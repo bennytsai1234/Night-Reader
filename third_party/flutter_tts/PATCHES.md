@@ -6,7 +6,7 @@
 - Archive: `https://pub.dev/api/archives/flutter_tts-4.2.5.tar.gz`
 - Archive SHA-256: `ce5eb209b40e95f2f4a1397116c87ab2fcdff32257d04ed7a764e75894c03775`
 - Upstream repository: <https://github.com/dlutton/flutter_tts>
-- Vendored version: `4.2.5+nightreader.1`
+- Vendored version: `4.2.5+nightreader.5`
 - License: MIT; the upstream [`LICENSE`](LICENSE) is retained unchanged.
 
 ## Local patch
@@ -55,3 +55,34 @@ Night Reader maintains this package in-tree and no longer tracks upstream.
 - Restored the upstream 4.2.5 iOS implementation (`ios/`) and its plugin
   registration. The podspec's deployment target is raised from 8.0 to 13.0;
   the sources are otherwise unchanged.
+
+## Patch `nightreader.5`: Android engine work off the main thread
+
+- Every method call, the `onInit` follow-up (default voice locale, pending
+  calls), `TextToSpeech` creation and the utterance progress callbacks run in
+  order on the plugin's own `HandlerThread` (`flutter_tts`); all plugin state is
+  read and written only there. Each call is a binder round trip to the TTS
+  service, and voice lists are large parcels read several times while the app
+  sets up the engine; on Android the main thread also draws Flutter frames, so
+  this work stalled launch animations. Results and events are posted back to
+  the main thread (`MainThreadResult`, `invokeMethod`).
+- Work on that thread catches its own exceptions (Flutter only catches them
+  for handlers running on the main thread): a failing call replies with an
+  error instead of ending the app. `MainThreadResult` forwards only the first
+  reply.
+- `onInit` applies the default voice locale before running calls queued while
+  connecting, so a queued `setLanguage` is no longer reverted to the default.
+- Each engine is tagged with a generation; `onInit` and progress callbacks of a
+  replaced engine are ignored. `setEngine`'s reply belongs to the engine being
+  connected and is answered before queued calls replay; a superseded
+  `setEngine`, and a pending awaited `speak` or `synthesizeToFile`, reply `0`
+  when their engine is replaced.
+- `setEngine` with the engine the current instance was created for (the
+  requested one, or the system default at creation) replies at once instead of
+  binding the TTS service again; switching engines shuts the replaced engine
+  down.
+- Failures reply instead of hanging: `speak` the connected engine rejects
+  replies `0` (only a lost connection reconnects and retries); utterance errors
+  complete an awaited `speak`/`synthesizeToFile` with `0`; `setSilence` replies.
+  On Android 24–25, `onStart` for silence and synthesis utterances no longer
+  dereferences a missing text.

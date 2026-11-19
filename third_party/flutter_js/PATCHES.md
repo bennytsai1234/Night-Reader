@@ -3,7 +3,7 @@
 This directory is a controlled fork of [`flutter_js` 0.8.7](https://pub.dev/packages/flutter_js/versions/0.8.7), originally published from [`abner/flutter_js`](https://github.com/abner/flutter_js).
 
 - Upstream package version: `0.8.7`
-- Local package version: `0.8.7+nightreader.1`
+- Local package version: `0.8.7+nightreader.7`
 - Upstream package archive SHA-256: `046428059ac7bef71e305dc35fc24be933b684684a43e83eab7ebd0dc407ad85`
 - License: MIT; the upstream [`LICENSE`](LICENSE) is retained unchanged.
 
@@ -94,3 +94,26 @@ Night Reader maintains this package in-tree and no longer tracks upstream.
   Upstream kept the `onMessage` handlers of every disposed runtime in that
   static map, and with them everything the handlers captured (Night Reader's
   extensions and the Jsoup node table of each rule engine).
+
+## Patch `nightreader.7`: interrupting QuickJS from another isolate
+
+- `JsInterruptFlag` (exported from `quickjs_runtime2.dart`) is an `Int32` in
+  native memory that one isolate raises and another isolate's QuickJS reads.
+  `QuickJsRuntime2.interruptFlag` installs it on every runtime created
+  afterwards in that isolate through QuickJS's own `JS_SetInterruptHandler`,
+  replacing the bridge's time-based handler (Night Reader never sets
+  `timeout`). When the flag is raised, QuickJS throws an uncatchable error at
+  its next check and returns to Dart, so even `while (true) {}` stops. Once
+  raised, `evaluate` on that runtime fails at once instead of starting.
+- The handler is a Dart callback that only reads the flag; it runs on the
+  isolate that is evaluating, like the existing channel callback.
+- `JsInterruptFlag.supported` is false on iOS (JavaScriptCore), when the
+  library does not export `JS_SetInterruptHandler` (the Windows test bridge),
+  and when the library cannot be loaded. The Android
+  `fastdev-jsruntimes-quickjs` 0.3.6 library and the Linux test bridge export
+  it.
+- Reason: Night Reader stops a book-source worker with
+  `Isolate.beforeNextEvent`, because `Isolate.immediate` during a QuickJS
+  callback crashed the app natively (#358). A rule stuck in a loop never
+  reached the next event, so its isolate never exited.
+

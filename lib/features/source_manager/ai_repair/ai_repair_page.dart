@@ -86,7 +86,8 @@ Future<void> openAiRepair(
   await navigator.push(MaterialPageRoute<void>(builder: (_) => run.page()));
 }
 
-/// 修復頁：一步一列（docs/design/screens.md「AI 修書源」）。
+/// 修復頁：固定四段，AI 做過的步收在「經過」（docs/design/screens.md
+/// 「AI 修書源」）。
 class AiRepairPage extends StatefulWidget {
   const AiRepairPage({
     super.key,
@@ -112,6 +113,9 @@ class AiRepairPage extends StatefulWidget {
 class _AiRepairPageState extends State<AiRepairPage> {
   final TextEditingController _paste = TextEditingController();
   bool _closing = false;
+
+  /// 「經過」展開著：每次進這一頁都是收起的。
+  bool _historyOpen = false;
 
   /// 背景跑的修復暫停後按繼續會換成新的一段，照 [AiRepairPage.run] 的。
   AiRepairSession get _session => widget.run?.session ?? widget.session;
@@ -361,17 +365,11 @@ class _AiRepairPageState extends State<AiRepairPage> {
             ),
             body: GroupedListView(
               children: [
-                if (job.steps.isNotEmpty || (run?.isPaused ?? false)) ...[
+                if (!_clipboard || job.steps.isNotEmpty) ...[
                   GroupedSection(
                     footer: sentTo,
                     children: [
-                      for (final step in job.steps)
-                        GroupedRow(
-                          leading: aiRepairStepIcon(context, step.state),
-                          title: step.title,
-                          subtitle: step.detail,
-                          showChevron: false,
-                        ),
+                      ..._stageRows(context, job),
                       if (run?.isPaused ?? false)
                         GroupedRow(
                           leading: Icon(
@@ -384,6 +382,13 @@ class _AiRepairPageState extends State<AiRepairPage> {
                           showChevron: false,
                         ),
                     ],
+                  ),
+                  ?aiStepsHistory(
+                    context,
+                    steps: _history(job),
+                    expanded: _historyOpen,
+                    onToggle: () =>
+                        setState(() => _historyOpen = !_historyOpen),
                   ),
                   if (job.awaitingPaste)
                     GroupedSection(
@@ -413,6 +418,83 @@ class _AiRepairPageState extends State<AiRepairPage> {
         );
       },
     );
+  }
+
+  /// 剪貼簿的修復：照做過的步一步一列。只從「複製給 AI」進來，不進背景，
+  /// 所以沒有 [AiRepairPage.run]；App 重開後還原的暫停修復也沒有 AI 服務，
+  /// 但有 run，照固定四段畫。
+  bool get _clipboard => widget.run == null && _session.usesClipboard;
+
+  /// AI 修改規則那一段的每一步（AI 的輪與重新開始）。
+  static List<AiRepairStep> _aiSteps(AiRepairJob job) => [
+    for (final step in job.steps)
+      if (step.kind != AiRepairStepKind.stage) step,
+  ];
+
+  /// 最後一次「校驗修好的書源」之後 AI 又做了事：交出的被退回，回到 AI 修改
+  /// 規則，這次的校驗還沒開始。
+  static bool _backToAi(AiRepairJob job) {
+    final steps = job.steps;
+    final verify = steps.lastIndexWhere((s) => s.title == aiRepairVerifyStage);
+    return verify < 0 ||
+        steps.lastIndexWhere((s) => s.kind != AiRepairStepKind.stage) > verify;
+  }
+
+  /// 「經過」：AI 做過的步，正在做的那一步寫在「AI 修改規則」的副標，不放進來。
+  List<AiRepairStep> _history(AiRepairJob job) {
+    final steps = _aiSteps(job);
+    return _aiState(job, steps) == AiRepairStepState.running
+        ? steps.sublist(0, steps.length - 1)
+        : steps;
+  }
+
+  /// 「AI 修改規則」的狀態：還沒問 AI 是還沒開始；交出的正在校驗或校驗過了
+  /// 是做完；AI 說修不好、出錯、按了暫停或結束時是失敗（後面的段沒做，同整批
+  /// 修復）；其他時候是做著（兩輪之間、交出被退回後也算）。
+  AiRepairStepState _aiState(AiRepairJob job, List<AiRepairStep> steps) {
+    if (steps.isEmpty) return AiRepairStepState.waiting;
+    if (!_backToAi(job)) return AiRepairStepState.done;
+    if (steps.last.state == AiRepairStepState.running) {
+      return AiRepairStepState.running;
+    }
+    if (job.outcome != null || _session.isPaused) {
+      return AiRepairStepState.failed;
+    }
+    return AiRepairStepState.running;
+  }
+
+  /// 卡片上的段：用 AI 服務時固定四段（校驗原本的書源、抓網頁、AI 修改規則、
+  /// 校驗修好的書源），還沒輪到的畫空心圓；剪貼簿照做過的步一步一列。
+  List<Widget> _stageRows(BuildContext context, AiRepairJob job) {
+    GroupedRow row(AiRepairStepState state, String title, String? detail) =>
+        GroupedRow(
+          leading: aiRepairStepIcon(context, state),
+          title: title,
+          subtitle: detail,
+          showChevron: false,
+        );
+    if (_clipboard) {
+      return [
+        for (final step in job.steps) row(step.state, step.title, step.detail),
+      ];
+    }
+    GroupedRow stage(String title) {
+      final step = job.steps.where((step) => step.title == title).lastOrNull;
+      return step == null
+          ? row(AiRepairStepState.waiting, title, null)
+          : row(step.state, title, step.detail);
+    }
+
+    final ai = _aiSteps(job);
+    return [
+      stage(aiRepairCheckStage),
+      stage(aiRepairFetchStage),
+      row(_aiState(job, ai), 'AI 修改規則', ai.lastOrNull?.line),
+      if (ai.isNotEmpty && _backToAi(job))
+        row(AiRepairStepState.waiting, aiRepairVerifyStage, null)
+      else
+        stage(aiRepairVerifyStage),
+    ];
   }
 
   Widget _result(

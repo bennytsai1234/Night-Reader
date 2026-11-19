@@ -47,6 +47,7 @@ import 'core/services/crash_handler.dart';
 import 'core/startup/startup_retry_gate.dart';
 import 'features/search/ai_find/ai_find_run.dart';
 import 'features/search/search_provider.dart';
+import 'features/search/background_search.dart';
 import 'features/source_manager/ai_repair/repair_runs.dart';
 import 'features/source_manager/source_check_job.dart';
 import 'shared/widgets/skeleton_text.dart';
@@ -293,6 +294,7 @@ void _runPostLaunchTasks() {
   unawaited(restorePausedAiFind());
   unawaited(PausedSourceCheck.instance.restore());
   unawaited(restorePausedRepair());
+  unawaited(BackgroundSearches.instance.restore());
   // 書源被刪掉的書架網路書：開 App 前記下的這時才換（ADR 0069）。
   unawaited(
     SharedPreferences.getInstance().then(

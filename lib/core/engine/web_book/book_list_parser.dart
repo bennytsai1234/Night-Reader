@@ -5,6 +5,7 @@ import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/book/book_help.dart';
 import 'package:night_reader/core/engine/parsers/java_regexp.dart';
 import 'package:night_reader/core/engine/web_book/book_info_parser.dart';
+import 'package:night_reader/core/utils/source_progress.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/core/utils/html_formatter.dart';
 
@@ -41,6 +42,7 @@ class BookListParser {
           source.bookUrlPattern!,
           wholeInput: true,
         ).hasMatch(baseUrl)) {
+          reportSourceProgress(const SourceDebugNote('≡連結為詳情頁'));
           final searchBook = await _getInfoItem(
             source: source,
             body: body,
@@ -75,6 +77,10 @@ class BookListParser {
       // 2. 如果列表為空且未配置 bookUrlPattern，嘗試按詳情頁解析 (對標 Android 邏輯)
       if (elements.isEmpty &&
           (source.bookUrlPattern == null || source.bookUrlPattern!.isEmpty)) {
+        // 照 Legado 寫出來：詳情頁的規則接著出錯時，看得出是照詳情頁解析
+        // 了一頁搜尋結果（2026-11-13 酷匠阅读的搜尋回空白，除錯只報詳情頁
+        // 的 JS 解析失敗）。
+        reportSourceProgress(const SourceDebugNote('└列表為空,按詳情頁解析'));
         final searchBook = await _getInfoItem(
           source: source,
           body: body,

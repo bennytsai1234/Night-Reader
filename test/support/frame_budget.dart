@@ -18,7 +18,9 @@
 // 子樹被搬動、一次排上百個重建時會大上幾十倍），只拿來找是誰。
 // FRAME_ATTRIBUTE=2 只列耗時、不記重建起點，數字接近實際。測試環境
 // 沒有開書源 isolate（`SourceIsolate.enabled`），書源工作在原地執行，會算進
-// 主執行緒。
+// 主執行緒。資料庫和 App 一樣在另一個 isolate（`setUpApp` 的
+// `databaseInIsolate`）：每一幀的時間裡沒有 SQL；每幀只讓出一次真實時間，
+// 接連好幾次查詢的工作會攤在幾幀裡，回覆落在哪一幀和手機不完全一樣。
 //
 //   FRAME_GC=1 flutter test --enable-vmservice …
 //   FRAME_CPU=1 flutter test --enable-vmservice …
@@ -36,15 +38,17 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
 
+import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/di/injection.dart';
 import 'package:vm_service/vm_service.dart' hide Isolate, Timeline;
 import 'package:vm_service/vm_service_io.dart';
 
-import 'db_clock.dart';
 import 'slice_clock.dart';
 
 /// 一幀的成本，單位微秒。
@@ -63,7 +67,6 @@ class FrameCost {
     this.scavengeMicros = 0,
     this.oldCollections = 0,
     this.oldGcMicros = 0,
-    this.dbMicros = 0,
     this.sliceMicros = 0,
     this.cpu = const [],
   });
@@ -115,23 +118,16 @@ class FrameCost {
 
   int get gcMicros => scavengeMicros + oldGcMicros;
 
-  /// 這一幀裡測試的資料庫在主執行緒上花的時間（`db_clock.dart`）。手機上
-  /// 資料庫在自己的 isolate，不佔這一幀；只會少算、不會多算。
-  final int dbMicros;
-
   /// 這一幀裡閱讀器排版照時間切的那幾片（`slice_clock.dart`）：每格做到
   /// 預算就停，手機上一樣長，不照 2 倍換算（ADR 0036）。
   final int sliceMicros;
 
   int get total => beforeFrame + frame + afterFrame + async;
 
-  /// 扣掉測試才有的資料庫時間，手機上這一幀主執行緒的工作（照 2 倍換算前）。
-  int get app => total - dbMicros;
-
   /// 判斷動畫中的幀有沒有超過 [frameLimit] 看這個（ADR 0036）：排版切片照實
   /// 算、其他工作照 2 倍換算到手機，再折回電腦的尺度和 4.2ms 比，也就是
-  /// 扣掉資料庫後再扣掉排版切片的一半。
-  int get judged => app - sliceMicros ~/ 2;
+  /// 扣掉排版切片的一半。
+  int get judged => total - sliceMicros ~/ 2;
 
   FrameCost _withMoving(bool value) => FrameCost(
     index: index,
@@ -147,7 +143,6 @@ class FrameCost {
     scavengeMicros: scavengeMicros,
     oldCollections: oldCollections,
     oldGcMicros: oldGcMicros,
-    dbMicros: dbMicros,
     sliceMicros: sliceMicros,
     cpu: cpu,
   );
@@ -166,7 +161,6 @@ class FrameCost {
     scavengeMicros: scavengeMicros,
     oldCollections: oldCollections,
     oldGcMicros: oldGcMicros,
-    dbMicros: dbMicros,
     sliceMicros: sliceMicros,
     cpu: lines,
   );
@@ -189,7 +183,6 @@ class FrameCost {
     oldGcMicros: pauses
         .where((p) => !p.young)
         .fold(0, (sum, p) => sum + p.micros),
-    dbMicros: dbMicros,
     sliceMicros: sliceMicros,
     cpu: cpu,
   );
@@ -551,7 +544,9 @@ class _ScreenPrint {
 
 /// 一幀一幀推進（每幀 [frameDuration]），直到 [until] 成立後再多 [tailFrames]
 /// 幀，記下每一幀的成本。[realAsync] 時每幀之間讓出真實時間，給跑在真的
-/// isolate 裡的資料庫回應（`app_harness.dart` 的整個 App 需要）。[note] 在
+/// isolate 裡的資料庫與正文轉換回應（`app_harness.dart` 的整個 App 需要）。
+/// 有資料庫時它要和 App 一樣在另一個 isolate（`setUpApp` 的
+/// `databaseInIsolate`），不然 SQL 算進主執行緒，直接失敗。[note] 在
 /// 每一幀畫完時記下畫面在哪一段，摘要裡跟著尖峰幀列出。[onFrame] 在每一幀
 /// 開始前呼叫（帶幀序號），拖動這類手勢一幀送一步；它花的時間算在幀前。
 /// 每一幀量完之後讀一次畫面的圖層（[_ScreenPrint]），和前一幀比，定出
@@ -568,6 +563,13 @@ Future<List<FrameCost>> recordFrames(
   Duration frameDuration = const Duration(milliseconds: 16),
   bool realAsync = false,
 }) async {
+  if (getIt.isRegistered<AppDatabase>() &&
+      getIt<AppDatabase>().executor is NativeDatabase) {
+    fail(
+      '量幀時資料庫在主執行緒，SQL 會算進每一幀；App 的資料庫在另一個 '
+      'isolate，用 setUpApp(databaseInIsolate: true)',
+    );
+  }
   final previous = (
     FlutterTimeline.debugCollectionEnabled,
     debugProfileBuildsEnabled,
@@ -653,9 +655,6 @@ Future<List<FrameCost>> recordFrames(
           top: top,
           dirty: dirty,
           note: note?.call(),
-          dbMicros: dbWork
-              .where((w) => w.start >= from && w.start < to)
-              .fold(0, (sum, w) => sum + w.micros),
           sliceMicros: sliceWork
               .where((w) => w.start >= from && w.start < to)
               .fold(0, (sum, w) => sum + w.micros),
@@ -756,8 +755,9 @@ List<AggregatedTimedBlock> _exclusive(List<TimedBlock> blocks) {
     ..length = math.min(15, self.length);
 }
 
-/// 摘要：幀數、中位數、最大值，以及超過 [over] 的每一幀各段成本。動畫中
-/// 另外列出扣掉資料庫、排版切片照實算（[FrameCost.judged]）後仍超過的
+/// 摘要：幀數、中位數、最大值、所有幀的主執行緒時間合計（比較工作有沒有
+/// 離開主執行緒），以及超過 [over] 的每一幀各段成本。動畫中
+/// 另外列出排版切片照實算（[FrameCost.judged]）後仍超過的
 /// 幀數：那些才是手機上也會超過的（ADR 0036）。
 String describeFrames(
   String label,
@@ -781,7 +781,7 @@ String describeFrames(
     final overApp = frames.where((c) => c.judged > over.inMicroseconds).length;
     return ' ${frames.length} 幀，最大 ${ms(top.total)}ms（第 ${top.index} 幀）、'
         '超過 ${limit}ms 的 $overLimit 幀'
-        '${moving ? '（扣掉資料庫、排版切片照實算後 $overApp 幀）' : ''}';
+        '${moving ? '（排版切片照實算後 $overApp 幀）' : ''}';
   }
 
   String gc(FrameCost cost) => cost.gcMicros == 0
@@ -792,7 +792,8 @@ String describeFrames(
 
   final lines = [
     '$label：${costs.length} 幀，中位數 ${ms(totals[totals.length ~/ 2])}ms，'
-        '最大 ${ms(totals.last)}ms，超過 ${limit}ms 的 ${spikes.length} 幀',
+        '最大 ${ms(totals.last)}ms，超過 ${limit}ms 的 ${spikes.length} 幀，'
+        '主執行緒合計 ${ms(totals.fold(0, (sum, us) => sum + us))}ms',
     '  動畫中（不含點下去後的第 0 幀）${peak(true)}；靜止時${peak(false)}',
     if (frameGc)
       '  回收記憶體的 ${collected.length} 幀（動畫中 '
@@ -804,9 +805,8 @@ String describeFrames(
           '${ms(cost.total)}ms：幀前 ${ms(cost.beforeFrame)}、'
           '幀 ${ms(cost.frame)}、幀後 ${ms(cost.afterFrame)}、'
           '非同步 ${ms(cost.async)}${gc(cost)}'
-          '${cost.dbMicros == 0 ? '' : '，其中資料庫 ${ms(cost.dbMicros)}ms'}'
-          '${cost.sliceMicros == 0 ? '' : '，其中排版切片 ${ms(cost.sliceMicros)}ms'}'
-          '${cost.dbMicros == 0 && cost.sliceMicros == 0 ? '' : '（判斷用 ${ms(cost.judged)}ms）'}',
+          '${cost.sliceMicros == 0 ? '' : '，其中排版切片 ${ms(cost.sliceMicros)}ms'
+                    '（判斷用 ${ms(cost.judged)}ms）'}',
       if (cost.top.isNotEmpty)
         '    耗時：${cost.top.map((b) => '${b.name} ${(b.duration / 1000).toStringAsFixed(1)}×${b.count}').join('、')}',
       if (cost.dirty.isNotEmpty)

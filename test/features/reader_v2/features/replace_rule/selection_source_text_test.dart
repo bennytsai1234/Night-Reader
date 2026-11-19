@@ -115,7 +115,7 @@ void main() {
   });
 
   test('刪節號與破折號排版後長度不同，仍刪得掉', () async {
-    expect(await hide('她說...本章未完--請翻頁。', paragraph: 0, text: '……本章未完——請翻頁。'), [
+    expect(await hide('她說...請收藏本站--謝謝。', paragraph: 0, text: '……請收藏本站——謝謝。'), [
       '她說',
     ]);
   });

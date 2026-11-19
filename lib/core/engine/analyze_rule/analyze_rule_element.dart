@@ -24,7 +24,6 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
       return null;
     }
 
-    log('⇒ 執行 getElement: $ruleStr');
     // 同 Legado：只有空白的規則拆不出任何一段，沒有結果，不是整份內容。
     dynamic result;
     final ruleList = splitSourceRuleCacheString(ruleStr, allInOne: true);
@@ -42,14 +41,12 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
             final val = getString(valueRule);
             if (val.isNotEmpty) {
               put(key, val);
-              log('  ◇ 保存變數: $key = $val');
             }
           });
         }
 
         final made = sourceRule.makeUp(result, this);
         final rule = made.rule;
-        log('  ◇ 模式: ${made.mode.name}, 規則: $rule');
 
         dynamic tempResult;
         try {
@@ -95,15 +92,8 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
         result = tempResult;
 
         if (result != null && made.replaceRegex.isNotEmpty) {
-          log('  ◇ 正則替換: ${made.replaceRegex} -> ${made.replacement}');
           result = replaceRegexLogic(stringifyRuleResult(result), made);
         }
-
-        final preview = result == null ? 'null' : stringifyRuleResult(result);
-        log(
-          '  └ 結果類型: ${result.runtimeType}, 預覽: '
-          '${preview.length > 500 ? preview.substring(0, 500) : preview}',
-        );
       }
     }
     return result;
@@ -115,7 +105,6 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
       return [];
     }
 
-    log('⇒ 執行 getElements: $ruleStr');
     // 同 Legado：只有空白的規則拆不出任何一段，沒有結果，不是整份內容。
     dynamic result;
     final ruleList = splitSourceRuleCacheString(ruleStr, allInOne: true);
@@ -133,14 +122,12 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
             final val = getString(valueRule);
             if (val.isNotEmpty) {
               put(key, val);
-              log('  ◇ 保存變數: $key = $val');
             }
           });
         }
 
         final made = sourceRule.makeUp(result, this);
         final rule = made.rule;
-        log('  ◇ 模式: ${made.mode.name}, 規則: $rule');
 
         dynamic tempResult;
         try {
@@ -184,7 +171,6 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
         result = tempResult;
 
         if (result != null && made.replaceRegex.isNotEmpty) {
-          log('  ◇ 正則替換列表元素: ${made.replaceRegex}');
           if (result is List) {
             result = result
                 .map((e) => replaceRegexLogic(stringifyRuleResult(e), made))
@@ -193,9 +179,6 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
             result = replaceRegexLogic(stringifyRuleResult(result), made);
           }
         }
-        log(
-          '  └ 列表長度: ${result is List ? result.length : (result == null ? 0 : 1)}',
-        );
       }
     }
 

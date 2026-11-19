@@ -18,7 +18,7 @@ void main() {
   testWidgets('switching tabs', (tester) async {
     setUpPhone(tester);
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(databaseInIsolate: true);
       await seedLibrary();
       await seedSiteSource();
       await installFakeSite();

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:night_reader/shared/widgets/pixel_translation.dart';
 
 /// 全 App 換頁共用的轉場，在「外觀與主題 → 換頁動畫」選擇。
 ///
@@ -1125,7 +1126,7 @@ class _TopPose {
     }
     return _PageOpacity(
       opacity: opacity.clamp(0.0, 1.0),
-      child: _PixelTranslation(
+      child: PixelTranslation(
         offset: offset,
         fraction: fractionalOffset,
         child: Transform.scale(
@@ -1267,7 +1268,7 @@ class _UnderPose {
       color: faded ? background : null,
       child: _PageOpacity(
         opacity: opacity.clamp(0.0, 1.0),
-        child: _PixelTranslation(
+        child: PixelTranslation(
           fraction: fractionalOffset,
           child: Transform.scale(
             scale: scale,
@@ -1290,107 +1291,6 @@ class _UnderPose {
         ),
       ),
     );
-  }
-}
-
-/// 換頁的平移：[offset] 加上頁寬、頁高的 [fraction] 倍，對齊到整數個實體
-/// 像素。頁面平移時字落在像素裡的位置不變，繪製不必每一幀替字補建新位置
-/// 的貼圖：2026-11-05 手機上返回書架、進搜尋頁的頭幾幀，建字的貼圖 6–14ms，
-/// 漏一拍。一個實體像素在手機上約 0.33 個邏輯像素，看不出對齊。
-class _PixelTranslation extends SingleChildRenderObjectWidget {
-  const _PixelTranslation({
-    this.offset = Offset.zero,
-    required this.fraction,
-    super.child,
-  });
-
-  final Offset offset;
-  final Offset fraction;
-
-  @override
-  _RenderPixelTranslation createRenderObject(BuildContext context) =>
-      _RenderPixelTranslation(
-        offset,
-        fraction,
-        MediaQuery.devicePixelRatioOf(context),
-      );
-
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    _RenderPixelTranslation renderObject,
-  ) {
-    renderObject
-      ..translation = offset
-      ..fraction = fraction
-      ..devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
-  }
-}
-
-class _RenderPixelTranslation extends RenderProxyBox {
-  _RenderPixelTranslation(
-    this._translation,
-    this._fraction,
-    this._devicePixelRatio,
-  );
-
-  Offset _translation;
-  set translation(Offset value) {
-    if (value == _translation) return;
-    _translation = value;
-    _moved();
-  }
-
-  Offset _fraction;
-  set fraction(Offset value) {
-    if (value == _fraction) return;
-    _fraction = value;
-    _moved();
-  }
-
-  double _devicePixelRatio;
-  set devicePixelRatio(double value) {
-    if (value == _devicePixelRatio) return;
-    _devicePixelRatio = value;
-    _moved();
-  }
-
-  /// 位移變了：重畫，讀屏的框也跟著移（同 [RenderTransform]、
-  /// [RenderFractionalTranslation]）。
-  void _moved() {
-    markNeedsPaint();
-    markNeedsSemanticsUpdate();
-  }
-
-  Offset get _shift {
-    final raw =
-        _translation +
-        Offset(_fraction.dx * size.width, _fraction.dy * size.height);
-    double snap(double value) => _devicePixelRatio > 0
-        ? (value * _devicePixelRatio).roundToDouble() / _devicePixelRatio
-        : value;
-    return Offset(snap(raw.dx), snap(raw.dy));
-  }
-
-  @override
-  void paint(PaintingContext context, Offset offset) {
-    final child = this.child;
-    if (child != null) context.paintChild(child, offset + _shift);
-  }
-
-  @override
-  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
-      result.addWithPaintOffset(
-        offset: _shift,
-        position: position,
-        hitTest: (result, position) =>
-            super.hitTestChildren(result, position: position),
-      );
-
-  @override
-  void applyPaintTransform(RenderBox child, Matrix4 transform) {
-    final shift = _shift;
-    transform.translateByDouble(shift.dx, shift.dy, 0, 1);
   }
 }
 

@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/network/page_digest.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
+import 'package:night_reader/core/utils/source_progress.dart';
 
 /// 一份 [RequestLog] 記什麼；跨 isolate 送得過去（規則 JS 要等的請求在網路
 /// isolate 照同樣的設定記，`BlockingCall`）。
@@ -15,6 +16,8 @@ typedef RequestLogSettings = ({
   bool digestPages,
   bool keepPages,
   bool sentHeaders,
+  bool live,
+  bool returnsPages,
 });
 
 /// [RequestLog.pages] 的一筆：請求或回應的那一行（同 [RequestLog.lines]），
@@ -27,6 +30,16 @@ List<Object?> loggedPageToJson(LoggedPage page) => [page.line, page.body];
 LoggedPage loggedPageFromJson(Object? json) {
   final list = json! as List;
   return (line: list[0]! as String, body: list[1] as String?);
+}
+
+/// [RequestLog.live] 一邊跑一邊交回的一行（[reportSourceProgress]）：同
+/// [RequestLog.lines] 的一行；[RequestLog.keepPages] 時回應另帶整頁原文
+/// （同 [RequestLog.pages] 的 [LoggedPage.body]）。
+final class LoggedRequestLine {
+  const LoggedRequestLine(this.line, this.body);
+
+  final String line;
+  final String? body;
 }
 
 /// 一段工作實際送出的請求，依序記在 [lines]；給了 [responsePreview] 時每個
@@ -47,15 +60,17 @@ final class RequestLog {
     this.digestPages = false,
     this.keepPages = false,
     this.sentHeaders = false,
-  });
+    this.live = false,
+  }) : _returnsPages = false;
 
+  /// 網路 isolate 照停住的 worker 的設定記（[settingsFor]）。
   RequestLog.from(RequestLogSettings settings)
-    : this(
-        responsePreview: settings.responsePreview,
-        digestPages: settings.digestPages,
-        keepPages: settings.keepPages,
-        sentHeaders: settings.sentHeaders,
-      );
+    : responsePreview = settings.responsePreview,
+      digestPages = settings.digestPages,
+      keepPages = settings.keepPages,
+      sentHeaders = settings.sentHeaders,
+      live = settings.live,
+      _returnsPages = settings.returnsPages;
 
   /// 網頁先精簡（[digestPage]）再取開頭，給 AI 看。
   final bool digestPages;
@@ -73,21 +88,43 @@ final class RequestLog {
   /// Cookie 這類有沒有真的送出去。
   final bool sentHeaders;
 
-  /// 規則 JS 的請求在網路 isolate 照這份設定記；在 [keepingPages] 裡時
-  /// 那邊也記整頁，帶回來交給 [keepingPages]。
-  RequestLogSettings get settings => (
-    responsePreview: responsePreview,
-    digestPages: digestPages,
-    keepPages: keepPages || _currentPageSink != null,
-    sentHeaders: sentHeaders,
-  );
+  /// 每記一行，當下也交給這次 [run] 開始時收書源工作紀錄的人
+  /// （[LoggedRequestLine]，[reportSourceProgress]）：規則 JS 同步等網路、
+  /// 外層先結束時，已經送出的請求也拿得到。整頁原文只交給收的人，[pages]
+  /// 不另留一份。
+  final bool live;
+
+  /// 網路 isolate 的這份紀錄要把整頁帶回停住的 worker（[settingsFor]）。
+  final bool _returnsPages;
+
+  /// 規則 JS 的請求在網路 isolate 照這份設定記。[forwardsDirectly]：網路
+  /// isolate 記下的可以直接交給收這份紀錄的人（[live]，而且收的人就是這個
+  /// 書源工作的，`BlockingCall` 判斷）；不行時接上（[merge]）時再交。在
+  /// [keepingPages] 裡時那邊也記整頁，帶回來交給 [keepingPages]；整頁只交給
+  /// 收紀錄的人時不帶回來，同一頁不送兩次。
+  RequestLogSettings settingsFor({required bool forwardsDirectly}) {
+    final direct = live && forwardsDirectly;
+    return (
+      responsePreview: responsePreview,
+      digestPages: digestPages,
+      keepPages: _keepsPageNow,
+      sentHeaders: sentHeaders,
+      live: direct,
+      returnsPages: _currentPageSink != null || (keepPages && !direct),
+    );
+  }
 
   bool get withResponses => responsePreview != null;
   final List<String> lines = [];
 
   /// 和 [lines] 一筆對一筆，回應另帶整頁原本的內容（照編碼解開，最多
-  /// [fullPageBytes] 位元組，不精簡）；[keepPages] 才記。
+  /// [fullPageBytes] 位元組，不精簡）；[keepPages] 才記，[live] 的交給收
+  /// 紀錄的人、不記在這裡。
   final List<LoggedPage> pages = [];
+
+  /// 記進 [pages]：[keepPages] 而且不是 [live]，或是要帶回 worker 的網路
+  /// isolate 紀錄。
+  bool get _storesPages => _returnsPages || (keepPages && !live);
 
   /// [pages] 每個回應最多記多少位元組。
   static const int fullPageBytes = 2 * 1024 * 1024;
@@ -98,8 +135,13 @@ final class RequestLog {
   int get transientResponses => _transientResponses;
 
   /// 在這份紀錄裡執行 [body]：裡面送出的請求都記進來。
-  Future<T> run<T>(Future<T> Function() body) =>
-      runZoned(body, zoneValues: {_requestLogZoneKey: this});
+  Future<T> run<T>(Future<T> Function() body) => runZoned(
+    body,
+    zoneValues: {
+      _requestLogZoneKey: this,
+      _liveSinkZoneKey: live ? currentSourceProgress : null,
+    },
+  );
 
   /// 在這份紀錄裡執行 [body]，裡面的請求照常記進來，另外照 [pages] 的樣子
   /// （每個回應帶整頁原文）記一份進 [into]。只有 [body] 送出的請求進
@@ -109,26 +151,47 @@ final class RequestLog {
   Future<T> keepingPages<T>(List<LoggedPage> into, Future<T> Function() body) =>
       runZoned(
         body,
-        zoneValues: {_requestLogZoneKey: this, _pageSinkZoneKey: into},
+        zoneValues: {
+          _requestLogZoneKey: this,
+          _pageSinkZoneKey: into,
+          _liveSinkZoneKey: identical(currentRequestLog, this)
+              ? currentRequestLogSink
+              : (live ? currentSourceProgress : null),
+        },
       );
 
   /// 接上在別的 isolate 記下的內容（規則 JS 要等的請求在網路 isolate 送出，
-  /// ADR 0034）。
+  /// ADR 0034）。[forwarded]：網路 isolate 已經直接交給收紀錄的人了
+  /// （[settingsFor]），這裡不再交。
   void merge(
     List<String> otherLines,
     int transientResponses, {
     List<LoggedPage> otherPages = const [],
+    bool forwarded = false,
   }) {
     lines.addAll(otherLines);
-    if (keepPages) pages.addAll(otherPages);
+    if (live && !forwarded) {
+      if (currentRequestLogSink case final sink?) {
+        for (final (i, line) in otherLines.indexed) {
+          final body = keepPages && i < otherPages.length
+              ? otherPages[i].body
+              : null;
+          sink(LoggedRequestLine(line, body));
+        }
+      }
+    }
+    if (_storesPages) pages.addAll(otherPages);
     _currentPageSink?.addAll(otherPages);
     _transientResponses += transientResponses;
   }
 
   void _add(String line, [String? body]) {
     lines.add(line);
+    currentRequestLogSink?.call(
+      LoggedRequestLine(line, keepPages ? body : null),
+    );
     if (!withResponses) return;
-    if (keepPages) pages.add((line: line, body: body));
+    if (_storesPages) pages.add((line: line, body: body));
     _currentPageSink?.add((line: line, body: body));
   }
 
@@ -160,6 +223,13 @@ String _elapsedNote(RequestOptions? options) {
 /// 外層的 [RequestLog]；不在 [RequestLog.run] 裡時是 null。
 RequestLog? get currentRequestLog =>
     Zone.current[_requestLogZoneKey] as RequestLog?;
+
+/// [RequestLog.live] 的這次 [RequestLog.run] 開始時收書源工作紀錄的人；不是
+/// [RequestLog.live]、或沒有人收時是 null。
+void Function(Object entry)? get currentRequestLogSink =>
+    Zone.current[_liveSinkZoneKey] as void Function(Object entry)?;
+
+final Object _liveSinkZoneKey = Object();
 
 /// 外層已經在 [RequestLog.run] 裡：裡面的請求會記進外層的紀錄。
 bool get isRecordingRequestUrls => currentRequestLog != null;

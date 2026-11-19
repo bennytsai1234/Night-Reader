@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/pixel_translation.dart';
 
 /// 開關 [ReaderV2SidePanel] 的遙控器，由閱讀頁建立與釋放。
 class ReaderV2SidePanelController {
@@ -379,8 +380,10 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
           alignment: AlignmentDirectional.centerStart,
           child: AnimatedBuilder(
             animation: _position,
-            builder: (context, child) => FractionalTranslation(
-              translation: Offset(_position.value - 1, 0),
+            // 平移對齊整數實體像素：滑入時目錄的字不必每到新位置就補建
+            // 字的貼圖。
+            builder: (context, child) => PixelTranslation(
+              fraction: Offset(_position.value - 1, 0),
               child: child,
             ),
             child: FocusScope(

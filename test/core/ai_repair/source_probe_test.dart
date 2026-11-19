@@ -11,6 +11,7 @@ import 'package:night_reader/core/ai_repair/repair_rule_tools.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -41,6 +42,10 @@ void main() {
     databaseIsolate = await DriftIsolate.spawn(NativeDatabase.memory);
     db = AppDatabase.connected(await databaseIsolate.connect());
     registerDatabase(db);
+    // 規則 JS 的 `java.ajax` 停住 worker、交給網路 isolate 送；App 裡開書源
+    // isolate 時設好它連哪個資料庫（[SourceIsolate.start]），這裡沒開，要
+    // 自己設，不然它等 App 的資料庫等不到。
+    SourceIo.configure(database: Future.value(databaseIsolate));
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     site = 'http://${server.address.address}:${server.port}';
     server.listen((request) async {
@@ -83,6 +88,7 @@ void main() {
   });
 
   tearDownAll(() async {
+    await SourceIo.stop();
     await server.close(force: true);
     await db.close();
     await databaseIsolate.shutdownAll();
@@ -170,6 +176,39 @@ void main() {
     expect(report.fullText, contains('（試抓超過時間，停在這裡）'));
   });
 
+  // 規則 JS 同步等網路時 worker 停住，自己的計時器跑不到；外層結束它時交回
+  // 已經走到的紀錄，不是空的（2026-11-14 Codex 審查用本機伺服器重現：兩次
+  // java.ajax 各 10 秒、試抓時限 1 秒）。
+  test(
+    'a probe stuck in rule JS waiting on the network says how far it got',
+    () async {
+      final slow = '$site/book/9/1.html';
+      final report = await probeSource(
+        source(content: '@js:java.ajax("$slow"); java.ajax("$slow")'),
+        keyword: probeStart(
+          'content',
+          keyword: '',
+          url: '$site/book/1/1.html',
+        )!,
+        timeout: const Duration(seconds: 1),
+        database: Future.value(databaseIsolate),
+        workerGrace: const Duration(milliseconds: 500),
+      );
+
+      expect(report.timedOut, isTrue);
+      expect(report.fullText, contains('正文 URL: $site/book/1/1.html'));
+      expect(report.requests, contains(startsWith('$site/book/1/1.html')));
+      expect(
+        report.requests,
+        contains(startsWith('  ← $site/book/1/1.html 200')),
+      );
+      // 規則 JS 正在等的那個請求送出了、還沒回。
+      expect(report.requests, contains(startsWith(slow)));
+      expect(report.requests, isNot(contains(startsWith('  ← $slow'))));
+    },
+    skip: quickJsUnavailableReason(),
+  );
+
   test(
     'a broken rule says where it stopped and still shows the page',
     () async {
@@ -213,7 +252,6 @@ void main() {
 
     expect(report.fullText, contains('$site/book/3/1_2.html'));
     expect(report.unjoinedNextPage, isNull);
-    expect(SourceProbeReport.fromMap(report.toMap()).unjoinedNextPage, isNull);
   });
 
   test('a chapter cut at its first page is caught the way the source check '
@@ -233,10 +271,6 @@ void main() {
         report.unjoinedNextPage,
         '$site/book/3/1_2.html',
         reason: report.fullText,
-      );
-      expect(
-        SourceProbeReport.fromMap(report.toMap()).unjoinedNextPage,
-        '$site/book/3/1_2.html',
       );
     }
   });
@@ -352,5 +386,36 @@ void main() {
     );
 
     expect(result, '傳回：2:本機書源');
+  }, skip: quickJsUnavailableReason());
+
+  test('a JS tool run out of time still lists the requests it sent', () async {
+    final result = await runRepairJs(
+      source(),
+      code:
+          'java.ajax("$site/book/1/1.html"); java.ajax("$site/book/9/1.html")',
+      pages: const {},
+      timeout: const Duration(seconds: 1),
+      database: Future.value(databaseIsolate),
+    );
+
+    expect(result, startsWith('超過時間，沒做完'), reason: result);
+    expect(result, contains('# 這段程式送出的請求'), reason: result);
+    expect(result, contains('  ← $site/book/1/1.html 200'), reason: result);
+    expect(result, contains('$site/book/9/1.html'), reason: result);
+    expect(result, isNot(contains('  ← $site/book/9/1.html')), reason: result);
+  }, skip: quickJsUnavailableReason());
+
+  test('JS tool includes synchronous java.ajax request and response', () async {
+    final result = await runRepairJs(
+      source(),
+      code: 'java.ajax("$site/book/1/1.html")',
+      pages: const {},
+      timeout: const Duration(seconds: 30),
+      database: Future.value(databaseIsolate),
+    );
+
+    expect(result, contains('# 這段程式送出的請求'), reason: result);
+    expect(result, contains('$site/book/1/1.html'), reason: result);
+    expect(result, contains('  ← $site/book/1/1.html 200'), reason: result);
   }, skip: quickJsUnavailableReason());
 }

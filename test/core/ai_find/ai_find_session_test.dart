@@ -528,6 +528,21 @@ void main() {
     expect(find.rounds.first.detail, isNot(contains('…')));
   });
 
+  test(
+    'a keyword with 「；」 in it still swaps its "…" line for the result',
+    () async {
+      final ai = _Ai([
+        _calls([
+          ('search', {'keyword': '穿越；獵魔'}),
+          ('shelf', <String, Object?>{}),
+        ]),
+      ]);
+      final find = session(_Library({}), ai);
+      await find.start();
+      expect(find.rounds.first.detail, '搜尋「穿越；獵魔」小說，找到 0 本；看書架與閱讀紀錄');
+    },
+  );
+
   test('stop cancels the search that is running', () async {
     final library = _Library({})..searchGate = Completer<void>();
     final ai = _Ai([

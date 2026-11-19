@@ -52,7 +52,7 @@ svg{display:block} .hot{color:var(--crit);font-weight:600}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 </style></head><body><div class="wrap">
 <h1>全 App 主執行緒總覽</h1>
-<p class="sub">電腦上 debug 模式逐幀量到的主執行緒時間，看的是問題落在哪個操作、哪一段，不是手機上的毫秒數。每幀已扣掉測試的資料庫時間（手機上不在主執行緒）。4.2ms 是電腦上的上限（手機 8.3ms 照 2 倍換算，ADR 0029、0036）；只算畫面在動的幀，畫面靜止時的尖峰（預留停頓）不算。</p>
+<p class="sub">電腦上 debug 模式逐幀量到的主執行緒時間，看的是問題落在哪個操作、哪一段，不是手機上的毫秒數。每幀已扣掉閱讀器排版切片的一半（照時間切，手機上一樣長）；資料庫和 App 一樣在另一個 isolate，不在這些時間裡。4.2ms 是電腦上的上限（手機 8.3ms 照 2 倍換算，ADR 0029、0036）；只算畫面在動的幀，畫面靜止時的尖峰（預留停頓）不算。</p>
 <div class="tiles" id="tiles"></div>
 <h2>動畫中超過 4.2ms 的幀數最多的 20 步（<i class="sw" style="background:var(--bar)"></i>淺色＋<i class="sw" style="background:var(--dark)"></i>深色）</h2>
 <div class="card"><div id="top"></div></div>
@@ -169,12 +169,11 @@ def main():
             m = row.get(mode)
             if not m:
                 continue
-            # 每幀扣掉測試的資料庫時間（手機上不在主執行緒，`db_clock.dart`）與閱讀器
-            # 排版切片的一半（照時間切、手機上一樣長，`slice_clock.dart`，ADR 0036）。
-            db = m.pop('db', None) or []
+            # 每幀扣掉閱讀器排版切片的一半（照時間切、手機上一樣長，`slice_clock.dart`，
+            # ADR 0036）。
             sl = m.pop('slice', None) or []
             at = lambda xs, i: xs[i] if i < len(xs) else 0  # noqa: E731
-            m['costs'] = [round(c - at(db, i) - at(sl, i) / 2, 1) for i, c in enumerate(m['costs'])]
+            m['costs'] = [round(c - at(sl, i) / 2, 1) for i, c in enumerate(m['costs'])]
             runs = []
             for p in m['phases']:
                 if runs and runs[-1][0] == p:

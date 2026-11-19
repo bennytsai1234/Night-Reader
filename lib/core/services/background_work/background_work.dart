@@ -74,7 +74,7 @@ class BackgroundWorkStatus {
 }
 
 /// 一件使用者按了才開始的長工作：修復異常書源、單一書源的 AI 修復、
-/// 校驗書源、AI 找書（ADR 0058）。
+/// 校驗書源、AI 找書（ADR 0058）、放到背景的搜尋（ADR 0070）。
 abstract interface class BackgroundJob {
   /// 通知上按了「暫停」、從最近使用滑掉夜讀，或系統的時間到了：停下、做到
   /// 的留著，之後按繼續接著做。

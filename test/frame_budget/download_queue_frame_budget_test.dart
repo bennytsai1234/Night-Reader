@@ -47,7 +47,7 @@ void main() {
     setUpScreenshot(tester);
     late DownloadService service;
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(databaseInIsolate: true);
       await seedLibrary();
       service = DownloadService();
       // 讓它從資料庫讀完（空的）再放進任務。
