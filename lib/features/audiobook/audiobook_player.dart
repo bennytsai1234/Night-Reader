@@ -795,7 +795,9 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     final since = (index: _index, at: position.value);
     final pulled = await _sync.pullProgress(book.bookUrl);
     if (pulled == null || !pulled.isCurrent || !isCurrent(book)) return;
-    if (playing || _index != since.index || position.value != since.at) {
+    // 抓的這段時間按了播放（含重載播不出來的那一集）、換了集或拖了：照使用
+    // 者按的，不跳。
+    if (!_canCatchUp || _index != since.index || position.value != since.at) {
       return;
     }
     final index = _playable(

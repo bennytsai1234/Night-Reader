@@ -251,5 +251,12 @@ class FakeSync extends Fake implements SyncService {
   int commits = 0;
 
   @override
-  Future<PulledProgress?> pullProgress(String bookUrl) async => pulled;
+  /// 抓另一台的進度要等外面放行（測試抓的途中按了什麼）。
+  Completer<void>? pullGate;
+
+  @override
+  Future<PulledProgress?> pullProgress(String bookUrl) async {
+    await pullGate?.future;
+    return pulled;
+  }
 }
