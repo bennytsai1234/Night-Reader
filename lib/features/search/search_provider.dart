@@ -567,8 +567,10 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   void setKind(BookSourceKind kind) {
     if (kind == this.kind) return;
     _chosenKind = kind;
-    notifyListeners();
-    if (lastSearchKey.isNotEmpty) {
+    // 搜過的由新的一次開始時通知：先離開接回的那一次，頁首才不先讀到它的類別。
+    if (lastSearchKey.isEmpty) {
+      notifyListeners();
+    } else {
       unawaited(search(lastSearchKey));
     }
   }
@@ -667,11 +669,11 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   );
 
   /// 新的一次搜尋開始前清掉上一次的：詳情帶回的封面、固定的順序與篩選。
-  /// 條件在這時定下（頁首膠囊當時的樣子）。傳回給 [SearchRun.start] 的號碼。
+  /// 條件在這時定下（頁首膠囊當時的樣子）：先離開接回的那一次，條件才不照
+  /// 它的。傳回給 [SearchRun.start] 的號碼。
   int _beginSearch(String searchKey, SearchScope scope) {
-    final conditions = _conditions(scope);
     _leaveBackground();
-    final ticket = _run.begin(searchKey, conditions);
+    final ticket = _run.begin(searchKey, _conditions(scope));
     _resetCovers();
     _heldOrder = null;
     clearResultFilters();
