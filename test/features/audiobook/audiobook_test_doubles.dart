@@ -250,7 +250,6 @@ class FakeSync extends Fake implements SyncService {
   PulledProgress? pulled;
   int commits = 0;
 
-  @override
   /// 抓另一台的進度要等外面放行（測試抓的途中按了什麼）。
   Completer<void>? pullGate;
 
