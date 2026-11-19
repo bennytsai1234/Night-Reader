@@ -579,4 +579,102 @@ void main() {
     expect(veil.isVisible, isTrue, reason: '紙留著');
     await finish(tester);
   });
+  group('骨架長完停著等正文的那 0.5 秒', () {
+    Future<void> grown(WidgetTester tester) async {
+      makeVeil(tester);
+      await pumpVeil(tester);
+      await advance(tester, revealTime);
+      expect(veil.isSkeletonFading, isFalse);
+      expect(tester.hasRunningAnimations, isFalse, reason: '長完先停在最深');
+    }
+
+    testWidgets('settling during the rest never starts the breath', (
+      tester,
+    ) async {
+      await grown(tester);
+      await advance(tester, const Duration(milliseconds: 200));
+
+      var settled = false;
+      unawaited(veil.settleBreath().then((_) => settled = true));
+      await tester.pump(frame);
+      expect(settled, isTrue, reason: '本來就靜止，不用等');
+      await advance(tester, LoadingVeilController.restBeforeBreath * 2);
+      expect(tester.hasRunningAnimations, isFalse, reason: '不開始呼吸');
+      await finish(tester);
+    });
+
+    testWidgets('resuming starts a whole rest again before breathing', (
+      tester,
+    ) async {
+      await grown(tester);
+      await advance(tester, const Duration(milliseconds: 300));
+      unawaited(veil.settleBreath());
+      await tester.pump(frame);
+
+      // 這次掀紙作廢：從現在起再停一整段才呼吸。
+      veil.resumeBreath();
+      await advance(
+        tester,
+        LoadingVeilController.restBeforeBreath -
+            const Duration(milliseconds: 100),
+      );
+      expect(tester.hasRunningAnimations, isFalse, reason: '還在停');
+      await advance(tester, const Duration(milliseconds: 200));
+      expect(tester.hasRunningAnimations, isTrue, reason: '停完正文還沒好，呼吸');
+      await finish(tester);
+    });
+
+    testWidgets('resuming while it grows rests after it grows, then breathes', (
+      tester,
+    ) async {
+      makeVeil(tester);
+      await pumpVeil(tester);
+      await tester.pump(frame);
+      unawaited(veil.settleBreath());
+      await tester.pump(frame);
+      veil.resumeBreath();
+
+      await advance(tester, revealTime);
+      expect(veil.isSkeletonFading, isFalse);
+      expect(tester.hasRunningAnimations, isFalse, reason: '長完先停');
+      await advance(
+        tester,
+        LoadingVeilController.restBeforeBreath +
+            const Duration(milliseconds: 100),
+      );
+      expect(tester.hasRunningAnimations, isTrue);
+      await finish(tester);
+    });
+  });
+
+  testWidgets('a skeleton grows in from the left but fades out evenly', (
+    tester,
+  ) async {
+    makeVeil(tester);
+    await pumpVeil(tester);
+    await advance(tester, revealTime * 0.5);
+    expect(veil.isSkeletonFading, isTrue);
+
+    // 第一行長條的左右兩端（同一行、同一種顏色）。
+    Future<(List<int>, List<int>)> ends() async {
+      final image = await pixels(tester);
+      List<int> at(int x) {
+        final width = veilKey.currentContext!.size!.width.round();
+        final i = (19 * width + x) * 4;
+        return image.sublist(i, i + 4);
+      }
+
+      return (at(70), at(370));
+    }
+
+    final (growLeft, growRight) = await ends();
+    expect(growLeft, isNot(growRight), reason: '長出時由左而右，右端還淡');
+
+    veil.hideSkeleton();
+    await tester.pump(frame);
+    await tester.pump(frame);
+    final (fadeLeft, fadeRight) = await ends();
+    expect(fadeLeft, fadeRight, reason: '淡掉時整頁一起淡');
+    await finish(tester);
+  });
 }
