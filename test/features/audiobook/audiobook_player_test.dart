@@ -447,6 +447,126 @@ void main() {
     expect(engine.lastSpeed, 1.5);
   });
 
+  test('開書讀目錄、換集抓網址時都算載入中，載好就不是', () async {
+    final other = await bookWithoutChapters();
+    source.chapterList = Completer();
+    final opening = player.open(other);
+    await pumpEventQueue();
+    expect(player.loading, isTrue);
+    expect(player.playing, isFalse);
+    source.chapterList!.complete([
+      for (var i = 0; i <= 6; i++)
+        BookChapter(
+          url: 'https://audio.test/b2/ep$i',
+          title: '第 $i 集',
+          bookUrl: other.bookUrl,
+          index: i,
+        ),
+    ]);
+    await opening;
+    await pumpEventQueue();
+    expect(player.loading, isFalse);
+    expect(player.playing, isTrue);
+
+    // 換到沒預先解析的那一集，抓網址要等書源。
+    source.gate = Completer<void>();
+    final switching = player.playChapter(1);
+    await pumpEventQueue();
+    expect(player.loading, isTrue);
+    expect(player.playing, isFalse);
+    source.gate!.complete();
+    await switching;
+    expect(player.loading, isFalse);
+    expect(player.playing, isTrue);
+  });
+
+  test('緩衝時播放鍵轉圈、系統播放資訊寫等資料，不算出聲', () async {
+    await player.open(book);
+    expect(playback.buffering, isFalse);
+
+    engine.buffer(true);
+    expect(player.loading, isTrue);
+    expect(player.playing, isTrue);
+    expect(playback.buffering, isTrue);
+    expect(playback.playing, isTrue);
+
+    engine.buffer(false);
+    expect(player.loading, isFalse);
+    expect(playback.buffering, isFalse);
+  });
+
+  test('換集抓網址時，系統播放資訊停在上一集、暫停；載好換成新的一集', () async {
+    await player.open(book);
+    await pumpEventQueue();
+    source.gate = Completer<void>();
+    final switching = player.playChapter(1);
+    await pumpEventQueue();
+    expect(playback.item?.title, '第 2 集');
+    expect(playback.playing, isFalse);
+
+    source.gate!.complete();
+    await switching;
+    expect(playback.item?.title, '第 1 集');
+    expect(playback.playing, isTrue);
+  });
+
+  test('最後一集播完、換集失敗時，系統播放資訊是暫停', () async {
+    await player.open(book, chapterIndex: 3);
+    engine.finish();
+    await pumpEventQueue();
+    expect(playback.item?.title, '第 3 集');
+    expect(playback.playing, isFalse);
+
+    source.failing.add('https://audio.test/ep1');
+    await player.playChapter(1);
+    expect(player.error, isNotNull);
+    expect(playback.playing, isFalse);
+  });
+
+  test('抓網址時引擎回報出錯：載好也不出聲，留著原因', () async {
+    await player.open(book);
+    await pumpEventQueue();
+    source.gate = Completer<void>();
+    final switching = player.playChapter(1);
+    await pumpEventQueue();
+    engine.fail(StateError('斷線'));
+    source.gate!.complete();
+    await switching;
+
+    expect(player.playing, isFalse);
+    expect(engine.playing, isFalse);
+    expect(player.error, isNotNull);
+    expect(player.loading, isFalse);
+  });
+
+  test('回到前景時暫停中：另一台聽到別集，跳過去停著、記成同步過', () async {
+    await player.open(book);
+    await player.pause();
+    sync.pulled = PulledProgress(
+      SyncedProgress(
+        chapterIndex: 3,
+        charOffset: 1000,
+        chapterTitle: '第 3 集',
+        time: 1,
+      ),
+      (_) async => sync.commits++,
+    );
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await pumpEventQueue();
+
+    expect(player.chapterIndex, 3);
+    expect(player.position.value, const Duration(milliseconds: 1000));
+    expect(engine.opened.last.$2, const Duration(milliseconds: 1000));
+    expect(player.playing, isFalse);
+    expect(engine.playing, isFalse);
+    expect(sync.commits, 1);
+  });
+
   group('系統播放資訊', () {
     test('開始播就接手：原本在播的暫停，交出集名、副標、總長與五顆按鈕', () async {
       final other = OtherPlaybackOwner();

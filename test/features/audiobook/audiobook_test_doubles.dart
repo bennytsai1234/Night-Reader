@@ -160,6 +160,7 @@ class RecordingPlayback extends SystemPlayback {
   bool? playing;
   Set<PlaybackControl>? controls;
   Duration? position;
+  bool? buffering;
 
   @override
   Future<void> start() async {}
@@ -187,6 +188,7 @@ class RecordingPlayback extends SystemPlayback {
     this.playing = playing;
     this.controls = controls;
     this.position = position;
+    this.buffering = buffering;
   }
 
   @override
@@ -195,6 +197,7 @@ class RecordingPlayback extends SystemPlayback {
     item = null;
     playing = null;
     controls = null;
+    buffering = null;
   }
 }
 
