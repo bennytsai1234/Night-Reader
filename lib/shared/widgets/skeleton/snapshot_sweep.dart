@@ -283,8 +283,11 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     _progress.duration = duration;
     if (ready) {
       // 兩張圖已經拍好：螢幕換上「之前」那張圖，底下同一格換成換好的樣子
-      // （螢幕上看不到，換回真的畫面時已經好了）。
+      // （螢幕上看不到，換回真的畫面時已經好了）。先離開拍好：change 裡
+      // 又叫 play 時是新的一輪，蓋過這一次，不是接手同一輪。
+      round.stage = _Stage.showing;
       change();
+      if (!_current(round)) return run.future;
       _showBefore(round);
       return run.future;
     }

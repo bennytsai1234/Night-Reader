@@ -200,6 +200,50 @@ void main() {
       });
     }
 
+    testWidgets('playing again from the change of a play on captured '
+        'pictures ends the first play', (tester) async {
+      await pumpScreen(tester);
+      var captured = false;
+      unawaited(
+        controller
+            .capture(
+              change: () => setColor(() => color = Colors.white),
+              restore: () => setColor(() => color = Colors.black),
+            )
+            .then((_) => captured = true),
+      );
+      for (var i = 0; i < 6 && !captured; i++) {
+        await tester.pump(frame);
+      }
+      expect(controller.captured, isTrue);
+
+      var first = false;
+      var second = false;
+      unawaited(
+        controller
+            .play(
+              duration: duration,
+              change: () {
+                setColor(() => color = Colors.white);
+                unawaited(
+                  controller
+                      .play(duration: duration, change: () {})
+                      .then((_) => second = true),
+                );
+              },
+            )
+            .then((_) => first = true),
+      );
+      await tester.pump();
+      expect(first, isTrue, reason: '新的一次蓋過舊的，舊的算播完');
+      // 新的一次重拍兩張圖（拍圖要等一下，不靠 pumpAndSettle）、再播完。
+      for (var i = 0; i < 60 && !second; i++) {
+        await tester.pump(frame);
+      }
+      expect(second, isTrue);
+      expect(controller.playing, isFalse);
+    });
+
     testWidgets('pictures taken first leave the real screen on and take '
         'taps; playing them then sweeps from the before to the after', (
       tester,
