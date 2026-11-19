@@ -8,8 +8,6 @@ import 'package:night_reader/features/reader/session/reader_location.dart';
 
 typedef ChapterId = int;
 
-enum ReaderScrollDirection { forward, backward }
-
 /// [loading]：視口只顯示載入畫面、沒有正文可掉幀，排版可用滿整幀。
 enum PumpState { idle, dragging, ballistic, rebuilding, loading }
 
@@ -844,7 +842,6 @@ final class LayoutTask {
     required this.contentWidth,
     this.textColor = const ui.Color(0xFF000000),
     this.priority = LayoutTaskPriority.prefetch,
-    this.direction = ReaderScrollDirection.forward,
     this.indentChars = 0,
     this.trailingSpacing = 0.0,
     this.trailingLayoutLookahead = '',
@@ -891,7 +888,6 @@ final class LayoutTask {
   final double contentWidth;
   final ui.Color textColor;
   final LayoutTaskPriority priority;
-  final ReaderScrollDirection direction;
   final int indentChars;
   final double trailingSpacing;
   final double? cellWidth;
