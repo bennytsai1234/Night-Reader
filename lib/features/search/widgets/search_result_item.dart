@@ -21,10 +21,10 @@ class SearchResultItem extends StatefulWidget {
   final AggregatedSearchBook result;
   final bool isInBookshelf;
 
-  /// 要顯示的封面；沒給時用書本身的（見 [SearchProvider.coverOf]）。
+  /// 要顯示的封面；沒給時用書本身的（見 `SearchProvider.coverOf`）。
   final String? coverUrl;
 
-  /// 進書籍詳情之前呼叫（見 [SearchProvider.rememberOpenedCard]）。
+  /// 進書籍詳情之前呼叫（見 `SearchProvider.rememberOpenedCard`）。
   final VoidCallback? onOpen;
 
   const SearchResultItem({
