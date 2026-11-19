@@ -15,6 +15,7 @@
 | 書籍詳情 | 5 個加上 `_loadErrorMessage`、`_sourceIssueMessage` 裡的哨兵字串（見下方） | 載入的 `BookDetailWorldState`；抓書源的結果 `_FetchIssue`（書源不能讀照書源算）；三件操作共用的 `BookDetailAction` | 「登入」掛在別的字旁；目錄已經有了還寫目錄失敗；載入失敗卻沒有錯誤訊息 | 1 件、另 2 件補漏的防重入（見下方） | 6 件（見下方） | #459 |
 | 同步 | `_running`、`_again`、`_fullPending`、`_cancelled`（另有 `_progressFirst`、`_authorizingGoogleDrive` 留成旗標） | `SyncPhase`（閒著、同步進度、全面同步、停下中）與排著的下一輪，收在跑著的那一段 `_SyncRun`；全面同步交回 `FullSyncResult` | 排著全面同步卻沒在跑；進度輪裡記著取消；閒著時還留著要插隊的進度；進度框收掉後那一行和那一輪的結果對不上 | 1 件（見下方） | 7 件（見下方） | #461 |
 | 搜尋 | 4 處共 15 個，頁面另拼 5 個組合（見下方） | 一次搜尋的 `_Phase`；頁面讀的 `SearchStage`；搜尋頁怎麼看著背景那件的 `_Attachment`；換源不換 | 存紀錄中又在重試；重試中的旗標留到下一次搜尋；接回等進場又算看著 | 4 件（見下方） | 4 件，另審查找到 1 件（見下方） | #462 |
+| 骨架呼吸 | `_hold`、`_waiting`、`_restFrom`、`_still`、`_restarted`（另有 `_allowed`、`_visible`、`_usingShared`、`SkeletonRest._resting` 留著，見下方） | `_BreathStage`：等開始、呼吸（從哪一輪起、是不是從最深起）、收住中、收住了；跟著共用呼吸的骨架照抄這一個值 | 等開始又收住了；收住了卻沒有收住的起點；等開 App 呼吸時底下的收住照樣在變 | 3 件（見下方） | 3 件，都碰不到（見下方） | #466 |
 | 閱讀器正文捲動 | `_initialRestoreCompleted`、`_textWaitsForBreath`、`_pendingReveal`、`_revealTimer`、`_dragging`、`_sawUserScroll`（`_rebuildQueued`、`_captureFramePending` 留成旗標）；`PumpState` 兩邊各寫 | 正文的 `_TextStage`（排版中、等掀紙、在畫面上）；手指的 `_FingerScroll`（沒有、在盡頭往外拉、拖動、甩動）；排版預算只照進行中的那次還原或手指算 | 沒排好卻在等呼吸收住；拖動中卻不算手指；被取代的還原改到接手那次的預算 | 2 件（見下方） | 1 件（見下方） | 待開 |
 
 ## 各狀態機
@@ -613,6 +614,84 @@ ADR 0055 的播放器（`lib/features/audiobook/audiobook_player.dart`），讀�
 讀者看得到、照階段表定的差別：按「重試失敗」後，讀好重試得了的書源、引擎還沒開始（等繁簡字典）的這段，改前頁面先是沒在搜（結果工具列、頁首「搜尋」）再換成搜尋中；現在當下就是搜尋中，同送出搜尋（#30）與接著搜「引擎開始前就算搜尋中，不閃出工具列」。字典已經載好時兩次通知落在同一幀，看不出差別。
 
 改測試的五處都是把讀旗標的地方換成讀 `SearchStage`（`isBackgroundPaused` → 已暫停、`showsMoveToBackground` → 搜尋中），意思沒變。
+
+### 骨架呼吸
+
+`lib/shared/widgets/skeleton/skeleton.dart`：每個 `Skeleton` 的呼吸（`_BreathClock`）、閱讀器的紙與頁首頁尾共用的一口呼吸（`SharedSkeletonBreath`，ADR 0037）、開 App 進場換場前收住一群骨架（`SkeletonRest`，ADR 0031、0035）。形狀（`skeleton_shapes.dart`）只讀呼吸的深淺，不記階段。
+
+**改前**（2026-11-20，`beta` `2a5d2a75`）：
+
+| 欄位 | 意思 | 誰設 |
+|---|---|---|
+| `_hold`（`ValueListenable?`） | 開 App 的骨架還沒到呼吸的時候：整片最深、計時器不走 | 建在進場底下時掛上，進場的 `breathing` 變 true 時放掉 |
+| `_waiting` | 共用的呼吸還沒開始：整片最深、計時器不走 | 共用呼吸一建立、沒人用時（`reset`）設；`begin` 收 |
+| `_restFrom`（`double?`） | 收住從哪一個相位開始；不是 null 就是在收住 | `rest`、`restNow` 設；`resume`、`begin`、`reset` 收 |
+| `_still` | 收住完了，整片最深、計時器停 | 收住呼完、被藏起來或減少動態時直接算停好；`resume`、`begin`、`reset` 收 |
+| `_restarted` | 這口呼吸是從整片最深起的，右邊還沒輪到的位置停在最深 | 開 App 到了呼吸的時候、`resume`、`begin` 設；減少動態、`reset` 收 |
+| `_allowed` | 計時器可以走：一般的骨架是沒要求減少動態；共用呼吸是有人在用 | 骨架照 `MediaQuery.disableAnimations`；共用呼吸照 `acquire`、`reset` |
+| `_visible`、`_usingShared` | 畫面上看得到（`TickerMode`）；這個骨架算不算共用呼吸的使用者 | 骨架建畫面時 |
+| `SkeletonRest._resting` | 一群骨架從 `settle` 到 `release` 之間：這段才出現的骨架一出現就停在最深 | 進場換場前收住、換場播完放開 |
+| `_SkeletonState._breathing` | 沒要求減少動態，形狀照呼吸畫 | 骨架建畫面時 |
+
+「現在在哪」散在五個欄位：深淺先看 `_hold != null || _waiting`（最深），再看 `_restFrom` 與 `_still`（收住了或這個位置呼完了就最深），再看 `_restarted`（還沒輪到就最深）；`_start`、`gradient`、`isBreathing`、共用呼吸的 `begin` 各自再拼一次。`_still` 只在 `_restFrom` 不是 null 時才有意思，`_hold` 成立時其他幾個照樣在變、只是被蓋住；共用呼吸在開始前收住，`_waiting` 與 `_still` 會同時是 true。跟著共用呼吸的骨架每一幀照抄來源的六個欄位。
+
+**歷史上因此出錯的**（`git log -G'bool _still' / '_restFrom' / 'bool _waiting' / 'bool _usingShared'` 找到加欄位的 #112、#124、#284、#304，打開 diff 看）：
+
+- #126 審查：收住的計時器比呼吸第一格早一點時，右邊還沒輪到的位置整段沒呼吸。原因是收住多久只看 `_restFrom`，沒看這口是不是從最深起的（`_restarted`）；補進 `_stopAfter`。
+- #284 審查：共用呼吸和開 App 進場疊用時，收住與接著呼吸看的是自己沒在走的計時器、相位也對不上（`_shared` 與 `_hold` 同時成立）。改成不准疊用（`Skeleton` 的 assert）。
+- #284 審查：被局部 `TickerMode` 藏起來的骨架仍佔著共用呼吸。原因是登記使用只看 `_allowed`，沒看 `_visible`；加了 `_usingShared`。
+
+查過不算：#304 審查「呼吸中又跳章，新骨架邊長出邊沿用舊呼吸」修在紙那邊（舊骨架淡掉時就收住共用的呼吸），`begin` 等收住呼完再起是新加的；#203 的 NaN 是畫的時候位置算不出來，和階段無關。
+
+**階段表**（讀者看到的，照 ADR 0024、0025、0031、0035、0037 與 `docs/design/loading.md`；一個 `Skeleton` 的呼吸，共用呼吸是同一張表）：
+
+| 階段 | 讀者看到什麼 | 可以走到 | 現在一樣嗎 |
+|---|---|---|---|
+| 等開始 | 整片停在最深、不動：開 App 骨架長出與長完停的那一下；閱讀器的紙長完骨架、正文還沒排好的那 0.5 秒 | 呼吸（開 App 到了呼吸的時候、閱讀器 `begin`，從最深起）；收住了（還沒開始就收住） | 一樣 |
+| 呼吸 | 每個位置由深變淺再變深，一輪 1.6 秒（開 App 進場中 0.6 秒），由左而右；從最深起的那口，右邊還沒輪到的位置停在最深；一般的骨架一出現就呼吸，右邊一開始就在淺處 | 收住中；收住了（收住時被藏起來、減少動態或計時器沒在走，直接算停好） | 一樣 |
+| 收住中 | 每個位置把這一口呼完、停在最深，停了就不再動；最多再一輪，從最深剛起步時最多一輪半 | 收住了；呼吸（收住途中接著呼吸：等這一口呼完、停在最深再從最深起，同閱讀器的 `begin`）；等開始（閱讀器沒人用；換到還沒呼吸的進場） | 不一樣：收住途中接著呼吸時照原本的起法繼續，已經停在最深的位置跳回原本的明暗，進場的節奏換回一般節奏那一格也跳一下（一格最多變 64/255）；一群骨架放開後又被收住一次 |
+| 收住了 | 整片最深、計時器停 | 呼吸（接著呼吸、閱讀器 `begin`，從最深起，不跳）；等開始（閱讀器沒人用；開 App 還沒到呼吸的時候就接著呼吸） | 一樣 |
+
+「收住中」那一格現在的程式碰不到：只有書架的骨架切換接開 App 的進場，進場的 `release` 只在換場播完（這時早已收住）或書架一開始就是內容時呼叫，後者在書架的骨架切換建立時、還沒開始收住。照表改，免得以後多一個呼叫的地方就踩到。同一個骨架換到另一個進場（`GlobalKey` 搬過去）也碰不到，主頁面只有一個進場；照表定：新的還沒到呼吸的時候就等它，已經在呼吸就從最深起。
+
+**不收進階段的**（會和階段同時成立）：
+
+- `_allowed`：一般的骨架是減少動態的設定，共用呼吸是有沒有人在用；任何階段都可能，只決定計時器走不走。共用呼吸沒人用時一律回到等開始。
+- `_visible`、`_usingShared`：看不看得到、有沒有登記成共用呼吸的使用者，任何階段都可能；藏起來時收住中直接算停好。
+- `_hold`：等開 App 到呼吸的時候那個通知的掛勾，掛著時階段一定是等開始或收住了（掛上時正在呼吸或收住中的停回最深）；是聽通知的資源，不是階段。
+- 收住完成的 `Completer`：誰要求收住誰等。跟著共用呼吸的骨架照抄來源的階段，不能連等待一起抄，所以留在各自的呼吸上。
+- `_cycle`：一輪多長（開 App 進場中 0.6 秒，之後 1.6 秒），是節奏不是階段。
+- `SkeletonRest._resting`：一群骨架的收住窗口，只有一個布林值、沒有和別的旗標互相牽動。
+- `SharedSkeletonBreath` 的 `_users`、`_requests`、`_disposed`：使用者數、作廢等著收住後再開始的那一次的號碼、放掉了沒。
+- `_SkeletonState._breathing`：減少動態的設定。
+
+**同資料夾不在這一節的**：一般換場 `skeleton_switcher.dart` 的 `_resting`、`_snapshotting`、`_reveal` 是它在開 App 進場裡等到哪一步，和進場一起收（見「進場」）；兩種換場的 `_sweep` 是這一次換場的方向，`CoverReveal._waiting` 只會從等封面變成不等，`_CoverRevealSlotState` 的 `_granted` 配 `_queuedOn` 是排隊建書卡的三個樣子（沒排、排著、放行），都只有一個布林值，不換結構。
+
+**重構時查到並修掉的**：
+
+以下都碰不到（理由見階段表下方），照階段表修，各先寫會失敗的測試：
+
+- 開 App 的骨架收住途中接著呼吸時，一輪的長度從進場的 0.6 秒換回 1.6 秒，計時器照樣在走、整段時間用新的長度重算，那一格深淺最多跳 64/255。
+- 同上，Codex 審查找到、改前就有：照原本的起法繼續呼吸，已經停在最深的位置一下子跳回原本的明暗；一群骨架的收住（`SkeletonRest.settle`）放開後回頭又收一次。前兩件改成等這一口呼完、停在最深，再照一般的節奏從最深起，換節奏時計時器停著，不跳；要求收住的等待在放開時完成，之後不再回頭收。
+- 同一個骨架從還沒呼吸的進場搬到已經在呼吸的進場（Codex 審查找到）：改前凍在搬過去那一刻的深淺，改後原本卡在等開始、整片最深不動；現在從最深起。掛上新進場時正在收住的，原本計時器被停住、收住永遠等不完，現在停回最深、等待完成。
+
+換結構時自己弄出、合併前修掉的（Codex 審查找到）：第一件原本改成換長度時重新啟動計時器，重啟後第一格經過的時間是零，那一格深淺和上一格一樣；改成等這一口呼完再起之後不用換長度，跟著拿掉。
+
+**改後**：
+
+| 改前 | 改後 |
+|---|---|
+| `_hold != null`、`_waiting` | `_Waiting`（等開始）；`_hold` 只剩聽通知的掛勾，到了呼吸的時候、階段還是等開始才從最深起 |
+| `_restFrom == null && !_still`，配 `_restarted` | `_Breathing`：從哪一輪起算（`shift`）、是不是從最深起（`fromDeepest`） |
+| `_restFrom != null && !_still` | `_Resting`：原本那口怎麼起的（一個 `_Breathing`）與從哪個相位開始收；接著呼吸就換回那個 `_Breathing` |
+| `_still`（配 `_restFrom != null`） | `_Still` |
+| 跟著共用呼吸的骨架抄六個欄位 | 抄計時的輪數與 `_stage` 兩個 |
+| 漸層快取比 `_shift`、`_restFrom`、`_restarted` | 比 `_stage` 是不是同一個（每個階段建好就不改） |
+| `_start`、`gradient`、`isBreathing` 各自拼 `_hold`、`_waiting`、`_still` | 都看「正在呼吸或收住中」（`_moving`） |
+
+`_allowed`、`_visible`、`_usingShared`、`SkeletonRest._resting` 與共用呼吸的計數照舊（理由見上）。拿掉 `_restarted`、`_restFrom`、`_still`、`_waiting` 與三個快取欄位；對外的 `SharedSkeletonBreath`、`SkeletonRest`、`SkeletonPhase` 與 `Skeleton` 不變，閱讀器的紙照舊。
+
+讀者看不到的一處：還沒到呼吸的時候、已經收住了，到了呼吸的時候原本會多通知一次重畫（深淺不變），現在不通知。
 
 ### 閱讀器正文捲動
 
