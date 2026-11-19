@@ -335,6 +335,71 @@ void main() {
       expect(find.byKey(const Key('bar')), findsNothing);
     });
 
+    testWidgets('the sweep fades the content in left first, right last', (
+      tester,
+    ) async {
+      // 內容是一整條黑色，骨架不畫東西：截圖的每一處就是內容那一層的濃度。
+      final shot = GlobalKey();
+      Widget band({required bool loading}) => MaterialApp(
+        theme: themeWith(AppStyle.paper, Brightness.light, const [
+          SkeletonReveal(),
+        ]),
+        home: Scaffold(
+          backgroundColor: Colors.white,
+          body: RepaintBoundary(
+            key: shot,
+            child: ColoredBox(
+              color: Colors.white,
+              child: CustomScrollView(
+                slivers: [
+                  SliverSkeletonSwitcher(
+                    loading: loading,
+                    skeleton: const SizedBox(key: Key('bar'), height: 40),
+                    builder: (_) => [
+                      const SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: 40,
+                          child: ColoredBox(color: Colors.black),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(band(loading: true));
+      await tester.pumpWidget(band(loading: false));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const SkeletonReveal().duration ~/ 2);
+      final progress = 1 - skeletonOpacity(tester);
+      expect(progress, inExclusiveRange(0.2, 0.8));
+
+      final boundary =
+          shot.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final (width, rgba) = (await tester.runAsync(() async {
+        final image = await boundary.toImage();
+        final data = await image.toByteData();
+        final width = image.width;
+        image.dispose();
+        return (width, data!.buffer.asUint8List());
+      }))!;
+      for (final u in [0.05, 0.3, 0.5, 0.7, 0.95]) {
+        final x = (u * (width - 1)).round();
+        // 第 20 列的紅色通道：白底上疊濃度 a 的黑色是 255·(1 − a)。
+        final red = rgba[(20 * width + x) * 4];
+        expect(
+          1 - red / 255,
+          closeTo(SkeletonReveal.incomingOpacityAt(progress, x / width), 0.02),
+          reason: 'u = $u',
+        );
+      }
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('the content is tappable only through itself', (tester) async {
       const reveal = SkeletonReveal();
       await tester.pumpWidget(host(reveal, loading: true));
