@@ -203,6 +203,7 @@ class RenderSkeletonRevealLayer extends RenderProxyBox
   void attach(PipelineOwner owner) {
     super.attach(owner);
     _presence.addListener(revealChanged);
+    syncRevealPartial();
   }
 
   @override
@@ -229,8 +230,9 @@ class RenderSkeletonRevealLayer extends RenderProxyBox
 /// 直接畫、不另開圖層；整頁淡時一層透明度，由左而右時一層橫向漸層的遮罩
 /// （每個位置的濃度是 [alphaAt]）。
 ///
-/// 用它的 render object 在進度或方式變了時呼叫 [revealChanged]，
-/// `alwaysNeedsCompositing` 照 [revealPartial] 回答。
+/// 用它的 render object 掛上去、開始聽進度之後呼叫 [syncRevealPartial]，
+/// 進度或方式變了時呼叫 [revealChanged]，`alwaysNeedsCompositing` 照
+/// [revealPartial] 回答。
 mixin SkeletonRevealPainting on RenderObject {
   /// 換場進度：0 還沒開始、1 換好，是經過的時間比例、不套曲線。
   double get revealProgress;
@@ -268,9 +270,9 @@ mixin SkeletonRevealPainting on RenderObject {
     markNeedsPaint();
   }
 
-  @override
-  void attach(PipelineOwner owner) {
-    super.attach(owner);
+  /// 掛上去、開始聽進度之後呼叫一次，照當下的進度記下要不要另開圖層：
+  /// 開始聽的那一刻，進度可能才剛被設好。
+  void syncRevealPartial() {
     _partial = !_fullyOpaque && !_fullyClear;
   }
 

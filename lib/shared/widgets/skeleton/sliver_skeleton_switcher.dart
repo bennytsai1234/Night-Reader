@@ -124,7 +124,7 @@ class _SliverSkeletonSwitcherState extends State<SliverSkeletonSwitcher>
   SliverSkeletonSwitcher? _builtFor;
   int? _builtCount;
 
-  /// [builder] 給的 slivers；同一個 widget 只呼叫一次，一個個加進來時前面
+  /// [SliverSkeletonSwitcher.builder] 給的 slivers；同一個 widget 只呼叫一次，一個個加進來時前面
   /// 已經建好的沿用同一個 widget，不再重建。
   List<Widget>? _slivers;
 
@@ -422,6 +422,7 @@ class _RenderSliverRevealLayer extends RenderProxySliver
   void attach(PipelineOwner owner) {
     super.attach(owner);
     _presence.addListener(revealChanged);
+    syncRevealPartial();
   }
 
   @override

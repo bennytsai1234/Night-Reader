@@ -1,3 +1,6 @@
+/// @docImport 'skeleton_shapes.dart';
+library;
+
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -407,8 +410,10 @@ abstract interface class SkeletonPhase implements Listenable {
   /// 這一刻整個畫面寬的呼吸漸層（螢幕座標）；整片一樣深時是 null，用單色畫。
   ui.Gradient? gradient(Color color, SkeletonBreath breath, double viewWidth);
 
-  /// [box] 到螢幕（邏輯像素）的轉換，同 `box.getTransformTo(null)`。回傳的
-  /// 矩陣是共用的一個，下一個形狀算的時候就被蓋掉，拿到就要用掉。
+  /// [box] 到螢幕（邏輯像素）的轉換，同 `box.getTransformTo(null)`。只在
+  /// 同一次 paint 裡 [gradient] 不是 null 之後呼叫：骨架最外層到螢幕的那一段
+  /// 每一幀算一次，呼吸沒在走時不會作廢。回傳的矩陣是共用的一個，下一個形狀
+  /// 算的時候就被蓋掉，拿到就要用掉。
   Matrix4 toScreen(RenderObject box);
 }
 
@@ -740,7 +745,7 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
   /// 這一刻整個畫面寬的呼吸漸層：螢幕座標從左緣（x = 0）到右緣
   /// （x = [viewWidth]），每 1/32 個畫面寬一個停點，顏色是 [color] 乘上那個
   /// 位置的深淺。同一個骨架每一幀每種顏色只建一道，底下每個形狀共用
-  /// （[_drawBreathing]），呼吸每一幀的成本不跟著形狀數變多。整片一樣深時
+  /// （[SkeletonBox] 這類形狀），呼吸每一幀的成本不跟著形狀數變多。整片一樣深時
   /// （還沒開始呼吸、收住了、整片一起呼吸）回傳 null，用單色畫。
   @override
   ui.Gradient? gradient(Color color, SkeletonBreath breath, double viewWidth) {
