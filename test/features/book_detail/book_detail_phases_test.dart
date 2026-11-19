@@ -21,7 +21,7 @@ import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 /// 操作；書源問題那一列寫什麼、有沒有「登入」；檢查更新、加入或移出書架、
 /// 換源進行中再按一次會怎樣。
 
-enum _Toc { ok, empty, fails, needsLogin, hangs }
+enum _Toc { ok, empty, fails, needsLogin }
 
 class _Source extends BookSourceService {
   bool infoFails = false;
@@ -58,7 +58,6 @@ class _Source extends BookSourceService {
       _Toc.empty => <BookChapter>[],
       _Toc.fails => throw Exception('目錄連不上'),
       _Toc.needsLogin => throw LoginCheckException('目錄需要登入後閱讀'),
-      _Toc.hangs => await Completer<List<BookChapter>>().future,
     };
   }
 }
@@ -547,15 +546,20 @@ void main() {
       expect(provider.totalChapterCount, 3);
     });
 
-    test('the first load tells the page only once, when it is ready', () async {
+    test('the first load tells the page once when it is ready', () async {
       await storeSource();
       final provider = await open(waitReady: false);
-      var notified = 0;
-      provider.addListener(() => notified++);
+      final states = <BookDetailWorldState>[];
+      provider.addListener(() => states.add(provider.worldState));
       await until(() => provider.hasReadyWorld);
-      // 骨架到內容只通知一次，加上存好封面的那一次（存不了就沒有）。
-      expect(notified, inInclusiveRange(1, 3));
-      expect(provider.isLoading, isFalse);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      // 進場後開始載入不通知（ADR 0018）；排好目錄時骨架還在，換成內容
+      // 只有一次，之後是存好封面的那一次。
+      expect(states, [
+        BookDetailWorldState.initializing,
+        BookDetailWorldState.ready,
+        BookDetailWorldState.ready,
+      ]);
     });
   });
 
@@ -581,15 +585,22 @@ void main() {
       await storeSource();
       service.toc = _Toc.fails;
       final provider = await open();
-      // 目錄還沒有：加入書架要先抓，抓的時候卡住。
-      service.toc = _Toc.hangs;
+      // 目錄還沒有：加入書架要先抓，抓的時候停住。
+      service
+        ..toc = _Toc.ok
+        ..tocGate = Completer<void>();
 
-      unawaited(provider.setInBookshelf(true));
+      final adding = provider.setInBookshelf(true);
       await until(() => service.chapterListCalls == 2);
       expect(provider.isRunning(BookDetailAction.updateBookshelf), isTrue);
       final second = await provider.setInBookshelf(false);
       expect(second.success, isFalse);
       expect(second.message, '正在更新書架，請稍候');
+
+      service.tocGate!.complete();
+      expect((await adding).message, '已加入書架');
+      expect(provider.isRunning(BookDetailAction.updateBookshelf), isFalse);
+      expect(provider.isInBookshelf, isTrue);
     });
 
     test('switching source twice switches once, and the page keeps its own '
@@ -608,9 +619,26 @@ void main() {
       expect(second.success, isFalse);
       expect(second.message, '正在換源，請稍候');
 
+      // 換源進行中收到的換源事件不記：這頁自己換好的書為準。
+      const otherUrl = 'https://other.example/book/3';
+      await db.bookDao.upsert(
+        searchResult().copyWith(
+          bookUrl: otherUrl,
+          origin: 'https://other.example',
+        ),
+      );
+      await db.chapterDao.insertChapters(chaptersOf(otherUrl, 7));
+      AppEventBus().fire(
+        AppEventBus.bookSwitched,
+        data: const BookSwitchedEvent(
+          fromBookUrl: _bookUrl,
+          toBookUrl: otherUrl,
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
       switcher.gate!.complete();
       expect((await first).success, isTrue);
-      // 這頁自己換源發出的事件不當成閱讀器換源：回到這頁照舊是新的書。
       await provider.reloadAfterReading();
       expect(provider.book.bookUrl, _newUrl);
       expect(provider.totalChapterCount, 5);

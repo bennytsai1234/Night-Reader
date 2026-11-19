@@ -500,7 +500,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
   }) {
     final actionsEnabled = provider.hasReadyWorld;
     final onlineShelfBook = !provider.book.isLocal && provider.isInBookshelf;
-    final checkingUpdate = provider.isRunning(BookDetailAction.checkUpdate);
     return GlassNavHeader(
       backgroundColor: background,
       titleWidget: ValueListenableBuilder<bool>(
@@ -520,9 +519,13 @@ class _BookDetailPageState extends State<BookDetailPage> {
           entriesBuilder: (ctx) => [
             GlassMenuItem(
               value: _MenuAction.checkUpdate,
-              label: checkingUpdate ? '正在檢查更新…' : '檢查更新',
+              label: provider.isRunning(BookDetailAction.checkUpdate)
+                  ? '正在檢查更新…'
+                  : '檢查更新',
               icon: Icons.update_rounded,
-              enabled: !provider.book.isLocal && !checkingUpdate,
+              enabled:
+                  !provider.book.isLocal &&
+                  !provider.isRunning(BookDetailAction.checkUpdate),
             ),
             GlassMenuItem(
               value: _MenuAction.autoUpdate,
