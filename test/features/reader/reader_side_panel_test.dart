@@ -11,12 +11,14 @@ void main() {
   late ReaderSidePanelController panel;
   late int panelBuilds;
   late int bodyTaps;
+  late int bodyDowns;
   late List<bool> openChanges;
   late int closes;
 
   setUp(() {
     panelBuilds = 0;
     bodyTaps = 0;
+    bodyDowns = 0;
     openChanges = [];
     closes = 0;
   });
@@ -52,11 +54,16 @@ void main() {
                     if (heavy) sleep(const Duration(milliseconds: 25));
                   },
                 ),
-                child: GestureDetector(
-                  onTap: () => bodyTaps++,
-                  child: const ColoredBox(
-                    color: Colors.white,
-                    child: SizedBox.expand(),
+                // 正文的點擊層直接聽按下（`ReaderPointerTapLayer`），不經過
+                // 手勢競賽。
+                child: Listener(
+                  onPointerDown: (_) => bodyDowns++,
+                  child: GestureDetector(
+                    onTap: () => bodyTaps++,
+                    child: const ColoredBox(
+                      color: Colors.white,
+                      child: SizedBox.expand(),
+                    ),
                   ),
                 ),
               );
@@ -674,6 +681,31 @@ void main() {
     expectSettled(tester);
     await tester.tapAt(const Offset(500, 300));
     expect(bodyTaps, 1);
+  });
+
+  testWidgets('a touch from before the panel closed cannot drag the panel '
+      'once it is opened again', (tester) async {
+    await pumpPanel(tester, heavy: true);
+    panel.open();
+    await tester.pump();
+    final oldTouch = await tester.startGesture(const Offset(200, 300));
+    await tester.pump();
+    // 按著時按了返回，再從別處（另一根手指點正文）重開。
+    panel.close();
+    await tester.pump();
+    panel.open();
+    await tester.pump();
+    await tester.pump(AppMotion.stillGap);
+    await tester.pumpAndSettle();
+    expect(panelLeft(tester), 0);
+    await oldTouch.moveBy(const Offset(-30, 0));
+    await oldTouch.moveBy(const Offset(-170, 0));
+    await tester.pump(const Duration(milliseconds: 300));
+    await oldTouch.up();
+    await tester.pumpAndSettle();
+    expect(openChanges, [true, false, true]);
+    expect(closes, 1);
+    expectSettled(tester);
   });
 
   testWidgets('a touch before the slide starts closes the panel before it '

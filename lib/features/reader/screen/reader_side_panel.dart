@@ -93,6 +93,12 @@ class _ReaderSidePanelState extends State<ReaderSidePanel>
 
   _Phase _phase = const _Hidden();
 
+  /// 面板收著過幾次，和按下時記的 [_touchClosings] 對照：按著的途中面板
+  /// 收著過（例如按了返回），這次觸控之後就不再動面板，面板又被打開了也
+  /// 一樣。和階段同時成立，所以另記。
+  int _closings = 0;
+  int _touchClosings = 0;
+
   /// 收著時沿用的面板元件；第一次準備時才有，之後一直掛著。
   Widget? _panel;
 
@@ -136,6 +142,7 @@ class _ReaderSidePanelState extends State<ReaderSidePanel>
     if (identical(before, next)) return;
     if (before case _Preparing(:final hold)) hold?.cancel();
     _phase = next;
+    if (next is _Hidden) _closings++;
     // 建畫面只讀這三件，沒變就不重建：滑出、開始拖、放手都落在畫面正在
     // 動的幀（ADR 0037 策略二）。面板沿用同一個元件，不跟著重建。
     if (before.shown != next.shown ||
@@ -227,15 +234,19 @@ class _ReaderSidePanelState extends State<ReaderSidePanel>
   /// 手指按下：動畫停在原處，等手勢判定是不是左右拖。收著時先把面板準備
   /// 好，往右拖時面板已經建好，只跟著手指走（策略四）。
   void _handleDragDown(DragDownDetails details) {
+    _touchClosings = _closings;
     _position.stop();
     if (_phase is _Hidden) _go(const _AtEdge());
   }
 
+  /// 這次觸控按下之後面板收著過：剩下的都不理。
+  bool get _touchOutlived => _touchClosings != _closings;
+
   /// 手指真的開始左右拖：面板交給手指，還沒開始的滑出作廢，按著時才開始
-  /// 的滑出停在這裡。按著的途中面板已經收掉的話，這次拖曳不理。
+  /// 的滑出停在這裡。
   void _handleDragStart(DragStartDetails details) {
+    if (_touchOutlived) return;
     final from = _phase;
-    if (from is _Hidden) return;
     _go(_Dragging(open: from.open, opened: from.opened));
     _position.stop();
   }
@@ -270,7 +281,7 @@ class _ReaderSidePanelState extends State<ReaderSidePanel>
 
   /// 按下之後沒有左右拖（點一下，或在目錄裡上下捲）：照面板停在哪一半定。
   void _handleDragCancel() {
-    if (_position.isAnimating) return;
+    if (_touchOutlived || _position.isAnimating) return;
     switch (_phase) {
       case _AtEdge():
         _go(const _Hidden());
