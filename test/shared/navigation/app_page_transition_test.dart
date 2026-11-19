@@ -591,43 +591,71 @@ void main() {
       });
     }
 
+    /// 回到這一頁時是整頁、手勢已經結束，也還能再拖曳返回。
+    Future<void> expectWholeAndSwipeable(
+      WidgetTester tester,
+      ModalRoute<Object?> route,
+    ) async {
+      expect(tester.getCenter(find.text('新頁')), const Offset(400, 300));
+      expect(route.animation!.value, 1);
+      expect(route.popGestureEnabled, isTrue);
+      expect(Navigator.of(home).userGestureInProgress, isFalse);
+      await slowDrag(tester, 800 * 0.25);
+      await tester.pumpAndSettle();
+      expect(find.text('新頁'), findsNothing);
+    }
+
+    Future<void> pushThird(BuildContext page) => Navigator.push(
+      page,
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Center(child: Text('第三頁'))),
+      ),
+    );
+
+    for (final transition in AppPageTransition.values) {
+      // 推入新頁時 Navigator 取消正在按的手指，拖曳跟著取消。
+      testWidgets('${transition.name}: a page pushed mid-drag cancels the drag '
+          'and leaves the page whole', (tester) async {
+        await pumpApp(tester, transition);
+        await push(tester);
+        final page = tester.element(find.text('新頁'));
+        final route = ModalRoute.of(page)!;
+        final gesture = await holdDrag(tester);
+        unawaited(pushThird(page));
+        await tester.pump();
+        await gesture.up();
+        await tester.pumpAndSettle();
+        Navigator.pop(tester.element(find.text('第三頁')));
+        await tester.pumpAndSettle();
+        await expectWholeAndSwipeable(tester, route);
+      });
+    }
+
     for (final (transition, goesBack) in [
       for (final transition in AppPageTransition.values)
         for (final goesBack in [false, true]) (transition, goesBack),
     ]) {
-      testWidgets(
-        '${transition.name}: a page pushed mid-drag '
-        '(${goesBack ? 'goes back' : 'springs back'}) leaves the page whole',
-        (tester) async {
-          await pumpApp(tester, transition);
-          await push(tester);
-          final page = tester.element(find.text('新頁'));
-          final route = ModalRoute.of(page)!;
-          final gesture = await holdDrag(tester);
-          Navigator.push(
-            page,
-            MaterialPageRoute<void>(
-              builder: (_) => const Scaffold(body: Center(child: Text('第三頁'))),
-            ),
-          );
-          await tester.pump();
-          // 往回拖到不滿五分之一再放，或直接放開（已經拖過四分之一）。
-          if (!goesBack) await gesture.moveBy(const Offset(-150, 0));
-          await gesture.up();
-          await tester.pumpAndSettle();
-          Navigator.pop(tester.element(find.text('第三頁')));
-          await tester.pumpAndSettle();
-
-          // 被蓋住時不返回；回到這一頁時是整頁，也還能再拖曳返回。
-          expect(tester.getCenter(find.text('新頁')), const Offset(400, 300));
-          expect(route.animation!.value, 1);
-          expect(route.popGestureEnabled, isTrue);
-          expect(Navigator.of(home).userGestureInProgress, isFalse);
-          await slowDrag(tester, 800 * 0.25);
-          await tester.pumpAndSettle();
-          expect(find.text('新頁'), findsNothing);
-        },
-      );
+      testWidgets('${transition.name}: let go, then a page pushed while it '
+          '${goesBack ? 'goes back' : 'springs back'} leaves the page whole', (
+        tester,
+      ) async {
+        await pumpApp(tester, transition);
+        await push(tester);
+        final page = tester.element(find.text('新頁'));
+        final route = ModalRoute.of(page)!;
+        final gesture = await holdDrag(tester);
+        // 往回拖到不滿五分之一再放，或直接放開（已經拖過四分之一）。
+        if (!goesBack) await gesture.moveBy(const Offset(-150, 0));
+        await gesture.up();
+        await tester.pump(const Duration(milliseconds: 16));
+        unawaited(pushThird(page));
+        await tester.pumpAndSettle();
+        // 被蓋住時不返回。
+        expect(find.text('新頁', skipOffstage: false), findsOneWidget);
+        Navigator.pop(tester.element(find.text('第三頁')));
+        await tester.pumpAndSettle();
+        await expectWholeAndSwipeable(tester, route);
+      });
     }
 
     for (final transition in AppPageTransition.values) {
