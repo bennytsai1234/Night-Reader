@@ -9,7 +9,7 @@
 | 狀態機 | 改前的旗標 | 改後的狀態 | 改後寫不出來的組合 | 歷史上因此出錯的 | 重構時查到並修掉的 | PR |
 |---|---|---|---|---|---|---|
 | 背景工作的生命週期 | 7 處共 30 個（見下方） | 五件共用的 `WorkPhase`；頁面那層的 `_RunStage`；校驗服務的 `_CheckPhase` | 按了結束又是已暫停；正在暫停時整批先標成做完；停下中開始新的一輪校驗 | 5 件（見下方） | 5 件（見下方） | #458 |
-| 書源管理 | `_isLoading`、`_loadOwnsLoading`、`_isBatchOperationInProgress`、`_mergingDuplicates`、`_syncReloadPending` | `_ListWork`（第一次讀、閒著、重讀、匯入、批次作業）；併重複書源是有名字的動作 `_merging` | 匯入中的「載入中」被背景重讀收掉；同時跑兩次合併；批次作業做完時放開還沒讀完的重讀 | 3 件（見下方） | 6 件（見下方） | （開 PR 後補） |
+| 書源管理 | `_isLoading`、`_loadOwnsLoading`、`_isBatchOperationInProgress`、`_mergingDuplicates`、`_syncReloadPending` | `_ListWork`（第一次讀、閒著、重讀、匯入、批次作業）；併重複書源是有名字的動作 `_merging` | 匯入中的「載入中」被背景重讀收掉；同時跑兩次合併；批次作業做完時放開還沒讀完的重讀 | 3 件（見下方） | 6 件（見下方） | #460 |
 
 ## 各狀態機
 
