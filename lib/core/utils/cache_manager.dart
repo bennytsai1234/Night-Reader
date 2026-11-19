@@ -1,63 +1,16 @@
 import 'dart:async';
-import 'dart:collection';
 
 import 'package:night_reader/core/database/dao/cache_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/cache.dart';
+import 'package:night_reader/core/utils/lru_map.dart';
 
-/// LruMemoryCache - 簡易 LRU 記憶體快取
-/// (原 Android LruCache) (String, Any)
-class LruMemoryCache {
-  final int maxSize;
-  int _currentSize = 0;
-  final LinkedHashMap<String, dynamic> _cache =
-      LinkedHashMap<String, dynamic>();
-
-  LruMemoryCache(this.maxSize);
-
-  void put(String key, dynamic value) {
-    _remove(key);
-    final size = _estimateSize(value);
-
-    // 若單個物件就超過上限，則不快取
-    if (size > maxSize) return;
-
-    while (_currentSize + size > maxSize && _cache.isNotEmpty) {
-      final firstKey = _cache.keys.first;
-      _remove(firstKey);
-    }
-
-    _cache[key] = value;
-    _currentSize += size;
-  }
-
-  dynamic get(String key) {
-    if (!_cache.containsKey(key)) return null;
-    final value = _cache.remove(key);
-    _cache[key] = value; // 重新插入以更新排序
-    return value;
-  }
-
-  void remove(String key) => _remove(key);
-
-  void _remove(String key) {
-    if (!_cache.containsKey(key)) return;
-    final value = _cache.remove(key);
-    _currentSize -= _estimateSize(value);
-  }
-
-  void clear() {
-    _cache.clear();
-    _currentSize = 0;
-  }
-
-  int _estimateSize(dynamic value) {
-    if (value is String) return value.length * 2; // 估算為 UTF-16
-    if (value is List<int>) return value.length;
-    return 1024; // 預設估算
-  }
-
-  Iterable<String> get keys => _cache.keys;
+/// 記憶體快取估算一筆值佔多少位元組：文字照 UTF-16 算，位元組陣列照長度，
+/// 其他一律當 1KB。
+int estimateMemorySize(Object? value) {
+  if (value is String) return value.length * 2;
+  if (value is List<int>) return value.length;
+  return 1024;
 }
 
 /// CacheManager - 記憶體與資料庫兩層的文字快取，期限兩層都記
@@ -72,7 +25,10 @@ class CacheManager {
       getIt.isRegistered<CacheDao>() ? getIt<CacheDao>() : null;
 
   // 記憶體快取 (50MB)
-  final LruMemoryCache _memoryCache = LruMemoryCache(1024 * 1024 * 50);
+  final LruMap<String, Object?> _memoryCache = LruMap(
+    maxSize: 1024 * 1024 * 50,
+    sizeOf: estimateMemorySize,
+  );
   final Map<String, int> _memoryDeadlines = <String, int>{};
 
   CacheManager._internal();
@@ -142,12 +98,12 @@ class CacheManager {
     onMemoryWrite?.call(key, value, 0);
   }
 
-  dynamic getFromMemory(String key) => _memoryCache.get(key);
+  dynamic getFromMemory(String key) => _memoryCache[key];
 
   /// 記憶體裡還沒過期的文字；沒有時是 null，要連資料庫一起找用 [get]。
   String? getMemoryText(String key) {
     if (_isMemoryExpired(key)) return null;
-    final value = _memoryCache.get(key);
+    final value = _memoryCache[key];
     return value is String ? value : null;
   }
 
@@ -162,7 +118,7 @@ class CacheManager {
   }
 
   void _putMemory(String key, dynamic value, {int deadline = 0}) {
-    _memoryCache.put(key, value);
+    _memoryCache[key] = value;
     if (deadline == 0) {
       _memoryDeadlines.remove(key);
     } else {
