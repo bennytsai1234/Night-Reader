@@ -7,7 +7,7 @@ import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/book/book_extensions.dart';
 import 'package:night_reader/core/models/reading/bookmark.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/features/reader/features/bookmark/reader_bookmarks.dart';
 import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/features/reader/features/highlight/reader_highlights.dart';

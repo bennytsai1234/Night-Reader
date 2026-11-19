@@ -13,7 +13,7 @@ import 'package:night_reader/core/source/chapter_content_kind.dart';
 import 'package:night_reader/core/source/content_next_page.dart';
 import 'package:night_reader/core/source/source_debug_service.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
-import 'package:night_reader/core/utils/source_progress.dart';
+import 'package:night_reader/core/source/source_progress.dart';
 
 /// 一次試抓：照書源除錯從搜尋一路抓到正文（[SourceDebugService]），記下除錯
 /// 紀錄與每個請求、網站回了什麼（每個回應留開頭 [responsePreview] 字），給

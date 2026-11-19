@@ -14,7 +14,7 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
@@ -22,7 +22,7 @@ import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/core/storage/reader_chapter_content_storage.dart';
 import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
 import 'package:night_reader/core/source_switch/source_switch_service.dart';
-import 'package:night_reader/core/source_switch/source_switch_handoff.dart';
+import 'package:night_reader/core/source_switch/source_switch_operation_lease.dart';
 
 class _RecordingSourceSwitchLease implements SourceSwitchOperationLease {
   _RecordingSourceSwitchLease(this.bookUrl);

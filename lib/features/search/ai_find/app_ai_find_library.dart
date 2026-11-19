@@ -11,7 +11,7 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/core/source/book_source_service.dart';

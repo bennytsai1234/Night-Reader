@@ -4,7 +4,7 @@ import 'package:night_reader/shared/widgets/popups/popup_routes.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/features/reader/features/menu/reader_bottom_menu.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_entrance.dart';
-import 'package:night_reader/features/reader/features/menu/reader_menu_palette.dart';
+import 'package:night_reader/features/reader/features/menu/reader_menu_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';

@@ -11,7 +11,7 @@ import 'package:night_reader/shared/widgets/sleep_timer_section.dart';
 
 import 'reader_menu_entrance.dart';
 import 'reader_menu_controller.dart';
-import 'reader_menu_palette.dart';
+import 'reader_menu_style.dart';
 
 import 'package:night_reader/core/chinese/ui_language.dart';
 

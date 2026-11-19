@@ -10,7 +10,7 @@ import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/chapter_alignment.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/chinese/chinese_utils.dart';

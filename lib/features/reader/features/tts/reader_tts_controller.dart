@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/models/book/book.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/playback/system_playback.dart';
 import 'package:night_reader/core/playback/tts_service.dart';

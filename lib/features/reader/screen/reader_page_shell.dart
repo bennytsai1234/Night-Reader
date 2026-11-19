@@ -14,11 +14,11 @@ import 'package:night_reader/features/reader/layout/reader_layout_constants.dart
 import 'package:night_reader/features/reader/features/brightness/reader_brightness_bar.dart';
 import 'package:night_reader/features/reader/features/menu/reader_bottom_menu.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_entrance.dart';
-import 'package:night_reader/features/reader/features/menu/reader_menu_palette.dart';
+import 'package:night_reader/features/reader/features/menu/reader_menu_style.dart';
 import 'package:night_reader/features/reader/features/menu/reader_top_menu.dart';
 import 'package:night_reader/core/playback/sleep_timer.dart';
 import 'package:night_reader/features/reader/text_view/core/progress_snapshot.dart';
-import 'package:night_reader/features/reader/text_view/progress/chapter_shares.dart';
+import 'package:night_reader/features/reader/text_view/progress/reader_chapter_shares.dart';
 import 'package:night_reader/features/reader/layout/reader_typography.dart';
 import 'package:night_reader/features/reader/screen/reader_battery_glyph.dart';
 import 'package:night_reader/features/reader/screen/reader_chapters_drawer.dart';

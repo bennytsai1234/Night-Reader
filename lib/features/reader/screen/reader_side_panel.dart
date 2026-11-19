@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:night_reader/features/reader/features/menu/reader_menu_palette.dart';
+import 'package:night_reader/features/reader/features/menu/reader_menu_style.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/pixel_translation.dart';
 

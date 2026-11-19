@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/features/reader/screen/reader_latest_only_scheduler.dart';
+import 'package:night_reader/features/reader/screen/latest_only_scheduler.dart';
 
 void main() {
   testWidgets('sends only the newest value requested before the frame', (

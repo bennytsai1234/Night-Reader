@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/app_update/update_service.dart';
+import 'package:night_reader/core/app_update/app_update_service.dart';
 
 /// 依路徑回傳固定 JSON 的 HTTP 轉接器，記下請求過的路徑。
 class _ReleaseApi implements HttpClientAdapter {

@@ -1,7 +1,7 @@
 // 書源膠囊開的網頁：章節的絕對網址，去掉 Legado 的網址選項；不是網頁時沒有。
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 
 void main() {
   test('絕對網址照用', () {

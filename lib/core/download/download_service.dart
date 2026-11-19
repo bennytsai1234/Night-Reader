@@ -15,7 +15,7 @@ import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
-import 'package:night_reader/core/source_switch/source_switch_handoff.dart';
+import 'package:night_reader/core/source_switch/source_switch_operation_lease.dart';
 
 import 'download_base.dart';
 import 'download_scheduler.dart';

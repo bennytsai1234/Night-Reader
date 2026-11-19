@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/reading/bookmark.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/shared/widgets/glass/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';

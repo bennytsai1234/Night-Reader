@@ -17,7 +17,7 @@ import 'package:night_reader/core/sync/source_sync.dart';
 import 'package:night_reader/core/sync/sync_records.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
-import 'package:night_reader/features/source_manager/widgets/source_batch_toolbar.dart';
+import 'package:night_reader/features/source_manager/widgets/select_action_bar.dart';
 import 'package:night_reader/features/source_manager/widgets/source_item_tile.dart';
 import 'package:night_reader/features/source_manager/widgets/source_list_skeleton.dart';
 import 'package:night_reader/shared/theme/app_style.dart';

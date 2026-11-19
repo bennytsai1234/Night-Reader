@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
-import 'package:night_reader/core/network/rate_limiter.dart';
+import 'package:night_reader/core/network/concurrent_rate_limiter.dart';
 
 /// 書源 isolate 向主 isolate 借名額：借到的時間由測試決定。
 class _HeldDelegate implements ConcurrentRateDelegate {

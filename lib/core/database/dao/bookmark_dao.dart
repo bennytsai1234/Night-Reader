@@ -4,7 +4,7 @@ import 'package:drift/drift.dart';
 
 import '../../models/book/chapter_alignment.dart';
 import '../../models/reading/bookmark.dart';
-import '../../models/book/chapter.dart';
+import '../../models/book/book_chapter.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
 

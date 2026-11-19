@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book/book.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/storage/book_storage_service.dart';
 import 'package:night_reader/features/reader/screen/dependencies/reader_dependencies.dart';
-import 'package:night_reader/features/reader/screen/reader_latest_only_scheduler.dart';
+import 'package:night_reader/features/reader/screen/latest_only_scheduler.dart';
 import 'package:night_reader/features/reader/features/auto_page/reader_auto_page_controller.dart';
 import 'package:night_reader/features/reader/features/bookmark/reader_bookmarks.dart';
 import 'package:night_reader/features/reader/features/highlight/reader_highlights.dart';

@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 
 import 'book.dart';
 import 'chapter_alignment.dart';

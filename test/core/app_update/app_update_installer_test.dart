@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/app_update/app_update_installer.dart';
-import 'package:night_reader/core/app_update/update_service.dart';
+import 'package:night_reader/core/app_update/app_update_service.dart';
 import 'package:path/path.dart' as p;
 
 /// 回傳固定內容的 HTTP 轉接器，記下請求次數。

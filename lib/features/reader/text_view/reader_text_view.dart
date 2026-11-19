@@ -5,7 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
@@ -34,7 +34,7 @@ import 'overlay/reader_mark_layers.dart';
 import 'overlay/reader_skeleton_page.dart';
 import 'overlay/reader_unavailable_message.dart';
 import 'overlay/selection_service.dart';
-import 'overlay/text_selection_overlay.dart';
+import 'overlay/reader_text_selection_layer.dart';
 import 'paragraph/paragraph_cache.dart' show IllustrationPaint;
 import 'pipeline/layout_disk_cache.dart';
 import 'pipeline/layout_pipeline.dart';

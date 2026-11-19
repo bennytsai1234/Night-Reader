@@ -9,7 +9,7 @@ import 'package:night_reader/features/source_login/source_failure_remedy.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 
 import 'comic_chapter_transition.dart';
-import 'comic_page_image.dart';
+import 'comic_page_view.dart';
 import 'comic_page_images.dart';
 import 'comic_strip_model.dart';
 

@@ -39,7 +39,7 @@ import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';

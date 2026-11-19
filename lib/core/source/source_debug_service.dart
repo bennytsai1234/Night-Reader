@@ -10,7 +10,7 @@ import 'package:night_reader/core/network/redirects.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/utils/html_formatter.dart';
 
 class DebugLog {

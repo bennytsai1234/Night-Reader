@@ -41,7 +41,7 @@ import 'widgets/import_preview_sheet.dart';
 import 'widgets/source_item_tile.dart';
 import '../source_login/source_login_page.dart';
 import 'widgets/source_list_skeleton.dart';
-import 'widgets/source_batch_toolbar.dart';
+import 'widgets/select_action_bar.dart';
 import 'widgets/source_check_status_bar.dart';
 import 'widgets/source_manager_menus.dart';
 import 'widgets/source_manager_dialogs.dart';

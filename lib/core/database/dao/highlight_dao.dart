@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:drift/drift.dart';
 
 import '../../models/book/chapter_alignment.dart';
-import '../../models/book/chapter.dart';
+import '../../models/book/book_chapter.dart';
 import '../../models/reading/highlight.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';

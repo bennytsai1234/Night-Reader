@@ -13,7 +13,7 @@ import '../engine/web_book/complete_content_fetcher.dart';
 import '../engine/web_book/illustration_fetcher.dart';
 import '../models/book/book.dart';
 import '../models/source/book_source.dart';
-import '../models/book/chapter.dart';
+import '../models/book/book_chapter.dart';
 import '../storage/book_chapter_files.dart';
 import '../utils/illustration_markers.dart';
 import 'comic_chapter_files.dart';

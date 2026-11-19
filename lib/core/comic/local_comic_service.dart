@@ -9,7 +9,7 @@ import '../database/dao/book_dao.dart';
 import '../database/dao/chapter_dao.dart';
 import '../local_book/local_book_fingerprint.dart';
 import '../models/book/book.dart';
-import '../models/book/chapter.dart';
+import '../models/book/book_chapter.dart';
 import '../models/source/book_source_logic.dart';
 import '../storage/app_storage_paths.dart';
 import '../local_book/local_book_service.dart';

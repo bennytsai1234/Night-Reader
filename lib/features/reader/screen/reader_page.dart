@@ -17,7 +17,7 @@ import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/core/backup/highlight_export.dart';
 import 'package:night_reader/features/reader/features/highlight/reader_highlight_sheet.dart';
 import 'package:night_reader/features/reader/features/highlight/reader_highlights.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:night_reader/core/storage/books_in_use.dart';

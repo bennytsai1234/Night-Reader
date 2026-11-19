@@ -8,7 +8,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/source_switch/auto_source_switch.dart';
 import 'package:night_reader/core/background_work/background_work.dart';

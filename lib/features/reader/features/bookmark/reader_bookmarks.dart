@@ -6,7 +6,7 @@ import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/chapter_alignment.dart';
 import 'package:night_reader/core/models/reading/bookmark.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/features/reader/text_view/overlay/bookmark_marks.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 

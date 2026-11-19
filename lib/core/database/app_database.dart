@@ -12,7 +12,7 @@ import '../engine/book/book_help.dart';
 // model imports required by app_database.g.dart (part shares this namespace)
 import '../models/search/ai_find_record.dart';
 import '../models/book/book.dart';
-import '../models/book/chapter.dart';
+import '../models/book/book_chapter.dart';
 import '../models/replace_rule.dart';
 import '../models/source/book_source.dart';
 import '../models/book/book_group.dart';

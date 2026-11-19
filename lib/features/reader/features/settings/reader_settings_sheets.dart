@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_sheet.dart';
 import 'package:night_reader/features/reader/features/settings/reader_settings_controller.dart';
-import 'package:night_reader/features/reader/features/settings/reader_settings_sections.dart';
+import 'package:night_reader/features/reader/features/settings/reader_settings_groups.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';

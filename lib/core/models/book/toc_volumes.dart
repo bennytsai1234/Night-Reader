@@ -1,4 +1,4 @@
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 
 /// 目錄裡的分卷（[BookChapter.isVolume]）：每章屬於哪一卷、卷裡有幾章、
 /// 收起哪些卷後畫面上剩哪些列。位置都是在 [chapters] 裡的第幾個。

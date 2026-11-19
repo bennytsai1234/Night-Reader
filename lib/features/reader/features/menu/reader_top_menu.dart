@@ -8,7 +8,7 @@ import 'package:night_reader/shared/widgets/glass/glass.dart';
 
 import 'reader_bottom_menu.dart' show ReaderChapterNavigationState;
 import 'reader_menu_entrance.dart';
-import 'reader_menu_palette.dart';
+import 'reader_menu_style.dart';
 
 import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book/book.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/features/audiobook/audiobook_page.dart';
 import 'package:night_reader/features/comic_reader/comic_reader_page.dart';

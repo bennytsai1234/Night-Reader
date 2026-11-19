@@ -4,7 +4,7 @@ import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart'
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 
 /// 有聲書一集的音訊請求：播放器拿它自己抓（ADR 0055）。
 class AudioRequest {

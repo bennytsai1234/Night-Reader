@@ -1,6 +1,6 @@
 import 'package:night_reader/features/reader/session/reader_open_target.dart';
 import 'package:night_reader/features/reader/chapter/reader_content.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/book/book.dart';
 
 import 'dart:convert';

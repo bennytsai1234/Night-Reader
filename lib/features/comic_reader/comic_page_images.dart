@@ -40,7 +40,7 @@ class ComicImageKey {
 /// 不用 Flutter 的圖片快取：它照最近用到的擠掉，不知道哪些圖離畫面近，
 /// 範圍外的也不會主動放掉。
 ///
-/// 圖由 [ComicPageView]（`comic_page_image.dart`）畫：已經解碼好的直接畫
+/// 圖由 [ComicPageView]（`comic_page_view.dart`）畫：已經解碼好的直接畫
 /// （[image]），還沒的登記（[addListener]、[want]），好了或失敗時通知。
 class ComicPageImages {
   ComicPageImages({required this.source, this.onSize, this.concurrency = 3})

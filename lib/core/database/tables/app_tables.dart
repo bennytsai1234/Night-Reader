@@ -5,7 +5,7 @@ import 'package:drift/drift.dart';
 import '../../models/search/ai_find_record.dart';
 import '../../models/book/book.dart';
 import '../../models/reading/bookmark.dart';
-import '../../models/book/chapter.dart';
+import '../../models/book/book_chapter.dart';
 import '../../models/reading/highlight.dart';
 import '../../models/replace_rule.dart';
 import '../../models/source/book_source.dart';

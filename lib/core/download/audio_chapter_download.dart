@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../models/book/book.dart';
 import '../models/source/book_source.dart';
-import '../models/book/chapter.dart';
+import '../models/book/book_chapter.dart';
 import '../storage/book_chapter_files.dart';
 import '../source/book_source_service.dart';
 import '../network/network_service.dart';

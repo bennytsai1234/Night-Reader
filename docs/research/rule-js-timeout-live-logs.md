@@ -50,7 +50,7 @@
 
 照「逐筆事件」的設計做了（分支 `fix/rule-js-debug-logs`）：
 
-- 書源工作一邊跑一邊交回紀錄：`reportSourceProgress`（`lib/core/utils/source_progress.dart`），呼叫端在 `SourceIsolate.run`／`SourceWorker.run` 給 `onProgress`。worker 每一筆當下 `notify` 主 isolate；worker 停住時網路 isolate 替它記的照 `_Blocked.id` 交回停住的那個工作。工作結束或 worker 被結束後才到的不收，不會混進下一次。
+- 書源工作一邊跑一邊交回紀錄：`reportSourceProgress`（`lib/core/source/source_progress.dart`），呼叫端在 `SourceIsolate.run`／`SourceWorker.run` 給 `onProgress`。worker 每一筆當下 `notify` 主 isolate；worker 停住時網路 isolate 替它記的照 `_Blocked.id` 交回停住的那個工作。工作結束或 worker 被結束後才到的不收，不會混進下一次。
 - `RequestLog.live`：每記一行交給這次 `run` 開始時收紀錄的人。收的人就是這個 worker 工作的時，網路 isolate 照同樣設定直接交回，`merge` 不再交，整頁原文也不帶回 worker；收的人在 worker 裡（原地執行的工作自己收）時，`merge` 接上時再交。正文那段要在 worker 裡找下一頁（`keepingPages`），那段的整頁仍帶回 worker。
 - 除錯紀錄由 `startDebug` 的 `onLog` 在寫下當下交出，不經 `logStream`。
 - 試抓與 JS 工具的紀錄以主 isolate 收到的那份為準，worker 跑完只交回逾時、正文判斷這些；外層超時交回已收到的。JS 工具的 6,000 字上限照舊。

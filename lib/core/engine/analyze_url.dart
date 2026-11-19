@@ -13,7 +13,7 @@ import 'package:night_reader/core/engine/rule_analyzer.dart';
 import 'package:night_reader/core/models/source/lenient_json.dart';
 import 'package:night_reader/core/network/backstage_webview.dart';
 import 'package:night_reader/core/network/http_client.dart';
-import 'package:night_reader/core/network/rate_limiter.dart';
+import 'package:night_reader/core/network/concurrent_rate_limiter.dart';
 import 'package:night_reader/core/utils/encoding_detect.dart';
 import 'package:night_reader/core/network/cookie_store.dart';
 import 'package:night_reader/core/utils/cache_manager.dart';

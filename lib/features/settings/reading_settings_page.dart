@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/features/reader/features/settings/reader_settings_controller.dart';
-import 'package:night_reader/features/reader/features/settings/reader_settings_sections.dart';
+import 'package:night_reader/features/reader/features/settings/reader_settings_groups.dart';
 import 'package:night_reader/features/reader/screen/reader_device_channel.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';

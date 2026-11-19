@@ -1,4 +1,4 @@
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 
 /// AppException - 應用程式例外基類 (原 Android exception/NoStackTraceException.kt)
 abstract class AppException implements Exception {

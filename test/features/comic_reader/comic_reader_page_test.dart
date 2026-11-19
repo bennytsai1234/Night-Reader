@@ -6,7 +6,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book/book.dart';
-import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/features/comic_reader/comic_reader_page.dart';
 import 'package:night_reader/features/comic_reader/comic_strip_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';

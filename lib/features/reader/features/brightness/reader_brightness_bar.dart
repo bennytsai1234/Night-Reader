@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader/features/brightness/reader_brightness.dart';
-import 'package:night_reader/features/reader/features/menu/reader_menu_palette.dart';
+import 'package:night_reader/features/reader/features/menu/reader_menu_style.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
