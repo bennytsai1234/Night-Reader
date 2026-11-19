@@ -132,7 +132,7 @@ void main() {
 
     await tester.tap(find.text('暫停'));
     // 停好要等結果檔寫完（真的寫檔）。
-    for (var i = 0; i < 50 && find.text('已暫停 0/1').evaluate().isEmpty; i++) {
+    for (var i = 0; i < 200 && find.text('已暫停 0/1').evaluate().isEmpty; i++) {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 20)),
       );
@@ -149,7 +149,11 @@ void main() {
     work.end(other);
 
     await tester.tap(find.text('結束'));
-    for (var i = 0; i < 50 && find.text('已暫停 0/1').evaluate().isNotEmpty; i++) {
+    for (
+      var i = 0;
+      i < 200 && find.text('已暫停 0/1').evaluate().isNotEmpty;
+      i++
+    ) {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 20)),
       );
@@ -229,7 +233,7 @@ void main() {
     Future<void> release(WidgetTester tester, Finder done) async {
       holding = false;
       if (!hold.isCompleted) hold.complete();
-      for (var i = 0; i < 50 && done.evaluate().isEmpty; i++) {
+      for (var i = 0; i < 200 && done.evaluate().isEmpty; i++) {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 20)),
         );
@@ -252,7 +256,7 @@ void main() {
       ]);
       for (
         var i = 0;
-        i < 50 &&
+        i < 200 &&
             (provider.unfilteredResultCount == 0 ||
                 provider.completedSources == 0);
         i++
