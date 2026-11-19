@@ -92,6 +92,43 @@ class PulledProgress {
   Future<void> commit(SyncRecord applied) => _commit(applied);
 }
 
+/// 同步現在在哪個階段（`docs/state-machines.md`「同步」）。
+enum SyncPhase {
+  /// 沒在同步。
+  idle,
+
+  /// 日常的同步：只有閱讀進度（[SyncService.syncProgress]）。
+  progress,
+
+  /// 全面同步：全部種類（[SyncService.syncAll]）。
+  full,
+
+  /// 全面同步按了取消（[SyncService.cancelSync]）：手上這一種做完就停。
+  stopping,
+}
+
+/// 跑的途中又有人要的那一輪。
+enum _Next { none, progress, full }
+
+/// 正在跑的一段同步：這一輪在哪個階段、跑完要不要接著再一輪。整段（含補跑
+/// 的輪次）做完就放掉，[SyncService] 回到閒著。
+class _SyncRun {
+  _SyncRun(this.round);
+
+  /// 這一輪：同步進度、全面同步或停下中，不會是閒著。
+  SyncPhase round;
+
+  /// 排著的下一輪。同時要過進度與全面同步時排全面同步，它含進度。
+  _Next next = _Next.none;
+
+  /// 有人要閱讀進度插隊先送（[SyncService.requestSyncProgressFirst]），還沒
+  /// 送；和這一輪、排著的下一輪同時成立。
+  bool progressFirst = false;
+
+  /// 整段做完時完成。
+  late final Future<void> done;
+}
+
 /// 多台手機同步（ADR 0039）：每種資料（[SyncKind]）讀雲端、每筆合併、
 /// 寫回。日常只同步閱讀進度（[syncProgress]），全部種類要使用者按「立即
 /// 全面同步」（[syncAll]，ADR 0046）。同一時間只跑一次；跑的途中又有人要
@@ -165,8 +202,8 @@ class SyncService {
   /// 不再記進上次同步的紀錄。
   int _generation = 0;
 
-  Future<void>? _running;
-  bool _again = false;
+  /// 正在跑的那一段同步；閒著時是 null。
+  _SyncRun? _run;
 
   /// Google 系統登入畫面會使 App 暫停／恢復，這段期間不需要額外同步舊空間。
   bool _authorizingGoogleDrive = false;
@@ -345,9 +382,12 @@ class SyncService {
   /// 取消全面同步：正在跑的那一輪目前這一種做完就停，已經寫完的種類留著，
   /// 不回滾；還沒開始的那一輪不跑。之後才要求的進度同步照常補跑。
   void cancelSync() {
-    if (_running == null) return;
-    _fullPending = false;
-    _cancelled = true;
+    final run = _run;
+    if (run == null) return;
+    if (run.round == SyncPhase.full) run.round = SyncPhase.stopping;
+    // 排的時候可能也有人要過進度（退到背景、有聲書存好進度），分不出來就
+    // 照要過算，不漏送。
+    if (run.next == _Next.full) run.next = _Next.progress;
   }
 
   /// App 進入背景時同步本機改動；Google 帳號選取造成的暫停不算。
@@ -360,54 +400,57 @@ class SyncService {
   /// 同步的話，不等這一輪全部做完，目前這一種做完就先把進度再同步一次，
   /// 另一台才在幾秒內拿得到。
   void requestSyncProgressFirst() {
-    _progressFirst = true;
+    // 閒著時開始的那一輪本來就先做進度。
+    _run?.progressFirst = true;
     syncProgress();
   }
 
-  /// 有人要閱讀進度優先送出（[requestSyncProgressFirst]），還沒送。
-  bool _progressFirst = false;
-
-  /// 有人要全面同步（[syncAll]），還沒開始那一輪。
-  bool _fullPending = false;
-
-  /// 使用者取消了正在跑的那一輪全面同步（[cancelSync]）；下一輪開始時清掉。
-  bool _cancelled = false;
-
   Future<void> _request({required bool full}) {
-    if (full) _fullPending = true;
-    final running = _running;
-    if (running != null) {
-      _again = true;
-      return running;
+    if (_run case final run?) {
+      if (full) {
+        run.next = _Next.full;
+      } else if (run.next == _Next.none) {
+        run.next = _Next.progress;
+      }
+      return run.done;
     }
-    final future = _runUntilSettled().whenComplete(_finishRun);
-    _running = future;
-    return future;
+    final run = _SyncRun(full ? SyncPhase.full : SyncPhase.progress);
+    _run = run;
+    run.done = _runRounds(run);
+    return run.done;
   }
 
-  Future<void> _runUntilSettled() async {
+  /// 一輪接一輪跑到沒有排著的。最後一次看排隊和放下 [_run] 在同一步：之後
+  /// 才要求的開新的一段，不會排進已經不再看的隊。
+  Future<void> _runRounds(_SyncRun run) async {
     final timer = Stopwatch()..start();
     var rounds = 0;
-    do {
-      _again = false;
-      _cancelled = false;
-      final full = _fullPending;
-      _fullPending = false;
-      rounds++;
-      await _syncOnce(full: full);
-      // 取消只停全面同步；取消之後才要求的進度同步（回到前景、退到背景）
-      // 照樣補一輪。
-    } while (_again || _fullPending);
-    if (status.value.enabled && timer.elapsedMilliseconds >= 1000) {
-      AppLog.i('同步總耗時：${timer.elapsedMilliseconds}ms，共 $rounds 輪');
+    try {
+      while (true) {
+        rounds++;
+        await _syncOnce(run);
+        switch (run.next) {
+          case _Next.none:
+            if (status.value.enabled && timer.elapsedMilliseconds >= 1000) {
+              AppLog.i('同步總耗時：${timer.elapsedMilliseconds}ms，共 $rounds 輪');
+            }
+            return;
+          case _Next.progress:
+            run.round = SyncPhase.progress;
+          case _Next.full:
+            run.round = SyncPhase.full;
+        }
+        run.next = _Next.none;
+      }
+    } finally {
+      _finishRun();
     }
   }
 
-  /// 整輪（包含途中補跑的輪次）結束。先放下 [_running] 再通知畫面：聽到
-  /// 「同步完成」時又要求同步的，會開新的一輪，不會拿到這一輪的 future。
+  /// 整段（包含途中補跑的輪次）結束。先放下 [_run] 再通知畫面：聽到「同步
+  /// 完成」時又要求同步的，會開新的一段，不會拿到這一段的 future。
   void _finishRun() {
-    _running = null;
-    _cancelled = false;
+    _run = null;
     status.value = status.value.copyWith(running: false, clearProgress: true);
     // 沒設定同步空間、或沒走到閱讀進度就失敗了，開書也不再等。
     _progressDone();
@@ -486,8 +529,9 @@ class SyncService {
     }
   }
 
-  /// 同步一輪：[full] 是全部種類，否則只有閱讀進度。
-  Future<void> _syncOnce({required bool full}) async {
+  /// 同步一輪：[run] 這一輪是全面同步時全部種類，否則只有閱讀進度。
+  Future<void> _syncOnce(_SyncRun run) async {
+    final full = run.round != SyncPhase.progress;
     final kindTimes = <String, int>{};
     try {
       await _lock.synchronized(() async {
@@ -509,11 +553,11 @@ class SyncService {
             : _kinds(this).whereType<ProgressSync>().take(1).toList();
         for (final (index, kind) in kinds.indexed) {
           // 取消在種類之間停：寫到一半的那一種做完，已經寫完的留著。
-          if (full && _cancelled) return;
+          if (run.round == SyncPhase.stopping) return;
           if (appliedAfter[kind.name] == false) continue;
           appliedAfter[kind.name] = false;
           // 這一種讀這台資料的時候，要求優先送出的進度已經存好了。
-          if (kind is ProgressSync) _progressFirst = false;
+          if (kind is ProgressSync) run.progressFirst = false;
           status.value = status.value.copyWith(
             progress: (kind: kind.name, step: index + 1, total: kinds.length),
           );
@@ -542,7 +586,10 @@ class SyncService {
             );
             if (kind is ProgressSync) _progressDone();
           }
-          if (_progressFirst) await _syncProgressAgain(store, kinds);
+          if (run.progressFirst) {
+            run.progressFirst = false;
+            await _syncProgressAgain(store, kinds);
+          }
         }
         if (failure != null) {
           Error.throwWithStackTrace(failure, failureStack!);
@@ -571,7 +618,6 @@ class SyncService {
   /// 同步途中有人要進度優先送出：把閱讀進度再同步一次，之後才接著做下一種。
   /// 失敗只記下來：這一輪本來就會報錯，下一次同步也還會再送。
   Future<void> _syncProgressAgain(SyncStore store, List<SyncKind> kinds) async {
-    _progressFirst = false;
     final progress = kinds.whereType<ProgressSync>().firstOrNull;
     if (progress == null) return;
     try {
