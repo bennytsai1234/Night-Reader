@@ -87,43 +87,93 @@ class SnapshotSweepController {
   }
 
   /// 兩張圖已經 [capture] 好、還沒開始 [play]。
-  bool get captured => _state?._phase == _Phase.captured;
+  bool get captured => _state?._stage == _Stage.captured;
 
   /// 螢幕上只貼兩張圖、底下不畫：換場中，或拍好後開始掃之前停住的那幾格。
-  bool get playing => _state?._phase == _Phase.playing;
+  bool get playing => _state?._stage.mixing ?? false;
 
   /// 拍到一半、拍好還沒播，或換場還沒播完時，換回真的畫面（底下已經換好）、
   /// 放掉圖，完成這一次換場。建畫面途中呼叫時（例如底下的元件在
   /// didUpdateWidget 裡）等這一幀畫完再換。
   void finish() {
     final state = _state;
-    final session = state?._session;
-    if (state == null || session == null) return;
+    final round = state?._round;
+    if (state == null || round == null) return;
     final scheduler = SchedulerBinding.instance;
     if (scheduler.schedulerPhase != SchedulerPhase.persistentCallbacks) {
       state._end();
       return;
     }
     scheduler.addPostFrameCallback((_) {
-      if (state.mounted && identical(state._session, session)) state._end();
+      if (state._current(round)) state._end();
     });
   }
 }
 
-enum _Phase {
-  /// 畫真的畫面。
-  live,
+/// 定格換場現在在哪一段（`docs/state-machines.md`「定格換場」）。
+enum _Stage {
+  /// 沒在換場：畫真的畫面。
+  live(painted: _Painted.live),
 
-  /// 已經拍好「之前」、底下換成了換好的樣子：螢幕上蓋著「之前」那張圖，
-  /// 等底下畫好拍「之後」。
-  holding,
+  /// 拍「之前」：畫真的畫面，等這一格畫完拍下來。
+  takingBefore(painted: _Painted.live),
 
-  /// 兩張圖都拍好、底下換回原本的樣子（[SnapshotSweepController.capture]），
-  /// 畫真的畫面，等 [SnapshotSweepController.play]。
-  captured,
+  /// 蓋著「之前」拍「之後」：底下換成換好的樣子，螢幕上蓋著「之前」那張圖，
+  /// 等底下畫好拍下來。
+  holding(painted: _Painted.before),
 
-  /// 兩張圖混合中，底下不畫。
-  playing,
+  /// 拍好（[SnapshotSweepController.capture]）：底下換回原本的樣子、畫真的
+  /// 畫面，等 [SnapshotSweepController.play]。
+  captured(painted: _Painted.live),
+
+  /// 換上「之前」：螢幕上只貼兩張圖（換場進度 0），等這一格畫完做 settle。
+  showing(painted: _Painted.mix),
+
+  /// 停一下：做完 settle，停滿 gap 才開始換場。
+  waiting(painted: _Painted.mix),
+
+  /// 換場中：兩張圖照每個像素的橫向位置混合。
+  sweeping(painted: _Painted.mix);
+
+  const _Stage({required this.painted});
+
+  /// 螢幕上畫什麼。
+  final _Painted painted;
+
+  /// 螢幕上只貼兩張圖、底下不畫（[SnapshotSweepController.playing]）。
+  bool get mixing => painted == _Painted.mix;
+}
+
+/// 螢幕上畫什麼：真的畫面（照常點）、蓋著「之前」那張圖（不接點擊），或
+/// 兩張圖的混合（按下就直接播完）。
+enum _Painted { live, before, mix }
+
+/// 一輪定格換場：從拍「之前」到換場播完或被結束。這一輪的圖、等它的人與
+/// 參數都在這裡，結束時一起放掉；等待回來看它還是不是現在這一輪。
+class _Round {
+  _Round(this.stage);
+
+  _Stage stage;
+  ui.Image? before;
+  ui.Image? after;
+
+  /// [SnapshotSweepController.capture] 拍好、換回原本的樣子的那一格畫完時
+  /// 完成；拍好後馬上 play 時會和換上「之前」同時還在。
+  Completer<void>? captured;
+
+  /// [SnapshotSweepController.play] 換場播完時完成。
+  Completer<void>? run;
+
+  /// 由左而右還是整片淡換。
+  bool sweep = true;
+
+  /// 換上「之前」、這一格畫完後做的事（[SnapshotSweepController.play] 的
+  /// settle），與做完後停多久（gap）。
+  VoidCallback? settle;
+  Duration gap = Duration.zero;
+
+  /// 停一下的計時器。
+  Timer? timer;
 }
 
 class _SnapshotSweepState extends State<SnapshotSweep>
@@ -131,19 +181,10 @@ class _SnapshotSweepState extends State<SnapshotSweep>
   late final AnimationController _progress = AnimationController(vsync: this);
   final GlobalKey _boundaryKey = GlobalKey();
 
-  _Phase _phase = _Phase.live;
-  ui.Image? _before;
-  ui.Image? _after;
-  bool _sweep = true;
+  /// 這一輪；null 是沒在換場。
+  _Round? _round;
 
-  /// 這一輪（拍圖到換場播完）；結束或被下一輪蓋過時換掉。
-  Object? _session;
-
-  /// [SnapshotSweepController.capture] 拍好、換回原本的樣子時完成。
-  Completer<void>? _captured;
-
-  /// [SnapshotSweepController.play] 換場播完時完成。
-  Completer<void>? _run;
+  _Stage get _stage => _round?.stage ?? _Stage.live;
 
   @override
   void initState() {
@@ -187,35 +228,29 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     return !dirty;
   }
 
-  /// 兩張都拍好後要再停多久（[SnapshotSweepController.play] 的 gap）。
-  Duration _gap = Duration.zero;
+  bool _current(_Round round) => mounted && identical(_round, round);
 
-  /// 兩張都拍好、停住的畫面畫完後做的事（[SnapshotSweepController.play] 的
-  /// settle）。
-  VoidCallback? _settle;
-
-  /// 拍好後停的計時器；結束才開始換場。
-  Timer? _hold;
-
-  bool _current(Object session) => mounted && identical(_session, session);
+  /// 換到這一輪的下一段，螢幕跟著換。
+  void _enter(_Round round, _Stage stage) =>
+      setState(() => round.stage = stage);
 
   Future<void> _capture(VoidCallback change, VoidCallback restore) {
     _end();
     if (MediaQuery.disableAnimationsOf(context)) return Future<void>.value();
-    final session = _session = Object();
-    final captured = _captured = Completer<void>();
+    final round = _round = _Round(_Stage.takingBefore);
+    final captured = round.captured = Completer<void>();
     _afterFrame(
       () => _captureBefore(
-        session,
+        round,
         change,
         // 沒有畫面可拍：不拍，[play] 時照常處理。
         onMissing: _end,
         then: () {
           restore();
-          setState(() => _phase = _Phase.captured);
+          _enter(round, _Stage.captured);
           _afterFrame(() {
-            if (!_current(session)) return;
-            _captured = null;
+            if (!_current(round)) return;
+            round.captured = null;
             captured.complete();
           });
         },
@@ -231,36 +266,36 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     Duration gap,
     VoidCallback? settle,
   ) {
-    final session = _session;
-    final ready = session != null && _phase == _Phase.captured;
+    final ready = _stage == _Stage.captured;
     if (!ready || MediaQuery.disableAnimationsOf(context)) _end();
     if (MediaQuery.disableAnimationsOf(context)) {
       change();
       return Future<void>.value();
     }
-    final run = _run = Completer<void>();
-    _sweep = sweep;
-    _gap = gap;
-    _settle = settle;
+    final round = _round ??= _Round(_Stage.takingBefore);
+    final run = round.run = Completer<void>();
+    round
+      ..sweep = sweep
+      ..gap = gap
+      ..settle = settle;
     _progress.duration = duration;
     if (ready) {
       // 兩張圖已經拍好：螢幕換上「之前」那張圖，底下同一格換成換好的樣子
       // （螢幕上看不到，換回真的畫面時已經好了）。
       change();
-      _showBefore(session);
+      _showBefore(round);
       return run.future;
     }
-    final fresh = _session = Object();
     _afterFrame(
       () => _captureBefore(
-        fresh,
+        round,
         change,
         // 還沒畫出來（或已經拆掉）：沒有「之前」可拍，直接換。
         onMissing: () {
           _end();
           change();
         },
-        then: () => _showBefore(fresh),
+        then: () => _showBefore(round),
       ),
     );
     return run.future;
@@ -270,10 +305,10 @@ class _SnapshotSweepState extends State<SnapshotSweep>
   /// settle、才開始算 gap：settle 落在靜止的畫面上，做得再久，換場前也照樣
   /// 停滿 gap。等的是下一格（[_afterFrame]），不用 endOfFrame：這一格裡別人
   /// 先要過的話，拿到的是這一格的結束。
-  void _showBefore(Object session) {
+  void _showBefore(_Round round) {
     _progress.value = 0;
-    setState(() => _phase = _Phase.playing);
-    _afterFrame(() => _settleThenHold(session));
+    _enter(round, _Stage.showing);
+    _afterFrame(() => _settleThenWait(round));
   }
 
   /// 下一格畫完時做 [action]（[action] 自己判斷能不能做，不能就再等一格）。
@@ -293,12 +328,12 @@ class _SnapshotSweepState extends State<SnapshotSweep>
   /// 拍下「之前」，[change] 換成換好的樣子（螢幕上蓋著「之前」），畫好後拍下
   /// 「之後」，再 [then]。沒有畫面可拍時 [onMissing]。
   void _captureBefore(
-    Object session,
+    _Round round,
     VoidCallback change, {
     required VoidCallback onMissing,
     required VoidCallback then,
   }) {
-    if (!_current(session)) return;
+    if (!_current(round)) return;
     final boundary = _boundary;
     if (boundary == null) {
       onMissing();
@@ -306,73 +341,73 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     }
     if (!_readyToCapture(boundary)) {
       _afterFrame(
-        () => _captureBefore(session, change, onMissing: onMissing, then: then),
+        () => _captureBefore(round, change, onMissing: onMissing, then: then),
       );
       return;
     }
     unawaited(
       _toImage(boundary).then((before) {
-        if (!_current(session)) {
+        if (!_current(round)) {
           before.dispose();
           return;
         }
         // 換成換好的樣子；這一格（與拍「之後」之前的每一格）螢幕上蓋著
         // 「之前」，底下重建得再久也看不出來。
         change();
-        setState(() {
-          _before = before;
-          _phase = _Phase.holding;
-        });
-        _afterFrame(() => _captureAfter(session, then));
+        round.before = before;
+        _enter(round, _Stage.holding);
+        _afterFrame(() => _captureAfter(round, then));
       }),
     );
   }
 
-  void _captureAfter(Object session, VoidCallback then) {
-    if (!_current(session)) return;
+  void _captureAfter(_Round round, VoidCallback then) {
+    if (!_current(round)) return;
     final boundary = _boundary;
     if (boundary == null) {
       _end();
       return;
     }
     if (!_readyToCapture(boundary)) {
-      _afterFrame(() => _captureAfter(session, then));
+      _afterFrame(() => _captureAfter(round, then));
       return;
     }
     unawaited(
       _toImage(boundary).then((after) {
-        if (!_current(session)) {
+        if (!_current(round)) {
           after.dispose();
           return;
         }
-        _after = after;
+        round.after = after;
         then();
       }),
     );
   }
 
-  void _settleThenHold(Object session) {
-    bool current() => _current(session) && _phase == _Phase.playing;
-    if (!current()) return;
-    final settle = _settle;
-    _settle = null;
+  /// 換上「之前」那一格畫完：做 settle，再停 gap 才開始換場。
+  void _settleThenWait(_Round round) {
+    bool showing() => _current(round) && round.stage == _Stage.showing;
+    if (!showing()) return;
+    final settle = round.settle;
+    round.settle = null;
     settle?.call();
     // settle 裡可能結束或換掉了這一次換場。
-    if (!current()) return;
-    _hold = Timer(_gap, () => _start(session));
+    if (!showing()) return;
+    round
+      ..stage = _Stage.waiting
+      ..timer = Timer(round.gap, () => _start(round));
   }
 
-  /// 兩張圖都拍好、也停滿 gap 時開始換場。
-  void _start(Object session) {
-    if (!_current(session) ||
-        _phase != _Phase.playing ||
-        _progress.isAnimating) {
-      return;
-    }
+  /// 停滿 gap 時開始換場。
+  void _start(_Round round) {
+    if (!_current(round) || round.stage != _Stage.waiting) return;
+    round
+      ..stage = _Stage.sweeping
+      ..timer = null;
     // 從下一格開始計時：拍圖這幾格多花的時間不吃掉換場的開頭。
     unawaited(
       _progress.forward(from: 0).whenComplete(() {
-        if (identical(_session, session)) _end();
+        if (identical(_round, round)) _end();
       }),
     );
   }
@@ -380,62 +415,54 @@ class _SnapshotSweepState extends State<SnapshotSweep>
   /// 換回真的畫面、放掉兩張圖，完成這一次換場（拍到一半或拍好還沒播的也
   /// 一起結束）。
   void _end({bool rebuild = true}) {
-    final run = _run, captured = _captured;
-    _run = null;
-    _captured = null;
-    _session = null;
-    _settle = null;
-    _hold?.cancel();
-    _hold = null;
+    final round = _round;
+    if (round == null) return;
+    round.timer?.cancel();
     _progress.stop();
-    final before = _before, after = _after;
-    void reset() {
-      _phase = _Phase.live;
-      _before = null;
-      _after = null;
-    }
-
-    if (rebuild && mounted && _phase != _Phase.live) {
-      setState(reset);
+    if (rebuild && mounted && round.stage != _Stage.takingBefore) {
+      setState(() => _round = null);
     } else {
-      reset();
+      _round = null;
     }
     // 已經交出去的畫面各自留著圖的參照，這裡放掉的只是自己這一份。
-    before?.dispose();
-    after?.dispose();
-    run?.complete();
-    captured?.complete();
+    round.before?.dispose();
+    round.after?.dispose();
+    round.run?.complete();
+    round.captured?.complete();
   }
 
   double get _pixelRatio => MediaQuery.devicePixelRatioOf(context);
 
   /// 兩張圖和畫面大小對不上了：結束這一次換場、換回真的畫面。
   void _onStale() {
-    if (mounted && _phase == _Phase.playing) _end();
+    if (mounted && _stage.mixing) _end();
   }
 
   /// 換場中手指按下：換場直接播完、換回真的畫面，這一下交給底下真的畫面。
   void _onInterrupt() {
-    if (mounted && _phase == _Phase.playing) _end();
+    if (mounted && _stage.mixing) _end();
   }
 
   @override
-  Widget build(BuildContext context) => _SnapshotSweepPaint(
-    phase: _phase,
-    before: _before,
-    after: _after,
-    progress: _progress,
-    sweep: _sweep,
-    pixelRatio: _pixelRatio,
-    onStale: _onStale,
-    onInterrupt: _onInterrupt,
-    child: RepaintBoundary(key: _boundaryKey, child: widget.child),
-  );
+  Widget build(BuildContext context) {
+    final round = _round;
+    return _SnapshotSweepPaint(
+      painted: _stage.painted,
+      before: round?.before,
+      after: round?.after,
+      progress: _progress,
+      sweep: round?.sweep ?? true,
+      pixelRatio: _pixelRatio,
+      onStale: _onStale,
+      onInterrupt: _onInterrupt,
+      child: RepaintBoundary(key: _boundaryKey, child: widget.child),
+    );
+  }
 }
 
 class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
   const _SnapshotSweepPaint({
-    required this.phase,
+    required this.painted,
     required this.before,
     required this.after,
     required this.progress,
@@ -446,7 +473,7 @@ class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
     required super.child,
   });
 
-  final _Phase phase;
+  final _Painted painted;
   final ui.Image? before;
   final ui.Image? after;
   final Animation<double> progress;
@@ -458,7 +485,7 @@ class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
   @override
   _RenderSnapshotSweep createRenderObject(BuildContext context) =>
       _RenderSnapshotSweep(progress, onStale, onInterrupt)
-        ..phase = phase
+        ..painted = painted
         ..before = before
         ..after = after
         ..sweep = sweep
@@ -470,7 +497,7 @@ class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
     _RenderSnapshotSweep renderObject,
   ) {
     renderObject
-      ..phase = phase
+      ..painted = painted
       ..before = before
       ..after = after
       ..sweep = sweep
@@ -499,10 +526,10 @@ class _RenderSnapshotSweep extends RenderProxyBox {
     markNeedsPaint();
   }
 
-  _Phase _phase = _Phase.live;
-  set phase(_Phase value) {
-    if (_phase == value) return;
-    _phase = value;
+  _Painted _painted = _Painted.live;
+  set painted(_Painted value) {
+    if (_painted == value) return;
+    _painted = value;
     markNeedsPaint();
   }
 
@@ -528,7 +555,7 @@ class _RenderSnapshotSweep extends RenderProxyBox {
   }
 
   void _onTick() {
-    if (_phase == _Phase.playing) markNeedsPaint();
+    if (_painted == _Painted.mix) markNeedsPaint();
   }
 
   @override
@@ -553,18 +580,18 @@ class _RenderSnapshotSweep extends RenderProxyBox {
   /// 一換出來就點書，原本會被吃掉、要再點一次（2026-11-05 在手機上量到）。
   @override
   bool hitTest(BoxHitTestResult result, {required Offset position}) {
-    if (_phase == _Phase.live || _phase == _Phase.captured) {
+    if (_painted == _Painted.live) {
       return super.hitTest(result, position: position);
     }
     if (!size.contains(position)) return false;
-    if (_phase == _Phase.playing) hitTestChildren(result, position: position);
+    if (_painted == _Painted.mix) hitTestChildren(result, position: position);
     result.add(BoxHitTestEntry(this, position));
     return true;
   }
 
   @override
   void handleEvent(PointerEvent event, BoxHitTestEntry entry) {
-    if (event is PointerDownEvent && _phase == _Phase.playing) onInterrupt();
+    if (event is PointerDownEvent && _painted == _Painted.mix) onInterrupt();
   }
 
   static final Paint _exact = Paint()..filterQuality = FilterQuality.none;
@@ -582,15 +609,14 @@ class _RenderSnapshotSweep extends RenderProxyBox {
   void paint(PaintingContext context, Offset offset) {
     final before = _before;
     final after = _after;
-    switch (_phase) {
-      case _Phase.live:
-      case _Phase.captured:
+    switch (_painted) {
+      case _Painted.live:
         super.paint(context, offset);
-      case _Phase.holding:
+      case _Painted.before:
         // 底下畫的是換好的樣子（為了拍下來），上面蓋著「之前」。
         super.paint(context, offset);
         if (before != null) _drawWhole(context.canvas, before, offset);
-      case _Phase.playing:
+      case _Painted.mix:
         if (before == null ||
             after == null ||
             !_fits(before) ||

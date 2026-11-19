@@ -731,3 +731,14 @@ ADR 0055 的播放器（`lib/features/audiobook/audiobook_player.dart`），讀�
 
 - 兩張圖、等 `capture` 與 `play` 的人、`settle`、停多久、方向：都是這一輪的東西，收進 `_Round`，結束時一起放掉，不單獨是階段。拍好之後接著 `play`，`capture` 的等待要到換回原本樣子的那一格畫完才完成，和換上「之前」會同時還在。
 - `_progress`：換場的進度，只在換場中動。
+
+**改後**：
+
+| 改前 | 改後 |
+|---|---|
+| `_Phase`（四個）加上 `_session`、`_settle`、`_hold`、`_progress.isAnimating` | `_Stage` 七段，每段寫明螢幕上畫什麼（`_Painted`：真的畫面、蓋著「之前」、兩張圖的混合） |
+| `_session`、`_before`、`_after`、`_captured`、`_run`、`_settle`、`_hold`、`_gap`、`_sweep` 各自是欄位 | 收進這一輪 `_Round`；`_round` 是 null 就是沒在換場，等待回來比它是不是同一輪，`_end` 一次放掉 |
+| 畫的那一層收 `_Phase`，自己再分哪幾個畫真的、哪幾個接點擊 | 只收 `_Painted` |
+| `_start` 看 `_session`、`_phase` 與 `_progress.isAnimating` | 看這一輪是不是停一下 |
+
+對外的 `SnapshotSweepController`（`capture`、`play`、`captured`、`playing`、`finish`）不變；讀者看到的都一樣。
