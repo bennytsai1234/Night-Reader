@@ -706,6 +706,48 @@ void main() {
     await until(() => loader.sent.length == 6);
   });
 
+  test('ending a search while it saves its keyword sends nothing', () async {
+    final keywords = _GatedKeywordDao(db);
+    GetIt.instance
+      ..unregister<SearchKeywordDao>()
+      ..registerSingleton<SearchKeywordDao>(keywords);
+    final loader = _Loader();
+    final provider = await page(searches(), loader);
+    addTearDown(provider.dispose);
+    unawaited(provider.search('night'));
+    expect(provider.isSearching, isTrue);
+    provider.stopSearch();
+    expect(provider.isSearching, isFalse);
+    keywords.gate.complete();
+    await settle();
+    expect(loader.sent, isEmpty);
+    expect(provider.isSearching, isFalse);
+  });
+
+  test('retrying keeps the number of sources the whole search asked', () async {
+    final loader = _Loader();
+    final provider = await page(searches(), loader);
+    addTearDown(provider.dispose);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.length == 3);
+    loader
+      ..answer('甲')
+      ..fail('乙')
+      ..answer('丙');
+    await until(() => !provider.isSearching);
+    expect(provider.failedSources, 1);
+    expect(provider.searchedSourceCount, 3);
+
+    unawaited(provider.retryFailedSources());
+    await until(() => loader.sent.length == 4);
+    expect(provider.isSearching, isTrue);
+    expect(provider.searchedSourceCount, 3);
+    loader.fail('乙');
+    await until(() => !provider.isSearching);
+    expect(provider.failedSources, 1);
+    expect(provider.searchedSourceCount, 3);
+  });
+
   test('a search whose failed sources were all disabled since leaves nothing '
       'to retry', () async {
     final background = searches();

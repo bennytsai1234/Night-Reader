@@ -158,4 +158,153 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('已暫停 0/1'), findsNothing);
   });
+  group('while a background search settles', () {
+    late Completer<void> hold;
+    late bool holding;
+    late Map<String, Completer<List<SearchBook>>> pending;
+    late SearchProvider provider;
+
+    /// 搜尋頁搜「night」（只有一種寫法，每個書源送一次）、放到背景；結果檔的寫入在 [holding] 時卡住，按了暫停
+    /// 或結束之後停在還沒停好的那一刻。
+    Future<void> openInBackground(WidgetTester tester) async {
+      hold = Completer<void>();
+      holding = false;
+      pending = {};
+      await tester.runAsync(
+        () => GetIt.instance<BookSourceDao>().upsertAll([
+          BookSource(bookSourceUrl: 'https://甲.example', bookSourceName: '甲'),
+          BookSource(bookSourceUrl: 'https://乙.example', bookSourceName: '乙'),
+        ]),
+      );
+      Future<List<SearchBook>> loader(
+        BookSource source,
+        String key, {
+        CancelToken? cancelToken,
+      }) {
+        final completer = Completer<List<SearchBook>>();
+        pending[source.bookSourceName] = completer;
+        cancelToken?.whenCancel.then((error) {
+          if (!completer.isCompleted) completer.completeError(error);
+        });
+        return completer.future;
+      }
+
+      final searches = BackgroundSearches(
+        work: BackgroundWork(),
+        directory: () async {
+          if (holding) await hold.future;
+          return dir;
+        },
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: ChangeNotifierProvider(
+            create: (_) => provider = SearchProvider(
+              entrance: Future<void>.value(),
+              searchLoader: loader,
+              backgroundSearches: searches,
+            ),
+            child: const SearchView(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        unawaited(provider.search('night'));
+        for (var i = 0; i < 100 && pending.length < 2; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(find.text('放到背景'));
+      // 結果檔的第一行寫好。
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pump();
+    }
+
+    /// 放開卡住的寫入，等 [done] 出現在畫面上。
+    Future<void> release(WidgetTester tester, Finder done) async {
+      holding = false;
+      if (!hold.isCompleted) hold.complete();
+      for (var i = 0; i < 50 && done.evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(done, findsOneWidget);
+    }
+
+    /// 甲回來一本「甲書」。
+    /// 甲回來一本「甲書」，等它併進結果、結果檔記下它。
+    Future<void> answerFirst(WidgetTester tester) async {
+      pending.remove('甲')!.complete([
+        SearchBook(
+          bookUrl: 'https://甲.example/book',
+          name: '甲書',
+          author: '作者',
+          origin: 'https://甲.example',
+          originName: '甲',
+        ),
+      ]);
+      for (
+        var i = 0;
+        i < 50 &&
+            (provider.unfilteredResultCount == 0 ||
+                provider.completedSources == 0);
+        i++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(provider.completedSources, 1);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+
+    testWidgets('ending a paused search', (tester) async {
+      await openInBackground(tester);
+      await answerFirst(tester);
+      await tester.pump();
+      await tester.tap(find.text('暫停'));
+      hold.complete();
+      await release(tester, find.text('已暫停 1/2'));
+      expect(find.text('結束'), findsOneWidget);
+
+      hold = Completer<void>();
+      holding = true;
+      await tester.tap(find.text('結束'));
+      await tester.pump();
+      expect(find.text('正在結束…'), findsOneWidget);
+      // 改前：從暫停中結束時「繼續」還在、灰掉。
+      expect(action(tester, '繼續').onPressed, isNull);
+      expect(find.text('結束'), findsOneWidget);
+
+      await release(tester, find.text('排序：相關度'));
+      expect(find.text('搜尋'), findsOneWidget);
+    });
+
+    testWidgets('ending while it runs', (tester) async {
+      await openInBackground(tester);
+      await answerFirst(tester);
+      holding = true;
+      await tester.tap(find.text('結束'));
+      await tester.pump();
+      // 改前：結果工具列馬上淡入、頁首是「搜尋」，結束那一行還在寫；淡出中
+      // 的進度那一列寫「正在結束…」。
+      expect(find.text('排序：相關度'), findsOneWidget);
+      expect(find.text('搜尋'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('正在結束…'), findsNothing);
+      expect(find.text('排序：相關度'), findsOneWidget);
+      await release(tester, find.text('排序：相關度'));
+    });
+  });
 }
