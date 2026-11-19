@@ -2,13 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_sheet.dart';
 import 'package:night_reader/features/reader/text_view/overlay/highlight_marks.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/skeleton/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
 

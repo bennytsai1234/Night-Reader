@@ -9,7 +9,7 @@ import 'package:night_reader/core/comic/local_comic_library.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/comic/local_comic_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';

@@ -7,7 +7,7 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/features/comic_reader/comic_strip_model.dart';
 import 'package:night_reader/features/comic_reader/comic_strip_view.dart';
 import 'package:night_reader/features/source_login/source_failure_remedy.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 
 import 'comic_test_pages.dart';
 

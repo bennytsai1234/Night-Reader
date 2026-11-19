@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source/chapter_content_kind.dart';
 
 BookSource _source() => BookSource(

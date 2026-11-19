@@ -3,7 +3,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
+import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';
 
 import '../support/screenshot.dart';
 import 'survey_support.dart';

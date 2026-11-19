@@ -5,10 +5,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book/chapter.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
 import 'package:night_reader/features/reader/features/illustration/reader_illustration_viewer.dart';
 import 'package:night_reader/features/reader/features/settings/reader_highlight_style.dart';
 import 'package:night_reader/features/reader/features/tts/reader_tts_highlight.dart';

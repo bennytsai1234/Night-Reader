@@ -24,9 +24,9 @@
 ## 彈出層
 
 - 彈出層用夜讀自己的開法：底部面板 `AppBottomSheet.show`／`showCustom`、動作表 `showAppActionSheet`、提示框 `showAppAlert` 這一系列、彈出選單 `showGlassMenu`、Material 對話框 `showAppDialog`。Flutter 的 `showModalBottomSheet`、`showDialog`、`showGeneralDialog` 在打開當下就定住遮罩色與打開處的主題，彈出層開著時系統切換深淺就停在舊配色。
-- 從外層主題算出一層自己的主題（面板墊一階、閱讀選單配色）用 `DerivedTheme` 包，不寫 `Theme(data: f(Theme.of(context)))`：彈出層會把打開處的 `Theme` 複製成定值，`DerivedTheme` 底下打開的改從它外面打開、再照當下主題算一次（`lib/shared/widgets/popup_routes.dart`）。
+- 從外層主題算出一層自己的主題（面板墊一階、閱讀選單配色）用 `DerivedTheme` 包，不寫 `Theme(data: f(Theme.of(context)))`：彈出層會把打開處的 `Theme` 複製成定值，`DerivedTheme` 底下打開的改從它外面打開、再照當下主題算一次（`lib/shared/widgets/popups/popup_routes.dart`）。
 - 傳給彈出層的元件（長按預覽、自己畫底色的面板內容、選單色點）在元件裡照主題取色，不在打開前先算好顏色傳進去。
-- 新的開法或打開處加進 `test/shared/widgets/popup_theme_switch_test.dart` 的清單。
+- 新的開法或打開處加進 `test/shared/widgets/popups/popup_theme_switch_test.dart` 的清單。
 
 ## 介面文字
 

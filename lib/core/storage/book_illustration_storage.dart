@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
-import '../models/book.dart';
+import '../models/book/book.dart';
 import 'app_storage_paths.dart';
 import 'storage_metrics.dart';
 import '../utils/illustration_markers.dart';

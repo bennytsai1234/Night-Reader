@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/rendering.dart'
     show BoxHitTestResult, PipelineOwner, RenderProxyBox, RenderSliver;
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
@@ -14,22 +14,22 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
-import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
-import 'package:night_reader/shared/widgets/glass_menu.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 
 import 'search_model.dart';
 import 'search_provider.dart';
 import 'search_run.dart';
 import 'models/search_scope.dart';
 
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/background_work/background_work.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/features/explore/widgets/explore_book_item.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 
 import 'ai_find/ai_find_page.dart';
@@ -39,7 +39,7 @@ import 'widgets/search_result_item.dart';
 import 'widgets/search_scope_sheet.dart';
 import 'widgets/search_suggestion_view.dart';
 
-import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 
 /// SearchPage - 搜尋頁面
 /// (對標 Legado SearchActivity)

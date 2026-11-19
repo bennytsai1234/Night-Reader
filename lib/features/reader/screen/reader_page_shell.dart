@@ -5,9 +5,9 @@ import 'dart:ui' as ui show TextDirection;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/popup_routes.dart';
+import 'package:night_reader/shared/widgets/popups/popup_routes.dart';
 import 'package:intl/intl.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/features/reader/features/settings/reader_info_item.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_constants.dart';
@@ -26,11 +26,11 @@ import 'package:night_reader/features/reader/screen/reader_device_channel.dart';
 import 'package:night_reader/features/reader/screen/reader_side_panel.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
-import 'package:night_reader/shared/widgets/skeleton_text.dart';
+import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton_text.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 閱讀頁面框架的垂直幾何：頁首、正文、頁尾各佔的高度。

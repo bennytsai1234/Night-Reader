@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 
-import '../../models/chapter.dart';
+import '../../models/book/chapter.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
 

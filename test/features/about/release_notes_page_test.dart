@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/app_update/update_preferences.dart';
 import 'package:night_reader/core/app_update/update_service.dart';
 import 'package:night_reader/features/about/release_notes_page.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeService extends AppUpdateService {

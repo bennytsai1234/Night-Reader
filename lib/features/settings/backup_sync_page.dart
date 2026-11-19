@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/platform/app_file_selection_service.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/backup/backup_service.dart';
@@ -16,9 +16,9 @@ import 'package:night_reader/features/settings/sync_space_page.dart';
 import 'package:night_reader/features/settings/sync_status_text.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:share_plus/share_plus.dart';
 
 class BackupSyncPage extends StatefulWidget {

@@ -5,7 +5,7 @@ import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/js/js_response.dart';
 import 'package:night_reader/core/engine/web_book/login_check.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/network/redirects.dart';
 import 'package:night_reader/core/network/str_response.dart';
 import 'package:night_reader/core/utils/cache_manager.dart';

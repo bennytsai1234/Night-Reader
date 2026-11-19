@@ -6,7 +6,7 @@ import 'package:night_reader/core/app_update/app_update_installer.dart';
 import 'package:night_reader/core/app_update/update_preferences.dart';
 import 'package:night_reader/core/app_update/update_service.dart';
 import 'package:night_reader/features/about/update_dialog.dart';
-import 'package:night_reader/shared/widgets/popup_routes.dart';
+import 'package:night_reader/shared/widgets/popups/popup_routes.dart';
 
 /// 自動 / 手動 更新檢查的入口。集中處理「呼叫 service → 看忽略與稍後提醒 →
 /// 視網路先下載 → 顯示 Dialog → 寫忽略或稍後提醒」。

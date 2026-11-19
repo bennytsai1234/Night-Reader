@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/features/reader/features/menu/reader_bottom_menu.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_controller.dart';
 import 'package:night_reader/features/reader/features/menu/reader_top_menu.dart';
@@ -14,10 +14,10 @@ import 'package:night_reader/features/reader/screen/reader_chapters_drawer.dart'
 import 'package:night_reader/features/reader/screen/reader_page_shell.dart';
 import 'package:night_reader/features/reader/screen/reader_side_panel.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
-import 'package:night_reader/shared/widgets/skeleton_text.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton_text.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../support/glass_motion.dart';

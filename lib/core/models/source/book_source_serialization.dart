@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import '../book_source.dart';
+import 'book_source.dart';
 
 class BookSourceSerialization {
   /// 將規則對象轉換為 JSON 字符串

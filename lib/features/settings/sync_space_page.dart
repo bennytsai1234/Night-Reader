@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
@@ -10,9 +10,9 @@ import 'package:night_reader/core/sync/sync_store.dart';
 import 'package:night_reader/features/settings/full_sync_dialog.dart';
 import 'package:night_reader/features/settings/webdav_settings_page.dart';
 import 'package:night_reader/features/settings/sync_status_text.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 
 /// 選這台手機的同步空間（ADR 0039）：Google 雲端硬碟或 WebDAV，每台自己選。
 /// Google 雲端硬碟只在 Android：iOS 版是使用者自己重新簽章安裝的，Google

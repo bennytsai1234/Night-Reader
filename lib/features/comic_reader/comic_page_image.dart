@@ -2,15 +2,15 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/features/source_login/source_failure_remedy.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 
 import 'comic_page_images.dart';
 
-import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 
 /// 條漫上的一張圖：已經解碼好的直接畫；還沒到時畫骨架（照骨架呼吸），
 /// 到了淡入；載不到時寫原因，下面「重試」與「用網頁開啟」，其他張照常

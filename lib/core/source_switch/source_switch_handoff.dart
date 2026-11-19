@@ -1,5 +1,5 @@
 import 'package:night_reader/core/database/app_database.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 
 /// A cross-owner operation that must become quiescent before a source switch
 /// can publish a new reader world.

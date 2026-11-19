@@ -10,10 +10,10 @@ import 'package:night_reader/core/engine/analyze_rule.dart' show AnalyzeRule;
 import 'package:night_reader/core/engine/analyze_rule/analyze_rule_support.dart';
 import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/models/rule_data_interface.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/source/rule_data_interface.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 
 import 'js_extensions_base.dart';
 import 'extensions/js_blocking_tasks.dart';

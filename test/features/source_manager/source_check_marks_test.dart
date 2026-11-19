@@ -6,7 +6,7 @@ import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';

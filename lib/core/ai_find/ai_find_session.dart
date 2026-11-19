@@ -10,9 +10,9 @@ import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart'
     show AiRepairStep, AiRepairStepKind, AiRepairStepState;
-import 'package:night_reader/core/models/ai_find_record.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/search/ai_find_record.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/core/utils/string_utils.dart';

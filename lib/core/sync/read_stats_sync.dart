@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/app_database.dart' show ReadDay;
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/read_record.dart';
+import 'package:night_reader/core/models/reading/read_record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'sync_base_storage.dart';

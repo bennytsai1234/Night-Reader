@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source/chapter_content_kind.dart';
 
 import 'agent_loop.dart';

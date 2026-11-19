@@ -4,7 +4,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
-import 'package:night_reader/core/widgets/default_book_cover.dart';
+import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 import 'book_info_header.dart';

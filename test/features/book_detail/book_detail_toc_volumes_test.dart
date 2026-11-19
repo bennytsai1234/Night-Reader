@@ -4,10 +4,10 @@ import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 

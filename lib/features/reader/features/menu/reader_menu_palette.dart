@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_layers.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
-import 'package:night_reader/shared/widgets/popup_routes.dart';
+import 'package:night_reader/shared/widgets/popups/popup_routes.dart';
 
 /// 閱讀選單（上下選單、目錄、閱讀器內面板）的配色，取自目前風格。
 class ReaderMenuStyle {

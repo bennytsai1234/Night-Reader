@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/features/reader/session/reader_read_time_controller.dart';
 import 'package:night_reader/shared/navigation/app_route_observer.dart';
 

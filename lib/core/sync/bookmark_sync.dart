@@ -1,7 +1,7 @@
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/book/book_help.dart';
-import 'package:night_reader/core/models/bookmark.dart';
+import 'package:night_reader/core/models/reading/bookmark.dart';
 
 import 'sync_kind.dart';
 import 'sync_records.dart';

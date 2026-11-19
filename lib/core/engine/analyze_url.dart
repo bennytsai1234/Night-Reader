@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:dio/dio.dart';
-import 'package:night_reader/core/models/base_source.dart';
+import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/js/encode/charsets.dart';
 import 'package:night_reader/core/engine/js/encode/encode_utils_base64.dart';

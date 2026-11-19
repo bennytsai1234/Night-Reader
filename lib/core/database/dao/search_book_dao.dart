@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 
-import '../../models/search_book.dart';
+import '../../models/search/search_book.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
 

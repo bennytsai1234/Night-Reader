@@ -7,8 +7,8 @@ import 'package:night_reader/core/platform/app_permission_service.dart';
 import 'package:night_reader/features/about/privacy_pages.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 
 import '../../support/skeleton_match.dart';
 

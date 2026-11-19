@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:night_reader/core/models/base_source.dart';
+import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/network/cancellation.dart';
 
 /// ConcurrentRecord - 並發記錄

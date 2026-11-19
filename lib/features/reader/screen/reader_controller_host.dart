@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/book/chapter.dart';
 import 'package:night_reader/core/storage/book_storage_service.dart';
 import 'package:night_reader/features/reader/screen/dependencies/reader_dependencies.dart';
 import 'package:night_reader/features/reader/screen/reader_latest_only_scheduler.dart';

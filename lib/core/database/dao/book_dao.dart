@@ -1,7 +1,7 @@
 import 'package:drift/drift.dart';
 
-import '../../models/book.dart';
-import '../../models/book_group.dart';
+import '../../models/book/book.dart';
+import '../../models/book/book_group.dart';
 import '../../models/source/book_source_logic.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';

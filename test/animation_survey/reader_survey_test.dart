@@ -20,8 +20,8 @@ import 'package:night_reader/features/reader/screen/reader_page.dart';
 import 'package:night_reader/features/reader/session/reader_runtime.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
-import 'package:night_reader/shared/widgets/chapter_scrollbar.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/book/chapter_scrollbar.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 
 import '../support/app_harness.dart';
 import '../support/navigation_budget.dart';

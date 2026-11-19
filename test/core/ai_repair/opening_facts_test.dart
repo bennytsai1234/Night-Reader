@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/opening_facts.dart';
 import 'package:night_reader/core/ai_repair/repair_pages.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 
 /// 「我的」照 UTF-8 與 GBK 編碼的樣子。
 const _utf8Key = '%E6%88%91%E7%9A%84';

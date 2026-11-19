@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader/features/brightness/reader_brightness.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_palette.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 閱讀選單左側的亮度條：上方一顆「自動」鈕，下方一條直立膠囊，亮度從下

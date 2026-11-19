@@ -6,21 +6,21 @@ import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/widgets/book_cover_widget.dart';
-import 'package:night_reader/core/widgets/default_book_cover.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/shared/widgets/book/book_cover_widget.dart';
+import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/book_detail/widgets/book_cover_ambience.dart';
 import 'package:night_reader/features/book_detail/widgets/book_info_header.dart';
 import 'package:night_reader/features/book_detail/widgets/book_read_capsule.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
-import 'package:night_reader/shared/widgets/skeleton_text.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton_text.dart';
 
 /// 書籍資料要等 [gate] 打開才回來，用來停在載入中。
 class _FakeBookDao extends Fake implements BookDao {

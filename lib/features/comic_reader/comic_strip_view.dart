@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/scheduler.dart';
 import 'package:night_reader/features/source_login/source_failure_remedy.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 
 import 'comic_chapter_transition.dart';
 import 'comic_page_image.dart';

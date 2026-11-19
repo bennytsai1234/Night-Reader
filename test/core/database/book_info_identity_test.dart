@@ -1,9 +1,9 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/bookmark.dart';
-import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/reading/bookmark.dart';
+import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 
 void main() {

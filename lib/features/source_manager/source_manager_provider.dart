@@ -7,7 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';

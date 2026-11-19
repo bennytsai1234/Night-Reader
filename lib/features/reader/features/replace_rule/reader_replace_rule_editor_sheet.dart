@@ -2,15 +2,15 @@ import 'dart:async';
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_preview.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_form.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_options.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_test_panel.dart';
-import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
 class ReaderReplaceRuleEditorSheet extends StatefulWidget {

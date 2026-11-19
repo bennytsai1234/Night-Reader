@@ -6,9 +6,9 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/bookmark.dart';
-import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/reading/bookmark.dart';
+import 'package:night_reader/core/models/reading/highlight.dart';
 
 /// 升級到 schema 16：書、書籤與標註的作者拿掉以前書籍詳情解析留下的
 /// 開頭的「作者：」，三張表一起改，書名加作者照樣對得上；「著」不動。

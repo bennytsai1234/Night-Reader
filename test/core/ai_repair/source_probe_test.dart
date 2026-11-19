@@ -12,7 +12,7 @@ import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/network/network_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

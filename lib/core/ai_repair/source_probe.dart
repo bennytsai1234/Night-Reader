@@ -5,7 +5,7 @@ import 'package:drift/isolate.dart';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/network/error_text.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';

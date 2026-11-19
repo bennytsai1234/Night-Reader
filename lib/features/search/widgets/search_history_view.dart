@@ -1,20 +1,20 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
-import 'package:night_reader/core/models/ai_find_record.dart';
-import 'package:night_reader/core/models/search_keyword.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
+import 'package:night_reader/core/models/search/ai_find_record.dart';
+import 'package:night_reader/core/models/search/search_keyword.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 
 import '../ai_find/ai_find_page.dart';
 import '../search_provider.dart';
 
-import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 
 /// SearchHistoryView - 搜尋歷史顯示元件
 /// (對標 Legado SearchActivity 的輸入輔助區域 + HistoryKeyAdapter)

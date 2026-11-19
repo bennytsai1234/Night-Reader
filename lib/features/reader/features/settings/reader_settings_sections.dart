@@ -3,7 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/fonts/app_font.dart';
 import 'package:night_reader/features/reader/features/brightness/reader_brightness.dart';
 import 'package:night_reader/features/reader/features/menu/reader_tap_action.dart';
@@ -15,14 +15,14 @@ import 'package:night_reader/features/reader/features/settings/reader_settings_c
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
-import 'package:night_reader/shared/widgets/app_font_picker_row.dart';
-import 'package:night_reader/shared/widgets/glass_segmented.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
-import 'package:night_reader/shared/widgets/number_stepper_row.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/lists/app_font_picker_row.dart';
+import 'package:night_reader/shared/widgets/glass/glass_segmented.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/skeleton/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/lists/number_stepper_row.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
+import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 
 // 閱讀設定的各組：閱讀器內的外觀與排版面板與「閱讀偏好」頁共用，都透過
 // ReaderSettingsController 讀寫，兩處行為與資料一致。

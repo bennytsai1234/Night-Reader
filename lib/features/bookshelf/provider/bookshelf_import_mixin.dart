@@ -1,5 +1,5 @@
 import 'package:night_reader/core/comic/comic_chapter_files.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/comic/local_comic_service.dart';
 

@@ -9,7 +9,7 @@ import '../../support/sync_store_blobs.dart';
 
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
-import 'package:night_reader/core/models/bookmark.dart';
+import 'package:night_reader/core/models/reading/bookmark.dart';
 import 'package:night_reader/core/sync/bookmark_sync.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
 import 'package:night_reader/core/sync/sync_records.dart';

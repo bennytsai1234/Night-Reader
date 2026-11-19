@@ -8,8 +8,8 @@ import '../../support/sync_store_blobs.dart';
 
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/ai_find_dao.dart';
-import 'package:night_reader/core/models/ai_find_record.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/search/ai_find_record.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/sync/ai_find_sync.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
 import 'package:night_reader/core/sync/sync_service.dart';

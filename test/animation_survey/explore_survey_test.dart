@@ -6,11 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
 import 'package:night_reader/features/explore/explore_show_page.dart';
 import 'package:night_reader/features/explore/explore_show_provider.dart';
-import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
+import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';
 import 'package:provider/provider.dart';
 
 import '../support/navigation_budget.dart';

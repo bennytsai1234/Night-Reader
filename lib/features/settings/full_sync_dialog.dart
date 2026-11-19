@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/features/settings/sync_status_text.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 
 /// 全面同步（[SyncService.syncAll]）：開一個點外面、按返回都關不掉的進度框，
 /// 蓋住整個 App，同步完才關，再用一行提示說完成、失敗或停下（ADR 0046）。

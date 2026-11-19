@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/book/chapter.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 
 /// 規則 JS 能直接改的一個欄位（`book.xxx = …`、`chapter.xxx = …`）。
 ///
