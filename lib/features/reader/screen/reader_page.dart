@@ -52,6 +52,7 @@ import 'package:night_reader/features/reader/session/reader_runtime.dart';
 import 'package:night_reader/features/reader/session/reader_state.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
+import 'package:night_reader/features/reader/features/tts/reader_tts_phase.dart';
 
 class ReaderPage extends StatefulWidget {
   const ReaderPage({
@@ -504,8 +505,7 @@ class _ReaderPageState extends State<ReaderPage>
                         )
                       : null,
                   sleepTimer: _host.tts?.sleepTimer,
-                  isTtsPlaying: _host.tts?.isPlaying ?? false,
-                  isTtsPaused: _host.tts?.isPaused ?? false,
+                  ttsPhase: _host.tts?.phase ?? ReaderTtsPhase.idle,
                   onMenuHidden: _menuPages.menusHidden,
                   onChapterPanelChanged: (open) => _drawerOpen.value = open,
                 ),

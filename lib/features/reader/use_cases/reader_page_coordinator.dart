@@ -27,6 +27,7 @@ import 'package:night_reader/features/reader/features/replace_rule/reader_replac
 import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_sheet.dart';
 import 'package:night_reader/features/reader/features/tts/reader_tts_highlight_follower.dart';
 import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
+import 'package:night_reader/features/reader/features/tts/reader_tts_phase.dart';
 
 typedef ReaderNoticeSink = void Function(
   String message, {
@@ -210,9 +211,9 @@ class ReaderPageCoordinator {
     if (autoPage == null) return;
     if (!autoPage.isRunning) {
       _host.menu.dismissControls();
-      // 自動捲動與朗讀跟隨不同時移動正文；後開的接手。
+      // 自動捲動與朗讀跟隨不同時移動正文；後開的接手，朗讀暫停中也收掉。
       final tts = _host.tts;
-      if (tts != null && (tts.isPlaying || tts.currentHighlight != null)) {
+      if (tts != null && tts.phase != ReaderTtsPhase.idle) {
         unawaited(tts.stop());
       }
     }
