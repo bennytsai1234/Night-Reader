@@ -1,4 +1,4 @@
-/// @docImport 'grouped_list.dart';
+/// @docImport 'grouped_row.dart';
 library;
 
 import 'package:flutter/material.dart';
