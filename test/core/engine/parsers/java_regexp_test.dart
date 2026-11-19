@@ -78,4 +78,14 @@ void main() {
     expect(url.hasMatch('x https://b.test/book/1'), isFalse);
     expect(javaRegExp('a|ab', wholeInput: true).hasMatch('ab'), isTrue);
   });
+
+  test('wholeInput 寫錯的規則照樣丟錯，不和包在外面的字接成別的規則', () {
+    for (final broken in ['[https', r'https://s\.example/book/[0-9', 'a)|(b']) {
+      expect(
+        () => javaRegExp(broken, wholeInput: true),
+        throwsFormatException,
+        reason: broken,
+      );
+    }
+  });
 }

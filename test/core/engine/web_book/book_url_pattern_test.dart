@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book_source.dart';
 
 import '../../../test_helper.dart';
@@ -96,7 +97,7 @@ void main() {
     // 夜讀原本吞掉錯誤、改解析書單，除錯只看到「未獲取到書籍」。
     return expectLater(
       search(detail, detailUrl, name: '@js:JSON.parse("").name'),
-      throwsA(anything),
+      throwsA(isA<ParsingException>()),
     );
   }, skip: quickJsUnavailableReason());
 
@@ -104,6 +105,22 @@ void main() {
     return expectLater(
       search(detail, detailUrl, name: 'class.none@text'),
       completion(isEmpty),
+    );
+  });
+
+  test('a detail page that matches the filter is found', () {
+    return expectLater(
+      search(detail, detailUrl, filter: (name, author) => name == '詳情書名'),
+      completion(['詳情書名']),
+    );
+  });
+
+  // 寫錯的 pattern 包成「整段符合」後，`[` 會吃掉包在外面的字、變成什麼都
+  // 對得上；要先認出寫錯，當成不是詳情頁。
+  test('a broken pattern is not taken as a detail page', () {
+    return expectLater(
+      search('[https', 'https://s.example/search?q=a'),
+      completion(['甲書', '乙書']),
     );
   });
 
