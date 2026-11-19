@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/services.dart';
-import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/reading/bookmark.dart';
@@ -18,15 +17,11 @@ import 'package:night_reader/core/backup/highlight_export.dart';
 import 'package:night_reader/features/reader/features/highlight/reader_highlight_sheet.dart';
 import 'package:night_reader/features/reader/features/highlight/reader_highlights.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
-import 'package:night_reader/core/models/search/search_book.dart';
-import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:night_reader/core/storage/books_in_use.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
-import 'package:night_reader/core/source_switch/source_switch_service.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
-import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_page.dart';
 import 'package:night_reader/features/settings/appearance_settings_page.dart';
 import 'package:night_reader/features/settings/tts_settings_page.dart';
@@ -38,6 +33,7 @@ import 'package:night_reader/features/reader/text_view/core/progress_snapshot.da
 import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
 import 'package:night_reader/features/reader/screen/reader_controller_host.dart';
 import 'package:night_reader/features/reader/screen/reader_chapter_info.dart';
+import 'package:night_reader/features/reader/screen/reader_change_source.dart';
 import 'package:night_reader/features/reader/use_cases/reader_page_coordinator.dart';
 import 'package:night_reader/features/reader/use_cases/coordinators/reader_page_exit_coordinator.dart';
 import 'package:night_reader/features/reader/session/reader_session_facade.dart';
@@ -62,7 +58,6 @@ import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 import 'package:night_reader/shared/theme/theme_reveal_scope.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
@@ -94,8 +89,6 @@ class _ReaderPageState extends State<ReaderPage>
     implements ReaderExitFlowDelegate {
   static const ReaderSessionFacade _sessionFacade = ReaderSessionFacade();
 
-  late final SourceSwitchService _sourceSwitchService;
-
   /// 左側的目錄面板。
   final ReaderSidePanelController _chapterPanel = ReaderSidePanelController();
   final ReaderPageExitCoordinator _exitCoordinator =
@@ -105,6 +98,15 @@ class _ReaderPageState extends State<ReaderPage>
   late final ReaderPageCoordinator _coordinator;
 
   /// 目前章、章名與頁首頁尾的資訊（[ReaderChapterInfo]）。
+  /// 換源（[ReaderChangeSource]）。
+  late final ReaderChangeSource _changeSource = ReaderChangeSource(
+    context: () => context,
+    mounted: () => mounted,
+    book: widget.book,
+    host: _host,
+    info: _chapterInfo,
+  );
+
   late final ReaderChapterInfo _chapterInfo = ReaderChapterInfo(
     book: widget.book,
     initialChapters: widget.initialChapters,
@@ -161,11 +163,6 @@ class _ReaderPageState extends State<ReaderPage>
   void initState() {
     super.initState();
     _inUse = BooksInUse.hold(widget.book.bookUrl);
-    _sourceSwitchService = SourceSwitchService(
-      operationQuiescer: (oldBook) =>
-          DownloadService().quiesceForSourceSwitch(oldBook),
-      assetRetirer: BookCoverStorageService().handoffSourceSwitchAssets,
-    );
     _host = ReaderControllerHost(
       book: widget.book,
       initialChapters: widget.initialChapters,
@@ -647,7 +644,7 @@ class _ReaderPageState extends State<ReaderPage>
           ),
         // 本地書沒有換源，灰著留在原位（ADR 0059）。
         OutlinedButton.icon(
-          onPressed: widget.book.isLocal ? null : _showChangeSource,
+          onPressed: widget.book.isLocal ? null : _changeSource.show,
           icon: const Icon(Icons.swap_horiz),
           label: const UiText('換源'),
         ),
@@ -987,7 +984,7 @@ class _ReaderPageState extends State<ReaderPage>
     switch (action) {
       case _ReaderMoreAction.changeSource:
         _host.menu.dismissControls();
-        await _showChangeSource();
+        await _changeSource.show();
       case _ReaderMoreAction.refetchChapter:
         _host.menu.dismissControls();
         await _refetchCurrentChapter();
@@ -1247,87 +1244,6 @@ class _ReaderPageState extends State<ReaderPage>
       context,
       settings: _host.settings,
       builder: (_) => ReaderTtsPanel(tts: tts, settings: _host.settings),
-    );
-  }
-
-  Future<void> _showChangeSource() async {
-    if (widget.book.isLocal) return;
-    PreparedSourceSwitch? preparedSwitch;
-    await AppBottomSheet.showCustom<void>(
-      context: context,
-      constraints: ReaderMenuSheet.constraintsFor(context, _host.settings),
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) => ChangeSourceSheet(
-        book: widget.book,
-        onSelectSource: (candidate, toc) => _handleChangeSourceSelected(
-          candidate,
-          toc: toc,
-          onSuccess: (prepared) => preparedSwitch = prepared,
-        ),
-      ),
-    );
-
-    final prepared = preparedSwitch;
-    if (!mounted || prepared == null) return;
-    _pushReplacementForPreparedSwitch(prepared);
-  }
-
-  Future<ChangeSourceOutcome> _handleChangeSourceSelected(
-    SearchBook candidate, {
-    SourceToc? toc,
-    void Function(PreparedSourceSwitch prepared)? onSuccess,
-  }) async {
-    try {
-      // The flush returns the exact snapshot that was captured and persisted.
-      // Use that snapshot for source alignment; reading runtime state after
-      // the await would allow a scroll/TTS update during the DAO write to
-      // disagree with the progress that is authoritative for this switch.
-      final flushedLocation = await _host.flushProgress();
-      final runtime = _host.runtime;
-      final currentLocation = flushedLocation ?? runtime?.state.visibleLocation;
-      final currentIndex =
-          currentLocation?.chapterIndex ??
-          _chapterInfo.currentChapterIndex(runtime);
-      final currentTitle = _chapterInfo.chapterTitleAt(currentIndex);
-      final switchingBook = widget.book.copyWith(
-        chapterIndex: currentIndex,
-        durChapterTitle: currentTitle.isEmpty
-            ? widget.book.durChapterTitle
-            : currentTitle,
-        charOffset: currentLocation?.charOffset ?? widget.book.charOffset,
-        visualOffsetPx:
-            currentLocation?.visualOffsetPx ?? widget.book.visualOffsetPx,
-      );
-      final prepared = await _sourceSwitchService.prepareSwitch(
-        switchingBook,
-        candidate,
-        targetChapterIndex: currentIndex,
-        targetChapterTitle: currentTitle.isEmpty ? null : currentTitle,
-        toc: toc,
-      );
-      await _sourceSwitchService.commitSwitch(
-        widget.book,
-        prepared,
-        bookDao: _host.dependencies.bookDao,
-        chapterDao: _host.dependencies.chapterDao,
-      );
-      AppEventBus().fire(AppEventBus.upBookshelf);
-      onSuccess?.call(prepared);
-      return (success: true, message: '已切換到 ${prepared.source.bookSourceName}');
-    } catch (error) {
-      if (!isSourceSwitchUnavailable(error)) rethrow;
-      return (success: false, message: failureMessage('換源', error));
-    }
-  }
-
-  void _pushReplacementForPreparedSwitch(PreparedSourceSwitch prepared) {
-    Navigator.of(context).pushReplacement(
-      BookOpenRoute(
-        book: prepared.migratedBook,
-        openTarget: ReaderOpenTarget.resume(prepared.migratedBook),
-        initialChapters: prepared.chapters,
-      ),
     );
   }
 
