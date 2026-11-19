@@ -9,6 +9,7 @@
 | 狀態機 | 改前的旗標 | 改後的狀態 | 改後寫不出來的組合 | 歷史上因此出錯的 | 重構時查到並修掉的 | PR |
 |---|---|---|---|---|---|---|
 | 背景工作的生命週期 | 7 處共 30 個（見下方） | 五件共用的 `WorkPhase`；頁面那層的 `_RunStage`；校驗服務的 `_CheckPhase` | 按了結束又是已暫停；正在暫停時整批先標成做完；停下中開始新的一輪校驗 | 5 件（見下方） | 5 件（見下方） | #458 |
+| 搜尋 | 4 處共 15 個，頁面另拼 5 個組合（見下方） | 做中 | 做中 | 4 件（見下方） | 做中 | 做中 |
 
 ## 各狀態機
 
@@ -96,3 +97,29 @@ ADR 0058 的四件背景工作與 ADR 0070 放到背景的搜尋，加上頁面�
 - 上面三件修掉的 bug。
 
 改測試的兩處（讀者看不到的舊意思）：沒開始就結束的一批，通知原本寫「正在結束…」；做完的一批原本仍算「按了結束」。現在「正在結束」只在還沒停好時成立。
+
+### 搜尋
+
+搜尋頁的一次搜尋（`SearchRun`）、放到背景的那一件（ADR 0070 的 `BackgroundSearchRun`，生命週期在上一節）、搜尋頁怎麼看著它（`SearchProvider`），加上書籍詳情的換源。
+
+**改前**（2026-11-20，`beta` `660b61a1`）：
+
+| 位置 | 旗標 |
+|---|---|
+| 一次搜尋 `lib/features/search/search_run.dart` | `isSearching`、`_retrying`、`_pending`、`_choosing`、`_unmerged`、`_disposed` |
+| 放到背景的那一件 `lib/features/search/background_search.dart` | `_resuming`（配 `_remaining`）、`_headerWritten`、`_abandoned`、`_disposed`；暫停、結束已是 `WorkPhase`（#458） |
+| 搜尋頁 `lib/features/search/search_provider.dart` | `_holdingResults`、`_attached`、`_entered`、`_disposed` |
+| 換源 `lib/features/book_detail/source/book_detail_change_source_provider.dart` | `isSearching`，配 `_activeSearchId` 判斷哪一輪還有效 |
+
+`PLAN.md` 寫的 `search_provider.dart` 的 `_isSearching`、`_retrying`，#433 搬進 `SearchRun`，成了上表的 `isSearching`、`_retrying`。
+
+「這次搜尋在哪一段」散在四個布林值：送出後還在存紀錄是 `_pending && isSearching`，照條件搜是 `_choosing` 到選好書源為止，重試是 `_retrying`，讀回還沒合併是 `_unmerged`；暫停是 `isSearching` 留著、等 `markPaused` 才放下。頁面再把搜尋頁與背景那件的旗標拼成畫面：進度那一列與頁首「結束」看 `isSearching || isBackgroundPaused`（四處），「暫停」看 `isInBackground && !isBackgroundPausing && !isBackgroundStopping`，文字照 `isBackgroundPausing`、`isBackgroundStopping`、`isBackgroundPaused` 的先後挑。
+
+**歷史上因此出錯的**：
+
+- #30：送出搜尋到引擎真正開始（存紀錄、讀書源清單）這段，`_isSearching` 還沒立起來，閃出「尚未加入可搜尋的書源」，也擋不住重複送出。原因是少了「送出了、還沒開始」這一段，之後補成先立 `_isSearching`。
+- #433 審查（提交 `b21d73ec9b`）：還在存搜尋紀錄就放到背景、暫停或結束，存完照樣把書源全送出去。原因同上：那一段沒有名字，補了 `_pending` 與號碼。
+- #433 審查（同一個提交）：正在暫停時按結束停成已暫停。原因是 `_pausing`、`_ending` 兩個布林值，收成 `_Settling`（#458 再換成 `WorkPhase`）。
+- #444 審查（提交 `47c5fb74a4`）：重試讀書源那段空檔就立著 `_retrying`，這時開始的新搜尋算不到自己的書源總數（失敗那一列「共 N 個」停在上一次的）。改成只包住真正在重試的那段。
+
+查過不算：#442（#437）接回後換類別照舊類別搜，是先組條件、才離開接回的那一次的先後問題，不是旗標組合；#444 其他幾項是條件與範圍怎麼定。
