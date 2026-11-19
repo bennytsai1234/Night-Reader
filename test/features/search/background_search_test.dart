@@ -482,6 +482,43 @@ void main() {
     expect(run.isPaused, isFalse);
   });
 
+  test('pausing after every source came back, while the results file is '
+      'still being written, does not pause it', () async {
+    final hold = Completer<void>();
+    var holding = false;
+    final background = BackgroundSearches(
+      work: work,
+      directory: () async {
+        if (holding) await hold.future;
+        return dir;
+      },
+      readingFetches: ReadingFetches(),
+    );
+    final loader = _Loader();
+    final provider = await page(background, loader);
+    addTearDown(provider.dispose);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.length == 3);
+    provider.moveToBackground();
+    await settle();
+    // 最後幾行卡在寫檔：搜尋本身已經搜完，背景那件還在收尾。
+    holding = true;
+    for (final name in ['甲', '乙', '丙']) {
+      loader.answer(name);
+    }
+    final run = background.current!;
+    await run.search.running;
+    await settle();
+    expect(provider.isSearching, isFalse);
+
+    provider.pauseBackground();
+    expect(run.phase, WorkPhase.running, reason: '搜完了，沒有東西可暫停');
+    expect(platform.shown.last.text, isNot('正在暫停…'));
+    hold.complete();
+    await until(() => !run.isRunning);
+    expect(run.isFinished, isTrue);
+  });
+
   test('pausing keeps a source that has just come back', () async {
     final background = searches();
     final loader = _Loader();
