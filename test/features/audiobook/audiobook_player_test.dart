@@ -330,7 +330,9 @@ void main() {
 
   test('一集播完接著播下一集，最後一集播完停在結尾', () async {
     await player.open(book);
+    final opening = engine.nextOpen;
     engine.finish();
+    await opening.timeout(const Duration(seconds: 5));
     await pumpEventQueue();
 
     expect(player.chapterIndex, 3);
