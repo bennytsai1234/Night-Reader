@@ -8,7 +8,7 @@ import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/network/page_digest.dart';
 import 'package:night_reader/core/network/page_notes.dart';
-import 'package:night_reader/core/source_check/source_check_isolate.dart';
+import 'package:night_reader/core/source_check/source_checker.dart';
 import 'package:night_reader/core/source_check/source_check_verdict.dart';
 import 'package:night_reader/core/utils/public_suffix.dart';
 

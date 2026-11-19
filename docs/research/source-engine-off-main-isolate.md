@@ -42,7 +42,7 @@
 
 ### 已經可行的部分
 
-- **JS 引擎**：QuickJS 走 FFI，書源校驗已經在背景 isolate 裡跑完整的搜尋、詳情、目錄、正文流程（`lib/core/source_check/source_check_isolate.dart`）。
+- **JS 引擎**：QuickJS 走 FFI，書源校驗已經在背景 isolate 裡跑完整的搜尋、詳情、目錄、正文流程（`lib/core/source_check/source_check_isolate.dart` 開背景工作，流程在 `source_checker.dart`）。
 - **網路**：`NetworkService().init(ephemeral: true)` 在背景 isolate 建立自己的 Dio（同檔 `:203`）。
 - **平台通道（Dart 往平台發訊息）**：背景 isolate 用 `BackgroundIsolateBinaryMessenger.ensureInitialized(rootIsolateToken)` 註冊後即可使用外掛，例如 `path_provider`、`shared_preferences`。Flutter 官方文件：「Plugins and channels can be used by any `Isolate`, but that `Isolate` has to be a root `Isolate` (the one created by Flutter) or registered as a background `Isolate` for a root `Isolate`.」（[Platform channels](https://docs.flutter.dev/platform-integration/platform-channels)）
 - **登入與互動驗證**：不支援（ADR 0013），引擎不會需要等使用者。

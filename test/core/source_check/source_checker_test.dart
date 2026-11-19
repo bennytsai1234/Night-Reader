@@ -13,6 +13,7 @@ import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/source_check/source_check_isolate.dart';
+import 'package:night_reader/core/source_check/source_checker.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
 
 const _readable = '這是一段足夠長的正文內容，用來確認校驗會把它當成可以閱讀的章節。';
