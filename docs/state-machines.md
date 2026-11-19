@@ -16,6 +16,7 @@
 | 同步 | `_running`、`_again`、`_fullPending`、`_cancelled`（另有 `_progressFirst`、`_authorizingGoogleDrive` 留成旗標） | `SyncPhase`（閒著、同步進度、全面同步、停下中）與排著的下一輪，收在跑著的那一段 `_SyncRun`；全面同步交回 `FullSyncResult` | 排著全面同步卻沒在跑；進度輪裡記著取消；閒著時還留著要插隊的進度；進度框收掉後那一行和那一輪的結果對不上 | 1 件（見下方） | 7 件（見下方） | #461 |
 | 搜尋 | 4 處共 15 個，頁面另拼 5 個組合（見下方） | 一次搜尋的 `_Phase`；頁面讀的 `SearchStage`；搜尋頁怎麼看著背景那件的 `_Attachment`；換源不換 | 存紀錄中又在重試；重試中的旗標留到下一次搜尋；接回等進場又算看著 | 4 件（見下方） | 4 件，另審查找到 1 件（見下方） | #462 |
 | 骨架呼吸 | `_hold`、`_waiting`、`_restFrom`、`_still`、`_restarted`（另有 `_allowed`、`_visible`、`_usingShared`、`SkeletonRest._resting` 留著，見下方） | `_BreathStage`：等開始、呼吸（從哪一輪起、是不是從最深起）、收住中、收住了；跟著共用呼吸的骨架照抄這一個值 | 等開始又收住了；收住了卻沒有收住的起點；等開 App 呼吸時底下的收住照樣在變 | 3 件（見下方） | 3 件，都碰不到（見下方） | #466 |
+| 定格換場 | `_Phase` 加上 `_session`、`_settle`、`_hold`、`_progress.isAnimating` 拼出的三段（見下方） | `_Stage` 七段：沒在換場、拍「之前」、蓋著「之前」拍「之後」、拍好、換上「之前」、停一下、換場中；這一輪的圖、等待與參數收在 `_Round` | 沒有這一輪卻在拍；兩張圖拍好了卻沒有這一輪；停一下的計時器在換場中還掛著 | 1 件（見下方） | 沒有 | （待補） |
 
 ## 各狀態機
 
@@ -691,3 +692,42 @@ ADR 0055 的播放器（`lib/features/audiobook/audiobook_player.dart`），讀�
 `_allowed`、`_visible`、`_usingShared`、`SkeletonRest._resting` 與共用呼吸的計數照舊（理由見上）。拿掉 `_restarted`、`_restFrom`、`_still`、`_waiting` 與三個快取欄位；對外的 `SharedSkeletonBreath`、`SkeletonRest`、`SkeletonPhase` 與 `Skeleton` 不變，閱讀器的紙照舊。
 
 讀者看不到的一處：還沒到呼吸的時候、已經收住了，到了呼吸的時候原本會多通知一次重畫（深淺不變），現在不通知。
+
+### 定格換場
+
+`lib/shared/widgets/skeleton/snapshot_sweep.dart`（ADR 0031、0035）：開 App 書架第一次換成內容時，整個主頁面拍成兩張圖混合著換。只有開 App 的進場在用（`LaunchEntranceMotion.screen`）。
+
+**改前**（2026-11-20，`beta` `8beef6f1`）：
+
+| 欄位 | 意思 |
+|---|---|
+| `_phase`（`_Phase`：畫真的、蓋著「之前」、拍好、混合中） | 螢幕上畫什麼 |
+| `_session`（`Object?`） | 這一輪；null 是沒有，等待回來比它是不是同一個 |
+| `_before`、`_after` | 拍好的兩張圖 |
+| `_captured`、`_run`（`Completer?`） | 等 `capture`、`play` 的人 |
+| `_settle`、`_hold`（`Timer?`）、`_gap`、`_sweep` | 換上「之前」那張之後要做的事、停一下的計時器、停多久、由左而右還是整片淡換 |
+
+`_Phase` 有四個，讀者分得出的有七段，其他三段靠別的欄位拼：「拍『之前』中」是 `_phase` 畫真的而 `_session` 不是 null；「混合中」又分成換上「之前」那張、等這一格畫完做 `_settle`（`_settle` 還在），停一下（`_hold` 在走），真的在混合（`_progress` 在動）；`_start` 要同時看 `_session`、`_phase` 與 `_progress.isAnimating`，`_settleThenHold` 看 `_session` 與 `_phase`。
+
+**歷史上因此出錯的**（`git log -G'enum _Phase' / '_settle' / 'holding'`，打開 diff 看）：
+
+- #130 審查：`settle` 回呼裡結束或換掉了這一次換場，回呼後照樣建起停一下的計時器。原因是「換上『之前』、做 settle」和「停一下」沒有分開的階段，回呼後沒再看這一輪還在不在；補了回呼後再檢查、`_end` 清 `_settle` 與 `_hold`。
+
+查過不算：#141 審查的「拍到一半 `SkeletonSwitcher` 被拆掉，兩張圖一直留著」修在換場切換那邊（`dispose` 時 `finish`）；#268 的「換場中按下直接播完」是改規則。
+
+**階段表**（讀者看到的，照 ADR 0025、0031、0035 與 `docs/design/motion.md`）：
+
+| 階段 | 讀者看到什麼 | 可以走到 | 現在一樣嗎 |
+|---|---|---|---|
+| 沒在換場 | 真的畫面，照常點 | 拍「之前」（`capture` 或 `play`）；`play` 時減少動態或不在畫面上就直接換 | 一樣 |
+| 拍「之前」 | 真的畫面，照常點；等這一格畫完拍下來 | 蓋著「之前」拍「之後」；沒在換場（沒有畫面可拍：`capture` 不拍、`play` 直接換；`finish`；被新的一輪蓋過） | 一樣 |
+| 蓋著「之前」拍「之後」 | 螢幕停在「之前」那張圖、不接點擊；底下已經換好，等它畫完拍下來 | 拍好（`capture`：換回原本的樣子）；換上「之前」（`play`）；沒在換場 | 一樣 |
+| 拍好 | 真的畫面（換回原本的樣子），照常點；開 App 時骨架照常呼吸 | 換上「之前」（`play`）；沒在換場（`finish`、新的一輪、減少動態時 `play`） | 一樣 |
+| 換上「之前」 | 停在「之前」那張圖；按下就直接播完、交給底下 | 停一下（這一格畫完、做完 `settle`）；沒在換場（按下、畫面大小變了、`finish`、`settle` 裡結束） | 一樣 |
+| 停一下 | 同上（ADR 0025 的預留停頓，`gap`） | 換場中；沒在換場 | 一樣 |
+| 換場中 | 兩張圖照每個像素的橫向位置混合 0.6 秒；按下就直接播完、交給底下 | 沒在換場（播完、按下、畫面大小變了、`finish`、新的一輪） | 一樣 |
+
+**不收進階段的**：
+
+- 兩張圖、等 `capture` 與 `play` 的人、`settle`、停多久、方向：都是這一輪的東西，收進 `_Round`，結束時一起放掉，不單獨是階段。拍好之後接著 `play`，`capture` 的等待要到換回原本樣子的那一格畫完才完成，和換上「之前」會同時還在。
+- `_progress`：換場的進度，只在換場中動。
