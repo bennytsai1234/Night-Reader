@@ -1,0 +1,98 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart' show Size;
+import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
+import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
+
+/// 章節交界的留白契約：章末 block 留下使用者設定的章節間距（行），
+/// 與段距分開計算、不疊加。
+///
+/// 空白計入章末 block 的 trailingSpacing，而 block 高度等於排版高度加
+/// trailingSpacing（layout_pump_test 驗證），因此捲動、定位與進度共用
+/// 同一份幾何。
+void main() {
+  ReaderV2LayoutStyle styleWith({
+    double paragraphSpacing = 1.0,
+    double chapterSpacing = 1.0,
+    double titleSpacing = 0.0,
+  }) => ReaderV2LayoutStyle(
+    fontSize: 20,
+    lineHeight: 1.5,
+    letterSpacing: 0,
+    paragraphSpacing: paragraphSpacing,
+    chapterSpacing: chapterSpacing,
+    titleSpacing: titleSpacing,
+    paddingTop: 0,
+    paddingBottom: 0,
+    paddingLeft: 16,
+    paddingRight: 16,
+  );
+  const lineExtent = 30.0;
+
+  double chapterEnd(ReaderV2LayoutStyle style, {bool isTitle = false}) =>
+      readerV2BlockTrailingSpacing(style, isTitle: isTitle, isChapterEnd: true);
+
+  test('chapter end leaves exactly the configured lines', () {
+    expect(chapterEnd(styleWith()), lineExtent);
+    expect(chapterEnd(styleWith(chapterSpacing: 2.5)), lineExtent * 2.5);
+    expect(chapterEnd(styleWith(chapterSpacing: 0)), 0);
+  });
+
+  test('paragraph spacing does not stack on the chapter gap', () {
+    expect(chapterEnd(styleWith(paragraphSpacing: 0.3)), lineExtent);
+    expect(chapterEnd(styleWith(paragraphSpacing: 2.0)), lineExtent);
+  });
+
+  test('a title-only chapter uses the same chapter gap', () {
+    expect(chapterEnd(styleWith(), isTitle: true), lineExtent);
+  });
+
+  test(
+    'a title leaves the title spacing, independent of paragraph spacing',
+    () {
+      double afterTitle(ReaderV2LayoutStyle style) =>
+          readerV2BlockTrailingSpacing(
+            style,
+            isTitle: true,
+            isChapterEnd: false,
+          );
+      expect(afterTitle(styleWith(paragraphSpacing: 2)), 0);
+      expect(afterTitle(styleWith(titleSpacing: 1.5)), lineExtent * 1.5);
+      expect(
+        readerV2BlockTrailingSpacing(
+          styleWith(paragraphSpacing: 0.5, titleSpacing: 3),
+          isTitle: false,
+          isChapterEnd: false,
+        ),
+        lineExtent * 0.5,
+      );
+    },
+  );
+
+  test('title spacing is part of the text layout and cache identity', () {
+    ReaderV2LayoutSpec spec(double titleSpacing) =>
+        ReaderV2LayoutSpec.fromViewport(
+          viewportSize: const Size(400, 800),
+          style: styleWith(titleSpacing: titleSpacing),
+        );
+    expect(spec(1).layoutSignature, isNot(spec(0).layoutSignature));
+    expect(
+      StyleFingerprint.fromLayoutSpec(spec(1)),
+      isNot(StyleFingerprint.fromLayoutSpec(spec(0))),
+    );
+  });
+
+  test('chapter spacing is part of the text layout and cache identity', () {
+    ReaderV2LayoutSpec spec(double chapterSpacing) =>
+        ReaderV2LayoutSpec.fromViewport(
+          viewportSize: const Size(400, 800),
+          style: styleWith(chapterSpacing: chapterSpacing),
+        );
+    final one = spec(1);
+    final two = spec(2);
+    expect(two.layoutSignature, isNot(one.layoutSignature));
+    expect(
+      StyleFingerprint.fromLayoutSpec(two),
+      isNot(StyleFingerprint.fromLayoutSpec(one)),
+    );
+  });
+}

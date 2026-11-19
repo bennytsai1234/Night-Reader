@@ -17,15 +17,15 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
-import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
-import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
-import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
-import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
-import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
+import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
+import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
+import 'package:night_reader/features/reader/text_view/text/text_preprocessor.dart';
+import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
+import 'package:night_reader/features/reader/layout/reader_style.dart';
+import 'package:night_reader/features/reader/session/reader_location.dart';
+import 'package:night_reader/features/reader/session/reader_progress_controller.dart';
+import 'package:night_reader/features/reader/session/reader_runtime.dart';
+import 'package:night_reader/features/reader/viewport/reader_viewport_controller.dart';
 
 import '../support/frame_budget.dart';
 

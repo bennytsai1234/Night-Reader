@@ -10,7 +10,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
-import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
+import 'package:night_reader/features/reader/screen/reader_page.dart';
 import 'package:provider/provider.dart';
 
 import '../../support/app_harness.dart';

@@ -16,8 +16,8 @@ import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/book_detail/widgets/book_read_capsule.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
-import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
-import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
+import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
+import 'package:night_reader/features/reader/screen/reader_page.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/chapter_scrollbar.dart';
 

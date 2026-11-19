@@ -11,7 +11,7 @@ import 'package:night_reader/core/local_book/epub_parser.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
-import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
+import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 

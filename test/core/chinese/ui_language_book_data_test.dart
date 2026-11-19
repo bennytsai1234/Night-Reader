@@ -20,7 +20,7 @@ import 'package:night_reader/core/chinese/ui_language.dart';
 import 'package:night_reader/features/book_detail/change_cover_provider.dart';
 import 'package:night_reader/features/book_detail/widgets/cover/cover_header.dart';
 import 'package:night_reader/features/bookmarks/bookmarks_page.dart';
-import 'package:night_reader/features/cache_manager/download_manager_page.dart';
+import 'package:night_reader/features/downloads/download_manager_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';

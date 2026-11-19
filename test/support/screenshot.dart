@@ -26,7 +26,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
+import 'package:night_reader/features/reader/layout/reader_typography.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
 /// 截圖輸出的資料夾。

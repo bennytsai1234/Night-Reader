@@ -6,7 +6,7 @@ import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/app_update/app_version.dart';
 import 'package:night_reader/core/app_update/update_preferences.dart';
 import 'package:night_reader/core/network/webview_data_service.dart';
-import 'package:night_reader/features/cache_manager/download_manager_page.dart';
+import 'package:night_reader/features/downloads/download_manager_page.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';

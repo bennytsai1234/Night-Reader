@@ -23,7 +23,7 @@ import 'package:night_reader/core/playback/system_playback.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_read_time_controller.dart';
+import 'package:night_reader/features/reader/session/reader_read_time_controller.dart';
 
 import 'audio_engine.dart';
 

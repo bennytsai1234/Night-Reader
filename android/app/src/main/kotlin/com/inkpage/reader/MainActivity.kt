@@ -26,7 +26,7 @@ import java.io.File
 import java.util.Locale
 
 class MainActivity : AudioServiceActivity() {
-    // 音量鍵翻頁：由閱讀器在狀態變化時設定（reader_v2_volume_keys.dart）；
+    // 音量鍵翻頁：由閱讀器在狀態變化時設定（reader_volume_keys.dart）；
     // 新的 Activity 從不攔開始。
     private var volumeKeyPaging = false
     private var readerDevice: MethodChannel? = null

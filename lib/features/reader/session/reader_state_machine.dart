@@ -1,0 +1,237 @@
+import 'package:flutter/foundation.dart';
+import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
+
+import 'reader_location.dart';
+import 'reader_operation_token.dart';
+import 'reader_state.dart';
+
+class ReaderV2StateMachine {
+  ReaderV2StateMachine(ReaderV2State state)
+    : _state = state,
+      _visibleChapterIndex = ValueNotifier(state.visibleLocation.chapterIndex);
+
+  ReaderV2State _state;
+  ReaderV2State get state => _state;
+  set state(ReaderV2State value) {
+    _state = value;
+    _visibleChapterIndex.value = value.visibleLocation.chapterIndex;
+  }
+
+  /// 畫面上這一章（[ReaderV2State.visibleLocation] 的章）。每一次寫入位置
+  /// 都跟著更新，捲動途中悄悄記下的位置也一樣；章名、上一章／下一章、
+  /// 目錄的目前章各自聽它，換章時只有它們更新，閱讀頁不重建（ADR 0029
+  /// 做法 3）。未正規化，用的人自己夾在章數內。
+  final ValueNotifier<int> _visibleChapterIndex;
+  ValueListenable<int> get visibleChapterIndex => _visibleChapterIndex;
+
+  void dispose() => _visibleChapterIndex.dispose();
+  int _nextOperationId = 0;
+  ReaderV2OperationToken? _currentOperation;
+  ReaderV2LayoutSpec? _stagedLayoutSpec;
+
+  ReaderV2OperationToken? get currentOperation => _currentOperation;
+  ReaderV2Location? get pendingLocation => _currentOperation?.targetLocation;
+  ReaderV2LayoutSpec? get stagedLayoutSpec => _stagedLayoutSpec;
+  ReaderV2LayoutSpec get effectiveLayoutSpec =>
+      _stagedLayoutSpec ?? state.layoutSpec;
+
+  ReaderV2OperationToken beginOpen({ReaderV2Location? location}) {
+    if (state.lifecycle == ReaderV2Lifecycle.unavailable) {
+      state = state.copyWith(
+        lifecycle: ReaderV2Lifecycle.cold,
+        clearUnavailableMessage: true,
+      );
+    }
+    return _beginOperation(
+      ReaderV2OperationKind.open,
+      targetLocation: location,
+    );
+  }
+
+  ReaderV2OperationToken beginJump({ReaderV2Location? location}) {
+    return _beginOperation(
+      ReaderV2OperationKind.jump,
+      targetLocation: location,
+    );
+  }
+
+  ReaderV2OperationToken beginRestore({ReaderV2Location? location}) {
+    return _beginOperation(
+      ReaderV2OperationKind.restore,
+      targetLocation: location,
+    );
+  }
+
+  ReaderV2OperationToken beginPresentation({
+    required ReaderV2LayoutSpec spec,
+    ReaderV2Location? location,
+    required int layoutGeneration,
+  }) {
+    return _beginOperation(
+      ReaderV2OperationKind.presentation,
+      targetLocation: location,
+      layoutGeneration: layoutGeneration,
+      layoutSpec: spec,
+    );
+  }
+
+  ReaderV2OperationToken beginContentReload({ReaderV2Location? location}) {
+    return _beginOperation(
+      ReaderV2OperationKind.contentReload,
+      targetLocation: location,
+    );
+  }
+
+  void updateVisibleLocation(ReaderV2Location location) {
+    state = state.copyWith(visibleLocation: location);
+  }
+
+  void commitLocation(ReaderV2Location location) {
+    state = state.copyWith(committedLocation: location);
+  }
+
+  bool updateViewportSpec(ReaderV2LayoutSpec spec) {
+    final operation = _currentOperation;
+    final ownerSpec = effectiveLayoutSpec;
+    if (spec.layoutSignature != ownerSpec.layoutSignature) {
+      throw StateError('Viewport updates cannot change text layout identity.');
+    }
+    if (spec.presentationSignature == ownerSpec.presentationSignature) {
+      return false;
+    }
+
+    if (_stagedLayoutSpec != null) {
+      _stagedLayoutSpec = spec;
+    }
+    if (operation == null ||
+        operation.layoutGeneration == state.layoutGeneration) {
+      state = state.copyWith(layoutSpec: spec);
+    }
+    return true;
+  }
+
+  bool isCurrent(ReaderV2OperationToken token) {
+    final current = _currentOperation;
+    return current != null &&
+        current.id == token.id &&
+        current.kind == token.kind;
+  }
+
+  bool publishContentGeneration(int generation) {
+    if (generation < state.contentGeneration) {
+      throw StateError(
+        'Content generation cannot move backwards: '
+        'current=${state.contentGeneration}, next=$generation.',
+      );
+    }
+    if (generation == state.contentGeneration) return false;
+    state = state.copyWith(contentGeneration: generation);
+    return true;
+  }
+
+  bool commitLayoutForOperation(ReaderV2OperationToken token) {
+    if (!isCurrent(token)) return false;
+    final stagedSpec = _stagedLayoutSpec;
+    if (token.layoutGeneration == state.layoutGeneration) {
+      if (stagedSpec == null) return true;
+      if (stagedSpec.layoutSignature != state.layoutSpec.layoutSignature) {
+        throw StateError(
+          'Same-generation presentation cannot change text layout identity.',
+        );
+      }
+      state = state.copyWith(layoutSpec: stagedSpec);
+      return true;
+    }
+    if (token.layoutGeneration != state.layoutGeneration + 1) {
+      throw StateError(
+        'Layout generation must advance exactly once for the current operation.',
+      );
+    }
+    if (stagedSpec == null) {
+      throw StateError(
+        'A layout generation cannot advance without a staged layout spec.',
+      );
+    }
+    state = state.copyWith(
+      layoutSpec: stagedSpec,
+      layoutGeneration: token.layoutGeneration,
+    );
+    return true;
+  }
+
+  bool completeOperation(
+    ReaderV2OperationToken token, {
+    ReaderV2Location? visibleLocation,
+  }) {
+    if (!isCurrent(token)) return false;
+    _currentOperation = null;
+    _stagedLayoutSpec = null;
+    state = state.copyWith(
+      lifecycle: ReaderV2Lifecycle.ready,
+      visibleLocation: visibleLocation,
+      clearUnavailableMessage: true,
+    );
+    return true;
+  }
+
+  bool abandonOperation(ReaderV2OperationToken token) {
+    if (!isCurrent(token)) return false;
+    _currentOperation = null;
+    _stagedLayoutSpec = null;
+    return true;
+  }
+
+  bool markUnavailable(ReaderV2OperationToken token, Object error) {
+    if (!isCurrent(token)) return false;
+    if (state.hasStableWorld) {
+      throw StateError(
+        'A stable Reader world cannot become unavailable from an operation failure.',
+      );
+    }
+    _currentOperation = null;
+    _stagedLayoutSpec = null;
+    state = state.copyWith(
+      lifecycle: ReaderV2Lifecycle.unavailable,
+      unavailableMessage: error.toString(),
+    );
+    return true;
+  }
+
+  ReaderV2OperationToken _beginOperation(
+    ReaderV2OperationKind kind, {
+    ReaderV2Location? targetLocation,
+    int? layoutGeneration,
+    ReaderV2LayoutSpec? layoutSpec,
+  }) {
+    final previous = _currentOperation;
+    final previousStagedSpec = _stagedLayoutSpec;
+    final inheritedGeneration =
+        previous != null && previous.layoutGeneration > state.layoutGeneration
+        ? previous.layoutGeneration
+        : state.layoutGeneration;
+    final generation = layoutGeneration ?? inheritedGeneration;
+    if (generation < state.layoutGeneration ||
+        generation > state.layoutGeneration + 1) {
+      throw StateError(
+        'Operation layout generation is outside the active transaction.',
+      );
+    }
+    ReaderV2LayoutSpec? stagedSpec = layoutSpec;
+    if (stagedSpec == null &&
+        previous != null &&
+        previous.layoutGeneration > state.layoutGeneration &&
+        generation == previous.layoutGeneration) {
+      stagedSpec = previousStagedSpec;
+    }
+    final token = ReaderV2OperationToken(
+      targetLocation:
+          targetLocation ?? previous?.targetLocation ?? state.visibleLocation,
+      id: ++_nextOperationId,
+      kind: kind,
+      layoutGeneration: generation,
+    );
+    _currentOperation = token;
+    _stagedLayoutSpec = stagedSpec;
+    return token;
+  }
+}

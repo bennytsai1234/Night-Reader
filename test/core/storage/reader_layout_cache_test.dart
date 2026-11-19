@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/storage/reader_layout_cache.dart';
-import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
-import 'package:night_reader/features/reader_v2/hybrid/measure/chapter_plan_disk_cache.dart';
-import 'package:night_reader/features/reader_v2/hybrid/measure/metrics_disk_cache.dart';
+import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
+import 'package:night_reader/features/reader/text_view/measure/chapter_plan_disk_cache.dart';
+import 'package:night_reader/features/reader/text_view/measure/metrics_disk_cache.dart';
 
 StyleFingerprint _style(double fontSize) => StyleFingerprint(
   contentWidth: 288,

@@ -45,8 +45,8 @@
 
 ## 已有一致性保護與另一種載入狀態
 
-- 分組頁、閱讀器面板：`GroupedItemShape`、`GroupedSkeletonItem` 以真正元件的文字和常數量形狀；`test/shared/widgets/grouped_list_skeleton_test.dart`、`test/features/settings/mine_pages_skeleton_test.dart`、`test/features/reader_v2/reader_v2_sheet_entrance_test.dart` 已有對照測試。
-- 背景下載佇列：`_Subscribed` 以下載服務當下的值產生形狀，`test/features/cache_manager/download_manager_skeleton_test.dart` 已涵蓋主要佇列進場。
+- 分組頁、閱讀器面板：`GroupedItemShape`、`GroupedSkeletonItem` 以真正元件的文字和常數量形狀；`test/shared/widgets/grouped_list_skeleton_test.dart`、`test/features/settings/mine_pages_skeleton_test.dart`、`test/features/reader/reader_sheet_entrance_test.dart` 已有對照測試。
+- 背景下載佇列：`_Subscribed` 以下載服務當下的值產生形狀，`test/features/downloads/download_manager_skeleton_test.dart` 已涵蓋主要佇列進場。
 - 閱讀器正文：`LoadingVeil` 優先使用上次留存的每行位置，沒有可用紀錄時先顯示純色「紙」，待真正排版完成才給骨架；屬於有意設計，不能直接當成不符。
 - 閱讀統計、更新紀錄、崩潰日誌：等待資料時目前顯示置中轉圈，完成後才建立分組清單；這些頁面**沒有先畫錯的骨架**，但與 App 以內容形狀載入的整體設計不同，屬於另一次改版決策，不納入本次直接替換。
 

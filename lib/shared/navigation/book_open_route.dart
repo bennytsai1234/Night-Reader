@@ -4,9 +4,9 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/features/audiobook/audiobook_page.dart';
 import 'package:night_reader/features/comic_reader/comic_reader_page.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_read_time_scope.dart';
-import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
+import 'package:night_reader/features/reader/session/reader_open_target.dart';
+import 'package:night_reader/features/reader/session/reader_read_time_scope.dart';
+import 'package:night_reader/features/reader/screen/reader_page.dart';
 
 /// 開書：漫畫進漫畫閱讀器（[ComicReaderPage]，ADR 0052），有聲書進播放器
 /// （[AudiobookPage]，ADR 0055），其他進 [ReaderV2Page]。轉場與其他換頁相同

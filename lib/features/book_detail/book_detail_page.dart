@@ -23,7 +23,7 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
 import 'package:night_reader/features/source_manager/source_debug_page.dart';
 import 'package:night_reader/features/source_login/source_login_page.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
+import 'package:night_reader/features/reader/session/reader_open_target.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 
 import 'package:night_reader/shared/theme/app_chrome.dart';

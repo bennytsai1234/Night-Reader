@@ -1,0 +1,1407 @@
+import 'dart:async';
+import 'dart:isolate';
+
+import 'package:night_reader/core/utils/illustration_markers.dart';
+
+import 'package:night_reader/core/exception/user_error.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:night_reader/core/constant/app_pattern.dart';
+import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/storage/book_illustration_storage.dart';
+import 'package:night_reader/core/chinese/chinese_utils.dart';
+import 'package:night_reader/features/replace_rule/replace_rule_deadline.dart';
+
+import 'page_leftovers.dart';
+import 'reader_content.dart';
+import 'semantic_paragraph_formatter.dart';
+
+/// 在內容轉換階段執行文字排版正規化。
+///
+/// 無開關、恆開（2026-07-18 內化決策）：所有規則都以 CJK 脈絡判定自我防護，
+/// 中文語境下把半形/歧義寬度標點正規化為一致的 CJK 碼位；
+/// 純西文脈絡（英文句、數字、URL）一律原樣保留。這是 source typography
+/// normalization，不擁有 visual-line boundary。
+///
+/// 這裡只處理文字本身；不要在 [ReaderV2Content.fromRaw] 之後再改字，否則
+/// displayText 的 TTS、進度錨點與 contentHash 會失去同一座標系。
+///
+/// [preserveCjkSpaces] 供標題使用：章節標題的空格是刻意的結構分隔
+/// （「第一章 起點」），不是來源雜訊；內文才需要為格線刪空格。
+String normalizeTypography(String input, {bool preserveCjkSpaces = false}) {
+  if (input.isEmpty) return input;
+
+  final lineNormalized = input.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+  return lineNormalized
+      .split('\n')
+      .map(
+        (line) => _normalizeTypographyLine(
+          line,
+          preserveCjkSpaces: preserveCjkSpaces,
+        ),
+      )
+      .join('\n');
+}
+
+String _normalizeTypographyLine(
+  String line, {
+  required bool preserveCjkSpaces,
+}) {
+  final sourceRunes = line.runes.toList(growable: false);
+  // The public contract is intentionally asymmetric: CJK punctuation is
+  // normalized at the source-text layer, while Western/other-script text
+  // remains source text. This layer never decides visual-line boundaries.
+  // Ambiguous punctuation such as a single ellipsis/em-dash is not enough to
+  // classify the whole line as CJK; otherwise Western spacing/control/emoji
+  // shaping can be changed before the local punctuation rules even run.
+  if (!_hasCjkLineContext(sourceRunes)) return line;
+
+  final cleaned = StringBuffer();
+  for (final rune in sourceRunes) {
+    if (rune == 0x09 || rune == 0x00A0 || rune == 0x3000) {
+      cleaned.write(' ');
+      continue;
+    }
+    if (_isControlRune(rune)) continue;
+    // Keep the historical cleanup of zero-width spacing/BOM noise in CJK
+    // material, but never delete ZWNJ/ZWJ: those code points participate in
+    // shaping and emoji clusters and are therefore source semantics.
+    if (rune == 0x200B || rune == 0xFEFF) continue;
+    cleaned.write(String.fromCharCode(rune));
+  }
+
+  var result = cleaned.toString().replaceAll(RegExp(r' +'), ' ');
+  result = _normalizeEllipsis(result);
+  result = _normalizeDashes(result);
+  result = _normalizeCjkPunctuation(result);
+  result = _normalizeAmbiguousWidthPunctuation(result);
+  result = _normalizePairedQuotes(result);
+  result = _normalizePairedSingleQuotes(result);
+  result = _normalizeBrackets(result);
+  result = _mapCjkOnlyPunctuation(result);
+  if (!preserveCjkSpaces) {
+    result = _removeCjkSpaces(result);
+  }
+  return result;
+}
+
+bool _hasCjkLineContext(List<int> runes) {
+  if (runes.any(_isStrongCjkLineRune)) return true;
+
+  // `…` and `—` are shared Western/CJK punctuation and cannot by themselves
+  // claim ownership of an entire line. Keep the existing punctuation-only
+  // Chinese-dialogue contract for the conventional “……” / “——” forms, but
+  // only when the line has no Latin letter/digit that would make the context
+  // genuinely ambiguous.
+  if (runes.any(_isLatinLetterOrDigit)) return false;
+  final hasCurlyQuote = runes.any((rune) => rune == 0x201C || rune == 0x201D);
+  if (!hasCurlyQuote) return false;
+  for (var index = 0; index + 1 < runes.length; index += 1) {
+    final rune = runes[index];
+    final next = runes[index + 1];
+    final doubleEllipsis =
+        (rune == 0x2026 || rune == 0x22EF) &&
+        (next == 0x2026 || next == 0x22EF);
+    final doubleEmDash = rune == 0x2014 && next == 0x2014;
+    if (doubleEllipsis || doubleEmDash) return true;
+  }
+  return false;
+}
+
+bool _isStrongCjkLineRune(int? rune) {
+  if (rune == null) return false;
+  if (_isCjkRune(rune)) return true;
+  return (rune >= 0x1100 && rune <= 0x11FF) || // Hangul Jamo
+      (rune >= 0x3000 && rune <= 0x303F) || // CJK punctuation
+      (rune >= 0x3040 && rune <= 0x30FF) || // Hiragana/Katakana
+      (rune >= 0x3100 && rune <= 0x312F) || // Bopomofo
+      (rune >= 0x3130 && rune <= 0x318F) || // Hangul compatibility Jamo
+      (rune >= 0x31A0 && rune <= 0x31BF) || // Bopomofo extended
+      (rune >= 0x31F0 && rune <= 0x31FF) || // Katakana extensions
+      (rune >= 0xAC00 && rune <= 0xD7AF) || // Hangul syllables
+      (rune >= 0xFF00 && rune <= 0xFF60); // Full-width/CJK forms
+}
+
+bool _isControlRune(int rune) {
+  if (rune == 0x09 || rune == 0x0A) return false;
+  return (rune >= 0x00 && rune <= 0x1F) || (rune >= 0x7F && rune <= 0x9F);
+}
+
+String _normalizeEllipsis(String input) {
+  final runes = input.runes.toList(growable: false);
+  final output = StringBuffer();
+  for (var index = 0; index < runes.length; index += 1) {
+    final rune = runes[index];
+    if (!_isEllipsisRune(rune)) {
+      output.write(String.fromCharCode(rune));
+      continue;
+    }
+
+    var end = index + 1;
+    while (end < runes.length && _isEllipsisRune(runes[end])) {
+      end += 1;
+    }
+    final runLength = end - index;
+    final containsGlyph = runes
+        .sublist(index, end)
+        .any((value) => value == 0x2026 || value == 0x22EF);
+    final containsCjkSpecificDot = runes
+        .sublist(index, end)
+        .any((value) => value == 0xFF0E || value == 0x3002);
+    final candidate = containsGlyph || runLength >= 3;
+    final previous = _neighborRune(runes, index, -1);
+    final next = _neighborRune(runes, end - 1, 1);
+    final hasCjkContext =
+        containsCjkSpecificDot ||
+        _isCjkContextRune(previous) ||
+        _isCjkContextRune(next);
+    if (candidate && hasCjkContext) {
+      output.write('……');
+    } else {
+      for (var cursor = index; cursor < end; cursor += 1) {
+        output.write(String.fromCharCode(runes[cursor]));
+      }
+    }
+    index = end - 1;
+  }
+  return output.toString();
+}
+
+bool _isEllipsisRune(int rune) {
+  return _isEllipsisDot(rune) || rune == 0x2026 || rune == 0x22EF;
+}
+
+bool _isEllipsisDot(int rune) {
+  return rune == 0x2E || rune == 0xFF0E || rune == 0x3002;
+}
+
+/// 破折號統一為 U+2014。
+///
+/// - `―`（U+2015）、`─`（U+2500 製表線，網文常拿來當破折號）→ `—`
+/// - CJK 脈絡下的 `--` 連跑（2+ 個 ASCII hyphen）→ `——`
+/// - CJK 脈絡下的 `–`（U+2013）→ `—`；數字區間（1–5）不動
+/// - 既有 `—` 連跑保持原樣（寬度由字型解決，不強改字數）
+String _normalizeDashes(String input) {
+  final runes = input.runes.toList(growable: false);
+  final output = StringBuffer();
+  for (var index = 0; index < runes.length; index += 1) {
+    final rune = runes[index];
+    if (rune == 0x2015 || rune == 0x2500) {
+      output.write('—');
+      continue;
+    }
+    if (rune == 0x2D) {
+      var end = index + 1;
+      while (end < runes.length && runes[end] == 0x2D) {
+        end += 1;
+      }
+      final runLength = end - index;
+      final previous = index > 0 ? runes[index - 1] : null;
+      final next = end < runes.length ? runes[end] : null;
+      if (runLength >= 2 &&
+          (_isCjkContextRune(previous) || _isCjkContextRune(next))) {
+        output.write('——');
+        index = end - 1;
+        continue;
+      }
+      output.write('-' * runLength);
+      index = end - 1;
+      continue;
+    }
+    if (rune == 0x2013) {
+      final previous = index > 0 ? runes[index - 1] : null;
+      final next = index + 1 < runes.length ? runes[index + 1] : null;
+      if (_isCjkContextRune(previous) || _isCjkContextRune(next)) {
+        output.write('—');
+        continue;
+      }
+    }
+    output.write(String.fromCharCode(rune));
+  }
+  return output.toString();
+}
+
+String _normalizeCjkPunctuation(String input) {
+  const replacements = <int, String>{
+    0x2C: '，', // comma
+    0x2E: '。', // full stop
+    0x21: '！', // exclamation
+    0x3F: '？', // question
+    0x3B: '；', // semicolon
+    0x3A: '：', // colon
+    0x7E: '～', // tilde（「喂~」→「喂～」）
+  };
+  final runes = input.runes.toList(growable: false);
+  final output = StringBuffer();
+  for (var index = 0; index < runes.length; index += 1) {
+    final replacement = replacements[runes[index]];
+    if (replacement == null) {
+      output.write(String.fromCharCode(runes[index]));
+      continue;
+    }
+    final previous = _neighborRune(runes, index, -1);
+    final next = _neighborRune(runes, index, 1);
+    final hasCjkSide = _isCjkRune(previous) || _isCjkRune(next);
+    final hasNumericSide =
+        _isAsciiOrFullWidthDigit(previous) || _isAsciiOrFullWidthDigit(next);
+    output.write(
+      hasCjkSide && !hasNumericSide
+          ? replacement
+          : String.fromCharCode(runes[index]),
+    );
+  }
+  return output.toString();
+}
+
+int? _neighborRune(List<int> runes, int index, int direction) {
+  var cursor = index + direction;
+  while (cursor >= 0 && cursor < runes.length) {
+    final rune = runes[cursor];
+    if (rune == 0x0A) return null;
+    if (rune != 0x20) return rune;
+    cursor += direction;
+  }
+  return null;
+}
+
+/// 歧義寬度標點轉 CJK 專屬碼位。
+///
+/// 彎引號（U+201C/201D/2018/2019）與間隔號（U+00B7/U+2027）屬東亞歧義
+/// 寬度字元：Android 字型回退鏈逐字取第一個有字形的字型，這些碼位會
+/// 命中 Roboto 的西文窄字形而非 CJK 字型，因此不佔一格、與漢字不同寬
+/// （`fwid` 只作用於有 OpenType 半形→全形對映的字形，Roboto 不支援）。
+/// 轉成 Roboto 沒有字形的 CJK 專屬碼位（「」『』・）後，回退鏈必然落到
+/// CJK 字型、佔滿一格。
+String _normalizeAmbiguousWidthPunctuation(String input) {
+  final converted = input.split('\n').map(_convertCurlyQuotesLine).join('\n');
+  final runes = converted.runes.toList(growable: false);
+  final output = List<String>.generate(
+    runes.length,
+    (index) => String.fromCharCode(runes[index]),
+    growable: false,
+  );
+  for (var index = 0; index < runes.length; index += 1) {
+    final rune = runes[index];
+    if (rune != 0xB7 && rune != 0x2027) continue;
+    final previous = index > 0 ? runes[index - 1] : null;
+    final next = index + 1 < runes.length ? runes[index + 1] : null;
+    if (_isCjkRune(previous) && _isCjkRune(next)) {
+      output[index] = '・';
+    }
+  }
+  return output.join();
+}
+
+/// 彎引號逐字元轉換，以**行**為 CJK 脈絡判定單位。
+///
+/// 為什麼不成對掃描（2026-07-28 修正）：`“`/`”` 碼位本身即帶開/收方向，
+/// 不需要配對就能安全映射。舊版要求開引號找得到收引號才轉，而中文小說
+/// 連續對白的標準寫法是「每段開頭有開引號、只有最末段有收引號」——前面
+/// 每一段的 `“` 永遠配不到對而原樣留下，同一段對白裡因此並存 Roboto 的
+/// 細窄 `“` 與 CJK 的全形 `「」`，兩種字形一眼可辨。落單引號、
+/// `“他說“不要”…”` 這類內外層結構也同樣漏轉。
+///
+/// 純西文行（整行無 CJK 脈絡字元）仍原樣保留，`He said “hello”` 不受影響。
+///
+/// 單引號 `‘’` 另有撇號歧義（don’t、boys’），以「行內是否有尚未關閉的
+/// `‘`」判定：有 → `’` 是收引號；沒有且前字為拉丁字母/數字 → 撇號保留。
+String _convertCurlyQuotesLine(String line) {
+  final runes = line.runes.toList(growable: false);
+  if (!runes.any(_isCjkContextRune)) return line;
+
+  final output = List<String>.generate(
+    runes.length,
+    (index) => String.fromCharCode(runes[index]),
+    growable: false,
+  );
+  var singleQuoteOpen = false;
+  for (var index = 0; index < runes.length; index += 1) {
+    switch (runes[index]) {
+      case 0x201C:
+        output[index] = '「';
+      case 0x201D:
+        output[index] = '」';
+      case 0x2018:
+        output[index] = '『';
+        singleQuoteOpen = true;
+      case 0x2019:
+        if (singleQuoteOpen) {
+          output[index] = '』';
+          singleQuoteOpen = false;
+        } else if (!_isLatinLetterOrDigit(
+          index > 0 ? runes[index - 1] : null,
+        )) {
+          output[index] = '』';
+        }
+    }
+  }
+  return output.join();
+}
+
+bool _isLatinLetterOrDigit(int? rune) {
+  if (rune == null) return false;
+  return (rune >= 0x30 && rune <= 0x39) ||
+      (rune >= 0x41 && rune <= 0x5A) ||
+      (rune >= 0x61 && rune <= 0x7A);
+}
+
+/// [cjkBefore] 的第 i 項是 `runes[0..i)` 裡 CJK 脈絡字元的個數（見
+/// [_cjkContextCounts]），括號內有沒有中文用相減判斷，巢狀再深也只掃一遍。
+bool _quotePairHasCjkContext(
+  List<int> runes,
+  List<int> cjkBefore,
+  int openIndex,
+  int closeIndex,
+) {
+  if (cjkBefore[closeIndex] > cjkBefore[openIndex + 1]) return true;
+  return _isCjkContextRune(_neighborRune(runes, openIndex, -1)) ||
+      _isCjkContextRune(_neighborRune(runes, closeIndex, 1));
+}
+
+List<int> _cjkContextCounts(List<int> runes) {
+  final counts = List<int>.filled(runes.length + 1, 0);
+  for (var index = 0; index < runes.length; index += 1) {
+    counts[index + 1] =
+        counts[index] + (_isCjkContextRune(runes[index]) ? 1 : 0);
+  }
+  return counts;
+}
+
+/// CJK 脈絡字元：漢字之外也涵蓋 CJK 標點/全形區段與常見中文標點
+/// （`“……”`、`“——”他說` 這類引號內只有標點的段落也要能判定為中文脈絡）。
+bool _isCjkContextRune(int? rune) {
+  if (rune == null) return false;
+  if (_isCjkRune(rune)) return true;
+  return (rune >= 0x3000 && rune <= 0x303F) ||
+      (rune >= 0xFF00 && rune <= 0xFF60) ||
+      rune == 0x2014 ||
+      rune == 0x2026 ||
+      rune == 0x30FB;
+}
+
+/// 直引號 `"` 無方向資訊，只能靠交替配對。配對以**行**為單位：
+/// 對白引號幾乎不跨行，逐行配對能把單一雜訊引號的錯位影響隔離在
+/// 該行（整章全域交替時，一個落單引號會讓其後所有開/收全部顛倒；
+/// 全章奇數個就整章放棄，命中率極低）。奇數個引號的行原樣保留；
+/// 逐對再做 CJK 脈絡判定，純英文行（`"Hello," he said.`）不動。
+String _normalizePairedQuotes(String input) {
+  // 全形直引號 `＂`（U+FF02）與 `"` 同樣沒有方向，併入同一套配對。
+  return input
+      .replaceAll('\uFF02', '"')
+      .split('\n')
+      .map(
+        (line) => _convertAlternatingQuotesLine(
+          line,
+          quote: 0x22,
+          openReplacement: '「',
+          closeReplacement: '」',
+          skipAt: (runes, index) => false,
+        ),
+      )
+      .join('\n');
+}
+
+/// 直單引號 `'` 同理交替轉 `『』`（中文巢狀引號慣例的內層）。
+///
+/// 撇號保護：**前一個字元**是拉丁字母/數字即視為撇號，不參與配對。
+/// 舊版要求前後皆拉丁，`believin'` 這種字尾撇號（後接空格）漏網，
+/// 在改為交替狀態機後會被當成引號轉掉。代價是中文行內的英文引語
+/// （`他讀了 'test' 這個字`）收尾側會被當撇號而破對——字尾撇號遠比
+/// 中文行內夾英文引語常見，取誤傷較小的一側。
+String _normalizePairedSingleQuotes(String input) {
+  // 全形直單引號 `＇`（U+FF07）同理併入 `'` 的配對。
+  return input
+      .replaceAll('\uFF07', "'")
+      .split('\n')
+      .map(
+        (line) => _convertAlternatingQuotesLine(
+          line,
+          quote: 0x27,
+          openReplacement: '『',
+          closeReplacement: '』',
+          skipAt: (runes, index) =>
+              _isLatinLetterOrDigit(index > 0 ? runes[index - 1] : null),
+        ),
+      )
+      .join('\n');
+}
+
+/// 直引號交替轉換：不再要求整行偶數個。
+///
+/// 舊版奇數個就整行放棄，多段落對白（每段開頭一個 `"`）因此整段留著
+/// 半形直引號，與已轉的 `「」` 混排。改為交替狀態機：起手是開或收由
+/// 第一個引號的前文決定（行首／句讀標點之後 → 開，否則 → 收），之後
+/// 開收交替；落單的引號也拿得到一個方向，字形因此統一。
+///
+/// CJK 脈絡判定改以**行**為單位（與彎引號一致）：純西文行原樣保留。
+String _convertAlternatingQuotesLine(
+  String line, {
+  required int quote,
+  required String openReplacement,
+  required String closeReplacement,
+  required bool Function(List<int> runes, int index) skipAt,
+}) {
+  final runes = line.runes.toList(growable: false);
+  if (!runes.any(_isCjkContextRune)) return line;
+
+  final positions = <int>[];
+  for (var index = 0; index < runes.length; index += 1) {
+    if (runes[index] == quote &&
+        !_isEscaped(runes, index) &&
+        !skipAt(runes, index)) {
+      positions.add(index);
+    }
+  }
+  if (positions.isEmpty) return line;
+
+  final output = List<String>.generate(
+    runes.length,
+    (index) => String.fromCharCode(runes[index]),
+    growable: false,
+  );
+  var expectingOpen = _looksLikeQuoteOpening(runes, positions.first);
+  for (final position in positions) {
+    output[position] = expectingOpen ? openReplacement : closeReplacement;
+    expectingOpen = !expectingOpen;
+  }
+  return output.join();
+}
+
+/// 直引號的開/收起手判定，看的是**後文**而非前文。
+///
+/// 前文不管用：開引號與收引號的前一個字元都可能是漢字
+/// （`他說"…"` 的開、`…好"` 的收）。後文則有明確訊號——收引號後面
+/// 接的是句讀或行尾，開引號後面接的是內容字。
+bool _looksLikeQuoteOpening(List<int> runes, int index) {
+  final next = _neighborRune(runes, index, 1);
+  if (next == null) return false; // 行尾 → 收引號
+  return !_isQuoteClosingFollower(next);
+}
+
+/// 句讀與收括號類標點：其前出現的引號是收引號。
+bool _isQuoteClosingFollower(int rune) {
+  const followers = <int>{
+    0x3001, // 、
+    0x3002, // 。
+    0xFF0C, // ，
+    0xFF01, // ！
+    0xFF1F, // ？
+    0xFF1B, // ；
+    0xFF1A, // ：
+    0x300D, // 」
+    0x300F, // 』
+    0xFF09, // ）
+    0x3011, // 】
+    0x2C, // ,
+    0x2E, // .
+    0x21, // !
+    0x3F, // ?
+    0x3B, // ;
+    0x3A, // :
+    0x29, // )
+    0x5D, // ]
+  };
+  return followers.contains(rune);
+}
+
+/// 半形括號在 CJK 脈絡下成對轉全形：`()`→`（）`、`[]`→`【】`
+/// （`【】` 隨後由 [_mapCjkOnlyPunctuation] 統一轉 `「」`）。
+/// 同行成對＋逐對 CJK 脈絡判定；純西文（`f(x)`、`[1]`）不動。
+String _normalizeBrackets(String input) {
+  final runes = input.runes.toList(growable: false);
+  final output = List<String>.generate(
+    runes.length,
+    (index) => String.fromCharCode(runes[index]),
+    growable: false,
+  );
+  _convertBracketPairs(
+    runes,
+    output,
+    open: 0x28,
+    close: 0x29,
+    openReplacement: '（',
+    closeReplacement: '）',
+  );
+  _convertBracketPairs(
+    runes,
+    output,
+    open: 0x5B,
+    close: 0x5D,
+    openReplacement: '【',
+    closeReplacement: '】',
+  );
+  return output.join();
+}
+
+void _convertBracketPairs(
+  List<int> runes,
+  List<String> output, {
+  required int open,
+  required int close,
+  required String openReplacement,
+  required String closeReplacement,
+}) {
+  // 巢狀的照層次配對（`(她想(真的嗎)還是假的)` 內外兩對都轉）；換行時沒配到
+  // 的左括號、多出來的右括號原樣留著。
+  final opens = <int>[];
+  final cjkBefore = _cjkContextCounts(runes);
+  for (var index = 0; index < runes.length; index += 1) {
+    final rune = runes[index];
+    if (rune == 0x0A) {
+      opens.clear();
+    } else if (rune == open) {
+      opens.add(index);
+    } else if (rune == close && opens.isNotEmpty) {
+      final openIndex = opens.removeLast();
+      if (_quotePairHasCjkContext(runes, cjkBefore, openIndex, index)) {
+        output[openIndex] = openReplacement;
+        output[index] = closeReplacement;
+      }
+    }
+  }
+}
+
+/// CJK 專屬碼位的一對一風格映射（恆為中文脈絡，無需判定）：
+/// `【】〖〗`→`「」『』`（2026-07-18 使用者定案：統一成上下引號）、
+/// 半形直角引號 `｢｣`（U+FF62/FF63）→ `「」`。
+///
+/// 直排專用直角引號 `﹁﹂﹃﹄`（U+FE41–FE44，CJK Compatibility Forms）
+/// 也一併收：字形是為**垂直**排版設計的，在橫排版面上渲染成細長的
+/// 直立角線，與正常「」明顯不同粗細；直排書籍轉檔、OCR 與部分繁體
+/// 書源會帶進這組碼位（2026-07-28 補）。`〝〞`（U+301D/U+301E）同理。
+String _mapCjkOnlyPunctuation(String input) {
+  const mappings = <int, String>{
+    0x3010: '「', // 【
+    0x3011: '」', // 】
+    0x3016: '『', // 〖
+    0x3017: '』', // 〗
+    0xFF62: '「', // ｢
+    0xFF63: '」', // ｣
+    0xFE41: '「', // ﹁ 直排左直角
+    0xFE42: '」', // ﹂ 直排右直角
+    0xFE43: '『', // ﹃ 直排左雙直角
+    0xFE44: '』', // ﹄ 直排右雙直角
+    0x301D: '「', // 〝
+    0x301E: '」', // 〞
+  };
+  final output = StringBuffer();
+  for (final rune in input.runes) {
+    final replacement = mappings[rune];
+    if (replacement != null) {
+      output.write(replacement);
+    } else {
+      output.write(String.fromCharCode(rune));
+    }
+  }
+  return output.toString();
+}
+
+bool _isEscaped(List<int> runes, int index) {
+  var slashCount = 0;
+  for (var cursor = index - 1; cursor >= 0 && runes[cursor] == 0x5C; cursor--) {
+    slashCount += 1;
+  }
+  return slashCount.isOdd;
+}
+
+/// 刪掉中文旁邊的半形空格：兩側都是 CJK 脈絡字元（漢字或全形標點），
+/// 或一側是 CJK 脈絡字元、另一側是英文字母或數字。
+///
+/// 半形空格不佔全形格，是格線錯位的來源；「他說 「你好」」這類標點鄰接
+/// 空格也要涵蓋，故用 [_isCjkContextRune] 而非僅漢字。中英文之間的間隙
+/// 由排版時英數字段補到半格的補白提供（`VisualLineLayoutEngine`），原文的
+/// 空格留著會讓間隙變成將近一個字寬、寬窄不一。連續多個空格視為一處。
+String _removeCjkSpaces(String input) {
+  final runes = input.runes.toList(growable: false);
+  final output = StringBuffer();
+  var index = 0;
+  while (index < runes.length) {
+    if (runes[index] != 0x20) {
+      output.write(String.fromCharCode(runes[index]));
+      index += 1;
+      continue;
+    }
+    var end = index;
+    while (end < runes.length && runes[end] == 0x20) {
+      end += 1;
+    }
+    final previous = index > 0 ? runes[index - 1] : null;
+    final next = end < runes.length ? runes[end] : null;
+    final cjkBefore = _isCjkContextRune(previous);
+    final cjkAfter = _isCjkContextRune(next);
+    final remove =
+        (cjkBefore && (cjkAfter || _isLatinLetterOrDigit(next))) ||
+        (cjkAfter && _isLatinLetterOrDigit(previous));
+    if (!remove) output.write(' ' * (end - index));
+    index = end;
+  }
+  return output.toString();
+}
+
+bool _isAsciiOrFullWidthDigit(int? rune) {
+  if (rune == null) return false;
+  return (rune >= 0x30 && rune <= 0x39) || (rune >= 0xFF10 && rune <= 0xFF19);
+}
+
+bool _isCjkRune(int? rune) {
+  if (rune == null) return false;
+  return (rune >= 0x3400 && rune <= 0x4DBF) ||
+      (rune >= 0x4E00 && rune <= 0x9FFF) ||
+      (rune >= 0xF900 && rune <= 0xFAFF) ||
+      (rune >= 0x20000 && rune <= 0x323AF);
+}
+
+class ReaderV2ContentTransformer {
+  const ReaderV2ContentTransformer();
+
+  static final Map<String, RegExp> _regexCache = {};
+  static const String _duplicateTitleBoundary = r'(?=\s|\p{P}|$)';
+
+  /// 插圖的記號（`IllustrationMarkers.placeholder`）所在的私用區。
+  static final RegExp _illustrationPlaceholder = RegExp(r'[-]');
+  static final RegExp _leadingIllustrations = RegExp(r'^[\s-]*');
+
+  static RegExp _getOrCreateRegex(String pattern, {bool unicode = false}) {
+    final key = '$pattern|$unicode';
+    if (_regexCache.length > 500) {
+      _regexCache.clear();
+    }
+    return _regexCache.putIfAbsent(
+      key,
+      () => RegExp(pattern, unicode: unicode),
+    );
+  }
+
+  /// 處理一章正文，連同切段落與 contentHash 都在 worker 算好
+  /// （[ReaderV2Content.fromRaw]），主 isolate 直接拿到成品：整章跑正規表示式、
+  /// 編碼與雜湊在手機上要幾毫秒，開書與跳章時正好疊在骨架呼吸上（ADR 0018）。
+  ///
+  /// 一條規則跑超過它的逾時就略過它、照其他規則處理完，並呼叫
+  /// [onRuleTimedOut]（[ReaderV2ContentTransformWorker.process]）。
+  ///
+  /// 正文裡的插圖標記一律拿掉；[illustrationsDir] 有給（開了「顯示插圖」）
+  /// 時，圖檔在那個資料夾、讀得出大小的才放進
+  /// [ReaderV2Content.illustrations]（ADR 0050）。
+  Future<ReaderV2Content> process({
+    required int chapterIndex,
+    required Book book,
+    required BookChapter chapter,
+    required String rawContent,
+    required List<ReplaceRule> enabledRules,
+    required int chineseConvertType,
+    String? illustrationsDir,
+    void Function(ReplaceRule rule)? onRuleTimedOut,
+  }) async {
+    final args = <String, Object?>{
+      'chapterIndex': chapterIndex,
+      'bookName': book.name,
+      'bookOrigin': book.origin,
+      'chapterTitle': chapter.title,
+      'rawContent': rawContent,
+      'rulesJson': enabledRules.map((rule) => rule.toJson()).toList(),
+      'useReplaceRules': book.getUseReplaceRule(),
+      'reSegmentEnabled': book.getReSegment(),
+      'chineseConvertType': chineseConvertType,
+      'illustrationsDir': ?illustrationsDir,
+    };
+
+    final result = await ReaderV2ContentTransformWorker.instance.process(
+      args,
+      onRuleTimedOut: onRuleTimedOut,
+    );
+    return result['document']! as ReaderV2Content;
+  }
+
+  /// [onRule]：每開始套用一條規則就傳它在 `rulesJson` 的位置，一輪規則套完
+  /// 傳 null，worker 拿來讓主 isolate 計時。
+  static Map<String, Object?> _processInBackground(
+    Map<String, Object?> args, {
+    _RuleProgress? onRule,
+  }) {
+    final bookName = args['bookName'] as String? ?? '';
+    final bookOrigin = args['bookOrigin'] as String? ?? '';
+    final chapterTitle = args['chapterTitle'] as String? ?? '';
+    final rawContent = args['rawContent'] as String? ?? '';
+    final useReplaceRules = args['useReplaceRules'] as bool? ?? true;
+    final reSegmentEnabled = args['reSegmentEnabled'] as bool? ?? true;
+    final rules = _rulesFrom(args);
+    final titleRules = _titleRulesOf(rules, bookName, bookOrigin);
+    final content = _processContent(
+      bookName: bookName,
+      bookOrigin: bookOrigin,
+      chapterTitle: chapterTitle,
+      rawContent: rawContent,
+      rules: rules,
+      titleRules: titleRules,
+      useReplaceRules: useReplaceRules,
+      reSegmentEnabled: reSegmentEnabled,
+      onRule: onRule,
+    );
+    final displayTitle = _processTitle(
+      chapterTitle: chapterTitle,
+      rules: titleRules,
+      useReplaceRules: useReplaceRules,
+      onRule: onRule,
+    );
+
+    return <String, Object?>{'displayTitle': displayTitle, 'content': content};
+  }
+
+  /// 這一章正文的每一段在替換規則全部套用之後、排版整理之前的樣子，和
+  /// [ReaderV2Content.paragraphs] 一一對應。接在既有規則之後的新規則看到的
+  /// 就是這些字（選字「隱藏」用它找原文）。在另一個 isolate 處理，整章跑
+  /// 規則的正規表示式不佔畫面執行緒。
+  static Future<List<String>> ruleStageParagraphs({
+    required Book book,
+    required BookChapter chapter,
+    required String rawContent,
+    required List<ReplaceRule> enabledRules,
+  }) {
+    final args = <String, Object?>{
+      'bookName': book.name,
+      'bookOrigin': book.origin,
+      'chapterTitle': chapter.title,
+      'rawContent': rawContent,
+      'rulesJson': enabledRules.map((rule) => rule.toJson()).toList(),
+      'useReplaceRules': book.getUseReplaceRule(),
+      'reSegmentEnabled': book.getReSegment(),
+    };
+    return Isolate.run(() => _ruleStageParagraphsInBackground(args));
+  }
+
+  static List<String> _ruleStageParagraphsInBackground(
+    Map<String, Object?> args,
+  ) {
+    final bookName = args['bookName'] as String? ?? '';
+    final bookOrigin = args['bookOrigin'] as String? ?? '';
+    final chapterTitle = args['chapterTitle'] as String? ?? '';
+    final rules = _rulesFrom(args);
+    final useReplaceRules = args['useReplaceRules'] as bool? ?? true;
+    // 和顯示的正文（worker）一樣把插圖換成記號再套規則，重新分段與段落
+    // 修復看到的行才一樣；回傳前才拿掉記號。
+    final extracted = IllustrationMarkers.extract(
+      args['rawContent'] as String? ?? '',
+    );
+    final count = extracted.sources.length;
+    String withoutPlaceholders(String text) => String.fromCharCodes(
+      text.codeUnits.where(
+        (unit) => IllustrationMarkers.placeholderIndex(unit, count) == null,
+      ),
+    );
+    final repaired = SemanticParagraphFormatter.repairWithSources(
+      _applyRules(
+        bookName: bookName,
+        bookOrigin: bookOrigin,
+        chapterTitle: chapterTitle,
+        rawContent: extracted.text,
+        rules: rules,
+        titleRules: _titleRulesOf(rules, bookName, bookOrigin),
+        useReplaceRules: useReplaceRules,
+        reSegmentEnabled: args['reSegmentEnabled'] as bool? ?? true,
+      ).replaceAll('\r\n', '\n').replaceAll('\r', '\n'),
+    );
+    // 排版整理逐行處理、不增減行；整理後是空白或只有插圖的行不成段
+    // （[ReaderV2Content.fromRaw]）。被段落修復接起來的段，原文保留原本的
+    // 換行：新規則接在既有規則之後、段落修復之前套用，看到的是那樣的字。
+    final shown = normalizeTypography(repaired.lines.join('\n')).split('\n');
+    return <String>[
+      for (var i = 0; i < shown.length; i += 1)
+        if (_paragraphOf(withoutPlaceholders(shown[i])).isNotEmpty)
+          withoutPlaceholders(repaired.sources[i]),
+    ];
+  }
+
+  static List<ReplaceRule> _rulesFrom(Map<String, Object?> args) {
+    final rulesJson = (args['rulesJson'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>();
+    return [
+      for (var i = 0; i < rulesJson.length; i++)
+        if (ReplaceRule.fromJson(rulesJson[i]) case final rule
+            when rule.isEnabled)
+          rule.._sourceIndex = i,
+    ]..sort((a, b) => a.order.compareTo(b.order));
+  }
+
+  /// 依序套用 [rules]，每開始一條告訴 [onRule]，套完傳 null。[keep] 判斷
+  /// 套用後的字要不要留下。
+  static String _applyEach(
+    String text,
+    Iterable<ReplaceRule> rules, {
+    _RuleProgress? onRule,
+    bool Function(String next)? keep,
+  }) {
+    var result = text;
+    var started = false;
+    for (final rule in rules) {
+      started = true;
+      onRule?.call(rule._sourceIndex);
+      final next = rule.apply(result);
+      if (keep == null || keep(next)) result = next;
+    }
+    if (started) onRule?.call(null);
+    return result;
+  }
+
+  static List<ReplaceRule> _titleRulesOf(
+    List<ReplaceRule> rules,
+    String bookName,
+    String bookOrigin,
+  ) => rules
+      .where(
+        (rule) =>
+            rule.appliesToTitle(bookName: bookName, bookOrigin: bookOrigin),
+      )
+      .toList(growable: false);
+
+  static String _paragraphOf(String line) =>
+      line.trim().replaceAll('\u00A0', ' ');
+
+  static String _processContent({
+    required String bookName,
+    required String bookOrigin,
+    required String chapterTitle,
+    required String rawContent,
+    required List<ReplaceRule> rules,
+    required List<ReplaceRule> titleRules,
+    required bool useReplaceRules,
+    required bool reSegmentEnabled,
+    _RuleProgress? onRule,
+  }) {
+    final content = normalizeTypography(
+      SemanticParagraphFormatter.repair(
+        _applyRules(
+          bookName: bookName,
+          bookOrigin: bookOrigin,
+          chapterTitle: chapterTitle,
+          rawContent: rawContent,
+          rules: rules,
+          titleRules: titleRules,
+          useReplaceRules: useReplaceRules,
+          reSegmentEnabled: reSegmentEnabled,
+          onRule: onRule,
+        ),
+      ),
+    );
+
+    final paragraphs = <String>[];
+    const indent = '　　';
+    for (final line in content.split('\n')) {
+      final paragraph = _paragraphOf(line);
+      if (paragraph.isNotEmpty) {
+        paragraphs.add('$indent$paragraph');
+      }
+    }
+
+    return paragraphs.join('\n');
+  }
+
+  /// 去掉開頭重複的章名與分頁留下的頁碼（[removePageLeftovers]）、重新分段、
+  /// 每行 trim 並套用替換規則；排版整理之前。
+  static String _applyRules({
+    required String bookName,
+    required String bookOrigin,
+    required String chapterTitle,
+    required String rawContent,
+    required List<ReplaceRule> rules,
+    required List<ReplaceRule> titleRules,
+    required bool useReplaceRules,
+    required bool reSegmentEnabled,
+    _RuleProgress? onRule,
+  }) {
+    if (rawContent.isEmpty) {
+      return '';
+    }
+
+    // 章首的插圖（例如 EPUB 併進來的彩頁）不擋去重複章名：記號先拿開，
+    // 去完再放回開頭，圖照樣在章名之後、正文之前（ADR 0050）。
+    var leadingIllustrations =
+        _leadingIllustrations.stringMatch(rawContent) ?? '';
+    if (!_illustrationPlaceholder.hasMatch(leadingIllustrations)) {
+      leadingIllustrations = '';
+    }
+    var content = rawContent.substring(leadingIllustrations.length);
+
+    final nameRegex = RegExp.escape(bookName);
+    final titleRegex = RegExp.escape(chapterTitle)
+        .replaceAll(AppPattern.spaceRegex, r'\s*');
+    final duplicateTitlePattern = _getOrCreateRegex(
+      '^(\\s|\\p{P}|$nameRegex)*$titleRegex'
+      '$_duplicateTitleBoundary(\\s)*',
+      unicode: true,
+    );
+    final duplicateTitleMatch = duplicateTitlePattern.firstMatch(content);
+    if (duplicateTitleMatch != null) {
+      content = content.substring(duplicateTitleMatch.end);
+    } else if (useReplaceRules && titleRules.isNotEmpty) {
+      final displayTitle = _processTitle(
+        chapterTitle: chapterTitle,
+        rules: titleRules,
+        useReplaceRules: true,
+        onRule: onRule,
+      );
+      if (displayTitle.trim().isNotEmpty && displayTitle != chapterTitle) {
+        final displayTitleRegex = RegExp.escape(displayTitle)
+            .replaceAll(AppPattern.spaceRegex, r'\s*');
+        final displayDuplicateTitlePattern = _getOrCreateRegex(
+          '^(\\s|\\p{P}|$nameRegex)*$displayTitleRegex'
+          '$_duplicateTitleBoundary(\\s)*',
+          unicode: true,
+        );
+        final displayDuplicateTitleMatch = displayDuplicateTitlePattern
+            .firstMatch(content);
+        if (displayDuplicateTitleMatch != null) {
+          content = content.substring(displayDuplicateTitleMatch.end);
+        }
+      }
+    }
+    content = removePageLeftovers(
+      '$leadingIllustrations$content',
+      chapterTitle: chapterTitle,
+    );
+
+    if (reSegmentEnabled) {
+      content = _reSegment(content);
+    }
+
+    if (useReplaceRules) {
+      final buffer = StringBuffer();
+      final lines = content.split('\n');
+      for (var i = 0; i < lines.length; i++) {
+        if (i > 0) buffer.write('\n');
+        buffer.write(lines[i].trim());
+      }
+      content = _applyEach(
+        buffer.toString(),
+        rules.where(
+          (rule) =>
+              rule.appliesToContent(bookName: bookName, bookOrigin: bookOrigin),
+        ),
+        onRule: onRule,
+      );
+    }
+
+    return content;
+  }
+
+  static String _reSegment(String content) {
+    final normalized = content
+        .replaceAll(RegExp(r'\r\n?'), '\n')
+        .replaceAll(RegExp(r'[ \t]+\n'), '\n');
+    final nonEmptyLines = normalized
+        .split('\n')
+        .where((line) => line.trim().isNotEmpty)
+        .length;
+    if (nonEmptyLines > 1 || normalized.trim().length < 180) {
+      return normalized;
+    }
+    return _splitSingleLineByPunctuation(normalized);
+  }
+
+  static String _splitSingleLineByPunctuation(String content) {
+    final buffer = StringBuffer();
+    for (var index = 0; index < content.length; index++) {
+      final char = content[index];
+      buffer.write(char);
+      if (!_sentenceEndChars.contains(char)) continue;
+
+      while (index + 1 < content.length &&
+          _sentenceCloseChars.contains(content[index + 1])) {
+        index += 1;
+        buffer.write(content[index]);
+      }
+
+      if (index + 1 < content.length && content[index + 1].trim().isNotEmpty) {
+        buffer.write('\n');
+      }
+    }
+    return buffer.toString();
+  }
+
+  static const String _sentenceEndChars = '。！？!?；;';
+  static const String _sentenceCloseChars = '」』”’））》〉】]';
+
+  static String _processTitle({
+    required String chapterTitle,
+    required List<ReplaceRule> rules,
+    required bool useReplaceRules,
+    _RuleProgress? onRule,
+  }) {
+    var displayTitle = chapterTitle.replaceAll(RegExp(r'[\r\n]'), '');
+    if (useReplaceRules) {
+      displayTitle = _applyEach(
+        displayTitle,
+        rules.where((rule) => rule.pattern.isNotEmpty),
+        onRule: onRule,
+        keep: (next) => next.trim().isNotEmpty,
+      );
+    }
+    return normalizeTypography(displayTitle, preserveCjkSpaces: true);
+  }
+}
+
+/// worker 每開始套用一條規則傳它在 `rulesJson` 的位置，一輪套完傳 null。
+typedef _RuleProgress = void Function(int? index);
+
+/// 規則在 `rulesJson` 的位置（[ReaderV2ContentTransformer._rulesFrom] 記下）。
+final Expando<int> _sourceIndexes = Expando('rulesJson index');
+
+extension on ReplaceRule {
+  int? get _sourceIndex => _sourceIndexes[this];
+  set _sourceIndex(int? index) => _sourceIndexes[this] = index;
+}
+
+/// 內容轉換失敗：worker 啟動不了、處理時丟出錯誤，或處理途中意外結束。
+final class ReaderV2ContentTransformException implements Exception {
+  const ReaderV2ContentTransformException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// 常駐內容轉換 worker isolate；替換規則、重分段、簡繁轉換，以及切段落與
+/// contentHash（[ReaderV2Content.fromRaw]）只在這裡做，不在主 isolate 做。
+///
+/// 為什麼不用 compute：fling 放開瞬間會連續預載最多 3 章，compute 每章現場
+/// spawn/銷毀一個 isolate；且簡繁字典只存在主 isolate 靜態區，轉換被迫留在
+/// 主執行緒對整章正文執行，成本正好落在減速動畫期間。常駐 worker 只 spawn
+/// 一次、字典初始化一次。
+///
+/// 替換規則照 Legado 有逾時：worker 每開始套用一條規則就說一聲，主 isolate
+/// 計時（[ReplaceRuleDeadline]，同試跑）；跑超過那條的逾時，正則跑到一半只能
+/// 結束 worker。結束後把那條規則從所有等待中的請求拿掉、重新啟動 worker、
+/// 照原順序重送，那一章照其他規則處理完；正在處理的那個請求的
+/// `onRuleTimedOut` 收到那條規則（閱讀器拿來停用它）。
+///
+/// worker 意外結束時，等待中的請求以 [ReaderV2ContentTransformException]
+/// 結束，下一個請求重新啟動 worker。
+class ReaderV2ContentTransformWorker {
+  ReaderV2ContentTransformWorker._();
+
+  static final ReaderV2ContentTransformWorker instance =
+      ReaderV2ContentTransformWorker._();
+
+  Future<({SendPort commands, int generation})>? _starting;
+
+  /// 每次丟掉 worker 就加一；啟動中或已取得通訊埠的呼叫端靠它判斷那個
+  /// worker 是否還在。
+  int _generation = 0;
+  ReceivePort? _responses;
+  Isolate? _isolate;
+  int _nextRequestId = 0;
+  final Map<int, _TransformRequest> _pending = <int, _TransformRequest>{};
+
+  /// worker 正在套用的規則：哪個請求、`rulesJson` 的哪一筆。
+  ({int id, Map<Object?, Object?> json})? _running;
+  late final ReplaceRuleDeadline _deadline = ReplaceRuleDeadline(_ruleTimedOut);
+
+  static Future<List<String>?> _loadDictionaryDataFromBundle() async {
+    try {
+      return await Future.wait(
+        ChineseUtils.dictionaryAssetPaths.map(rootBundle.loadString),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 處理一章；[onRuleTimedOut] 收到這一章跑超過逾時、被略過的規則。
+  Future<Map<String, Object?>> process(
+    Map<String, Object?> args, {
+    void Function(ReplaceRule rule)? onRuleTimedOut,
+  }) {
+    final request = _pending[_nextRequestId++] = _TransformRequest(
+      args,
+      onRuleTimedOut,
+    );
+    unawaited(_sendPending());
+    return request.completer.future;
+  }
+
+  /// 把這個 worker 還沒收到的請求照順序送過去。
+  Future<void> _sendPending() async {
+    final ({SendPort commands, int generation}) worker;
+    try {
+      worker = await (_starting ??= _start());
+    } on ReaderV2ContentTransformException {
+      return; // 啟動失敗時等待中的請求已經收到錯誤（_reset）。
+    }
+    // 啟動完成後 worker 又被換掉了：換掉的那一方會再送一次。
+    if (worker.generation != _generation) return;
+    for (final MapEntry(key: id, value: request) in _pending.entries.toList()) {
+      if (request.sentTo == worker.generation) continue;
+      request.sentTo = worker.generation;
+      try {
+        worker.commands.send(<String, Object?>{
+          'type': 'process',
+          'id': id,
+          'args': request.args,
+        });
+      } catch (error) {
+        _pending.remove(id);
+        request.completer.completeError(
+          ReaderV2ContentTransformException(failureMessage('章節內容處理', error)),
+        );
+      }
+    }
+  }
+
+  /// worker 開始套用請求 [id] 的第 [index] 條規則；null 是這一輪套完了。
+  void _onRule(int id, int? index) {
+    final rules = _pending[id]?.args['rulesJson'];
+    if (index == null || rules is! List || index >= rules.length) {
+      _running = null;
+      _deadline.stop();
+      return;
+    }
+    final json = Map<Object?, Object?>.from(rules[index] as Map);
+    _running = (id: id, json: json);
+    _deadline.start(ReplaceRule.fromJson(json.cast<String, dynamic>()));
+  }
+
+  /// 正在套用的規則跑超過逾時：結束 worker，等待中的請求都拿掉這條規則，
+  /// 重新啟動後照順序重送。帶著這條規則的請求各自的 `onRuleTimedOut` 都
+  /// 收到（同一個只收一次）：可能是不同的閱讀器（剛關掉的與剛開的）。
+  void _ruleTimedOut(ReplaceRule rule) {
+    final running = _running;
+    if (running == null) return;
+    _discardWorker();
+    final notify = <void Function(ReplaceRule rule)>{};
+    for (final request in _pending.values) {
+      final rules = request.args['rulesJson'];
+      if (rules is! List) continue;
+      final kept = [
+        for (final other in rules)
+          if (!_sameRule(other, running.json)) other,
+      ];
+      if (kept.length == rules.length) continue;
+      request.args = <String, Object?>{...request.args, 'rulesJson': kept};
+      if (request.onRuleTimedOut case final callback?) notify.add(callback);
+    }
+    for (final callback in notify) {
+      callback(rule);
+    }
+    unawaited(_sendPending());
+  }
+
+  static bool _sameRule(Object? candidate, Map<Object?, Object?> rule) =>
+      candidate is Map &&
+      candidate.length == rule.length &&
+      rule.entries.every(
+        (entry) =>
+            candidate.containsKey(entry.key) &&
+            candidate[entry.key] == entry.value,
+      );
+
+  Future<({SendPort commands, int generation})> _start() async {
+    final generation = _generation;
+    final responses = ReceivePort();
+    final handshake = Completer<SendPort>();
+    _responses = responses;
+    responses.listen((Object? message) {
+      if (message is SendPort) {
+        if (!handshake.isCompleted) handshake.complete(message);
+        return;
+      }
+      if (message case ('rule', final int id, final int? index)) {
+        _onRule(id, index);
+        return;
+      }
+      if (message is Map) {
+        final id = message['id'] as int?;
+        if (_running?.id == id) {
+          _running = null;
+          _deadline.stop();
+        }
+        final completer = id == null ? null : _pending.remove(id)?.completer;
+        if (completer == null || completer.isCompleted) return;
+        final result = message['result'];
+        if (message['ok'] == true && result is Map) {
+          completer.complete(Map<String, Object?>.from(result));
+        } else {
+          completer.completeError(
+            ReaderV2ContentTransformException(
+              '章節內容處理失敗：${message['error'] ?? '未知錯誤'}',
+            ),
+          );
+        }
+        return;
+      }
+      // onError 送來 [錯誤, 堆疊]、onExit 送來 null：worker 已經結束。
+      const failure = ReaderV2ContentTransformException('內容轉換程序意外結束');
+      if (!handshake.isCompleted) handshake.completeError(failure);
+      if (identical(_responses, responses)) _reset(failure);
+    });
+    try {
+      final isolate = await Isolate.spawn(
+        _workerMain,
+        responses.sendPort,
+        onError: responses.sendPort,
+        onExit: responses.sendPort,
+        debugName: 'reader-v2-content-transform',
+      );
+      // 啟動途中 worker 被丟掉了：這個沒人用，結束它，也不能蓋掉之後啟動
+      // 的那個（逾時要停的是那個）。
+      if (generation != _generation) {
+        isolate.kill(priority: Isolate.immediate);
+        throw const ReaderV2ContentTransformException('內容轉換程序已停止');
+      }
+      _isolate = isolate;
+      final commands = await handshake.future;
+      final dictionaryData = await _loadDictionaryDataFromBundle();
+      // 握手之後、字典載入期間 worker 就結束了。
+      if (generation != _generation) {
+        throw const ReaderV2ContentTransformException('內容轉換程序意外結束');
+      }
+      if (dictionaryData != null && dictionaryData.length == 4) {
+        commands.send(<String, Object?>{
+          'type': 'dict',
+          'data': dictionaryData,
+        });
+      }
+      return (commands: commands, generation: generation);
+    } catch (error) {
+      final failure = error is ReaderV2ContentTransformException
+          ? error
+          : ReaderV2ContentTransformException(failureMessage('啟動內容轉換', error));
+      if (identical(_responses, responses)) _reset(failure);
+      throw failure;
+    }
+  }
+
+  /// 停掉 worker，下一個請求在呼叫端所在的 zone 重新啟動。
+  ///
+  /// 啟動好的 worker 存成一個 future，future 在建立它的 zone 裡通知等的人：
+  /// 元件測試每個測試有自己的假時鐘，上一個測試啟動的 worker 會讓這個測試
+  /// 的請求排進已經沒人推動的假時鐘，正文永遠等不到。整套 App 的測試在每個
+  /// 測試開頭停掉它（`setUpApp`）。
+  @visibleForTesting
+  void stop() => _reset(const ReaderV2ContentTransformException('內容轉換程序已停止'));
+
+  /// 丟掉目前的 worker，等待中的請求以 [failure] 結束；下一個請求會重新啟動。
+  void _reset(ReaderV2ContentTransformException failure) {
+    _discardWorker();
+    final waiters = _pending.values.toList(growable: false);
+    _pending.clear();
+    for (final waiter in waiters) {
+      final completer = waiter.completer;
+      if (!completer.isCompleted) completer.completeError(failure);
+    }
+  }
+
+  /// 結束目前的 worker，等待中的請求留著。
+  void _discardWorker() {
+    _generation += 1;
+    _starting = null;
+    _running = null;
+    _deadline.stop();
+    _responses?.close();
+    _responses = null;
+    _isolate?.kill(priority: Isolate.immediate);
+    _isolate = null;
+  }
+
+  static void _workerMain(SendPort replyPort) {
+    final commands = ReceivePort();
+    replyPort.send(commands.sendPort);
+    commands.listen((Object? message) {
+      if (message is! Map) return;
+      switch (message['type']) {
+        case 'dict':
+          final data = message['data'];
+          if (data is List) {
+            ChineseUtils.initializeFromDictionaryData(data.cast<String>());
+          }
+        case 'process':
+          final id = message['id'] as int?;
+          final rawArgs = message['args'];
+          if (id == null || rawArgs is! Map) return;
+          try {
+            final args = Map<String, Object?>.from(rawArgs);
+            final extracted = IllustrationMarkers.extract(
+              args['rawContent'] as String? ?? '',
+            );
+            args['rawContent'] = extracted.text;
+            final result = ReaderV2ContentTransformer._processInBackground(
+              args,
+              onRule: (index) => replyPort.send(('rule', id, index)),
+            );
+            final convertType = args['chineseConvertType'] as int? ?? 0;
+            if (convertType != 0) {
+              const converter = ChineseTextConverter();
+              result['displayTitle'] = converter.convert(
+                result['displayTitle'] as String? ?? '',
+                convertType: convertType,
+              );
+              result['content'] = converter.convert(
+                result['content'] as String? ?? '',
+                convertType: convertType,
+              );
+            }
+            // worker 和主 isolate 同一個 isolate group，成品直接傳回去。
+            result['document'] = ReaderV2Content.fromRaw(
+              chapterIndex: args['chapterIndex'] as int? ?? 0,
+              title: result['displayTitle'] as String? ?? '',
+              rawText: result['content'] as String? ?? '',
+              repairBrokenLines: false,
+              illustrationSlots: _illustrationSlots(
+                extracted.sources,
+                args['illustrationsDir'] as String?,
+              ),
+            );
+            replyPort.send(<String, Object?>{
+              'id': id,
+              'ok': true,
+              'result': result,
+            });
+          } catch (e) {
+            replyPort.send(<String, Object?>{
+              'id': id,
+              'ok': false,
+              'error': '$e',
+            });
+          }
+      }
+    });
+  }
+}
+
+/// 每張插圖對到的圖檔與大小，一張一個；沒給資料夾（關掉「顯示插圖」）時
+/// 都是 null、不顯示，圖檔不在或讀不出大小的那張不顯示（ADR 0050）。
+List<ReaderV2IllustrationSlot?> _illustrationSlots(
+  List<String> sources,
+  String? dir,
+) {
+  if (dir == null) return List.filled(sources.length, null);
+  return [
+    for (final src in sources)
+      () {
+        final path = BookIllustrationStorage.pathFor(dir, src);
+        final size = ImageSize.ofFile(path);
+        if (size == null) return null;
+        return (
+          src: src,
+          path: path,
+          pixelWidth: size.width,
+          pixelHeight: size.height,
+        );
+      }(),
+  ];
+}
+
+/// 一個還沒拿到結果的請求。[args] 在規則逾時後換成拿掉那條規則的版本。
+class _TransformRequest {
+  _TransformRequest(this.args, this.onRuleTimedOut);
+
+  Map<String, Object?> args;
+  final void Function(ReplaceRule rule)? onRuleTimedOut;
+  final Completer<Map<String, Object?>> completer =
+      Completer<Map<String, Object?>>();
+
+  /// 已經送給第幾代的 worker（[ReaderV2ContentTransformWorker._generation]）。
+  int? sentTo;
+}

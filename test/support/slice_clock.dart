@@ -2,7 +2,7 @@
 // 一樣是這麼久，不像其他工作照 2 倍換算（使用者 2026-10-29 定的，ADR 0036）。
 // 這裡記下每一片排版的時間，量動畫時算進它落在的那一幀
 // （`frame_budget.dart` 的 [FrameCost.sliceMicros]）。
-import 'package:night_reader/features/reader_v2/hybrid/pump/layout_pump.dart';
+import 'package:night_reader/features/reader/text_view/pump/layout_pump.dart';
 
 /// 每一片排版的開始時間（`Timeline.now` 的時鐘）與花了多久。
 final List<({int start, int micros})> sliceWork = [];

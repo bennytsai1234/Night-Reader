@@ -9,8 +9,8 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
-import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
-import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
+import 'package:night_reader/features/reader/text_view/overlay/loading_veil.dart';
+import 'package:night_reader/features/reader/screen/reader_page.dart';
 
 import '../support/app_harness.dart';
 import '../support/navigation_budget.dart';

@@ -1,0 +1,210 @@
+import 'package:flutter/material.dart';
+import 'package:night_reader/features/reader/features/brightness/reader_brightness.dart';
+import 'package:night_reader/features/reader/features/menu/reader_menu_palette.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
+
+/// 閱讀選單左側的亮度條：上方一顆「自動」鈕，下方一條直立膠囊，亮度從下
+/// 往上填滿。膠囊中的細線以下是加暗段（[ReaderV2Brightness.dimZone]），
+/// 填色換成主色。跟隨系統時膠囊變淡，一拖就改成自己的亮度。
+///
+/// 膠囊撐滿父層給的高度（減去自動鈕），由選單決定整條多長。
+class ReaderV2BrightnessBar extends StatelessWidget {
+  const ReaderV2BrightnessBar({
+    super.key,
+    required this.auto,
+    required this.level,
+    required this.onAutoChanged,
+    required this.onChanged,
+    required this.onChangeEnd,
+  });
+
+  final bool auto;
+  final double level;
+  final ValueChanged<bool> onAutoChanged;
+  final ValueChanged<double> onChanged;
+  final ValueChanged<double> onChangeEnd;
+
+  /// 自動鈕加間距之外，膠囊至少要有的高度（兩顆按鈕高）；給不到這麼高時
+  /// 整條不畫。
+  static const double minPillHeight = AppGlass.buttonSize * 2;
+
+  /// 整條亮度條至少要的高度。
+  static const double minHeight =
+      AppGlass.buttonSize + AppSpacing.md + minPillHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => constraints.maxHeight < minHeight
+          ? const SizedBox.shrink()
+          : _buildBar(context),
+    );
+  }
+
+  Widget _buildBar(BuildContext context) {
+    final menuStyle = ReaderV2MenuStyle.of(context);
+    final tint = menuStyle.glassTintOf(context);
+    return Column(
+      children: [
+        GlassIconButton(
+          icon: Icons.brightness_auto_rounded,
+          tooltip: auto ? '改用自訂亮度' : '亮度跟隨系統',
+          tint: auto ? Color.alphaBlend(menuStyle.accentMuted, tint) : tint,
+          color: auto ? menuStyle.accent : menuStyle.foreground,
+          onPressed: () => onAutoChanged(!auto),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Expanded(
+          child: _BrightnessPill(
+            auto: auto,
+            level: level,
+            tint: tint,
+            menuStyle: menuStyle,
+            onChanged: onChanged,
+            onChangeEnd: onChangeEnd,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BrightnessPill extends StatefulWidget {
+  const _BrightnessPill({
+    required this.auto,
+    required this.level,
+    required this.tint,
+    required this.menuStyle,
+    required this.onChanged,
+    required this.onChangeEnd,
+  });
+
+  final bool auto;
+  final double level;
+  final Color tint;
+  final ReaderV2MenuStyle menuStyle;
+  final ValueChanged<double> onChanged;
+  final ValueChanged<double> onChangeEnd;
+
+  @override
+  State<_BrightnessPill> createState() => _BrightnessPillState();
+}
+
+class _BrightnessPillState extends State<_BrightnessPill> {
+  static const double _step = 0.05;
+  static const double _iconSize = 22;
+  double? _dragLevel;
+  double _height = ReaderV2BrightnessBar.minPillHeight;
+
+  double _levelAt(double dy) => (1 - dy / _height).clamp(0.0, 1.0).toDouble();
+
+  void _update(double dy) {
+    final level = _levelAt(dy);
+    setState(() => _dragLevel = level);
+    widget.onChanged(level);
+  }
+
+  void _end() {
+    final level = _dragLevel;
+    if (level == null) return;
+    setState(() => _dragLevel = null);
+    widget.onChangeEnd(level);
+  }
+
+  static double _clamp(double level) => level.clamp(0.0, 1.0).toDouble();
+
+  static String _percent(double level) => '${(level * 100).round()}%';
+
+  void _nudge(double delta) => widget.onChangeEnd(_clamp(widget.level + delta));
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _height = constraints.maxHeight;
+        return _buildPill();
+      },
+    );
+  }
+
+  Widget _buildPill() {
+    final menuStyle = widget.menuStyle;
+    final level = _dragLevel ?? widget.level;
+    final inDimZone = level < ReaderV2Brightness.dimZone;
+    final fillColor = inDimZone ? menuStyle.accent : menuStyle.foreground;
+    final fillOpacity = widget.auto && _dragLevel == null ? 0.3 : 0.85;
+    // 圖示整個被填色蓋住時改用選單底色，否則用前景色。
+    final iconCovered =
+        fillOpacity > 0.5 && _height * level >= AppSpacing.md + _iconSize;
+    return Semantics(
+      slider: true,
+      label: context.ui('亮度'),
+      value: widget.auto ? context.ui('跟隨系統') : _percent(level),
+      increasedValue: _percent(_clamp(widget.level + _step)),
+      decreasedValue: _percent(_clamp(widget.level - _step)),
+      onIncrease: () => _nudge(_step),
+      onDecrease: () => _nudge(-_step),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (details) => _update(details.localPosition.dy),
+        onTapUp: (_) => _end(),
+        onVerticalDragStart: (details) => _update(details.localPosition.dy),
+        onVerticalDragUpdate: (details) => _update(details.localPosition.dy),
+        onVerticalDragEnd: (_) => _end(),
+        onVerticalDragCancel: _end,
+        child: SizedBox(
+          width: AppGlass.buttonSize,
+          child: GlassSurface(
+            borderRadius: AppRadius.pillShape,
+            tint: widget.tint,
+            grouped: false,
+            child: ClipRRect(
+              borderRadius: AppRadius.pillShape,
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: _height * level,
+                    child: ColoredBox(
+                      color: fillColor.withValues(alpha: fillOpacity),
+                    ),
+                  ),
+                  Positioned(
+                    left: AppSpacing.md,
+                    right: AppSpacing.md,
+                    bottom: _height * ReaderV2Brightness.dimZone - 1,
+                    height: 2,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: menuStyle.mutedForeground.withValues(alpha: 0.6),
+                        borderRadius: AppRadius.pillShape,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: AppSpacing.md,
+                    child: Icon(
+                      inDimZone
+                          ? Icons.dark_mode_rounded
+                          : Icons.light_mode_rounded,
+                      size: _iconSize,
+                      color: iconCovered
+                          ? menuStyle.background.withValues(alpha: 1)
+                          : menuStyle.foreground,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

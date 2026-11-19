@@ -1,0 +1,138 @@
+import 'dart:ui' as ui;
+
+import '../../session/reader_location.dart';
+import '../progress/chapter_shares.dart';
+import 'text_view_types.dart';
+
+abstract interface class HybridMeasurementStore {
+  BlockMetrics? get(MeasurementNamespace namespace, BlockKey key);
+  void put(MeasurementNamespace namespace, BlockKey key, BlockMetrics metrics);
+  void invalidateNamespace(MeasurementNamespace namespace);
+  void invalidateChapter(int chapterIndex);
+}
+
+abstract interface class HybridDocumentIndex {
+  BlockKey? blockAtOffset(double offset);
+  double? topOf(BlockKey key);
+  double? bottomOf(BlockKey key);
+  BlockKey? keyForSliverIndex({required bool beforeCenter, required int index});
+  double chapterExtent(int chapterIndex);
+}
+
+abstract interface class HybridChapterTextRepository {
+  Future<ChapterText> load(ChapterId id);
+  void setResidentRange(int first, int last);
+  Stream<ChapterEvent> get events;
+}
+
+abstract interface class HybridTextPreprocessor {
+  Future<ChapterBlocks> process(ChapterText chapter, {int maxBlockChars});
+}
+
+abstract interface class HybridParagraphCache {
+  ui.Paragraph? acquire(BlockKey key, LayoutEpoch epoch);
+  void put(
+    BlockKey key,
+    LayoutEpoch epoch,
+    ui.Paragraph paragraph, {
+    ui.Color bakedColor,
+  });
+  void dispose();
+}
+
+/// I4: this is the only contract allowed to build and lay out [ui.Paragraph].
+abstract interface class HybridLayoutPump {
+  void submit(LayoutTask task);
+  void onScrollStateChanged(PumpState state);
+  Stream<BlockReady> get completed;
+  void dispose();
+}
+
+abstract interface class HybridProgressCalculator {
+  HybridProgressSnapshot progressForLocation(
+    ReaderV2Location location, {
+    required int chapterLength,
+  });
+}
+
+final class HybridProgressSnapshot {
+  /// [chapterStart]、[chapterShare] 是這一章開頭在全書的位置與佔全書多少
+  /// （[ReaderV2ChapterShares]）；沒給時當每章一樣長。
+  const HybridProgressSnapshot({
+    required this.chapterIndex,
+    required this.chapterCount,
+    required this.chapterPercent,
+    double? chapterStart,
+    double? chapterShare,
+  }) : _givenStart = chapterStart,
+       _givenShare = chapterShare,
+       assert(chapterCount >= 0),
+       assert(chapterPercent >= 0),
+       assert(chapterPercent <= 100);
+
+  final int chapterIndex;
+  final int chapterCount;
+  final double chapterPercent;
+  final double? _givenStart;
+  final double? _givenShare;
+
+  double get chapterStart =>
+      _givenStart ??
+      ReaderV2ChapterShares.even(chapterCount).startOf(chapterIndex);
+  double get chapterShare =>
+      _givenShare ??
+      ReaderV2ChapterShares.even(chapterCount).shareOf(chapterIndex);
+
+  String get chapterLabel {
+    if (chapterCount <= 0) return '第 0/0 章 · 本章 0/10';
+    final safeChapterIndex = chapterIndex.clamp(0, chapterCount - 1);
+    return '第 ${safeChapterIndex + 1}/$chapterCount 章 · 本章 $chapterSegment/10';
+  }
+
+  /// 讀到的位置在整本書中的進度：這一章開頭的位置，加上這一章讀過的部分
+  /// 佔全書多少。
+  double get bookPercent {
+    if (chapterCount <= 0) return 0.0;
+    final safeChapterPercent = chapterPercent.clamp(0.0, 100.0);
+    return ((chapterStart + chapterShare * safeChapterPercent / 100) * 100)
+        .clamp(0.0, 100.0)
+        .toDouble();
+  }
+
+  String get percentLabel => '全書 ${bookPercent.toStringAsFixed(1)}%';
+
+  /// 資訊列單欄用的精簡標籤。
+  String get chapterIndexLabel {
+    if (chapterCount <= 0) return '0/0';
+    final safeChapterIndex = chapterIndex.clamp(0, chapterCount - 1);
+    return '${safeChapterIndex + 1}/$chapterCount';
+  }
+
+  String get chapterProgressLabel => '本章 $chapterSegment/10';
+
+  /// 全書進度顯示到小數第 [fractionDigits] 位；比較只看到第一位，再多
+  /// 一位不會跟著更新。
+  String bookPercentLabel(int fractionDigits) =>
+      '${bookPercent.toStringAsFixed(fractionDigits)}%';
+
+  /// 目前章節已完成的十分段數；章節開始為 0/10，章節結束為 10/10。
+  int get chapterSegment {
+    if (chapterPercent >= 100) return 10;
+    return (chapterPercent / 10).floor().clamp(0, 9);
+  }
+
+  /// 這是資訊列的顯示模型；小於 0.1% 的 raw progress 變化不應觸發
+  /// widget rebuild。
+  @override
+  bool operator ==(Object other) {
+    return other is HybridProgressSnapshot &&
+        other.chapterIndex == chapterIndex &&
+        other.chapterCount == chapterCount &&
+        other.chapterLabel == chapterLabel &&
+        other.percentLabel == percentLabel;
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(chapterIndex, chapterCount, chapterLabel, percentLabel);
+}

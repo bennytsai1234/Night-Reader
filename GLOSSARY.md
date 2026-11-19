@@ -182,7 +182,7 @@ _Avoid_: 轉場效果、頁面動畫、Hero（封面共享元素轉場已移除�
 ### 閱讀器與排版
 
 **Reader V2**：
-現行的閱讀器（`lib/features/reader_v2/`），負責分頁、排版、閱讀進度與閱讀選單。
+現行的閱讀器（`lib/features/reader/`），負責分頁、排版、閱讀進度與閱讀選單。
 _Avoid_: 新閱讀器、reader
 
 **書籤**：

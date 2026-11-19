@@ -19,7 +19,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/utils/illustration_markers.dart';
-import 'package:night_reader/features/reader_v2/chapter/semantic_paragraph_formatter.dart';
+import 'package:night_reader/features/reader/chapter/semantic_paragraph_formatter.dart';
 
 void main() {
   final env = Platform.environment;
