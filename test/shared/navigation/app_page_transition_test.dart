@@ -590,12 +590,15 @@ void main() {
       });
     }
 
-    for (final goesBack in [false, true]) {
+    for (final (transition, goesBack) in [
+      for (final transition in AppPageTransition.values)
+        for (final goesBack in [false, true]) (transition, goesBack),
+    ]) {
       testWidgets(
-        'a page pushed mid-drag (${goesBack ? 'goes back' : 'springs '
-                  'back'}) leaves the page whole',
+        '${transition.name}: a page pushed mid-drag '
+        '(${goesBack ? 'goes back' : 'springs back'}) leaves the page whole',
         (tester) async {
-          await pumpApp(tester, AppPageTransition.slide);
+          await pumpApp(tester, transition);
           await push(tester);
           final page = tester.element(find.text('新頁'));
           final route = ModalRoute.of(page)!;

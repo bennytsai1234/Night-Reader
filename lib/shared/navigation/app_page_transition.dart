@@ -340,7 +340,15 @@ class _AppTransitionState extends State<_AppTransition>
 
   void _onFinishTick() {
     final swipe = _swipe;
-    if (swipe is! _Settling || !_route.isCurrent) return;
+    if (swipe is! _Settling) return;
+    // 收尾途中有頁蓋上來：路由不讓手勢改進度，蓋上來的頁推完後這一頁不在
+    // 畫面上、計時器也跟著停；等它關掉再接著收，被蓋住時放開的返回就會在
+    // 那時才返回。現在就停在半途。
+    if (!_route.isCurrent) {
+      _finish.stop();
+      _settle(swipe);
+      return;
+    }
     _route.handleUpdateBackGestureProgress(
       progress: lerpDouble(
         swipe.from,
@@ -350,10 +358,15 @@ class _AppTransitionState extends State<_AppTransition>
     );
   }
 
-  // 收完時有頁蓋在上面，路由不讓手勢改進度，停在半途等補回整頁。
   void _onFinishStatus(AnimationStatus status) {
     final swipe = _swipe;
-    if (status != AnimationStatus.completed || swipe is! _Settling) return;
+    if (status == AnimationStatus.completed && swipe is _Settling) {
+      _settle(swipe);
+    }
+  }
+
+  // 收完時有頁蓋在上面，路由不讓手勢改進度，停在半途等補回整頁。
+  void _settle(_Settling swipe) {
     _back.clear();
     _swipe = _route.isCurrent ? const _Idle() : const _Stranded();
     if (swipe.goesBack) {
@@ -464,7 +477,7 @@ final class _Dragging extends _Swipe {
 }
 
 /// 放開後照 [BackSwipe] 的時長從 [from] 送到 [to]：0 是返回，1 是彈回。
-/// 途中再拖、系統再送都不接手。
+/// 途中再拖、系統再送都不接手；途中有頁蓋上來就停在半途（[_Stranded]）。
 final class _Settling extends _Swipe {
   const _Settling({required this.from, required this.to});
 
