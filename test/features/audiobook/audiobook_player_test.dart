@@ -415,7 +415,9 @@ void main() {
     await pumpEventQueue();
     expect(player.phase, AudiobookPhase.loading);
     await player.play();
+    final opening = engine.nextOpen;
     source.gate!.complete();
+    await opening.timeout(const Duration(seconds: 5));
     await pumpEventQueue();
 
     expect(player.chapterIndex, 1);
@@ -799,12 +801,14 @@ void main() {
       ),
       (_) async => sync.commits++,
     );
+    final opening = engine.nextOpen;
     final binding = TestWidgetsFlutterBinding.instance;
     binding
       ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
       ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
       ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
       ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await opening.timeout(const Duration(seconds: 5));
     await pumpEventQueue();
 
     expect(player.chapterIndex, 3);
