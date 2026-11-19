@@ -527,10 +527,11 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
         await _load(_index, start: position.value, autoplay: true);
       case AudiobookPhase.ended:
         await _load(_index, start: Duration.zero, autoplay: true);
-      case AudiobookPhase.opening ||
-          AudiobookPhase.loading ||
-          AudiobookPhase.playing ||
-          AudiobookPhase.paused:
+      // 還在開書或載入：只記下要出聲，載好才播。引擎裡還是上一集（或停掉
+      // 的上一本），現在叫它播會先出上一集的聲音。
+      case AudiobookPhase.opening || AudiobookPhase.loading:
+        _wantPlay = true;
+      case AudiobookPhase.playing || AudiobookPhase.paused:
         _wantPlay = true;
         await _startPlaying(engine);
     }

@@ -258,6 +258,40 @@ void main() {
     expect(engine.playing, isFalse);
   });
 
+  test('載入中按播放只記下要出聲，不讓還沒換掉的上一集出聲，載好才播', () async {
+    await player.open(book);
+    await pumpEventQueue();
+    source.gate = Completer<void>();
+    final switching = player.playChapter(1);
+    await pumpEventQueue();
+    await player.play();
+    expect(engine.playing, isFalse);
+    source.gate!.complete();
+    await switching;
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/ep1.mp3');
+    expect(engine.playing, isTrue);
+
+    // 開別本書、還在讀目錄時也一樣：引擎停著的是上一本。
+    final other = await bookWithoutChapters();
+    source.chapterList = Completer();
+    final opening = player.open(other);
+    await pumpEventQueue();
+    await player.play();
+    expect(engine.playing, isFalse);
+    source.chapterList!.complete([
+      for (var i = 0; i <= 6; i++)
+        BookChapter(
+          url: 'https://audio.test/b2/ep$i',
+          title: '第 $i 集',
+          bookUrl: other.bookUrl,
+          index: i,
+        ),
+    ]);
+    await opening;
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/b2/ep5.mp3');
+    expect(engine.playing, isTrue);
+  });
+
   test('換到抓不到的一集時，上一集也停聲，不會畫面停在新集、還聽著舊集', () async {
     await player.open(book);
     expect(engine.playing, isTrue);
