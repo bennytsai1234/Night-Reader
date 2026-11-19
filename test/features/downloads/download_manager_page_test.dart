@@ -142,7 +142,7 @@ void main() {
     final semantics = tester.ensureSemantics();
     expect(
       tester.getSemantics(find.bySemanticsLabel('重試').first),
-      containsSemantics(isButton: true, isEnabled: true, hasTapAction: true),
+      isSemantics(isButton: true, isEnabled: true, hasTapAction: true),
     );
     semantics.dispose();
 
