@@ -343,8 +343,16 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 從目錄點了某一集：從頭播。
   Future<void> playChapter(int index) async {
     if (_book == null || _chapters.isEmpty) return;
+    await _switchTo(_playable(index));
+  }
+
+  /// 使用者換到第 [index] 集（目錄選集、上一集、下一集）：先存好這一集聽到
+  /// 哪，再從頭播那一集。存的這段時間停止、開了別本或又換了集就不換。
+  Future<void> _switchTo(int index) async {
+    final generation = _generation;
     await _saveProgress();
-    await _load(_playable(index), start: Duration.zero, autoplay: true);
+    if (generation != _generation) return;
+    await _load(index, start: Duration.zero, autoplay: true);
   }
 
   Future<List<BookChapter>> _loadChapters(BookSource source, Book book) async {
@@ -418,8 +426,12 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     if (book == null || source == null || index >= _chapters.length) return;
     // 換集先讓上一集停聲：新的一集抓不到時，不會畫面停在新集、耳朵還聽著
     // 舊集，舊集的位置也不會記到新集上。
+    // 等上一集停聲的這段時間停止了、開了別本或又換了集：不再往下做，這時的
+    // 書與目錄已經不是按下去時的那一份。
+    final entry = _generation;
     final previous = _engine;
     if (previous != null && previous.playing) await previous.pause();
+    if (entry != _generation) return;
     if (autoplay) _wantPlay = true;
     final generation = ++_generation;
     // 載入途中被之後的開書、換集、停止取代：這次載入不再往下做。
@@ -444,8 +456,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
           : await ReadingFetches.instance.track(
               () => _sourceService.getAudioRequest(source, book, chapter),
             );
-      _prefetched = null;
       if (stale()) return;
+      _prefetched = null;
       _request = request;
       await engine.open(
         Uri.parse(request.url),
@@ -577,15 +589,13 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
         _nextPlayable(_index) ??
         (_mode == AudiobookPlayMode.listLoop ? _playable(0) : null);
     if (next == null) return;
-    await _saveProgress();
-    await _load(next, start: Duration.zero, autoplay: true);
+    await _switchTo(next);
   }
 
   Future<void> previous() async {
     final previous = _previousPlayable(_index);
     if (previous == null) return;
-    await _saveProgress();
-    await _load(previous, start: Duration.zero, autoplay: true);
+    await _switchTo(previous);
   }
 
   Future<void> setSpeed(double speed) async {

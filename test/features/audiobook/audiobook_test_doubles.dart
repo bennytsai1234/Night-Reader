@@ -75,11 +75,21 @@ class FakeAudioEngine implements AudioEngine {
   @override
   Future<void> play() async => _setPlaying(true);
 
-  @override
-  Future<void> pause() async => _setPlaying(false);
+  /// 暫停、拖動要等外面放行（測試等待途中按了什麼）。
+  Completer<void>? pauseGate;
+  Completer<void>? seekGate;
 
   @override
-  Future<void> seek(Duration to) async => position = to;
+  Future<void> pause() async {
+    await pauseGate?.future;
+    _setPlaying(false);
+  }
+
+  @override
+  Future<void> seek(Duration to) async {
+    await seekGate?.future;
+    position = to;
+  }
 
   @override
   Future<void> setSpeed(double speed) async => lastSpeed = speed;

@@ -317,6 +317,48 @@ void main() {
     expect(engine.playing, isTrue);
   });
 
+  test('按了下一集、上一集還沒停聲時停止：換集不再往下做', () async {
+    await player.open(book, chapterIndex: 1);
+    await pumpEventQueue();
+    engine.pauseGate = Completer<void>();
+    final switching = player.next();
+    await pumpEventQueue();
+    await player.stop();
+    engine.pauseGate!.complete();
+    await switching;
+
+    expect(player.book, isNull);
+    expect(engine.opened, hasLength(1));
+  });
+
+  test('按了下一集、上一集還沒停聲時開了別本：不換到別本的同一集', () async {
+    await player.open(book, chapterIndex: 1);
+    await pumpEventQueue();
+    final other = await bookWithoutChapters();
+    source.chapterList = Completer()
+      ..complete([
+        for (var i = 0; i <= 6; i++)
+          BookChapter(
+            url: 'https://audio.test/b2/ep$i',
+            title: '第 $i 集',
+            bookUrl: other.bookUrl,
+            index: i,
+          ),
+      ]);
+    engine.pauseGate = Completer<void>();
+    final switching = player.next();
+    await pumpEventQueue();
+    final opening = player.open(other);
+    await pumpEventQueue();
+    engine.pauseGate!.complete();
+    await switching;
+    await opening;
+    await pumpEventQueue();
+
+    expect(player.chapterIndex, 5);
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/b2/ep5.mp3');
+  });
+
   test('換到抓不到的一集時，上一集也停聲，不會畫面停在新集、還聽著舊集', () async {
     await player.open(book);
     expect(engine.playing, isTrue);
