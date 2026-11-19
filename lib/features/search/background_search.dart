@@ -382,10 +382,13 @@ class BackgroundSearchRun extends RepairRun implements SearchRecorder {
       await (search.running ?? Future<void>.value());
     }
     if (_searchPhase == WorkPhase.pausing) {
-      // 停好了才算暫停：每個搜完的書源都已經寫進結果檔。
+      // 停好了才算暫停：每個搜完的書源都已經寫進結果檔。等的時候按了結束
+      // 就是結束（結束蓋過暫停）。
       await _file.flush();
-      search.markPaused();
-      return WorkPhase.paused;
+      if (_searchPhase == WorkPhase.pausing) {
+        search.markPaused();
+        return WorkPhase.paused;
+      }
     }
     await _file.write('${jsonEncode({'end': true})}\n');
     return WorkPhase.finished;
