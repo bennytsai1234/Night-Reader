@@ -504,7 +504,13 @@ class _RenderEdgeHitRegion extends RenderProxyBox {
 
   @override
   bool hitTest(BoxHitTestResult result, {required Offset position}) {
-    if (!covering() && position.dx > edgeWidth) return false;
-    return super.hitTest(result, position: position);
+    if (!covering()) {
+      if (position.dx > edgeWidth) return false;
+      return super.hitTest(result, position: position);
+    }
+    // 佔著畫面時觸控一律不穿到底下：從左緣開始拖的那一幀，暗幕還沒重建、
+    // 不接觸控，這時按下的另一根手指也歸面板。
+    super.hitTest(result, position: position);
+    return true;
   }
 }

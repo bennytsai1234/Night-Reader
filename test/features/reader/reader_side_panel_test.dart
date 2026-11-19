@@ -708,6 +708,22 @@ void main() {
     expectSettled(tester);
   });
 
+  testWidgets('once a drag from the edge starts, a second finger on the page '
+      'goes to the panel, also in that same frame', (tester) async {
+    await pumpPanel(tester);
+    final drag = await tester.startGesture(const Offset(5, 300));
+    await tester.pump();
+    await drag.moveBy(const Offset(30, 0));
+    expect(panel.isOnScreen, isTrue);
+    final other = await tester.startGesture(const Offset(600, 300));
+    await tester.pump();
+    await other.up();
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(bodyDowns, 1, reason: '只有從左緣按下的那一下');
+    expect(bodyTaps, 0);
+  });
+
   testWidgets('a touch before the slide starts closes the panel before it '
       'shows: a tap beside it, or an up-and-down swipe', (tester) async {
     await pumpPanel(tester);
