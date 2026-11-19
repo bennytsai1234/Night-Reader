@@ -488,67 +488,107 @@ final class _Stranded extends _Swipe {
 /// 那段時間之後的位置，看起來是點下去就掉幀。這裡讓第一、二幀都停在起點，
 /// 之後把剩下的時間照比例走完整段，最後一幀和路由同時到位（ADR 0018）。
 class _Trip {
-  AnimationStatus? _direction;
-
-  /// 這一趟第一幀的時間戳；null 是還沒畫到。
-  Duration? _firstFrame;
-
-  /// 第二幀時這一趟已經走掉的時間比例，之後照它把剩下的時間拉回整段。
-  double? _resume;
-
-  /// 這一趟從頭開始，照上面的方式起步；中途接手的（拖曳返回放開後、半途
-  /// 反向）照路由的時間走。
-  bool _paced = false;
+  /// 這一趟走到哪個階段（`docs/state-machines.md`「路由換頁」）。
+  _TripPhase _phase = const _NoTrip();
 
   void update(AnimationStatus status) {
-    if (status.isAnimating) {
-      if (_direction == null) {
-        _direction = status;
-        _firstFrame = null;
-        _resume = null;
-        _paced = true;
-      }
-    } else {
-      _direction = null;
-      _paced = false;
+    if (!status.isAnimating) {
+      _phase = const _NoTrip();
+    } else if (_phase is _NoTrip) {
+      _phase = _AtStart(closing: status == AnimationStatus.reverse);
     }
   }
 
   /// [offstageFrame] 是這一頁最近一次在 offstage 的那一幀（只有剛推入的
   /// 新頁有）。
-  ({bool closing, double time}) of(
-    Animation<double> animation, {
-    Duration? offstageFrame,
-  }) {
-    final closing = (_direction ?? animation.status) == AnimationStatus.reverse;
+  TripTime of(Animation<double> animation, {Duration? offstageFrame}) {
+    final closing = switch (_phase) {
+      _NoTrip() => animation.status == AnimationStatus.reverse,
+      _Moving(:final closing) => closing,
+    };
     final time = closing ? 1 - animation.value : animation.value;
     return (closing: closing, time: _pace(time, offstageFrame));
   }
 
   double _pace(double time, Duration? offstageFrame) {
-    if (!_paced) return time;
     final stamp = SchedulerBinding.instance.currentFrameTimeStamp;
-    final first = _firstFrame;
-    if (first == null) {
-      if (time > 0) {
-        // 推入的第一幀新頁在 offstage（Hero 量位置），路由的動畫暫時是
-        // 「已播完」，這一趟從第二幀才看得到；照底下那頁同樣的方式從這一幀
-        // 起算，兩頁才會同步。
-        if (offstageFrame != null && offstageFrame != stamp) {
-          _firstFrame = offstageFrame;
-          _resume = time;
-          return 0;
-        }
-        // 不是從起點開始的一趟不調整。
-        _paced = false;
+    switch (_phase) {
+      case _NoTrip() || _OnRouteClock():
         return time;
-      }
-      _firstFrame = stamp;
-      return 0;
+      case _AtStart(:final closing, firstFrame: null):
+        if (time > 0) {
+          // 推入的第一幀新頁在 offstage（Hero 量位置），路由的動畫暫時是
+          // 「已播完」，這一趟從第二幀才看得到；照底下那頁同樣的方式從這一幀
+          // 起算，兩頁才會同步。
+          if (offstageFrame != null && offstageFrame != stamp) {
+            _phase = _CatchingUp(
+              closing: closing,
+              firstFrame: offstageFrame,
+              resume: time,
+            );
+            return 0;
+          }
+          // 不是從起點開始的一趟不調整。
+          _phase = _OnRouteClock(closing: closing);
+          return time;
+        }
+        _phase = _AtStart(closing: closing, firstFrame: stamp);
+        return 0;
+      case _AtStart(:final closing, :final firstFrame?):
+        if (stamp == firstFrame) return 0;
+        _phase = _CatchingUp(
+          closing: closing,
+          firstFrame: firstFrame,
+          resume: time,
+        );
+        return _pace(time, offstageFrame);
+      case _CatchingUp(:final firstFrame, :final resume):
+        if (stamp == firstFrame) return 0;
+        if (resume >= 1) return time;
+        return ((time - resume) / (1 - resume)).clamp(0.0, 1.0);
     }
-    if (stamp == first) return 0;
-    final resume = _resume ??= time;
-    if (resume >= 1) return time;
-    return ((time - resume) / (1 - resume)).clamp(0.0, 1.0);
   }
+}
+
+/// 一趟換頁走到哪個階段。
+sealed class _TripPhase {
+  const _TripPhase();
+}
+
+/// 路由沒在換頁：照路由的進度。
+final class _NoTrip extends _TripPhase {
+  const _NoTrip();
+}
+
+/// 路由正在換頁；[closing] 是這一趟一開始的方向，中途反向也沿用。
+sealed class _Moving extends _TripPhase {
+  const _Moving({required this.closing});
+
+  final bool closing;
+}
+
+/// 從頭開始的一趟停在起點：[firstFrame] 是第一幀的時間戳（null 是還沒
+/// 畫到），那一幀花掉的時間不算。
+final class _AtStart extends _Moving {
+  const _AtStart({required super.closing, this.firstFrame});
+
+  final Duration? firstFrame;
+}
+
+/// 第二幀起照剩下的時間走完整段：[resume] 是那時這一趟已經走掉的時間比例，
+/// 和路由同時到位。
+final class _CatchingUp extends _Moving {
+  const _CatchingUp({
+    required super.closing,
+    required this.firstFrame,
+    required this.resume,
+  });
+
+  final Duration firstFrame;
+  final double resume;
+}
+
+/// 不是從起點開始的一趟（中途接手）：照路由的時間。
+final class _OnRouteClock extends _Moving {
+  const _OnRouteClock({required super.closing});
 }
