@@ -9,7 +9,6 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/source/source_site.dart';
-import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/core/source/source_dedupe.dart';
 import 'package:night_reader/core/network/network_service.dart';
@@ -265,8 +264,8 @@ class SourceManagerProvider with ChangeNotifier {
   final SourceImportService _importService;
   final CheckSourceService checkService;
 
-  List<BookSourcePart> _sources = [];
-  List<BookSourcePart>? _visibleSourcesCache;
+  List<BookSource> _sources = [];
+  List<BookSource>? _visibleSourcesCache;
   bool _visibleSourcesDirty = true;
   bool _disposed = false;
   int _loadGeneration = 0;
@@ -285,15 +284,15 @@ class SourceManagerProvider with ChangeNotifier {
   int get totalSourceCount => _sources.length;
 
   /// 全部書源（依手動順序，不受目前的搜尋與篩選影響）。
-  List<BookSourcePart> get allSources => List<BookSourcePart>.unmodifiable(
-    List<BookSourcePart>.from(_sources)
+  List<BookSource> get allSources => List<BookSource>.unmodifiable(
+    List<BookSource>.from(_sources)
       ..sort((a, b) => a.customOrder.compareTo(b.customOrder)),
   );
   String? get loadErrorMessage => _loadError == null ? null : '載入書源失敗，請稍後重試';
 
-  List<BookSourcePart> get sources {
+  List<BookSource> get sources {
     if (_visibleSourcesDirty || _visibleSourcesCache == null) {
-      _visibleSourcesCache = List<BookSourcePart>.unmodifiable(
+      _visibleSourcesCache = List<BookSource>.unmodifiable(
         _computeVisibleSources(),
       );
       _visibleSourcesDirty = false;
@@ -301,8 +300,8 @@ class SourceManagerProvider with ChangeNotifier {
     return _visibleSourcesCache!;
   }
 
-  List<BookSourcePart> _computeVisibleSources() {
-    var list = List<BookSourcePart>.from(_sources);
+  List<BookSource> _computeVisibleSources() {
+    var list = List<BookSource>.from(_sources);
 
     // 全文搜尋
     if (_searchQuery.isNotEmpty) {
@@ -438,7 +437,7 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
-  void _rememberRows(List<BookSourcePart> shown) {
+  void _rememberRows(List<BookSource> shown) {
     lastRows = [
       for (final source in shown.take(lastRowsLimit)) SourceRowLook.of(source),
     ];
@@ -717,7 +716,7 @@ class SourceManagerProvider with ChangeNotifier {
 
   /// 讀完書源後在背景整理改前版本：刪掉的書源它的也刪。不擋清單的讀取，
   /// 讀不到就當沒有；它只決定長按選單有沒有「還原 AI 修改前」。
-  Future<void> _refreshAiRepaired(List<BookSourcePart> sources) async {
+  Future<void> _refreshAiRepaired(List<BookSource> sources) async {
     try {
       await AiRepairBackups.instance.keepOnly({
         for (final source in sources) source.bookSourceUrl,
@@ -1136,7 +1135,7 @@ class SourceManagerProvider with ChangeNotifier {
   }) => utf8.encode(value).length > limitBytes;
 
   Future<void> reorderSource(int oldIndex, int newIndex) async {
-    final list = List<BookSourcePart>.from(sources);
+    final list = List<BookSource>.from(sources);
     if (!canReorder ||
         oldIndex < 0 ||
         oldIndex >= list.length ||
@@ -1284,7 +1283,7 @@ class SourceManagerProvider with ChangeNotifier {
   int countSourcesWithTags(Set<SourceTag> tags) =>
       _sources.where((source) => _hasAnyTag(source, tags)).length;
 
-  bool _hasAnyTag(BookSourcePart source, Set<SourceTag> tags) => tags.any(
+  bool _hasAnyTag(BookSource source, Set<SourceTag> tags) => tags.any(
     (tag) => tag.kind != null
         ? source.sourceKind == tag.kind
         : _hasGroup(source.bookSourceGroup, tag.group!),
@@ -1455,7 +1454,7 @@ class SourceManagerProvider with ChangeNotifier {
   bool _hasGroup(String? value, String group) =>
       _groupLabels(value).contains(group);
 
-  int Function(BookSourcePart a, BookSourcePart b) _buildComparator() {
+  int Function(BookSource a, BookSource b) _buildComparator() {
     final multiplier = sortDesc ? -1 : 1;
     switch (sortMode) {
       case 0:

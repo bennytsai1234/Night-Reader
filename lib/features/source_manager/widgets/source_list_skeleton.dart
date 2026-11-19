@@ -1,8 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/models/book_source_part.dart';
-import 'package:night_reader/core/models/source/book_source_logic.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -32,7 +31,7 @@ class SourceRowLook {
     this.error,
   });
 
-  factory SourceRowLook.of(BookSourcePart source) {
+  factory SourceRowLook.of(BookSource source) {
     final health = source.runtimeHealth;
     return SourceRowLook(
       name: source.bookSourceName,
@@ -113,7 +112,7 @@ class SourceListSkeleton extends StatelessWidget {
   /// 書源到齊後，內容排隊建構時的空位也照同一列的真正形狀留高度。
   static double rowHeightFor(
     BuildContext context,
-    BookSourcePart source, {
+    BookSource source, {
     SourceCheckProgress? progress,
   }) {
     final width = math.min(

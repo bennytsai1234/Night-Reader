@@ -25,7 +25,6 @@ import 'source_editor_page.dart';
 import 'source_group_manage_page.dart';
 
 import 'package:night_reader/core/models/source/book_source.dart';
-import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
@@ -614,7 +613,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
 
   Widget _buildItem(
     SourceManagerProvider p,
-    BookSourcePart s, {
+    BookSource s, {
     required int index,
     required bool editing,
     required bool showHostHeader,
@@ -654,7 +653,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   /// 長按書源：列浮起預覽，旁邊列出單一書源的動作。
   Future<void> _showSourceMenu(
     SourceManagerProvider p,
-    BookSourcePart s,
+    BookSource s,
     Rect sourceRect,
     Widget preview,
   ) async {
@@ -811,10 +810,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     if (mounted) await p.loadSources(showLoading: false);
   }
 
-  Future<void> _confirmAiRestore(
-    SourceManagerProvider p,
-    BookSourcePart s,
-  ) async {
+  Future<void> _confirmAiRestore(SourceManagerProvider p, BookSource s) async {
     final confirmed = await showAppConfirm(
       context: context,
       title: '把「${s.bookSourceName}」換回 AI 修改前？',
@@ -832,7 +828,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
 
   Future<void> _confirmDeleteSource(
     SourceManagerProvider p,
-    BookSourcePart s,
+    BookSource s,
   ) async {
     final confirmed = await showAppConfirm(
       context: context,

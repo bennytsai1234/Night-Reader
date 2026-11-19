@@ -2,7 +2,7 @@ import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:provider/provider.dart';
-import 'package:night_reader/core/models/book_source_part.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -312,7 +312,7 @@ class _GroupSourcePickerPage extends StatefulWidget {
   const _GroupSourcePickerPage({required this.group, required this.sources});
 
   final String group;
-  final List<BookSourcePart> sources;
+  final List<BookSource> sources;
 
   @override
   State<_GroupSourcePickerPage> createState() => _GroupSourcePickerPageState();
