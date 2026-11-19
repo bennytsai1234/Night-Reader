@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
@@ -8,7 +9,12 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/core/source_check/source_check_isolate.dart';
+import 'package:night_reader/core/background_work/paused_work_file.dart';
+import 'package:night_reader/features/source_manager/source_check_job.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
+import 'package:night_reader/features/source_manager/widgets/source_check_status_bar.dart';
+import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 校驗出搜尋失效：和真的校驗一樣，結果的書源帶著校驗標記與錯誤註解。
@@ -59,6 +65,27 @@ class _FlakyDao extends BookSourceDao {
     if (failures-- > 0) throw StateError('資料庫讀不到');
     return super.getByUrl(url);
   }
+}
+
+/// 存在記憶體裡的暫停存檔。
+class _MemoryFile extends PausedWorkFile {
+  _MemoryFile() : super('check_sources');
+  bool closed = false;
+
+  @override
+  bool get isClosed => closed;
+
+  @override
+  Future<String?> read() async => null;
+
+  @override
+  void saveLater(String Function() encode) {}
+
+  @override
+  Future<void> flush() async {}
+
+  @override
+  Future<void> close() async => closed = true;
 }
 
 /// 書源列的校驗結果與「沒有異常」篩選要對得上：校驗之後書源被別處改寫
@@ -226,5 +253,65 @@ void main() {
     await checker.check([url]);
     expect(flaky.reads, greaterThan(reads), reason: '下一輪照常校驗');
     expect(checker.finishedRunCount, 1);
+  });
+
+  testWidgets('while a paused check settles, the bar says pausing and end '
+      'still works', (tester) async {
+    // 按了暫停也要等 [release] 才停得下來。
+    final release = Completer<void>();
+    final slow = CheckSourceService(
+      spawn: (source, config, timeout) async => SourceCheckIsolateHandle(
+        result: release.future.then((_) => null),
+        abort: () {},
+      ),
+    );
+    final provider = await tester.runAsync(() async {
+      final provider = SourceManagerProvider(
+        entrance: Future<void>.value(),
+        sourceCheckService: slow,
+        pausedCheck: PausedSourceCheck(file: _MemoryFile.new),
+      );
+      while (provider.isLoading || provider.totalSourceCount == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      return provider;
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: Scaffold(
+          body: ListenableBuilder(
+            listenable: provider!,
+            builder: (_, _) =>
+                SourceCheckStatusBar(provider: provider, onTap: () {}),
+          ),
+        ),
+      ),
+    );
+    final file = _MemoryFile();
+    final running = SourceCheckJob.of(
+      slow,
+      SourceCheckPlan([url]),
+      file: file,
+    ).run();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump();
+
+    provider.pauseSourceCheck();
+    await tester.pump();
+    expect(find.textContaining('正在暫停…'), findsOneWidget);
+
+    await tester.tap(find.text('結束'));
+    await tester.pump();
+    expect(find.textContaining('正在結束…'), findsOneWidget);
+
+    release.complete();
+    await tester.runAsync(() => running);
+    await tester.pump();
+    expect(provider.pausedCheck.isPaused, isFalse, reason: '結束蓋過暫停');
+    expect(file.closed, isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+    provider.dispose();
+    slow.dispose();
   });
 }
