@@ -82,7 +82,6 @@ class _ReaderPageState extends State<ReaderPage>
   late final ReaderControllerHost _host;
   late final ReaderPageCoordinator _coordinator;
 
-  /// 目前章、章名與頁首頁尾的資訊（[ReaderChapterInfo]）。
   /// 換源（[ReaderChangeSource]）。
   late final ReaderChangeSource _changeSource = ReaderChangeSource(
     context: () => context,
@@ -120,6 +119,7 @@ class _ReaderPageState extends State<ReaderPage>
     restoreMenuWhenUncovered: () => _menuPages.restoreMenuWhenUncovered(),
   );
 
+  /// 目前章、章名與頁首頁尾的資訊（[ReaderChapterInfo]）。
   late final ReaderChapterInfo _chapterInfo = ReaderChapterInfo(
     book: widget.book,
     initialChapters: widget.initialChapters,

@@ -44,6 +44,8 @@ void main() {
     expect(withToc.chapterAt(3)?.url, 'https://x/c3');
     expect(withToc.chapterUrlAt(9), '');
     expect(withToc.chapterAt(9), isNull);
+    expect(withToc.chapterAt(-1), isNull);
+    expect(withToc.chapterUrlAt(-1), '');
   });
 
   test('還沒有 Runtime：頁首頁尾畫骨架，描述要開的那一章', () {

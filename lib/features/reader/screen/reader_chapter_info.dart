@@ -109,8 +109,11 @@ final class ReaderChapterInfo {
     return _initialChapters[index].url;
   }
 
-  /// 第 [index] 章；Runtime 還沒建好時從開書前的目錄找，沒有就是 null。
+  /// 第 [index] 章：先問 Runtime，Runtime 還沒建好或查不到時從開書前的目錄
+  /// 找，都沒有就是 null。
   BookChapter? chapterAt(int index) =>
       _runtime()?.chapterAt(index) ??
-      (index < _initialChapters.length ? _initialChapters[index] : null);
+      (index >= 0 && index < _initialChapters.length
+          ? _initialChapters[index]
+          : null);
 }
