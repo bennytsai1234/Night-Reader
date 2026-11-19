@@ -228,6 +228,27 @@ void main() {
     expect(provider.isMutationBusy, isFalse);
   });
 
+  test('while duplicates merge, changing one of them is refused like any '
+      'other change to the sources', () async {
+    final merge = _GatedMerge(dao);
+    final provider = await loaded(mergeDuplicates: merge.call);
+    await dao.upsert(_source('https://a.example#copy', order: 3));
+
+    final reload = provider.loadSources(showLoading: false);
+    await merge.started.future;
+    // 刪掉要留下的那個：重複的那幾個的書會搬到已經刪掉的書源。
+    final first = provider.allSources.first;
+    unawaited(provider.toggleEnabled(first));
+    unawaited(provider.deleteSource(first));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(await dao.getByUrl('https://a.example'), isNotNull);
+    expect((await dao.getByUrl('https://a.example'))!.enabled, isTrue);
+
+    merge.gate.complete();
+    await reload;
+    expect(provider.totalSourceCount, 3);
+  });
+
   test('a reload that starts while duplicates merge waits for the merge '
       'and shows the merged list', () async {
     await dao.upsert(_source('https://a.example#copy', order: 3));

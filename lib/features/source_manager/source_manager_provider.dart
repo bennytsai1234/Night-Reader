@@ -1468,10 +1468,11 @@ class SourceManagerProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// 不同書源的單筆修改可以同時進行；同一筆、清單被占著（[_work] 不是閒著）
-  /// 或校驗中則拒絕。
+  /// 不同書源的單筆修改可以同時進行；同一筆、清單被占著（[_work] 不是閒著）、
+  /// 併重複書源中或校驗中則拒絕。
   bool _beginSourceMutation(String url) {
     if (_work != _ListWork.idle ||
+        _merging != null ||
         checkService.isChecking ||
         !_pendingSourceMutations.add(url)) {
       return false;
