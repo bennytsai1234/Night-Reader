@@ -9,7 +9,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_page.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_editor_sheet.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_preview.dart';
@@ -19,7 +19,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 class ReaderV2ReplaceRuleSheet extends StatefulWidget {
   const ReaderV2ReplaceRuleSheet({

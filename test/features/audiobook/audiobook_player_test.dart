@@ -1,4 +1,4 @@
-import 'package:night_reader/core/services/sleep_timer.dart';
+import 'package:night_reader/core/playback/sleep_timer.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 
 import 'dart:async';
@@ -17,8 +17,8 @@ import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/books_in_use.dart';
-import 'package:night_reader/core/services/system_playback/system_playback.dart';
+import 'package:night_reader/core/storage/books_in_use.dart';
+import 'package:night_reader/core/playback/system_playback.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/features/audiobook/audiobook_player.dart';

@@ -13,7 +13,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 
 /// 每一章都是一行 30 個 a 接一個「!」，回溯規則遇到就跑不完。

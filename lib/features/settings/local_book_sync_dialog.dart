@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/sync/local_book_sync.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_store.dart';

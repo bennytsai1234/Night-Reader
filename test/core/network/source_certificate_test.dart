@@ -6,7 +6,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/js/extensions/js_jsoup_http.dart';
-import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/core/network/network_service.dart';
 
 import '../../test_helper.dart';
 

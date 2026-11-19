@@ -7,8 +7,8 @@ import 'package:provider/provider.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book/book_extensions.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
-import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
+import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -24,7 +24,7 @@ import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 enum _QueueAction { pauseAll, resumeAll, clearCompleted }
 

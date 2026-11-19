@@ -11,7 +11,7 @@ import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 列滑動後露出的單一動作按鈕。
 @immutable

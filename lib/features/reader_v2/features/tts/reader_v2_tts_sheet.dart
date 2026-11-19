@@ -3,11 +3,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
-import 'package:night_reader/core/services/tts_service.dart';
+import 'package:night_reader/core/playback/tts_service.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
-import 'package:night_reader/core/services/sleep_timer.dart';
+import 'package:night_reader/core/playback/sleep_timer.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -17,7 +17,7 @@ import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
 import 'package:night_reader/shared/widgets/sleep_timer_section.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 abstract class ReaderV2TtsSheetController extends Listenable {
   bool get isPlaying;

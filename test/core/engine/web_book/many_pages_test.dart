@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/web_book/web_book_service.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/core/network/network_service.dart';
 
 import '../../../test_helper.dart';
 

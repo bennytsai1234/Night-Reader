@@ -1,4 +1,4 @@
-import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/chinese/chinese_utils.dart';
 
 class ChineseTextConverter {
   const ChineseTextConverter();

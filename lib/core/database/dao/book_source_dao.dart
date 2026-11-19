@@ -3,7 +3,7 @@ import 'package:drift/drift.dart';
 import '../../engine/app_event_bus.dart';
 import '../../models/base_source.dart';
 import '../../models/book_source.dart';
-import '../../services/app_log_service.dart';
+import '../../diagnostics/app_log_service.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
 import 'book_dao.dart';

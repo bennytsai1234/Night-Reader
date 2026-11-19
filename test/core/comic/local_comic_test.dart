@@ -11,7 +11,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
-import 'package:night_reader/core/services/local_comic_service.dart';
+import 'package:night_reader/core/comic/local_comic_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:path/path.dart' as p;
 

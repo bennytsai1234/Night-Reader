@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/background_work/background_work.dart';
-import 'package:night_reader/core/services/background_work/paused_work_file.dart';
-import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/background_work/background_work.dart';
+import 'package:night_reader/core/background_work/paused_work_file.dart';
+import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/shared/navigation/root_navigator.dart';
 
 import 'source_manager_page.dart';

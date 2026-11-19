@@ -12,7 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/core/network/network_service.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';

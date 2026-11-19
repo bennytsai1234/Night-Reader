@@ -2,8 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter_js/flutter_js.dart';
 import 'package:night_reader/core/models/base_source.dart';
-import 'package:night_reader/core/services/cookie_store.dart';
-import 'package:night_reader/core/services/cache_manager.dart';
+import 'package:night_reader/core/network/cookie_store.dart';
+import 'package:night_reader/core/utils/cache_manager.dart';
 
 import 'jsoup/jsoup_bridge.dart';
 import 'query_ttf.dart';

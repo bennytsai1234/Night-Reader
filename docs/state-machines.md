@@ -26,7 +26,7 @@ ADR 0058 的四件背景工作，加上頁面那層。
 | 單一書源 AI 修復 `lib/core/ai_repair/ai_repair_session.dart` | `_running`、`_stopped`、`_paused`、`_disposed`、`_committing` |
 | 修復異常書源 `lib/core/ai_repair/source_repair_batch.dart` | `_running`、`_stopped`、`_paused`、`_disposed`、`_editing` |
 | 頁面那層 `lib/features/source_manager/ai_repair/repair_runs.dart` | `_started`、`_finished`、`_seen`、`_paused`、`_resuming`、`_ending` |
-| 校驗書源 `lib/core/services/check_source_service.dart` | `_isChecking`、`_runInProgress`、`_isDisposed` |
+| 校驗書源 `lib/core/source_check/check_source_service.dart` | `_isChecking`、`_runInProgress`、`_isDisposed` |
 
 只有 AI 找書有「暫停中」，只有頁面那層有「結束中」「讀回中」。
 

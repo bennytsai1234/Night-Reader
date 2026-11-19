@@ -9,8 +9,8 @@ import 'package:night_reader/core/engine/web_book/illustration_fetcher.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/book_illustration_storage.dart';
-import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/core/storage/book_illustration_storage.dart';
+import 'package:night_reader/core/network/network_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 

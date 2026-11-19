@@ -7,9 +7,9 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
-import 'package:night_reader/core/services/bookshelf_state_tracker.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
+import 'package:night_reader/core/storage/bookshelf_state_tracker.dart';
 
 import 'explore_book_details.dart';
 

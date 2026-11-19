@@ -9,7 +9,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 
 /// 網路差時書源一直不回：書架上、手機裡有目錄的書照存著的資料打開，不等

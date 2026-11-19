@@ -3,7 +3,7 @@ import 'package:night_reader/core/ai_find/ai_find_avoid.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'sync_kind.dart';

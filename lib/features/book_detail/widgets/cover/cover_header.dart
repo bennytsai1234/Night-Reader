@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';

@@ -21,7 +21,7 @@ audio_service 0.18.19 讓通知的播放、暫停鈕送替身鍵，好和耳機�
 
 不 fork 套件（`DESIGN.md` 否決過為了通知按鈕 fork audio_service）。暫停中通知的播放鈕改用 `MediaAction.playPause`：送 `KEYCODE_MEDIA_PLAY_PAUSE`，在清單裡；交回夜讀是 `click(MediaButton.media)`，暫停中就是 `play()`，和上一章、下一章走同一條。iPhone 的鎖定畫面照動作開放播放指令，暫停中另外把 `MediaAction.play` 放進 `systemActions`，行為不變。暫停鈕的 `KEYCODE_MEDIA_RECORD` 還在清單裡，不動。
 
-測試：`test/core/services/system_playback_notification_play_test.dart`。
+測試：`test/core/playback/system_playback_notification_play_test.dart`。
 
 2026-11-18 修後在同一台 vivo 上用測試 APK 驗證：暫停後從通知按播放 3 次，3 次都在 4～5 秒內回到 PLAYING、朗讀服務出聲；`trail.log` 依序是「系統播放按了媒體鍵 media（狀態：暫停）」「系統播放按了 播放（ReaderV2TtsController）」「朗讀收到系統的播放」。
 

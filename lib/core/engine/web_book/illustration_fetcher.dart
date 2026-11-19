@@ -7,8 +7,8 @@ import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/book_illustration_storage.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/utils/illustration_markers.dart';
 
 /// 網路書一章正文裡的插圖抓進這本書的插圖資料夾（ADR 0050），在書源

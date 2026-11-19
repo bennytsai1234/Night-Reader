@@ -11,7 +11,7 @@ import 'reader_v2_menu_entrance.dart';
 import 'reader_v2_menu_palette.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 閱讀器上方選單：浮在狀態列下方的玻璃列——兩側圓形玻璃按鈕、中間書名膠囊，
 /// 開啟「標題附加資訊」時下方再浮一張章節資訊卡。

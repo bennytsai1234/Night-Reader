@@ -13,9 +13,9 @@ import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/background_work/background_work.dart';
-import 'package:night_reader/core/services/background_work/paused_work_file.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/background_work/background_work.dart';
+import 'package:night_reader/core/background_work/paused_work_file.dart';
 import 'package:night_reader/features/search/models/search_scope.dart';
 import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
 

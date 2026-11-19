@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/web_book/content_parser.dart';
 import 'package:night_reader/core/engine/web_book/login_check.dart';
@@ -12,7 +12,7 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/source_interaction.dart';
+import 'package:night_reader/core/source/source_interaction.dart';
 
 /// 正文完整性優先的抓取器。
 ///

@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
-import '../services/app_log_service.dart';
+import '../diagnostics/app_log_service.dart';
 import 'app_storage_paths.dart';
 
 /// AppCache - 磁碟快取工具 (原 Android utils/ACache.kt)

@@ -9,7 +9,7 @@ import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/base_source.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/network/str_response.dart';
 
 import 'extensions/js_blocking_tasks.dart';

@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/background_work/background_work.dart';
+import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
 import 'package:night_reader/features/source_manager/ai_repair/source_repair_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';

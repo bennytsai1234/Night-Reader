@@ -14,9 +14,9 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
-import 'package:night_reader/core/services/network_service.dart';
-import 'package:night_reader/core/services/source_interaction.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
+import 'package:night_reader/core/network/network_service.dart';
+import 'package:night_reader/core/source/source_interaction.dart';
 import 'package:night_reader/features/search/models/search_scope.dart';
 import 'package:night_reader/features/search/search_model.dart';
 

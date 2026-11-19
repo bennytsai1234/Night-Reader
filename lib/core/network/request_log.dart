@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/network/page_digest.dart';
-import 'package:night_reader/core/services/encoding_detect.dart';
+import 'package:night_reader/core/utils/encoding_detect.dart';
 import 'package:night_reader/core/utils/source_progress.dart';
 
 /// 一份 [RequestLog] 記什麼；跨 isolate 送得過去（規則 JS 要等的請求在網路

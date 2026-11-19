@@ -5,7 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book/chapter_alignment.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/hybrid/progress/chapter_shares.dart';

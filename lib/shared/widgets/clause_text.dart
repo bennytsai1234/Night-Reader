@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 多行說明照子句換行：一行排不下時，若斷點前 [_reach] 個字內有逗號、
 /// 句號這類標點，改在標點後斷，不把一個詞拆在兩行；找不到標點、最後一行

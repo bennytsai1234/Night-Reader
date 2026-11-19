@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:night_reader/core/services/crash_handler.dart';
-import 'package:night_reader/core/services/crash_trail.dart';
+import 'package:night_reader/core/diagnostics/crash_handler.dart';
+import 'package:night_reader/core/diagnostics/crash_trail.dart';
 
 /// [seedFullCrashLogs] 寫的 50 份接起來至少這麼多字，測試用它確認資料量
 /// 沒有因為崩潰日誌附的內容改了而悄悄縮水。

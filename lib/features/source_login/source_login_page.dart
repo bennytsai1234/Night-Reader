@@ -9,12 +9,12 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/source/source_login_ui.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/cookie_store.dart';
-import 'package:night_reader/core/services/network_service.dart';
-import 'package:night_reader/core/services/source_interaction.dart';
-import 'package:night_reader/core/services/source_login_session.dart';
-import 'package:night_reader/core/services/webview_cloudflare_solver.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/network/cookie_store.dart';
+import 'package:night_reader/core/network/network_service.dart';
+import 'package:night_reader/core/source/source_interaction.dart';
+import 'package:night_reader/core/source/source_login_session.dart';
+import 'package:night_reader/core/network/webview_cloudflare_solver.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
@@ -31,7 +31,7 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'source_browser_page.dart';
 import 'source_login_form.dart';
 
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 開 [source] 的登入（ADR 0038），關掉後傳回登入資料有沒有變（表單內容、
 /// 登入標頭、Cookie）。有變而且現在有登入資料時，拿掉書源的「需要登入」

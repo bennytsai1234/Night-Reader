@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
-import '../services/app_log_service.dart';
+import '../diagnostics/app_log_service.dart';
 import '../storage/app_storage_paths.dart';
 import 'app_font.dart';
 

@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 
 /// 碰到 Cloudflare 的瀏覽器檢查時，請真的瀏覽器在背景通過它，存下通行
 /// Cookie，再重送一次原本的請求；整個過程不需要使用者操作。要真人勾選的

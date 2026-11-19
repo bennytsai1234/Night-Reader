@@ -12,8 +12,8 @@ import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/highlight.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
-import 'package:night_reader/core/services/highlight_export.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
+import 'package:night_reader/core/backup/highlight_export.dart';
 import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmarks.dart';
 import 'package:night_reader/features/reader_v2/features/highlight/reader_v2_highlights.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/highlight_marks.dart';
@@ -31,7 +31,7 @@ import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
 import 'reading_stats_view.dart';
 
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 「我的 → 閱讀紀錄」：頂端分段切換書籤、標註與統計。書籤與標註都是一本書
 /// 一組（最近留過的書在上），組裡照在書裡的先後排。點了開那本書、跳過去；

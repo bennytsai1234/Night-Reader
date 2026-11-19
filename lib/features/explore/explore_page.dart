@@ -31,7 +31,7 @@ import 'widgets/explore_skeletons.dart';
 import 'widgets/legado_explore_kind_flow.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 class ExplorePage extends StatelessWidget {
   const ExplorePage({super.key});

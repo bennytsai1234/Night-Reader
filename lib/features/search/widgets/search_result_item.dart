@@ -13,8 +13,8 @@ import 'package:night_reader/shared/widgets/book_kind_mark.dart';
 import '../../book_detail/book_detail_page.dart';
 import '../../explore/widgets/explore_book_item.dart';
 
-import 'package:night_reader/core/services/chinese_display.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 class SearchResultItem extends StatefulWidget {

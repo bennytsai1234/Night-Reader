@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 import '../theme/app_chrome.dart';
 import '../theme/app_text_styles.dart';

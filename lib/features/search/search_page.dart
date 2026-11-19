@@ -26,7 +26,7 @@ import 'search_run.dart';
 import 'models/search_scope.dart';
 
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/background_work/background_work.dart';
+import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/features/explore/widgets/explore_book_item.dart';
 import 'package:night_reader/shared/widgets/glass.dart';

@@ -15,7 +15,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/read_record.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/features/search/ai_find/app_ai_find_library.dart';
 import 'package:night_reader/features/search/models/search_scope.dart';
 import 'package:shared_preferences/shared_preferences.dart';

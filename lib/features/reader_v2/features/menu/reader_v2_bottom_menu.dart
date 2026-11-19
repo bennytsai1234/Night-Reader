@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/popup_routes.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
-import 'package:night_reader/core/services/sleep_timer.dart';
+import 'package:night_reader/core/playback/sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -13,7 +13,7 @@ import 'reader_v2_menu_entrance.dart';
 import 'reader_v2_menu_controller.dart';
 import 'reader_v2_menu_palette.dart';
 
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 選單與頁首頁尾用到的章節資訊。目前這一章（[current]）是小訊號：捲動
 /// 途中換章時，只有章名、上一章／下一章這幾個聽它的小元件更新，閱讀頁

@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/book_storage_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/storage/book_storage_service.dart';
 import 'package:night_reader/core/sync/settings_sync.dart';
 
 import 'provider/bookshelf_provider_base.dart';
@@ -14,7 +14,7 @@ import 'provider/bookshelf_import_mixin.dart';
 export 'provider/bookshelf_provider_base.dart'
     show BookshelfSortMode, BookshelfSortModeLabel;
 
-export 'package:night_reader/core/services/book_update_service.dart'
+export 'package:night_reader/core/download/book_update_service.dart'
     show BookUpdateCheckResult;
 
 class BookshelfProvider extends BookshelfProviderBase

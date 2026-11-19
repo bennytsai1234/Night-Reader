@@ -8,9 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
-import 'package:night_reader/core/services/network_service.dart';
-import 'package:night_reader/core/services/source_interaction.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
+import 'package:night_reader/core/network/network_service.dart';
+import 'package:night_reader/core/source/source_interaction.dart';
 
 import '../../../test_helper.dart';
 

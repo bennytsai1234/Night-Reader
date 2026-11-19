@@ -2,10 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/exception/user_error.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/app_version.dart';
-import 'package:night_reader/core/services/update_preferences.dart';
-import 'package:night_reader/core/services/webview_data_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/app_update/app_version.dart';
+import 'package:night_reader/core/app_update/update_preferences.dart';
+import 'package:night_reader/core/network/webview_data_service.dart';
 import 'package:night_reader/features/cache_manager/download_manager_page.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -27,7 +27,7 @@ import 'licenses_page.dart';
 import 'privacy_pages.dart';
 import 'release_notes_page.dart';
 
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 「自動更新」的三種：不自動檢查、自動檢查（有新版時問要不要下載）、自動
 /// 檢查並在 Wi-Fi 下直接下載。

@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
-import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';

@@ -7,7 +7,7 @@ import '../analyze_url.dart';
 import '../js/js_engine.dart';
 
 import 'package:night_reader/core/models/rule_data_interface.dart';
-import 'package:night_reader/core/services/rule_big_data_service.dart';
+import 'package:night_reader/core/source/rule_big_data_service.dart';
 import 'package:night_reader/core/utils/lru_map.dart';
 
 // 導入同目錄下的其它部分

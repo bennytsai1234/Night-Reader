@@ -1,8 +1,8 @@
 import 'analyze_rule_base.dart';
 import '../js/js_engine.dart';
 
-import 'package:night_reader/core/services/cookie_store.dart';
-import 'package:night_reader/core/services/cache_manager.dart';
+import 'package:night_reader/core/network/cookie_store.dart';
+import 'package:night_reader/core/utils/cache_manager.dart';
 import 'package:night_reader/core/models/base_source.dart';
 
 /// AnalyzeRule 的腳本執行 (原 Android AnalyzeRule.kt)。JS 結果取決於

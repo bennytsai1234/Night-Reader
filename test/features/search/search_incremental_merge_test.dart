@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/features/search/search_model.dart';
 
 /// 搜尋結果逐個書源併入時只重算有變動的書名；結果要和一次全部分組相同。

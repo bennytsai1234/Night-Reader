@@ -3,7 +3,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/utils/html_formatter.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 

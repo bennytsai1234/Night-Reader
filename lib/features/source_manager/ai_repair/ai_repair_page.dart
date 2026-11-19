@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/background_work/background_work.dart';
+import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -19,7 +19,7 @@ import 'ai_repair_settings_page.dart';
 import 'repair_runs.dart';
 import 'source_repair_page.dart';
 
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 從書源管理開始 AI 修一個書源：這個書源正在修、或修完還沒看過結果時推回
 /// 那一頁（ADR 0058）；有 AI 服務就開始修、推修復頁，返回時照修；沒有時問要

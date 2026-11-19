@@ -12,8 +12,8 @@ import 'package:night_reader/core/widgets/book_cover_widget.dart';
 
 import '../../book_detail/book_detail_page.dart';
 
-import 'package:night_reader/core/services/chinese_display.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// ExploreBookItem - 探索結果書籍項目

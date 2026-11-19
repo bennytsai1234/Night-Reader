@@ -8,7 +8,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_pal
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 漫畫閱讀選單下方那一塊要的進度：第幾話、本話第幾張、共幾張。
 @immutable

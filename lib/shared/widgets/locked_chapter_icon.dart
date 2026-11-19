@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_chrome.dart';
 
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 目錄列右側的鎖頭：書源標了付費、還沒買的章節，網站只會回付費提示，
 /// 也不會下載。顏色同列尾的箭頭。

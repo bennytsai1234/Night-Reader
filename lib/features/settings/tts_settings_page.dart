@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/core/services/tts_service.dart';
+import 'package:night_reader/core/playback/tts_service.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';

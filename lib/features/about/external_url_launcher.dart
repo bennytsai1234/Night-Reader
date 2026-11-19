@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 Future<bool> launchExternalUrlWithFeedback(
   BuildContext context,

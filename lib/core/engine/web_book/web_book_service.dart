@@ -16,7 +16,7 @@ import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/engine/web_book/book_info_parser.dart';
 import 'package:night_reader/core/engine/web_book/chapter_list_parser.dart';
 import 'package:night_reader/core/engine/web_book/login_check.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/network/str_response.dart';
 
 /// WebBook - 書源抓取業務調度 (對標 Android model/webBook/WebBook.kt)

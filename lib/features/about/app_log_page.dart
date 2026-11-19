@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/services/crash_handler.dart';
-import 'package:night_reader/core/services/crash_trail.dart';
+import 'package:night_reader/core/diagnostics/crash_handler.dart';
+import 'package:night_reader/core/diagnostics/crash_trail.dart';
 
 import 'log_page.dart';
 

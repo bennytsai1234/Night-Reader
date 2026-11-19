@@ -8,8 +8,8 @@ import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/site_check.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/check_source_service.dart';
-import 'package:night_reader/core/services/source_check_isolate.dart';
+import 'package:night_reader/core/source_check/check_source_service.dart';
+import 'package:night_reader/core/source_check/source_check_isolate.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 
 import '../../support/fake_ai.dart';
