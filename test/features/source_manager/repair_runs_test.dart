@@ -12,6 +12,7 @@ import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/core/background_work/paused_work_file.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
 import 'package:night_reader/features/source_manager/ai_repair/source_repair_page.dart';
@@ -56,12 +57,28 @@ class _MemoryFile extends PausedWorkFile {
   }
 }
 
+/// 刪存檔要等 [gate]：工作本身做完、頁面那層還在收尾的那一段看得到。
+class _SlowToCloseFile extends _MemoryFile {
+  _SlowToCloseFile(this.gate);
+  final Completer<void> gate;
+
+  @override
+  Future<void> close() async {
+    await gate.future;
+    await super.close();
+  }
+}
+
 class _FakePlatform implements BackgroundWorkPlatform {
   final List<String> calls = [];
+
+  /// 每次送出的通知放了哪些按鈕。
+  final List<List<String>> actions = [];
 
   @override
   Future<bool> show(BackgroundWorkStatus status) async {
     calls.add('${status.text}｜${status.permille}');
+    actions.add(status.actions);
     return true;
   }
 
@@ -574,7 +591,8 @@ void main() {
 
   group('ending while the pause is still settling', () {
     /// AI 回覆要等 [gate] 才停得下來：按了暫停、還沒停好的那一段看得到。
-    AiRepairSession slowToStop(Completer<void> gate) => AiRepairSession(
+    /// 沒給 [gate] 時等到取消就停。
+    AiRepairSession slowToStop(Completer<void>? gate) => AiRepairSession(
       source: _s('one'),
       service: _service,
       check: (source, _) async => SourceCheckIsolateResult(
@@ -587,7 +605,7 @@ void main() {
       probe: (_, _, {start}) async =>
           const SourceProbeReport(logs: [], requests: []),
       ask: (_, token) async {
-        await gate.future;
+        await (gate?.future ?? token.whenCancel);
         throw DioException.requestCancelled(
           requestOptions: RequestOptions(),
           reason: token.cancelError?.message ?? '',
@@ -650,6 +668,43 @@ void main() {
       run
         ..disposeWork()
         ..dispose();
+    });
+
+    test('after end, the notification keeps no buttons while the save is '
+        'still being deleted', () async {
+      final gate = Completer<void>();
+      final run = SingleRepairRun(
+        slowToStop(null),
+        progress: _SlowToCloseFile(gate),
+        work: work,
+        navigator: () => null,
+      );
+      run.start();
+      for (var i = 0; i < 20 && run.session.job.steps.length < 3; i++) {
+        await _flush();
+      }
+      await run.end();
+      for (var i = 0; i < 20 && !run.session.isFinished; i++) {
+        await _flush();
+      }
+      await _flush();
+      expect(run.session.isFinished, isTrue);
+      expect(run.isFinished, isFalse, reason: '還在刪存檔');
+
+      final ending = platform.calls.indexWhere((c) => c.startsWith('正在結束…'));
+      expect(ending, isNot(-1));
+      expect(
+        platform.actions.skip(ending),
+        everyElement(isEmpty),
+        reason: '按了結束之後不再放回「暫停」「結束」',
+      );
+      expect(run.phase, WorkPhase.ending);
+
+      gate.complete();
+      for (var i = 0; i < 20 && !run.isFinished; i++) {
+        await _flush();
+      }
+      expect(platform.calls.last, 'hide');
     });
 
     test('a batch ends rather than pauses, and the notification says '

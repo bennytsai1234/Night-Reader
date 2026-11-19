@@ -137,12 +137,14 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
   Route<void>? _topRoute;
 
   /// 頁面與通知讀的階段（階段表見 `docs/state-machines.md`「背景工作的生命
-  /// 週期」）：做著時照工作本身，其他時候照頁面那層記的。
+  /// 週期」）：做著時照工作本身，其他時候照頁面那層記的。工作本身已經停好、
+  /// 頁面那層還在收尾（存檔、刪存檔、寫過去的找書）時，照它要去的那一頭：
+  /// 停好的是正在暫停，做完的是正在結束。
   WorkPhase get phase => switch (_stage) {
     _RunStage.notStarted => WorkPhase.ready,
     _RunStage.working => switch (workPhase) {
-      WorkPhase.pausing => WorkPhase.pausing,
-      WorkPhase.ending => WorkPhase.ending,
+      WorkPhase.pausing || WorkPhase.paused => WorkPhase.pausing,
+      WorkPhase.ending || WorkPhase.finished => WorkPhase.ending,
       _ => WorkPhase.running,
     },
     _RunStage.paused => WorkPhase.paused,
@@ -315,7 +317,9 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
   /// 工作的內容變了：更新通知。
   @protected
   void changed() {
-    if (isRunning) _work.update(this, status);
+    // 工作本身停好或做完之後不再送：通知留在「正在暫停…」「正在結束…」，
+    // 等收尾完一次收掉，不會又放回按鈕。
+    if (isRunning && workPhase.active) _work.update(this, status);
   }
 
   /// 頁面打開與關掉時呼叫，算有沒有人看著。
