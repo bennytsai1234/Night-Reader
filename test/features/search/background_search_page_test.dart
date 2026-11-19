@@ -298,8 +298,7 @@ void main() {
       await tester.tap(find.text('結束'));
       await tester.pump();
       expect(find.text('正在結束…'), findsOneWidget);
-      // 改前：從暫停中結束時「繼續」還在、灰掉。
-      expect(action(tester, '繼續').onPressed, isNull);
+      expect(find.byType(PlainTextAction), findsNothing);
       expect(find.text('結束'), findsOneWidget);
 
       await release(tester, find.text('排序：相關度'));
@@ -312,13 +311,11 @@ void main() {
       holding = true;
       await tester.tap(find.text('結束'));
       await tester.pump();
-      // 改前：結果工具列馬上淡入、頁首是「搜尋」，結束那一行還在寫；淡出中
-      // 的進度那一列寫「正在結束…」。
-      expect(find.text('排序：相關度'), findsOneWidget);
-      expect(find.text('搜尋'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 1));
-      expect(find.text('正在結束…'), findsNothing);
-      expect(find.text('排序：相關度'), findsOneWidget);
+      // 結束那一行還在寫：同通知欄，寫「正在結束…」直到停好。
+      expect(find.text('正在結束…'), findsOneWidget);
+      expect(find.byType(PlainTextAction), findsNothing);
+      expect(find.text('結束'), findsOneWidget);
+      expect(find.text('排序：相關度'), findsNothing);
       await release(tester, find.text('排序：相關度'));
     });
   });

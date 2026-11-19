@@ -216,8 +216,8 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     }
     return switch (background.phase) {
       WorkPhase.paused || WorkPhase.resuming => SearchStage.paused,
-      WorkPhase.ending when background.isPaused => SearchStage.ending,
-      // 搜尋本身停下了（搜完、按了結束），背景那件還在寫結果檔。
+      WorkPhase.ending => SearchStage.ending,
+      // 搜尋本身搜完了，背景那件還在寫結果檔。
       _ when !_run.isSearching => SearchStage.idle,
       WorkPhase.pausing => SearchStage.pausing,
       _ => SearchStage.inBackground,

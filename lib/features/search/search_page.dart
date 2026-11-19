@@ -580,7 +580,7 @@ class _SearchViewState extends State<SearchView> {
         small: true,
         onPressed: p.canMoveToBackground ? p.moveToBackground : null,
       ),
-      SearchStage.paused || SearchStage.ending => PlainTextAction(
+      SearchStage.paused => PlainTextAction(
         label: '繼續',
         small: true,
         onPressed: p.canResumeBackground
@@ -592,7 +592,7 @@ class _SearchViewState extends State<SearchView> {
         small: true,
         onPressed: p.pauseBackground,
       ),
-      SearchStage.idle || SearchStage.pausing => null,
+      SearchStage.idle || SearchStage.pausing || SearchStage.ending => null,
     };
     return Padding(
       padding: const EdgeInsets.only(left: AppGrouped.rowPadding),
