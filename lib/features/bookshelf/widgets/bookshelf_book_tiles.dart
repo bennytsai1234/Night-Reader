@@ -246,7 +246,26 @@ class BookshelfListCard extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.updateBadge,
+    this.radius,
   });
+
+  /// 書卡的圓角；null 是一般的分組卡片圓角。試用「列表併成一面」時照
+  /// [mergedRadius] 給（DESIGN.md 設計原則 6）。
+  final BorderRadius? radius;
+
+  /// 列表併成一面時第 [index] 本（共 [count] 本）的圓角：只有第一本的上緣、
+  /// 最後一本的下緣是圓角，中間的書接成一片。
+  static BorderRadius mergedRadius({required int index, required int count}) {
+    const round = Radius.circular(AppGrouped.radius);
+    final top = index == 0 ? round : Radius.zero;
+    final bottom = index == count - 1 ? round : Radius.zero;
+    return BorderRadius.only(
+      topLeft: top,
+      topRight: top,
+      bottomLeft: bottom,
+      bottomRight: bottom,
+    );
+  }
 
   static const double coverWidth = 52;
   static const double coverHeight = 72;
@@ -402,8 +421,8 @@ class BookshelfListCard extends StatelessWidget {
                     scheme.primary.withValues(alpha: 0.06 * tint),
                     surface,
                   ),
-            shape: const RoundedRectangleBorder(
-              borderRadius: AppGrouped.cardRadius,
+            shape: RoundedRectangleBorder(
+              borderRadius: radius ?? AppGrouped.cardRadius,
             ),
             clipBehavior: Clip.antiAlias,
             child: child,

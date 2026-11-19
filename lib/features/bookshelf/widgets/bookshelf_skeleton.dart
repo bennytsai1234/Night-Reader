@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/shelf_trial.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/features/bookshelf/provider/bookshelf_provider_base.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
@@ -107,21 +108,30 @@ class BookshelfSkeleton extends StatelessWidget {
 
   Widget _buildList(BoxConstraints constraints) {
     const cardHeight = BookshelfListCard.coverHeight + AppSpacing.md * 2;
+    // 試用「列表併成一面」時書與書之間不留縫（DESIGN.md 設計原則 6）。
+    final merged = ShelfTrial.mergedList.value;
+    final gap = merged ? 0.0 : AppSpacing.sm;
     final count = _countToFill(
       constraints.maxHeight - padding.top,
-      cardHeight + AppSpacing.sm,
+      cardHeight + gap,
     );
+    final shown = _limit(count);
+    // 書比畫面多時最後一張骨架在分頁列底下、後面還有書，下緣不收圓角。
+    final total = bookCount == shown ? shown : shown + 1;
     return ListView.builder(
       // 同 _buildGrid：骨架呼吸時整片每一幀都重畫，不每張卡各一層。
       addRepaintBoundaries: false,
       physics: const NeverScrollableScrollPhysics(),
       padding: padding,
-      itemCount: _limit(count),
+      itemCount: shown,
       itemBuilder: (context, index) => Padding(
-        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        padding: EdgeInsets.only(bottom: gap),
         child: _ListCardSkeleton(
           titleWidth: _titleWidths[index % _titleWidths.length],
           title: index < titles.length ? titles[index] : null,
+          radius: merged
+              ? BookshelfListCard.mergedRadius(index: index, count: total)
+              : AppGrouped.cardRadius,
         ),
       ),
     );
@@ -140,9 +150,14 @@ class BookshelfSkeleton extends StatelessWidget {
 
 /// 列表書卡的骨架：與 [BookshelfListCard] 同樣的紙卡、封面與兩行文字位置。
 class _ListCardSkeleton extends StatelessWidget {
-  const _ListCardSkeleton({required this.titleWidth, this.title});
+  const _ListCardSkeleton({
+    required this.titleWidth,
+    this.title,
+    required this.radius,
+  });
 
   final double titleWidth;
+  final BorderRadius radius;
 
   /// 這一本記下的書名與作者；null 時照 [titleWidth] 畫。
   final ShelfSkeletonTitle? title;
@@ -153,7 +168,7 @@ class _ListCardSkeleton extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: chrome.groupedSurface,
-        borderRadius: AppGrouped.cardRadius,
+        borderRadius: radius,
       ),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),

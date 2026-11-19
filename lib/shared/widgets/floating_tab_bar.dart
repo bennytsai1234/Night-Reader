@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/shelf_trial.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 
 import '../layout/readable_width.dart';
@@ -149,6 +150,20 @@ class FloatingTabBar extends StatefulWidget {
         .copyWith(bottom: systemBottom + AppGlass.tabBarBottomGap);
   }
 
+  /// 試用「分頁列置中」時 [count] 個分頁的列寬（DESIGN.md 設計原則 6）。
+  static double compactBarWidth(int count) =>
+      ShelfTrial.compactTabWidth * count + AppGlass.tabInnerInset * 2;
+
+  /// 搜尋鈕右緣離螢幕右邊多遠（收聽圓鈕疊在它正上方）。
+  static double searchRightOf(BuildContext context, {required int tabCount}) {
+    final side = ReadableWidth.cardInsetOf(context).right;
+    if (!ShelfTrial.compactTabBar.value) return side;
+    final group =
+        compactBarWidth(tabCount) + AppGlass.tabBarGap + AppGlass.tabBarHeight;
+    final width = MediaQuery.sizeOf(context).width;
+    return math.max(side, (width - group) / 2);
+  }
+
   @override
   State<FloatingTabBar> createState() => _FloatingTabBarState();
 }
@@ -164,6 +179,20 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
   /// 這次拖曳最後選的分頁。同一幀可能收到好幾筆移動，[FloatingTabBar.currentIndex]
   /// 要等主頁重建才跟上，拿它判斷有沒有跨格會漏掉跨過去又拖回來的那一下。
   int? _dragSelected;
+
+  @override
+  void initState() {
+    super.initState();
+    ShelfTrial.compactTabBar.addListener(_onTrialChanged);
+  }
+
+  @override
+  void dispose() {
+    ShelfTrial.compactTabBar.removeListener(_onTrialChanged);
+    super.dispose();
+  }
+
+  void _onTrialChanged() => setState(() {});
 
   double _pagePosition() {
     final controller = widget.controller;
@@ -184,7 +213,10 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
         : AppGlass.tabBarHeight + AppGlass.tabBarGap;
     // 分頁列加搜尋鈕的左右和清單的卡片切齊（平板上收在內容欄裡）。
     final side = ReadableWidth.cardInsetOf(context).left;
-    final barWidth = math.max(0.0, width - side * 2 - searchWidth);
+    // 試用「分頁列置中」（DESIGN.md 設計原則 6）：每個分頁固定寬，整組置中。
+    final barWidth = ShelfTrial.compactTabBar.value
+        ? FloatingTabBar.compactBarWidth(widget.items.length)
+        : math.max(0.0, width - side * 2 - searchWidth);
 
     final bar = Padding(
       padding: EdgeInsets.fromLTRB(
@@ -221,7 +253,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
                       shape: BoxShape.circle,
                       child: Icon(
                         Icons.search_rounded,
-                        size: 26,
+                        size: 24,
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
@@ -446,7 +478,7 @@ class _TabGlyph extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     mainAxisAlignment: MainAxisAlignment.center,
     children: [
-      Icon(icon, size: 24, color: color),
+      Icon(icon, size: 22, color: color),
       const SizedBox(height: 2),
       UiText(
         label,

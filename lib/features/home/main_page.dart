@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/shelf_trial.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -21,7 +22,6 @@ import 'package:night_reader/features/explore/explore_page.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
-import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -289,10 +289,17 @@ class _MainPageState extends State<MainPage>
             ),
             // 離開播放器還在播時，搜尋鈕上方的圓鈕（ADR 0055）。
             if (widget.destinations == null)
-              Positioned(
-                right: ReadableWidth.cardInsetOf(context).right,
-                bottom: AudiobookMiniButton.bottomOf(context),
-                child: AudiobookMiniButton(hidden: _tabBarHidden.value),
+              // 試用「分頁列置中」時搜尋鈕跟著移，圓鈕照樣疊在它正上方。
+              ValueListenableBuilder<bool>(
+                valueListenable: ShelfTrial.compactTabBar,
+                builder: (context, _, _) => Positioned(
+                  right: FloatingTabBar.searchRightOf(
+                    context,
+                    tabCount: _destinations.length,
+                  ),
+                  bottom: AudiobookMiniButton.bottomOf(context),
+                  child: AudiobookMiniButton(hidden: _tabBarHidden.value),
+                ),
               ),
           ],
         ),

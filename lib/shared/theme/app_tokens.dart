@@ -120,8 +120,9 @@ class AppGrouped {
 class AppGlass {
   AppGlass._();
 
-  /// 浮動分頁列：56 高的分頁項，加上下各 4 的內距。
-  static const double tabItemHeight = 56.0;
+  /// 浮動分頁列：44 高的分頁項，加上下各 4 的內距，共 52（使用者 2026-11-19
+  /// 從 64 降下來，少擋書架底部的書）。
+  static const double tabItemHeight = 44.0;
   static const double tabInnerInset = 4.0;
   static const double tabBarHeight = tabItemHeight + tabInnerInset * 2;
   static const double tabBarGap = 8.0;

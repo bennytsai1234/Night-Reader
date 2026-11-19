@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:night_reader/shared/shelf_trial.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/comic/comic_folder_picker.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
@@ -72,6 +73,8 @@ enum _ShelfMenuAction {
   gridView,
   listView,
   unifiedCovers,
+  trialMergedList,
+  trialCompactTabBar,
   sortFilter,
   select,
   export,
@@ -339,6 +342,22 @@ class _BookshelfPageState extends State<BookshelfPage>
         checked: provider.unifiedCovers,
         toggle: true,
       ),
+      // 試用開關（DESIGN.md 設計原則 6），使用者選定後拿掉。
+      GlassMenuItem(
+        value: _ShelfMenuAction.trialMergedList,
+        label: '試用：列表併成一面',
+        icon: Icons.view_agenda_outlined,
+        checked: ShelfTrial.mergedList.value,
+        toggle: true,
+        enabled: !provider.isGridView,
+      ),
+      GlassMenuItem(
+        value: _ShelfMenuAction.trialCompactTabBar,
+        label: '試用：分頁列置中',
+        icon: Icons.width_normal_outlined,
+        checked: ShelfTrial.compactTabBar.value,
+        toggle: true,
+      ),
       const GlassMenuDivider(),
       const GlassMenuItem(
         value: _ShelfMenuAction.sortFilter,
@@ -441,6 +460,10 @@ class _BookshelfPageState extends State<BookshelfPage>
         provider.setGridView(false);
       case _ShelfMenuAction.unifiedCovers:
         provider.setUnifiedCovers(!provider.unifiedCovers);
+      case _ShelfMenuAction.trialMergedList:
+        provider.setTrialMergedList(!ShelfTrial.mergedList.value);
+      case _ShelfMenuAction.trialCompactTabBar:
+        provider.setTrialCompactTabBar(!ShelfTrial.compactTabBar.value);
       case _ShelfMenuAction.sortFilter:
         break;
       case _ShelfMenuAction.select:
@@ -513,6 +536,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     };
     final books = [for (final url in shownUrls) ?known[url]];
     _shownBooks = {for (final book in books) book.bookUrl: book};
+    ShelfTrial.setShelfOrder([for (final book in books) context.zh(book.name)]);
     // 載入失敗時已有的書照常顯示；只有什麼都沒有時才換成錯誤頁。
     if (books.isEmpty && provider.loadErrorMessage != null) {
       return Padding(
@@ -870,7 +894,13 @@ class _BookshelfPageState extends State<BookshelfPage>
           key: ValueKey(books[index].bookUrl),
           index: index,
           enabled: !_isMultiSelect,
-          child: _buildListCard(provider, books[index], reorderable: true),
+          child: _buildListCard(
+            provider,
+            books[index],
+            reorderable: true,
+            index: index,
+            count: books.length,
+          ),
         ),
       );
     }
@@ -880,7 +910,12 @@ class _BookshelfPageState extends State<BookshelfPage>
       // 每張書卡外面的 BookshelfMotionItem 已經自成一個繪製層，清單不再
       // 多包一層：少一層要合成，開 App 建清單那一格也少建一些。
       addRepaintBoundaries: false,
-      itemBuilder: (context, index) => _buildListCard(provider, books[index]),
+      itemBuilder: (context, index) => _buildListCard(
+        provider,
+        books[index],
+        index: index,
+        count: books.length,
+      ),
     );
   }
 
@@ -888,12 +923,15 @@ class _BookshelfPageState extends State<BookshelfPage>
     BookshelfProvider provider,
     Book shown, {
     bool reorderable = false,
+    required int index,
+    required int count,
   }) {
     final selecting = _isMultiSelect;
+    final merged = ShelfTrial.mergedList.value;
     // 書卡不設左滑動作（使用者 2026-10-23 決定，DESIGN.md「否決過的方向」）：
     // 檢查更新、移出書架從長按選單走。
     final card = Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: EdgeInsets.only(bottom: merged ? 0 : AppSpacing.sm),
       // 書架重讀時只有這本書看得到的內容變了才重建這張書卡；點開、長按
       // 在按下時才讀書架上現在的那本（閱讀位置這些看不到的欄位可能已經
       // 換過）。
@@ -904,6 +942,9 @@ class _BookshelfPageState extends State<BookshelfPage>
           bookUrl: book.bookUrl,
           builder: (badge) => BookshelfListCard(
             book: book,
+            radius: merged
+                ? BookshelfListCard.mergedRadius(index: index, count: count)
+                : null,
             updateBadge: selecting ? null : badge,
             selecting: selecting,
             selected: _selectedUrls.contains(book.bookUrl),
