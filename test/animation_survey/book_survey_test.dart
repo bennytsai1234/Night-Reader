@@ -18,8 +18,8 @@ import 'package:night_reader/features/book_detail/widgets/change_source_sheet.da
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
 import 'package:night_reader/features/reader/screen/reader_page.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
-import 'package:night_reader/shared/widgets/chapter_scrollbar.dart';
+import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/book/chapter_scrollbar.dart';
 
 import '../support/navigation_budget.dart';
 import '../support/screenshot.dart';

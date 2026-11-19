@@ -10,11 +10,11 @@ import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/chapter_alignment.dart';
-import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:pool/pool.dart';
 
@@ -22,7 +22,7 @@ import '../diagnostics/app_log_service.dart';
 import '../source/book_source_service.dart';
 import '../source/chapter_content_kind.dart';
 import 'same_book.dart';
-import 'source_switch_handoff.dart';
+import 'source_switch_operation_lease.dart';
 
 bool isSourceSwitchUnavailable(Object error) {
   if (error is DioException) return error.type != DioExceptionType.cancel;

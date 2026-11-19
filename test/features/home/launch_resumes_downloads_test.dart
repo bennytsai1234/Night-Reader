@@ -6,13 +6,13 @@ import 'package:night_reader/app_providers.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/constant/book_type.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/main.dart';
-import 'package:night_reader/shared/widgets/launch_entrance.dart';
+import 'package:night_reader/shared/widgets/skeleton/launch_entrance.dart';
 import 'package:provider/provider.dart';
 
 import '../../support/app_harness.dart';

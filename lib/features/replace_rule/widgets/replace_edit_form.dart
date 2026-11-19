@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 
 /// 替換規則的基本欄位：名稱、分組、超時，以及正則與替換內容。
 class ReplaceEditForm extends StatelessWidget {

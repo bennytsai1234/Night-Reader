@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 
 /// 閱讀選單一塊（上方選單、下方選單、亮度條）的進場與收起：從 [edge]
 /// 那一側滑入（[AppMotion.readerMenuIn]，減速），收起時滑出

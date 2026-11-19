@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 
 /// 替換規則的開關選項：啟用、正則、作用於標題、作用於正文。
 class ReplaceEditOptions extends StatelessWidget {

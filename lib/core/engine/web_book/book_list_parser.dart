@@ -1,11 +1,11 @@
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/book/book_help.dart';
 import 'package:night_reader/core/engine/parsers/java_regexp.dart';
 import 'package:night_reader/core/engine/web_book/book_info_parser.dart';
-import 'package:night_reader/core/utils/source_progress.dart';
+import 'package:night_reader/core/source/source_progress.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/core/utils/html_formatter.dart';
 

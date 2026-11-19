@@ -9,13 +9,13 @@ import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
-import 'package:night_reader/core/models/ai_find_record.dart';
-import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/models/search_keyword.dart';
+import 'package:night_reader/core/models/search/ai_find_record.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
+import 'package:night_reader/core/models/search/search_keyword.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/bookshelf_state_tracker.dart';
-import 'package:night_reader/core/widgets/book_cover_widget.dart';
+import 'package:night_reader/shared/widgets/book/book_cover_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'background_search.dart';

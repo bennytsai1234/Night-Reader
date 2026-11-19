@@ -17,7 +17,7 @@ import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/settings/tts_settings_page.dart';
 import 'package:night_reader/features/home/main_page.dart';
 import 'package:night_reader/main.dart';
-import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
+import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';
 
 import '../support/app_harness.dart';
 import '../support/frame_budget.dart';

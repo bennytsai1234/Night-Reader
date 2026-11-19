@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/widgets/book_cover_widget.dart';
-import 'package:night_reader/core/widgets/default_book_cover.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/shared/widgets/book/book_cover_widget.dart';
+import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 
 import '../book_detail_provider.dart';
 
 import 'package:night_reader/core/chinese/chinese_display.dart';
-import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// Telegram 個人資料頁式的書籍頁首：置中封面、書名與作者，下方一排圓角

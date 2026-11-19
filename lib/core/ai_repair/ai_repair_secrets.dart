@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import '../models/base_source.dart';
-import '../models/book_source.dart';
+import '../models/source/base_source.dart';
+import '../models/source/book_source.dart';
 import '../network/cookie_store.dart';
 import '../diagnostics/app_log_service.dart';
 

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 書籍詳情底部的浮動玻璃膠囊：「開始閱讀／繼續閱讀」，有聲書是「開始

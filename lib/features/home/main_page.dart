@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/shelf_trial.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -25,8 +25,8 @@ import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
-import 'package:night_reader/shared/widgets/launch_entrance.dart';
+import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';
+import 'package:night_reader/shared/widgets/skeleton/launch_entrance.dart';
 
 Color _groupedBackground(BuildContext context) =>
     AppChrome.of(context).groupedBackground;

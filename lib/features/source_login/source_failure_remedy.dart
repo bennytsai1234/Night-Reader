@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
 import 'package:night_reader/features/source_login/source_browser_page.dart';
 import 'package:night_reader/features/source_login/source_login_page.dart';

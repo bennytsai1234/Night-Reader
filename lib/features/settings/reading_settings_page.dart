@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/features/reader/features/settings/reader_settings_controller.dart';
-import 'package:night_reader/features/reader/features/settings/reader_settings_sections.dart';
+import 'package:night_reader/features/reader/features/settings/reader_settings_groups.dart';
 import 'package:night_reader/features/reader/screen/reader_device_channel.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 
 /// 閱讀偏好：完整的排版、版面、頁首頁尾、翻頁、自動翻頁、繁簡、點擊區域、
 /// 音量鍵、朗讀與螢幕設定。和閱讀器內「外觀與排版」面板（精簡版）用同一組區塊與同一個

@@ -1,6 +1,6 @@
 import 'package:html/parser.dart' as html_parser;
 import 'package:night_reader/core/engine/js/encode/charsets.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 
 import 'source_probe.dart';

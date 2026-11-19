@@ -1,4 +1,4 @@
-import '../progress/chapter_shares.dart';
+import '../progress/reader_chapter_shares.dart';
 
 final class ProgressSnapshot {
   /// [chapterStart]、[chapterShare] 是這一章開頭在全書的位置與佔全書多少

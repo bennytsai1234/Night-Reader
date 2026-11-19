@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 
 /// 換源清單的一列：來源名稱、作者、最新章節與字數／分類，右邊是目錄共幾章
 /// （比哪個書源的目錄完整）；目前來源在名稱後面打勾且不可點。

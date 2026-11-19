@@ -5,7 +5,7 @@ import 'package:night_reader/features/reader/text_view/measure/document_index.da
 import 'package:night_reader/features/reader/text_view/pipeline/layout_pipeline.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
 import 'package:night_reader/features/reader/layout/reader_typography.dart';
-import 'package:night_reader/shared/widgets/skeleton_text.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton_text.dart';
 
 /// 一頁上每一行字的位置（viewport 座標，由上而下）、其中章名那幾行與
 /// 插圖方塊的索引，與量這些行時的版面。紙上的骨架照它畫（ADR 0016、

@@ -1,5 +1,5 @@
-import '../models/book.dart';
-import '../models/book_source.dart';
+import '../models/book/book.dart';
+import '../models/source/book_source.dart';
 import '../utils/illustration_markers.dart';
 
 /// 這章正文對 [kind] 這類書算不算抓到了：小說要讀得到字，漫畫要有圖，有聲

@@ -24,7 +24,7 @@
 |---|---|
 | 書源 0 | `lib/core/engine/js/`、`third_party/flutter_js/` |
 | 書源 1 | `lib/core/engine/parsers/`、`analyze_rule/` 與 `analyze_rule.dart`、`rule_analyzer/` 與 `rule_analyzer.dart`、`analyze_url.dart`、`explore_url_parser.dart`、`rule_data_fields.dart` |
-| 書源 2 | `lib/core/engine/web_book/`、`source_isolate/`、`lib/core/network/`（`cookie_store`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service` 在書源 4）；`lib/core/utils/` 的 `network_utils`、`source_progress`、`idna`、`public_suffix`、`encoding_detect`（不看資料表 `idna_mapping_table`、`public_suffix_rules`） |
+| 書源 2 | `lib/core/engine/web_book/`、`source_isolate/`、`lib/core/network/`（`cookie_store`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service` 在書源 4）；`lib/core/utils/` 的 `network_utils`、`idna`、`public_suffix`、`encoding_detect`（不看資料表 `idna_mapping_table`、`public_suffix_rules`） |
 | 書源 3 | `lib/features/source_manager/`（`ai_repair/` 在書源 4）、`search/`、`explore/`、`lib/core/engine/book/`、`app_event_bus.dart`、`lib/core/source/`（`source_login_session`、`source_interaction` 在書源 4，`chapter_content_kind` 在閱讀器 3）、`source_check/`、`source_switch/` |
 | 書源 4 | 登入、網頁驗證、AI 修書源與 AI 找書：`lib/features/source_login/`、`lib/core/ai_repair/`、`lib/core/ai_find/`、`lib/features/source_manager/ai_repair/`；`lib/core/source/` 的 `source_login_session`、`source_interaction`；`lib/core/network/` 的 `cookie_store`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service`；`lib/core/backup/login_data_backup.dart` |
 | 閱讀器 0 | `lib/features/reader/text_view/` |
@@ -37,8 +37,8 @@
 | 資料 2 | 備份、還原、匯出、本地書、更新：`lib/core/local_book/`、`backup/`（`login_data_backup` 在書源 4）、`app_update/`；`lib/core/playback/tts_service.dart` |
 | 資料 3 | `lib/main.dart`、`lib/app_providers.dart`、`lib/core/startup/`、`di/`、`config/`、`constant/`、`exception/`、`fonts/`、`base/`、`background_work/`、`diagnostics/`、`platform/`；Android 那一半：`android/app/src/main/` 的 Kotlin 與 `AndroidManifest.xml`；`lib/core/utils/` 的 `encoder_utils`、`lru_map`；`lib/core/storage/resource_service.dart` |
 | 資料 4 | 同步：`lib/core/sync/` |
-| 介面 0 | `lib/shared/widgets/` 裡的 `skeleton*`、`snapshot_sweep`、`launch_entrance` |
-| 介面 1 | `lib/shared/widgets/` 其餘、`lib/shared/navigation/`、`theme/`、`layout/`、`lib/core/widgets/` |
+| 介面 0 | `lib/shared/widgets/skeleton/` |
+| 介面 1 | `lib/shared/widgets/` 其餘、`lib/shared/navigation/`、`theme/`、`layout/` |
 | 介面 2 | `lib/features/bookshelf/`、`book_detail/`、`home/` |
 | 介面 3 | `lib/features/settings/`、`about/`、`association/`、`replace_rule/` |
 | 文件 | 全部文件；另外列出 `lib/features/`、`lib/core/` 底下的資料夾，與表上只列了部分檔案的資料夾（`lib/core/source/`、`storage/`、`utils/`）裡的檔，表上沒有的寫進報告「沒排進分段的程式」一節 |

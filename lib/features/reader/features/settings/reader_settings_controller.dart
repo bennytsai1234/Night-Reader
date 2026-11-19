@@ -14,7 +14,7 @@ import 'package:night_reader/features/reader/features/settings/reader_orientatio
 import 'package:night_reader/features/reader/features/settings/reader_page_turn_speed.dart';
 import 'package:night_reader/features/reader/text_view/layout/reader_paragraph_layout.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
-import 'package:night_reader/features/reader/layout/reader_style.dart';
+import 'package:night_reader/features/reader/layout/reader_style_preferences.dart';
 import 'package:night_reader/features/reader/features/settings/reader_prefs_repository.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_constants.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -51,8 +51,6 @@ class ReaderSettingsController extends ChangeNotifier {
   /// 正文目前用的字族；選的字型還不能用時是 null（系統字型）。
   String? get readerFontFamily => _fonts.familyOf(readerFont);
 
-  static const double minReadableLineHeight = ReaderStyle.minReadableLineHeight;
-  static const double maxReadableLineHeight = ReaderStyle.maxReadableLineHeight;
   static const double minAutoPageSpeed = ReaderPrefsRepository.minAutoPageSpeed;
   static const double maxAutoPageSpeed = ReaderPrefsRepository.maxAutoPageSpeed;
   static const double minPagePadding = ReaderPrefsRepository.minPagePadding;
@@ -152,7 +150,7 @@ class ReaderSettingsController extends ChangeNotifier {
   void _initFromCache(ReaderPrefsSnapshot snapshot) {
     fontSize = snapshot.fontSize;
     titleFontSize = snapshot.titleFontSize;
-    lineHeight = ReaderStyle.normalizeLineHeight(snapshot.lineHeight);
+    lineHeight = normalizeReaderLineHeight(snapshot.lineHeight);
     paragraphSpacing = snapshot.paragraphSpacing;
     chapterSpacing = snapshot.chapterSpacing;
     letterSpacing = snapshot.letterSpacing;
@@ -349,7 +347,7 @@ class ReaderSettingsController extends ChangeNotifier {
           .clamp(menuMinInset, AppGrouped.margin)
           .toDouble();
 
-  ReaderStyle readStyleFor(
+  ReaderStylePreferences readStyleFor(
     EdgeInsets mediaPadding, {
     required double viewportWidth,
     bool topInfoReservedExternally = false,
@@ -362,9 +360,9 @@ class ReaderSettingsController extends ChangeNotifier {
             : mediaPadding.top * kReaderContentTopSafeAreaFactor) +
         kReaderContentTopSpacing;
     final bottom = bottomInfoReservedExternally ? 0.0 : mediaPadding.bottom;
-    return ReaderStyle(
+    return ReaderStylePreferences(
       fontSize: fontSize,
-      lineHeight: ReaderStyle.normalizeLineHeight(lineHeight),
+      lineHeight: normalizeReaderLineHeight(lineHeight),
       letterSpacing: letterSpacing,
       paragraphSpacing: paragraphSpacing,
       chapterSpacing: chapterSpacing,
@@ -436,9 +434,9 @@ class ReaderSettingsController extends ChangeNotifier {
       changed |= _typography(
         ReaderSettings.lineHeight,
         this.lineHeight,
-        ReaderStyle.normalizeLineHeight(lineHeight),
+        normalizeReaderLineHeight(lineHeight),
         (value) => this.lineHeight = value,
-        restoreAs: ReaderStyle.normalizeLineHeight,
+        restoreAs: normalizeReaderLineHeight,
       );
     }
     if (paragraphSpacing != null) {

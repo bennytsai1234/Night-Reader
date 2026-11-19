@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/app_update/update_service.dart';
+import 'package:night_reader/core/app_update/app_update_service.dart';
 
 void main() {
   test('changelog notes keep the intro and turn the list into bullets', () {

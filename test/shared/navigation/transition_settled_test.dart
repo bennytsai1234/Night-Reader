@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 
 /// 等過換頁的頁面：進場播完時記下，之後每建一次加一。
 class _WaitingPage extends StatefulWidget {

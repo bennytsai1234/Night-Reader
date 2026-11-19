@@ -2,13 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/chapter_alignment.dart';
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
 import 'package:night_reader/features/reader/chapter/reader_content.dart';
-import 'package:night_reader/features/reader/text_view/progress/chapter_shares.dart';
+import 'package:night_reader/features/reader/text_view/progress/reader_chapter_shares.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
 import 'package:night_reader/features/reader/use_cases/coordinators/reader_chapter_navigation_resolver.dart';
 

@@ -15,13 +15,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
 import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
 import 'package:night_reader/features/reader/text_view/text/text_preprocessor.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
-import 'package:night_reader/features/reader/layout/reader_style.dart';
+import 'package:night_reader/features/reader/layout/reader_style_preferences.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/session/reader_progress_controller.dart';
 import 'package:night_reader/features/reader/session/reader_runtime.dart';
@@ -56,7 +56,7 @@ class _FakeSourceDao extends Fake implements BookSourceDao {}
 
 const Size _viewport = Size(400, 800);
 
-const ReaderStyle _style = ReaderStyle(
+const ReaderStylePreferences _style = ReaderStylePreferences(
   fontSize: 18,
   lineHeight: 1.5,
   letterSpacing: 0,

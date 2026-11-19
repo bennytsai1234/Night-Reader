@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/network/page_digest.dart';
 import 'package:night_reader/core/network/page_notes.dart';
 import 'package:night_reader/core/source_check/source_check_isolate.dart';

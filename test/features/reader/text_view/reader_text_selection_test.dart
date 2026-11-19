@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 import 'package:night_reader/features/reader/text_view/overlay/selection_service.dart';
-import 'package:night_reader/features/reader/text_view/overlay/text_selection_overlay.dart';
+import 'package:night_reader/features/reader/text_view/overlay/reader_text_selection_layer.dart';
 import 'package:night_reader/features/reader/text_view/text/word_segmenter.dart';
 
 ChapterBlock _block(

@@ -8,7 +8,7 @@ import 'package:night_reader/features/reader/features/menu/reader_top_menu.dart'
 import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
 import 'package:night_reader/features/reader/screen/reader_page.dart';
 import 'package:night_reader/features/reader/screen/reader_page_shell.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/glass_motion.dart';

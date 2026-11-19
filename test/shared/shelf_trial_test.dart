@@ -6,7 +6,7 @@ import 'package:night_reader/shared/shelf_trial.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
-import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
+import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

@@ -1,22 +1,22 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/download/book_update_service.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
-import 'package:night_reader/core/widgets/book_cover_widget.dart';
-import 'package:night_reader/core/widgets/default_book_cover.dart';
+import 'package:night_reader/shared/widgets/book/book_cover_widget.dart';
+import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_read_progress.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
-import 'package:night_reader/shared/widgets/cover_reveal.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/glass_menu.dart';
-import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/shared/widgets/skeleton/cover_reveal.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
+import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 書卡上選取（勾號、圓圈、讓位、卡片底色）與角標的動畫時長：系統關閉動畫

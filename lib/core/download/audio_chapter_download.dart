@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
 
-import '../models/book.dart';
-import '../models/book_source.dart';
-import '../models/chapter.dart';
+import '../models/book/book.dart';
+import '../models/source/book_source.dart';
+import '../models/book/book_chapter.dart';
 import '../storage/book_chapter_files.dart';
 import '../source/book_source_service.dart';
 import '../network/network_service.dart';

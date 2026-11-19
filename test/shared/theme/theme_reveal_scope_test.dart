@@ -1,0 +1,200 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/theme_reveal_scope.dart';
+
+void main() {
+  /// 和 App 一樣把 [ThemeRevealScope] 掛在 MaterialApp.builder；按鈕切換深淺。
+  Widget app({required ThemeMode mode, required VoidCallback onToggle}) {
+    return MaterialApp(
+      theme: ThemeData(brightness: Brightness.light),
+      darkTheme: ThemeData(brightness: Brightness.dark),
+      themeMode: mode,
+      themeAnimationStyle: AnimationStyle.noAnimation,
+      builder: (context, child) => ThemeRevealScope(child: child!),
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () =>
+                  ThemeRevealScope.of(context).run(change: onToggle),
+              child: Text(Theme.of(context).brightness.name),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 轉場時蓋在畫面上的舊畫面擷取圖（不攔點擊的那一層）。
+  Finder overlay() => find.descendant(
+    of: find.byType(ThemeRevealScope),
+    matching: find.byWidgetPredicate(
+      (widget) =>
+          widget is CustomPaint &&
+          widget.painter.runtimeType.toString() == '_InkRevealPainter',
+    ),
+  );
+
+  Future<void> pumpToggleApp(WidgetTester tester) {
+    var mode = ThemeMode.light;
+    return tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) => app(
+          mode: mode,
+          onToggle: () => setState(() {
+            mode = mode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+          }),
+        ),
+      ),
+    );
+  }
+
+  testWidgets('切換後新主題立即生效，墨暈結束後移除蓋圖', (tester) async {
+    await pumpToggleApp(tester);
+    expect(find.text('light'), findsOneWidget);
+    expect(overlay(), findsNothing);
+
+    await tester.tap(find.byType(TextButton));
+    await tester.pump();
+
+    // 底下已經是新主題，舊畫面的擷取圖蓋在上面準備暈開。
+    expect(find.text('dark'), findsOneWidget);
+    expect(overlay(), findsOneWidget);
+
+    await tester.pump(AppMotion.themeReveal ~/ 2);
+    expect(overlay(), findsOneWidget);
+
+    // 圓從換色那一幀畫完才開始計時，多等一幀才播完。
+    await tester.pump(AppMotion.themeReveal);
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump();
+    expect(overlay(), findsNothing);
+    expect(find.text('dark'), findsOneWidget);
+  });
+
+  /// 正在暈開的圓有多大（蓋圖上挖開的進度）。
+  double progress(WidgetTester tester) {
+    final paint = tester.widget<CustomPaint>(overlay());
+    return (paint.painter! as dynamic).progress.value as double;
+  }
+
+  testWidgets('暈開中再切一次：這圈照常暈完，播完才換回去', (tester) async {
+    await pumpToggleApp(tester);
+
+    await tester.tap(find.byType(TextButton));
+    // 換色那一幀畫完、下一幀才開始計時。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(AppMotion.themeReveal ~/ 3);
+    final before = progress(tester);
+    expect(before, greaterThan(0));
+
+    await tester.tap(find.byType(TextButton));
+    await tester.pump(const Duration(milliseconds: 16));
+    // 不重拍、不換色，圓接著長大。
+    expect(find.text('dark'), findsOneWidget);
+    expect(progress(tester), greaterThan(before));
+
+    // 這圈暈完之前一直是深色；暈完才換回淺色，再暈開一次。
+    await tester.pump(AppMotion.themeReveal ~/ 2);
+    expect(find.text('dark'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(overlay(), findsNothing);
+    expect(find.text('light'), findsOneWidget);
+  });
+
+  testWidgets('暈開中點回現在的設定，取消記下的那一次', (tester) async {
+    var mode = ThemeMode.light;
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => ThemeRevealScope(child: child!),
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const SizedBox.expand();
+          },
+        ),
+      ),
+    );
+    // 和外觀設定的「深淺」一樣：選的是現在的設定時 current。
+    void choose(ThemeMode next) =>
+        ThemeRevealScope.of(pageContext)
+            .run(current: mode == next, change: () => mode = next);
+
+    choose(ThemeMode.dark);
+    await tester.pump();
+    expect(mode, ThemeMode.dark);
+    // 暈開中點「跟隨系統」，又點回「深色」。
+    choose(ThemeMode.system);
+    choose(ThemeMode.dark);
+    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(mode, ThemeMode.dark);
+    expect(overlay(), findsNothing);
+  });
+
+  testWidgets('暈開中直接存了別的外觀，記下的那一次作廢', (tester) async {
+    var mode = ThemeMode.light;
+    var other = 'A';
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => ThemeRevealScope(child: child!),
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const SizedBox.expand();
+          },
+        ),
+      ),
+    );
+
+    ThemeRevealScope.of(pageContext).run(change: () => mode = ThemeMode.dark);
+    await tester.pump();
+    // 暈開中又選了一次，接著直接存了另一個深淺的設定（不暈開）。
+    ThemeRevealScope.of(pageContext).run(change: () => other = 'B');
+    ThemeRevealScope.of(pageContext).discardPending();
+    other = 'C';
+    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(mode, ThemeMode.dark);
+    expect(other, 'C');
+    expect(overlay(), findsNothing);
+  });
+
+  testWidgets('關閉系統動畫時直接換色，不蓋擷取圖', (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await pumpToggleApp(tester);
+
+    await tester.tap(find.byType(TextButton));
+    await tester.pump();
+
+    expect(find.text('dark'), findsOneWidget);
+    expect(overlay(), findsNothing);
+  });
+
+  testWidgets('不在 ThemeRevealScope 之下時直接執行變更', (tester) async {
+    var changed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () =>
+                ThemeRevealScope.of(context).run(change: () => changed = true),
+            child: const Text('切換'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('切換'));
+    expect(changed, isTrue);
+  });
+}

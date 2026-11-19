@@ -1,4 +1,4 @@
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 
 /// 書源網址的開頭（`https://www.site.com`）；不是 http(s) 的是 null。
 String? siteOrigin(String sourceUrl) {

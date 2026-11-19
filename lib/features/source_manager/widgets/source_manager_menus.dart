@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
-import 'package:night_reader/shared/widgets/glass_menu.dart';
+import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 
 import '../source_manager_provider.dart';
 

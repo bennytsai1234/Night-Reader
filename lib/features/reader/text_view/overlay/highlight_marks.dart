@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 

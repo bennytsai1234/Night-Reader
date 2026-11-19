@@ -5,8 +5,8 @@ import 'package:night_reader/features/bookshelf/provider/bookshelf_provider_base
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/shared/widgets/skeleton_text.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton_text.dart';
 
 /// 書架初次載入的骨架：依目前的網格或列表畫出同樣幾何的封面與書名佔位，
 /// 書到了之後換成真的書卡時版面不跳動。放在 [Skeleton] 底下才會呼吸。

@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader/features/menu/reader_bottom_menu.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_controller.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 
 void main() {
   Future<ReaderMenuController> pumpMenu(WidgetTester tester) async {

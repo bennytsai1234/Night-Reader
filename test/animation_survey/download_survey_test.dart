@@ -7,7 +7,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/download/download_service.dart';
-import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
+import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';
 
 import '../support/navigation_budget.dart';
 import '../support/screenshot.dart';

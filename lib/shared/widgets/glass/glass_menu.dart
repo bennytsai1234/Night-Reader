@@ -1,0 +1,664 @@
+import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
+
+import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
+
+import '../../theme/app_chrome.dart';
+import '../../theme/app_haptics.dart';
+import '../../theme/app_text_styles.dart';
+import '../../theme/app_tokens.dart';
+import 'glass.dart';
+import '../popups/popup_routes.dart';
+
+import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
+
+/// 情境選單的一個項目。
+sealed class GlassMenuEntry<T> {
+  const GlassMenuEntry();
+}
+
+class GlassMenuItem<T> extends GlassMenuEntry<T> {
+  const GlassMenuItem({
+    required this.value,
+    required this.label,
+    this.icon,
+    this.swatch,
+    this.subtitle,
+    this.destructive = false,
+    this.checked,
+    this.enabled = true,
+    this.submenu = false,
+    this.translate = true,
+    this.toggle = false,
+  }) : assert(!submenu || (icon == null && swatch == null)),
+       assert(!toggle || checked != null);
+
+  final T value;
+  final String label;
+
+  /// [label]、[subtitle] 是分組名稱這類資料時給 false，不跟介面語言轉換
+  /// （ADR 0066）。
+  final bool translate;
+
+  /// Telegram 把圖示放在右側。
+  final IconData? icon;
+
+  /// 放在圖示位置的色點（選顏色的選單），照選單裡當下的主題取色；與
+  /// [icon] 擇一。
+  final Color Function(BuildContext context)? swatch;
+  final String? subtitle;
+  final bool destructive;
+
+  /// 左側的勾號：切換類選項給 true 或 false，一般項目不給（null）。
+  /// 選單裡有切換類選項時，每一列都留勾號欄，切換時字不會左右移。
+  final bool? checked;
+  final bool enabled;
+
+  /// 這一項是獨立的開關（可以和別項同時勾），不是單選裡的一個選項：讀屏
+  /// 照核取方塊念，不當成單選群組。
+  final bool toggle;
+
+  /// 點了在同一處開出第二層：右側畫「›」，不另給圖示（使用者 2026-11-11
+  /// 選的，會展開的一眼分得出來）。
+  final bool submenu;
+}
+
+/// 群組之間的粗分隔。
+class GlassMenuDivider<T> extends GlassMenuEntry<T> {
+  const GlassMenuDivider();
+}
+
+/// 從 [anchor]（全域座標）旁邊彈出玻璃選單，取代 [PopupMenuButton]。
+Future<T?> showGlassMenu<T>({
+  required BuildContext context,
+  required Rect anchor,
+  required List<GlassMenuEntry<T>> entries,
+}) {
+  final origin = PopupOrigin.of(context);
+  return Navigator.of(origin.context, rootNavigator: true).push<T>(
+    _GlassMenuRoute<T>(anchor: anchor, entries: entries, origin: origin),
+  );
+}
+
+/// 在 [buttonContext] 那顆鈕的位置接著開出第二層（第一層那一項給
+/// `submenu: true`），同一處換一個選單，不疊兩層。
+Future<T?> showGlassSubmenu<T>(
+  BuildContext buttonContext,
+  List<GlassMenuEntry<T>> entries,
+) => showGlassMenu<T>(
+  context: buttonContext,
+  anchor: globalRectOf(buttonContext),
+  entries: entries,
+);
+
+/// 長按預覽選單：[preview] 從 [sourceRect] 浮起，旁邊列出動作
+/// （Telegram 長按聊天的 context preview）。
+Future<T?> showContextPreviewMenu<T>({
+  required BuildContext context,
+  required Rect sourceRect,
+  required Widget preview,
+  required List<GlassMenuEntry<T>> entries,
+  BorderRadius previewRadius = AppRadius.cardLg,
+}) {
+  AppHaptics.lift();
+  final origin = PopupOrigin.of(context);
+  return Navigator.of(origin.context, rootNavigator: true).push<T>(
+    _GlassMenuRoute<T>(
+      anchor: sourceRect,
+      entries: entries,
+      preview: preview,
+      previewRadius: previewRadius,
+      origin: origin,
+    ),
+  );
+}
+
+/// 取得 widget 在螢幕上的範圍，供 [showGlassMenu] 當錨點。
+Rect globalRectOf(BuildContext context) {
+  final box = context.findRenderObject()! as RenderBox;
+  return box.localToGlobal(Offset.zero) & box.size;
+}
+
+/// 圓形玻璃按鈕＋選單，取代 [PopupMenuButton]。
+class GlassMenuButton<T> extends StatelessWidget {
+  const GlassMenuButton({
+    super.key,
+    required this.entriesBuilder,
+    required this.onSelected,
+    this.icon = Icons.more_horiz_rounded,
+    this.tooltip = '更多',
+    this.child,
+    this.enabled = true,
+    this.color,
+  });
+
+  final List<GlassMenuEntry<T>> Function(BuildContext context) entriesBuilder;
+  final ValueChanged<T> onSelected;
+  final IconData icon;
+  final String tooltip;
+
+  /// 圖示顏色；例如選單裡有開著的篩選時用強調色。
+  final Color? color;
+
+  /// 覆寫按鈕外觀；為 null 時使用 [GlassIconButton]。
+  final Widget? child;
+
+  /// 停用時按鈕變淡、點擊不開選單。
+  final bool enabled;
+
+  Future<void> _open(BuildContext context) async {
+    final value = await showGlassMenu<T>(
+      context: context,
+      anchor: globalRectOf(context),
+      entries: entriesBuilder(context),
+    );
+    if (value != null) onSelected(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Builder(
+      builder: (buttonContext) {
+        final onTap = enabled ? () => _open(buttonContext) : null;
+        if (child != null) {
+          return Semantics(
+            button: true,
+            enabled: enabled,
+            label: UiLanguageText.convertNullable(context, tooltip),
+            child: PressScale(
+              onTap: onTap,
+              // 停用時同 [GlassIconButton]（[AppDisabled]）。
+              child: enabled
+                  ? child!
+                  : Opacity(opacity: AppDisabled.opacity, child: child!),
+            ),
+          );
+        }
+        return GlassIconButton(
+          icon: icon,
+          tooltip: tooltip,
+          color: color,
+          onPressed: onTap,
+        );
+      },
+    );
+  }
+}
+
+class _GlassMenuRoute<T> extends PopupRoute<T> {
+  _GlassMenuRoute({
+    required this.anchor,
+    required this.entries,
+    required PopupOrigin origin,
+    this.preview,
+    this.previewRadius = AppRadius.cardLg,
+  }) : _origin = origin,
+       capturedThemes = InheritedTheme.capture(
+         from: origin.context,
+         to: Navigator.of(origin.context, rootNavigator: true).context,
+       );
+
+  final Rect anchor;
+  final List<GlassMenuEntry<T>> entries;
+
+  /// 打開處複製的主題（從 [DerivedTheme] 底下打開時是那一層外面的，
+  /// [PopupOrigin]）。
+  final CapturedThemes capturedThemes;
+  final PopupOrigin _origin;
+  final Widget? preview;
+  final BorderRadius previewRadius;
+
+  @override
+  Color? get barrierColor => null;
+
+  @override
+  bool get barrierDismissible => true;
+
+  @override
+  String? get barrierLabel => '關閉選單';
+
+  @override
+  Duration get transitionDuration => AppMotion.menu;
+
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 160);
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    final overlay = _GlassMenuOverlay<T>(route: this, animation: animation);
+    return capturedThemes.wrap(_origin.wrap(overlay));
+  }
+}
+
+class _GlassMenuOverlay<T> extends StatelessWidget {
+  const _GlassMenuOverlay({required this.route, required this.animation});
+
+  final _GlassMenuRoute<T> route;
+  final Animation<double> animation;
+
+  @override
+  Widget build(BuildContext context) {
+    final chrome = AppChrome.of(context);
+    final media = MediaQuery.of(context);
+    final screen = media.size;
+    final safe = media.padding;
+    const edge = AppGrouped.margin;
+    final hasPreview = route.preview != null;
+
+    final menuHeight = _estimateMenuHeight(route.entries);
+    final maxMenuHeight = screen.height - safe.vertical - edge * 2;
+    final clampedMenuHeight = math.min(menuHeight, maxMenuHeight);
+    final menuWidth = math.min(AppGlass.menuWidth, screen.width - edge * 2);
+
+    // 選單水平位置：靠錨點同側對齊。
+    final anchor = route.anchor;
+    final alignRight = anchor.center.dx > screen.width / 2;
+    // 選單和可用寬高一樣大時，上下限理論上相等，但浮點誤差可能讓上限
+    // 略小於下限，clamp 會丟例外；上限一律不小於下限。
+    final double maxLeft = math.max(edge, screen.width - edge - menuWidth);
+    final menuLeft = (alignRight ? anchor.right - menuWidth : anchor.left)
+        .clamp(edge, maxLeft);
+
+    // 預覽：必要時往上推，讓預覽＋選單都放得下。
+    Rect previewRect = anchor;
+    double menuTop;
+    bool menuBelow;
+    var menuMaxHeight = maxMenuHeight;
+    if (hasPreview) {
+      final needed = anchor.height + AppSpacing.md + clampedMenuHeight;
+      final double top = anchor.top.clamp(
+        safe.top + edge,
+        math.max(safe.top + edge, screen.height - safe.bottom - edge - needed),
+      );
+      previewRect = Rect.fromLTWH(
+        anchor.left,
+        top,
+        anchor.width,
+        anchor.height,
+      );
+      menuTop = previewRect.bottom + AppSpacing.md;
+      menuBelow = true;
+      // 預覽很高（例如橫向）時下方放不下整個選單：選單高度只取剩下的空間、
+      // 改成可捲動，最後幾項才不會畫到螢幕外。至少留一列的高度。
+      menuMaxHeight = math.max(
+        screen.height - safe.bottom - edge - menuTop,
+        AppGlass.menuRowHeight,
+      );
+    } else {
+      final spaceBelow = screen.height - safe.bottom - edge - anchor.bottom;
+      menuBelow =
+          spaceBelow >= clampedMenuHeight ||
+          spaceBelow >= anchor.top - safe.top - edge;
+      menuTop = menuBelow
+          ? anchor.bottom + AppSpacing.sm
+          : anchor.top - AppSpacing.sm - clampedMenuHeight;
+      menuTop = menuTop.clamp(
+        safe.top + edge,
+        math.max(
+          safe.top + edge,
+          screen.height - safe.bottom - edge - clampedMenuHeight,
+        ),
+      );
+    }
+
+    final curved = CurvedAnimation(
+      parent: animation,
+      curve: AppMotion.springCurve,
+      reverseCurve: Curves.easeInCubic.flipped,
+    );
+    final fade = CurvedAnimation(parent: animation, curve: AppMotion.fadeCurve);
+
+    final menu = ConstrainedBox(
+      constraints: BoxConstraints.tightFor(width: menuWidth)
+          .copyWith(maxHeight: menuMaxHeight),
+      // 陰影不畫在玻璃上：展開的裁切會把伸出外框的陰影切掉，改由外面
+      // 沿著展開中的外框畫（[_MenuRevealShadow]）。
+      child: GlassSurface(
+        borderRadius: AppRadius.cardXl,
+        grouped: false,
+        shadow: false,
+        floating: false,
+        tint: chrome.popupTint(0.9),
+        child: Material(
+          type: MaterialType.transparency,
+          child: ListView(
+            padding: EdgeInsets.zero,
+            shrinkWrap: true,
+            physics: const ClampingScrollPhysics(),
+            children: _buildEntries(context, chrome),
+          ),
+        ),
+      ),
+    );
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).pop(),
+            child: hasPreview
+                // 模糊強度與底色一起淡入，不包 FadeTransition：透明度不到 1
+                // 時模糊取不到底下的畫面，最後一幀才突然糊上（ADR 0022）。
+                ? AnimatedBuilder(
+                    animation: fade,
+                    builder: (context, _) => BackdropFilter(
+                      filter: ImageFilter.blur(
+                        sigmaX: 8 * fade.value,
+                        sigmaY: 8 * fade.value,
+                      ),
+                      child: ColoredBox(
+                        color: chrome.barrier.withValues(
+                          alpha: chrome.barrier.a * fade.value,
+                        ),
+                      ),
+                    ),
+                  )
+                : FadeTransition(
+                    opacity: fade,
+                    child: ColoredBox(color: chrome.menuBarrier),
+                  ),
+          ),
+        ),
+        if (hasPreview)
+          AnimatedBuilder(
+            animation: curved,
+            builder: (context, child) {
+              // 預覽只移位、不縮放，位置對齊整數實體像素：縮放或落在像素
+              // 之間時，字每一幀都要重建貼圖（2026-11-05 手機上量到）。
+              final rect = _snapToPixels(
+                Rect.lerp(anchor, previewRect, curved.value)!,
+                MediaQuery.devicePixelRatioOf(context),
+              );
+              // 陰影跟著浮起的進度長出、收回：濃淡、模糊與位移都從 0 開始，
+              // 第一幀不會整塊冒出陰影，收起的最後一幀也不會突然消失。彈簧
+              // 回彈超過 1 的那一段維持滿陰影。
+              final lift = curved.value.clamp(0.0, 1.0);
+              return Positioned.fromRect(
+                rect: rect,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: route.previewRadius,
+                    boxShadow: [
+                      BoxShadow(
+                        color: chrome.glassShadow.withValues(
+                          alpha: chrome.glassShadow.a * lift,
+                        ),
+                        blurRadius: 30 * lift,
+                        offset: Offset(0, 10 * lift),
+                      ),
+                    ],
+                  ),
+                  child: child,
+                ),
+              );
+            },
+            child: ClipRRect(
+              borderRadius: route.previewRadius,
+              child: IgnorePointer(child: route.preview),
+            ),
+          ),
+        Positioned(
+          left: menuLeft,
+          top: menuTop,
+          // 從靠錨點的那個角展開，不淡（ADR 0022）：選單是玻璃，淡入時模糊
+          // 到最後一幀才突然糊上去。選單一開始就是最終大小，只有圓角的
+          // 裁切框由小長大，字不縮放，不必每一幀重建字的貼圖。陰影沿著
+          // 同一個外框畫、跟著展開的進度長出，展開完就是玻璃的陰影。
+          child: AnimatedBuilder(
+            animation: curved,
+            builder: (context, child) {
+              final progress = curved.value.clamp(0.0, 1.0);
+              final clipper = _MenuRevealClipper(
+                progress: progress,
+                alignment: Alignment(alignRight ? 1 : -1, menuBelow ? -1 : 1),
+                radius: AppRadius.cardXl.topLeft,
+              );
+              return CustomPaint(
+                painter: _MenuRevealShadow(
+                  clipper: clipper,
+                  shadows: GlassSurface.shadows(
+                    chrome,
+                    dark: Theme.of(context).brightness == Brightness.dark,
+                    shown: progress,
+                  ),
+                ),
+                child: ClipRRect(clipper: clipper, child: child),
+              );
+            },
+            child: menu,
+          ),
+        ),
+      ],
+    );
+  }
+
+  static Rect _snapToPixels(Rect rect, double devicePixelRatio) {
+    double snap(double v) =>
+        (v * devicePixelRatio).roundToDouble() / devicePixelRatio;
+    return Rect.fromLTWH(
+      snap(rect.left),
+      snap(rect.top),
+      rect.width,
+      rect.height,
+    );
+  }
+
+  double _estimateMenuHeight(List<GlassMenuEntry<T>> entries) {
+    var height = 0.0;
+    for (final entry in entries) {
+      switch (entry) {
+        case GlassMenuDivider<T>():
+          height += AppSpacing.sm;
+        case GlassMenuItem<T>(:final subtitle):
+          height += subtitle == null
+              ? AppGlass.menuRowHeight
+              : AppGrouped.rowTallMinHeight;
+      }
+    }
+    return height;
+  }
+
+  List<Widget> _buildEntries(BuildContext context, AppChrome chrome) {
+    final scheme = Theme.of(context).colorScheme;
+    final danger = Theme.of(context).brightness == Brightness.dark
+        ? AppPalette.rustDark
+        : AppPalette.rust;
+    final hasChecks = route.entries.any(
+      (e) => e is GlassMenuItem<T> && e.checked != null,
+    );
+    final widgets = <Widget>[];
+    GlassMenuEntry<T>? previous;
+    for (final entry in route.entries) {
+      switch (entry) {
+        case GlassMenuDivider<T>():
+          widgets.add(
+            Container(
+              height: AppSpacing.sm,
+              color: chrome.popupSeparator.withValues(
+                alpha: chrome.popupSeparator.a * 0.5,
+              ),
+            ),
+          );
+        case GlassMenuItem<T>():
+          if (previous is GlassMenuItem<T>) {
+            widgets.add(
+              Container(
+                height: AppGlass.hairline,
+                color: chrome.popupSeparator,
+              ),
+            );
+          }
+          // 不能用的項目一律中性灰，危險色不留（[AppDisabled]）。
+          final color = entry.destructive && entry.enabled
+              ? danger
+              : scheme.onSurface;
+          widgets.add(
+            // 讀屏要知道哪一項已勾選（單選群組或獨立的開關）、哪一項停用；
+            // 畫面上只靠勾號與透明度表示。沒有勾號的一般動作照按鈕念，
+            // 勾號欄（[hasChecks]）只管排版。
+            Semantics(
+              button: true,
+              enabled: entry.enabled,
+              checked: entry.checked,
+              inMutuallyExclusiveGroup: entry.checked != null && !entry.toggle,
+              child: InkWell(
+                onTap: entry.enabled
+                    ? () => Navigator.of(context).pop(entry.value)
+                    : null,
+                child: Opacity(
+                  opacity: entry.enabled ? 1 : AppDisabled.opacity,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: entry.subtitle == null
+                          ? AppGlass.menuRowHeight
+                          : AppGrouped.rowTallMinHeight,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppGrouped.rowPadding,
+                      ),
+                      child: Row(
+                        children: [
+                          if (hasChecks)
+                            SizedBox(
+                              width: 26,
+                              child: entry.checked == true
+                                  ? Icon(
+                                      Icons.check_rounded,
+                                      size: 18,
+                                      color: color,
+                                    )
+                                  : null,
+                            ),
+                          Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                DragOverflowText(
+                                  child: UiText(
+                                    entry.label,
+                                    translate: entry.translate,
+                                    maxLines: 2,
+                                    style: AppTextStyles.bodyBase.copyWith(
+                                      height: 1.25,
+                                      color: color,
+                                    ),
+                                  ),
+                                ),
+                                if (entry.subtitle != null)
+                                  DragOverflowText(
+                                    child: UiText(
+                                      entry.subtitle!,
+                                      translate: entry.translate,
+                                      maxLines: 1,
+                                      style: AppTextStyles.bodySm.copyWith(
+                                        height: 1.25,
+                                        color: chrome.sectionText,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          if (entry.submenu || entry.icon != null) ...[
+                            const SizedBox(width: AppSpacing.md),
+                            Icon(
+                              entry.submenu
+                                  ? Icons.chevron_right_rounded
+                                  : entry.icon,
+                              size: 20,
+                              color: color,
+                            ),
+                          ] else if (entry.swatch != null) ...[
+                            const SizedBox(width: AppSpacing.md),
+                            SizedBox.square(
+                              dimension: 20,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: entry.swatch!(context),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+      }
+      previous = entry;
+    }
+    return widgets;
+  }
+}
+
+/// 選單展開時的裁切框：貼著 [alignment] 那個角，寬從四成、高從 0 長到
+/// 整個選單，[progress] 為 1 時就是選單本身的圓角外框。
+class _MenuRevealClipper extends CustomClipper<RRect> {
+  const _MenuRevealClipper({
+    required this.progress,
+    required this.alignment,
+    required this.radius,
+  });
+
+  final double progress;
+  final Alignment alignment;
+  final Radius radius;
+
+  @override
+  RRect getClip(Size size) {
+    final width = size.width * (0.4 + 0.6 * progress);
+    final height = size.height * progress;
+    final rect = alignment.inscribe(Size(width, height), Offset.zero & size);
+    final r = math.min(radius.x, math.min(width, height) / 2);
+    return RRect.fromRectAndRadius(rect, Radius.circular(r));
+  }
+
+  /// 讀屏的範圍跟畫面上露出的一樣：還沒露出的列不能被巡覽到。
+  @override
+  Rect getApproximateClipRect(Size size) => getClip(size).outerRect;
+
+  @override
+  bool shouldReclip(_MenuRevealClipper old) =>
+      old.progress != progress ||
+      old.alignment != alignment ||
+      old.radius != radius;
+}
+
+/// 沿著 [clipper] 當下的外框畫玻璃的陰影（和 [BoxDecoration] 畫陰影的方式
+/// 一樣），畫在選單底下。
+class _MenuRevealShadow extends CustomPainter {
+  const _MenuRevealShadow({required this.clipper, required this.shadows});
+
+  final _MenuRevealClipper clipper;
+  final List<BoxShadow> shadows;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final frame = clipper.getClip(size);
+    if (frame.height <= 0) return;
+    for (final shadow in shadows) {
+      canvas.drawRRect(
+        frame.shift(shadow.offset).inflate(shadow.spreadRadius),
+        shadow.toPaint(),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MenuRevealShadow old) =>
+      clipper.shouldReclip(old.clipper) || !listEquals(old.shadows, shadows);
+}

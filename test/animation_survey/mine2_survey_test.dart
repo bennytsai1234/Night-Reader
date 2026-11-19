@@ -8,10 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/read_record.dart';
-import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/number_stepper_row.dart';
+import 'package:night_reader/core/models/reading/read_record.dart';
+import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/lists/number_stepper_row.dart';
 
 import '../support/navigation_budget.dart';
 import '../support/screenshot.dart';

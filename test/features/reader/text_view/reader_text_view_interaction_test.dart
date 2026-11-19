@@ -6,8 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
 import 'package:night_reader/features/reader/features/auto_page/reader_auto_page_controller.dart';
 import 'package:night_reader/features/reader/features/tts/reader_tts_highlight.dart';
@@ -19,14 +19,14 @@ import 'package:night_reader/features/reader/text_view/overlay/reader_skeleton_p
 import 'package:night_reader/features/reader/text_view/overlay/tts_highlight_overlay.dart';
 import 'package:night_reader/features/reader/text_view/text/text_preprocessor.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
-import 'package:night_reader/features/reader/layout/reader_style.dart';
+import 'package:night_reader/features/reader/layout/reader_style_preferences.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/session/reader_progress_controller.dart';
 import 'package:night_reader/features/reader/session/reader_runtime.dart';
 import 'package:night_reader/features/reader/viewport/reader_viewport_controller.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 正文排好到紙掀完：骨架長完後停著等正文（[LoadingVeilController
@@ -88,7 +88,7 @@ class _FakeSourceDao extends Fake implements BookSourceDao {}
 
 const Size _viewport = Size(400, 600);
 
-const ReaderStyle _style = ReaderStyle(
+const ReaderStylePreferences _style = ReaderStylePreferences(
   fontSize: 18,
   lineHeight: 1.5,
   letterSpacing: 0,

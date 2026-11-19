@@ -4,7 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/js/js_extensions.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/source/lenient_json.dart';
 import 'package:night_reader/core/models/source/source_login_ui.dart';
 import 'package:night_reader/core/source/source_interaction.dart';

@@ -3,7 +3,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:xpath_selector/xpath_selector.dart';
 import 'package:xpath_selector_html_parser/xpath_selector_html_parser.dart';
 import 'package:night_reader/core/engine/parsers/elements_list.dart';
-import 'package:night_reader/core/engine/parsers/xml_document.dart';
+import 'package:night_reader/core/engine/parsers/xml_content.dart';
 import 'package:night_reader/core/engine/rule_analyzer.dart';
 
 /// AnalyzeByXPath - XPath 解析器

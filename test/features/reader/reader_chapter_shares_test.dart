@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/features/reader/text_view/core/progress_snapshot.dart';
-import 'package:night_reader/features/reader/text_view/progress/chapter_shares.dart';
+import 'package:night_reader/features/reader/text_view/progress/reader_chapter_shares.dart';
 import 'package:night_reader/features/reader/screen/reader_page_shell.dart';
 import 'package:night_reader/features/reader/text_view/progress/progress_calculator.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';

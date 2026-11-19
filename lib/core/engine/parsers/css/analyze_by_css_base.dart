@@ -3,7 +3,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:xpath_selector/xpath_selector.dart';
 
 import '../elements_list.dart';
-import '../xml_document.dart';
+import '../xml_content.dart';
 
 /// AnalyzeByCss 的基礎類別
 /// (原 Android model/analyzeRule/AnalyzeByJSoup.kt)
