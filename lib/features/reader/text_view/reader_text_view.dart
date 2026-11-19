@@ -9,7 +9,6 @@ import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
-import 'package:night_reader/features/reader/features/illustration/reader_illustration_viewer.dart';
 import 'package:night_reader/features/reader/features/settings/reader_highlight_style.dart';
 import 'package:night_reader/features/reader/features/tts/reader_tts_highlight.dart';
 import 'package:night_reader/features/reader/layout/reader_style_preferences.dart';
@@ -35,7 +34,7 @@ import 'overlay/reader_skeleton_page.dart';
 import 'overlay/reader_unavailable_message.dart';
 import 'overlay/selection_service.dart';
 import 'overlay/reader_text_selection_layer.dart';
-import 'paragraph/paragraph_cache.dart' show IllustrationPaint;
+import 'overlay/reader_text_touch.dart';
 import 'pipeline/layout_disk_cache.dart';
 import 'pipeline/layout_pipeline.dart';
 import 'progress/progress_calculator.dart';
@@ -43,7 +42,6 @@ import 'pump/budget_governor.dart';
 import '../use_cases/coordinators/reader_chapter_navigation_resolver.dart';
 import 'text/chapter_text_window.dart';
 import 'text/text_preprocessor.dart';
-import 'text/word_segmenter.dart';
 import 'view/admission_controller.dart';
 import 'view/reader_scroll_controller.dart';
 import 'view/reader_scroll_view.dart';
@@ -246,12 +244,20 @@ class _ReaderTextViewState extends State<ReaderTextView>
   bool _sawUserScroll = false;
   bool _rebuildQueued = false;
   bool _captureFramePending = false;
-  final SelectionService _selection = SelectionService();
-  final WordSegmenter _wordSegmenter = const WordSegmenter();
 
-  /// 每次長按或取消都換號；選詞要等原生斷詞回來，期間若已取消或又長按
-  /// 別處，舊結果作廢。
-  int _selectionRequest = 0;
+  /// 點擊、長按與選字（[ReaderTextTouch]）。
+  late final ReaderTextTouch _touch = ReaderTextTouch(
+    pipeline: () => _pipeline,
+    documentIndex: _documentIndex,
+    marks: _marks,
+    scrollOffset: _effectiveScrollOffset,
+    context: () => context,
+    mounted: () => mounted,
+    selectionAllowed: () => widget.textSelectionEnabled && !_controlsVisible,
+    highlights: () => widget.highlights?.value,
+    onHighlightTap: () => widget.onHighlightTap,
+    onContentTapUp: () => widget.onContentTapUp,
+  );
 
   @override
   void initState() {
@@ -349,14 +355,14 @@ class _ReaderTextViewState extends State<ReaderTextView>
     if (oldWidget.runtime != widget.runtime ||
         !widget.textSelectionEnabled ||
         _controlsVisible) {
-      _clearSelection();
+      _touch.clear();
     }
   }
 
   bool get _controlsVisible => widget.controlsVisible?.value ?? false;
 
   void _onControlsVisibleChanged() {
-    if (_controlsVisible) _clearSelection();
+    if (_controlsVisible) _touch.clear();
   }
 
   /// 離開閱讀器時記下目前這一頁。在 [dispose] 時正文的捲動位置已經拆掉，
@@ -379,7 +385,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     unawaited(_chapterRepo.dispose());
     _admission.dispose();
     _scrollController?.dispose();
-    _selection.dispose();
+    _touch.dispose();
     _revealTimer?.cancel();
     _veil.dispose();
     super.dispose();
@@ -776,7 +782,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
       if (!_dragging && notification.dragDetails != null) {
         _dragging = true;
         _sawUserScroll = true;
-        _clearSelection();
+        _touch.clear();
         _runtimeLocationRevision += 1;
         widget.runtime.cancelJumpForUserScroll();
         _pipeline.onScrollStateChanged(PumpState.dragging);
@@ -940,7 +946,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     if (!_paper.claimForJump(jump, textShown: _initialRestoreCompleted)) {
       return;
     }
-    _clearSelection();
+    _touch.clear();
     _coverText();
   }
 
@@ -1233,7 +1239,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
   void _attachController() {
     _viewportCommands.attach(widget.viewportController);
     widget.viewportController
-      ?..dismissSelection = _dismissSelection
+      ?..dismissSelection = _touch.dismiss
       ..isTextCovered = _isTextCovered;
   }
 
@@ -1242,7 +1248,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
   void _detachController(ReaderViewportController? controller) {
     if (controller == null) return;
     _viewportCommands.detach(controller);
-    if (controller.dismissSelection == _dismissSelection) {
+    if (controller.dismissSelection == _touch.dismiss) {
       controller.dismissSelection = null;
     }
     if (controller.isTextCovered == _isTextCovered) {
@@ -1276,141 +1282,6 @@ class _ReaderTextViewState extends State<ReaderTextView>
         // 等跳章正文時紙下的正文歸那次跳章：翻頁、自動捲動與朗讀跟隨都
         // 不能移動它，跳章結束後再來。
         !_paper.holdsTextForJump;
-  }
-
-  /// 拖把手時 viewport 座標 [point] 在選取段落內最近的游標位置。
-  int? _selectionCaretAt(ReaderTextSelection selection, Offset point) {
-    final scrollOffset = _effectiveScrollOffset();
-    if (scrollOffset == null) return null;
-    return _pipeline.geometry.caretAt(
-      selection,
-      point.translate(0, scrollOffset),
-    );
-  }
-
-  List<LineBox> _selectionBoxes(ReaderTextSelection selection) {
-    if (!_pipeline.geometry.isSelectionCurrent(selection)) {
-      // 章節重新切分、換內容或樣式換代後，舊 offset 不再對應畫面。
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && identical(_selection.selection, selection)) {
-          _clearSelection();
-        }
-      });
-      return const <LineBox>[];
-    }
-    return _marks.lineBoxes(
-      selection.chapterIndex,
-      selection.range.start,
-      selection.range.end,
-    );
-  }
-
-  /// 文件座標 [point] 上的插圖（落在圖上才算）；沒有時回傳 null。
-  IllustrationPaint? _illustrationAt(Offset point) {
-    final key = _documentIndex.blockAtOffset(point.dy);
-    if (key == null) return null;
-    final blocks = _pipeline.blocksOf(key.chapterIndex);
-    if (blocks == null ||
-        key.blockIndex >= blocks.blocks.length ||
-        !blocks.blocks[key.blockIndex].isIllustration) {
-      return null;
-    }
-    final top = _documentIndex.topOf(key);
-    final paint = _pipeline.paragraphCache
-        .acquireEntry(key, _pipeline.epoch)
-        ?.illustration;
-    if (top == null || paint == null) return null;
-    final rect = paint.box.rect.shift(
-      Offset(_pipeline.layoutSpec.textPaddingLeft, top),
-    );
-    return rect.contains(point) ? paint : null;
-  }
-
-  Future<void> _handleLongPressStart(LongPressStartDetails details) async {
-    final request = ++_selectionRequest;
-    final scrollOffset = _effectiveScrollOffset();
-    // 長按插圖打開大圖，不選字（ADR 0050）。
-    final illustration = scrollOffset == null
-        ? null
-        : _illustrationAt(details.localPosition.translate(0, scrollOffset));
-    if (illustration != null) {
-      _selection.clear();
-      unawaited(Feedback.forLongPress(context));
-      unawaited(
-        Navigator.of(context)
-            .push(ReaderIllustrationViewer.route(illustration.path)),
-      );
-      return;
-    }
-    final hit = scrollOffset == null
-        ? null
-        : _pipeline.geometry.glyphAt(
-            details.localPosition.translate(0, scrollOffset),
-          );
-    if (hit == null) {
-      _selection.clear();
-      return;
-    }
-    unawaited(Feedback.forLongPress(context));
-    final epoch = _pipeline.epoch;
-    final paragraphText = hit.blocks.displayText.substring(
-      hit.paragraph.start,
-      hit.paragraph.end,
-    );
-    final word = await _wordSegmenter.wordAt(
-      paragraphText,
-      hit.offset - hit.paragraph.start,
-    );
-    if (!mounted ||
-        request != _selectionRequest ||
-        !widget.textSelectionEnabled ||
-        _controlsVisible ||
-        epoch != _pipeline.epoch ||
-        !identical(_pipeline.blocksOf(hit.blocks.chapterIndex), hit.blocks)) {
-      return;
-    }
-    _selection.select(
-      ReaderTextSelection(
-        blocks: hit.blocks,
-        epoch: epoch,
-        paragraph: hit.paragraph,
-        range: ChapterTextRange(
-          hit.paragraph.start + word.start,
-          hit.paragraph.start + word.end,
-        ),
-      ),
-    );
-  }
-
-  void _clearSelection() {
-    _selectionRequest += 1;
-    _selection.clear();
-  }
-
-  bool _dismissSelection() {
-    if (!_selection.active) return false;
-    _clearSelection();
-    return true;
-  }
-
-  void _handleContentTapUp(TapUpDetails details) {
-    // 選取中點正文只取消選取，不觸發翻頁或叫出選單。
-    if (_selection.active) {
-      _clearSelection();
-      return;
-    }
-    // 點到已畫的標註：打開那個標註，不翻頁、不叫選單。
-    if (widget.onHighlightTap case final onHighlightTap?) {
-      final id = _marks.highlightAt(
-        widget.highlights?.value,
-        details.localPosition,
-      );
-      if (id != null) {
-        onHighlightTap(id);
-        return;
-      }
-    }
-    widget.onContentTapUp?.call(details);
   }
 
   void _scheduleRebuild() {
@@ -1471,7 +1342,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     _veil.cover(skeleton: false, fade: true);
     if (!wasHolding) {
       // 紙從這一幀開始畫在正文上、攔下觸控。
-      _clearSelection();
+      _touch.clear();
       _holdScrollUnderVeil();
       _scheduleRebuild();
     }
@@ -1698,10 +1569,10 @@ class _ReaderTextViewState extends State<ReaderTextView>
         return ColoredBox(
           color: widget.backgroundColor,
           child: ReaderTextSelectionLayer(
-            selection: _selection,
+            selection: _touch.selection,
             repaint: controller,
-            boxesFor: _selectionBoxes,
-            caretAt: _selectionCaretAt,
+            boxesFor: _touch.boxesFor,
+            caretAt: _touch.caretAt,
             onHide: widget.onHideText == null
                 ? null
                 : (selection) => widget.onHideText!(selection.inParagraph),
@@ -1719,14 +1590,15 @@ class _ReaderTextViewState extends State<ReaderTextView>
               (controlsVisible, child) => ReaderPointerTapLayer(
                 onTapUp: widget.onContentTapUp == null || controlsVisible
                     ? null
-                    : _handleContentTapUp,
+                    : _touch.handleTapUp,
                 suppressTapAtPointerDown: _isUserFlingInProgress,
                 child: GestureDetector(
                   onLongPressStart:
                       widget.textSelectionEnabled &&
                           !controlsVisible &&
                           !_veilHoldsText
-                      ? (details) => unawaited(_handleLongPressStart(details))
+                      ? (details) =>
+                            unawaited(_touch.handleLongPressStart(details))
                       : null,
                   child: child,
                 ),
