@@ -619,6 +619,18 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
   /// （[LaunchEntranceMotion.breathCycle]），其他照 [Skeleton.breathCycle]。
   Duration _cycle = Skeleton.breathCycle;
 
+  /// 換一輪的長度。計時器在走時（收住途中接著呼吸）從當下的輪數接著算：
+  /// [_tick] 用這一輪的長度換算計時器啟動後的整段時間，不重新起算的話，
+  /// 進場的 0.6 秒換成 1.6 秒那一格，經過的輪數一下子少掉一大截，深淺跳一下。
+  void _setCycle(Duration cycle) {
+    if (cycle == _cycle) return;
+    _cycle = cycle;
+    if (!_ticker.isActive) return;
+    _ticker.stop();
+    _base = _cycles;
+    _ticker.start();
+  }
+
   /// 等開 App 的骨架開始呼吸的掛勾（[holdUntil]）；掛著時階段是等開始，
   /// 或還沒開始就收住了。
   ValueListenable<bool>? _hold;
@@ -693,10 +705,10 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
       case _Resting(:final breathing):
         _stage = breathing;
         _endRest();
-        _cycle = Skeleton.breathCycle;
+        _setCycle(Skeleton.breathCycle);
       case _Still():
         _endRest();
-        _cycle = Skeleton.breathCycle;
+        _setCycle(Skeleton.breathCycle);
         if (_hold != null) {
           _stage = const _Waiting();
         } else {

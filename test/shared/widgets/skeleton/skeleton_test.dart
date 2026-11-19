@@ -609,6 +609,24 @@ void main() {
       expect(previous.last, 0, reason: '右邊還沒輪到');
     });
 
+    testWidgets('releasing mid-rest carries on breathing without a jump', (
+      tester,
+    ) async {
+      // 進場的節奏（一輪 0.6 秒）換回一般節奏（1.6 秒）時，計時器照樣在走：
+      // 經過的輪數要從當下接著算，不能用新的一輪長度重算整段時間。
+      await setUpView(tester);
+      await tester.pumpWidget(host());
+      await grow(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      unawaited(motion.rest.settle());
+      await tester.pump(frame);
+      await tester.pump(frame);
+      final before = await sample(tester);
+      motion.rest.release();
+      final after = await pumpSmoothly(tester, before, cycleFrames * 2);
+      expect(after.toSet(), hasLength(greaterThan(1)), reason: '照常呼吸');
+    });
+
     testWidgets('a skeleton hidden mid-rest counts as rested instead of '
         'holding the launch forever', (tester) async {
       await setUpView(tester);
