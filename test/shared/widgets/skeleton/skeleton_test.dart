@@ -95,6 +95,180 @@ void main() {
     expect(breath.isBreathing, isTrue, reason: '出現了才呼吸');
   });
 
+  group('a shared breath between waiting, breathing and settling', () {
+    const breathKind = SkeletonBreath.gentleSweep;
+    const frame = Duration(milliseconds: 16);
+    const us = [0.0, 0.25, 0.5, 0.75, 1.0];
+    // 一般節奏一格（16ms，一輪 1.6 秒）最多變約 0.016（曲線最陡處），留一倍。
+    const maxStep = 0.03;
+
+    List<double> depths(SharedSkeletonBreath breath) => [
+      for (final u in us) breath.depthAt(u, breathKind),
+    ];
+
+    testWidgets('settling before it begins is done at once and stays at the '
+        'deepest; beginning then starts from the deepest, left first', (
+      tester,
+    ) async {
+      final breath = SharedSkeletonBreath(vsync: tester);
+      addTearDown(breath.dispose);
+      breath.acquire();
+      var settled = false;
+      unawaited(breath.settle().then((_) => settled = true));
+      await tester.pump();
+      expect(settled, isTrue, reason: '還沒開始呼吸，收住立刻完成');
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(depths(breath), everyElement(1));
+      expect(breath.isBreathing, isFalse);
+      expect(tester.hasRunningAnimations, isFalse);
+
+      breath.begin();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(breath.isBreathing, isTrue);
+      expect(breath.depthAt(0, breathKind), lessThan(1), reason: '左邊先變淺');
+      expect(breath.depthAt(1, breathKind), 1, reason: '右邊還沒輪到');
+      breath.release();
+    });
+
+    testWidgets('beginning while it settles lets this breath finish at the '
+        'deepest, then starts again from the deepest without a jump', (
+      tester,
+    ) async {
+      final breath = SharedSkeletonBreath(vsync: tester);
+      addTearDown(breath.dispose);
+      breath.acquire();
+      breath.begin();
+      await tester.pump();
+      for (var i = 0; i < 40; i++) {
+        await tester.pump(frame);
+      }
+      var settled = false;
+      unawaited(breath.settle().then((_) => settled = true));
+      await tester.pump(frame);
+      breath.begin();
+
+      var previous = depths(breath);
+      var allDeep = -1;
+      var lightAgain = -1;
+      for (var i = 0; i < 200 && lightAgain < 0; i++) {
+        await tester.pump(frame);
+        final now = depths(breath);
+        for (var j = 0; j < us.length; j++) {
+          expect(
+            (now[j] - previous[j]).abs(),
+            lessThanOrEqualTo(maxStep),
+            reason: '第 $i 格 u=${us[j]}',
+          );
+        }
+        if (allDeep < 0 && now.every((d) => d == 1)) allDeep = i;
+        if (allDeep >= 0 && now.first < 1) lightAgain = i;
+        previous = now;
+      }
+      expect(allDeep, greaterThanOrEqualTo(0), reason: '先把這一口呼完、整片停在最深');
+      expect(lightAgain, greaterThan(allDeep), reason: '再從最深接著呼吸');
+      expect(settled, isTrue);
+      expect(breath.isBreathing, isTrue);
+      expect(previous.last, 1, reason: '從最深起，右邊還沒輪到');
+      breath.release();
+    });
+
+    testWidgets('settling again after a begin that waits for the settle '
+        'keeps it at the deepest', (tester) async {
+      final breath = SharedSkeletonBreath(vsync: tester);
+      addTearDown(breath.dispose);
+      breath.acquire();
+      breath.begin();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 640));
+      unawaited(breath.settle());
+      await tester.pump(frame);
+      breath.begin();
+      await tester.pump(frame);
+      var settled = false;
+      unawaited(breath.settle().then((_) => settled = true));
+      await tester.pump(Skeleton.breathCycle * 2);
+      expect(settled, isTrue);
+      expect(depths(breath), everyElement(1), reason: '後來的收住蓋過等著的開始');
+      expect(breath.isBreathing, isFalse);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('the last user letting go mid-settle ends the settle, and a '
+        'new user waits at the deepest until it begins', (tester) async {
+      final breath = SharedSkeletonBreath(vsync: tester);
+      addTearDown(breath.dispose);
+      breath.acquire();
+      breath.begin();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 640));
+      var settled = false;
+      unawaited(breath.settle().then((_) => settled = true));
+      await tester.pump(frame);
+      expect(settled, isFalse);
+
+      breath.release();
+      await tester.pump();
+      expect(settled, isTrue, reason: '沒人用就不等這一口呼完');
+      expect(depths(breath), everyElement(1));
+      expect(tester.hasRunningAnimations, isFalse);
+
+      breath.acquire();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(depths(breath), everyElement(1), reason: '回到一開始：等開始');
+      expect(breath.isBreathing, isFalse);
+      breath.begin();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(breath.depthAt(0, breathKind), lessThan(1));
+      expect(breath.depthAt(1, breathKind), 1);
+      breath.release();
+    });
+  });
+
+  testWidgets('a plain skeleton breathes at once, already part way across', (
+    tester,
+  ) async {
+    // 不在進場、也不跟共用呼吸的骨架：一出現就照一般的節奏呼吸，不從整片
+    // 最深起（右邊一開始就比左邊淺）。
+    tester.view.physicalSize = const Size(400, 40);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final boundary = GlobalKey();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RepaintBoundary(
+          key: boundary,
+          child: const ColoredBox(
+            color: Color(0xFFFFFFFF),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Skeleton(
+                child: SkeletonBox(
+                  width: 400,
+                  height: 20,
+                  color: Color(0xFF000000),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(tester.hasRunningAnimations, isTrue);
+    final bytes = await tester.runAsync(() async {
+      final image =
+          await (boundary.currentContext!.findRenderObject()!
+                  as RenderRepaintBoundary)
+              .toImage();
+      return image.toByteData();
+    });
+    int red(int x) => bytes!.getUint8((10 * 400 + x) * 4);
+    expect(red(5), lessThan(10), reason: '左邊在最深附近');
+    expect(red(395), greaterThan(80), reason: '右邊已經在淺處');
+  });
+
   test('whole breathing pulses every position together', () {
     for (final phase in [0.0, 0.2, 0.5, 0.8]) {
       expect(
@@ -408,6 +582,31 @@ void main() {
       }
       await tester.pump(frame);
       expect(await sample(tester), everyElement(0), reason: '整條都停在最深');
+    });
+
+    testWidgets('settling before the breath starts is done at once, keeps the '
+        'skeleton at the deepest once breathing is due, and the release '
+        'starts it from the deepest', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(host());
+      await tester.pump(frame);
+      var rested = false;
+      unawaited(motion.rest.settle().then((_) => rested = true));
+      await tester.pump(frame);
+      expect(rested, isTrue, reason: '還沒開始呼吸，收住立刻完成');
+
+      await grow(tester);
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(frame);
+        expect(await sample(tester), everyElement(0), reason: '收住了，到時間也不呼吸');
+      }
+      expect(tester.hasRunningAnimations, isFalse);
+
+      final still = await sample(tester);
+      motion.rest.release();
+      final previous = await pumpSmoothly(tester, still, 12);
+      expect(previous.first, greaterThan(0), reason: '從最深起，左邊先變淺');
+      expect(previous.last, 0, reason: '右邊還沒輪到');
     });
 
     testWidgets('a skeleton hidden mid-rest counts as rested instead of '
