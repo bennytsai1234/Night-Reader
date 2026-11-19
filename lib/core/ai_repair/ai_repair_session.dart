@@ -302,14 +302,16 @@ class AiRepairSession extends ChangeNotifier {
   /// 結束：做著的那一步標成結束，修到一半的不改。暫停中的直接收尾。
   void stop() {
     if (job.outcome != null) return;
-    if (_paused) {
+    if (_paused && !_running) {
       _paused = false;
       _endSteps();
       _notify();
       return;
     }
-    if (_stopped) return;
+    // 正在暫停時按結束：結束蓋過暫停，照做著時按結束的走。
+    if (_stopped && !_paused) return;
     CrashTrail.action('按了結束：AI 修復 ${job.original.bookSourceName}');
+    _paused = false;
     _stopped = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已結束');
     if (!job._committing) _endSteps();
