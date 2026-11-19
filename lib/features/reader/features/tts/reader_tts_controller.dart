@@ -237,16 +237,15 @@ class ReaderTtsController extends ChangeNotifier
           );
           return;
         case _SpeechStart.empty:
-          final chapterIndex = next.chapterIndex + 1;
-          if (chapterIndex >= runtime.chapterCount) {
-            _finishSpeech(generation, notice: '已朗讀到書尾');
+          final chapterIndex = _chapterAfter(next.chapterIndex, 1);
+          if (chapterIndex == null) {
+            _finishSpeech(
+              generation,
+              notice: _endNoticeAfter(next.chapterIndex),
+            );
             return;
           }
-          next = ReaderLocation(
-            chapterIndex: chapterIndex,
-            charOffset: 0,
-            visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
-          );
+          next = _chapterStart(chapterIndex);
       }
     }
   }
@@ -456,6 +455,11 @@ class ReaderTtsController extends ChangeNotifier
         : null;
   }
 
+  /// [chapterIndex] 之後沒有能念的章時的提示：後面還有章卻沒有能念的，
+  /// 都是付費章節（ADR 0057）。
+  String _endNoticeAfter(int chapterIndex) =>
+      chapterIndex + 1 < runtime.chapterCount ? lockedChapterNotice : '已朗讀到書尾';
+
   ReaderLocation _chapterStart(int chapterIndex) => ReaderLocation(
     chapterIndex: chapterIndex,
     charOffset: 0,
@@ -521,12 +525,9 @@ class ReaderTtsController extends ChangeNotifier
       }
       final chapterIndex = _chapterAfter(completedSegment.chapterIndex, 1);
       if (chapterIndex == null) {
-        // 後面還有章卻沒有能念的，都是付費章節（ADR 0057）。
-        final paidAhead =
-            completedSegment.chapterIndex + 1 < runtime.chapterCount;
         _finishSpeech(
           generation,
-          notice: paidAhead ? lockedChapterNotice : '已朗讀到書尾',
+          notice: _endNoticeAfter(completedSegment.chapterIndex),
         );
         return;
       }

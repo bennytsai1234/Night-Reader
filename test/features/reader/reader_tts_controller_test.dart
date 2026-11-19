@@ -434,6 +434,33 @@ void main() {
     });
 
     test(
+      'paid chapters after a chapter without text are skipped too',
+      () async {
+        await open({0: '甲。', 1: '', 2: null, 3: '丁。'}, paid: {2});
+        await tts.startFromVisibleLocation();
+        engine.complete();
+        await pumpEventQueue();
+
+        expect(engine.spoken, ['甲。', '丁。']);
+        expect(tts.currentHighlight?.chapterIndex, 3);
+        expect(runtime.takeUserNotice(), isNull);
+      },
+    );
+
+    test(
+      'only paid chapters after a chapter without text end reading as paid',
+      () async {
+        await open({0: '甲。', 1: '', 2: null}, paid: {2});
+        await tts.startFromVisibleLocation();
+        engine.complete();
+        await pumpEventQueue();
+
+        expect(tts.isPlaying, isFalse);
+        expect(runtime.takeUserNotice()?.message, '付費章節');
+      },
+    );
+
+    test(
       'when only paid chapters are left, reading ends and says so',
       () async {
         await open({0: '甲。', 1: null}, paid: {1});
