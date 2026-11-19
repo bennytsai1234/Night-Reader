@@ -244,6 +244,9 @@ jobs:
             exit 1
           fi
       - run: flutter analyze --no-pub
+      - name: Check file names
+        # 檔名是主要類別名稱的小寫寫法（CODING_STANDARDS.md「命名」）。
+        run: dart run tool/file_names.dart
       - name: Test frame budget compare tool
         run: sh tool/frame_budget_compare_test.sh
       - name: Verify validation did not modify tracked source
