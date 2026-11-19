@@ -14,7 +14,14 @@
 - **整理架構，照順序做三段**：使用者 2026-11-18 要的，2026-11-19 定了順序：搬資料夾與改名 → 拆大檔 → 狀態機。理由：搬檔是機械的工作，先做完；agent 找程式靠搜尋，資料夾位置對它影響小，真正吃力的是常改的大檔與互相牽動的旗標，所以拆檔對準最常改的檔（2026-10-19 起改最多的：`reader_page.dart` 39 次、`reader_page_shell.dart` 28、`skeleton.dart` 22、`source_check_isolate.dart` 22、`reader_text_view.dart` 20）。使用者先把還開著的 PR 合併完、手上的問題都修完，才開工；開工由使用者說。
   - **避開衝突**：每批開工前查還沒合併、又改到 `lib/` 的分支，碰到同一批的檔，等它合併再搬。每個 PR 做好就收尾，不放著。
   - **1. 搬資料夾與改名**：三批都在 2026-11-19 做完（拆掉 `lib/core/services/`、改掉 `reader_v2`、`hybrid` 這類歷史名字、共用元件與資料模型照用途分資料夾、名不符實的檔改名）；命名原則寫在 `CODING_STANDARDS.md`「命名」，CI 用 `tool/file_names.dart` 檢查檔名。
-  - **2. 拆大檔**（`skeleton.dart` 2026-11-19 拆完：切成呼吸、形狀、一般換場、清單換場四個檔，兩份由左而右換場的畫法併成一份；`reader_text_view.dart` 2026-11-19 拆出捲動命令、點擊與選字，2101 → 1628 行，剩下的紙、還原與正文捲動互相牽動，留給第 3 段的狀態機；`source_check_isolate.dart` 2026-11-19 切成開背景工作 193、校驗流程 972、判定 416、正文抽查 204 行四個檔；`reader_page.dart` 2026-11-19 拆出章節資訊、換源、登入與驗證、選單開出去的頁面，1528 → 854 行）：一個大檔一個 PR，常改的先拆。開拆前先載入 `codebase-design`，分析這個檔和用它的地方，給使用者看切法：切成哪幾個模組、每個模組對外的介面、每塊做刪掉測試的結果（刪掉後複雜度是消失，還是散回呼叫的地方）；使用者定了才拆。照介面切，不照類別或行數切：例如 `skeleton.dart` 照類別會拆出一般與捲動清單兩個骨架換場，兩邊各自做一次「由左而右換掉骨架」，要先看能不能共用一個模組。使用者 2026-11-19 定的：不另外跑一次全專案的架構審查（`/improve-codebase-architecture`），常改的檔已經從改動紀錄量出來，散在小檔裡的重複與沒人用的檔在第 1 段經手時處理。1500 行以上、還沒拆的：`grouped_list.dart` 1584、`ai_repair_session.dart` 1512、`app_page_transition.dart` 1495（`idna_mapping_table.dart`、`public_suffix_rules.dart` 是資料表，不拆）。
+  - **2. 拆大檔**：2026-11-19 做完，七個檔各一個 PR，照介面切（`idna_mapping_table.dart`、`public_suffix_rules.dart` 是資料表，不拆）：
+    - `skeleton.dart`（#451）：呼吸、形狀、一般換場、清單換場四個檔，兩份由左而右換場的畫法併成一份。
+    - `reader_text_view.dart`（#452）：拆出捲動命令、點擊與選字，2101 → 1628 行；剩下的紙、還原與正文捲動互相牽動，留給第 3 段。
+    - `source_check_isolate.dart`（#453）：開背景工作 193、校驗流程 972、判定 416、正文抽查 204 行四個檔。
+    - `reader_page.dart`（#454）：拆出章節資訊、換源、登入與驗證、選單開出去的頁面，1528 → 854 行。
+    - `grouped_list.dart`（#455）：進場 363、卡片外框與組標題 281、一列與開關列打勾列 544、輸入列 358 四個檔，順手修了介面簡體時閱讀紀錄的書名被轉成簡體；進場的三個階段留給第 3 段。
+    - `ai_repair_session.dart`（#456）：一次修復流程 849，另拆出和 AI 對話的那半、預設實作、存檔與還原、步驟型別、判定、請求追蹤共七個檔。
+    - `app_page_transition.dart`（#457）：路由換頁 525、各進度的樣子 479、分頁切換 180、展開起點 121、返回手勢 109 五個檔；路由換頁的手勢旗標留給第 3 段。
   - **3. 大量重構成狀態機，並對照解決了哪些問題**：好幾處用幾個布林值互相牽動來表示「現在在哪個階段」，各處寫法已經分歧，修 bug 常是再加一個旗標。目標是改成明確的狀態機，每個做完寫出前後對照。
     - **先定讀者看到的階段**（使用者 2026-11-19 定的）：每個狀態機寫程式前，先寫一張表：階段、讀者看到什麼（按鈕、通知欄、頁面文字）、可以走到哪、現在的程式一樣嗎。使用者 2026-11-19 改成不再介入：表由做的對話照 `GLOSSARY.md`、`DESIGN.md` 與相關 ADR 自己定，寫進 `docs/state-machines.md` 就開工，不等使用者確認；要看圖才選得出的畫面改動先維持現狀，列進最後的回報等使用者之後再選。階段照這張表切，畫面直接讀這個階段、不另做轉換；讀者看不到的內部細節收在某個階段裡。理由：照現在的程式切階段，會把現在不是使用者要的行為也搬進去，之後改行為就得重切階段、或在狀態機和畫面之間多一層轉換。
     - **做法**：一個狀態機一個 PR，每個照這幾步：
@@ -25,7 +32,7 @@
     - **量幀預算**：改到紙、骨架、進場、換場的照 `AGENTS.md`「驗證」量前後。
     - **哪些收成一個狀態**：只收互斥的階段。可能同時成立的照 #280（紙歸誰管）寫成有名字的動作——那次三件事會同時成立，沒有硬塞成一個值。使用者設定、建構時給的參數、判斷函式不算旗標。
     - **對照表**（每個狀態機做完在 `docs/state-machines.md` 加一列、寫一節，開工前先寫「改前」，之後只剩 git）。找歷史 bug 用 `git log -G'bool _旗標名' -- 檔案` 找加旗標的提交，再打開 diff 確認。
-    - **試點：背景工作的生命週期**（ADR 0058 的四件）：改前的旗標、已查到的 5 件歷史 bug 與初步狀態已寫在 `docs/state-machines.md`。四件的暫停回饋現在不一致（只有 AI 找書有「暫停中」），階段表自己判斷要不要一致、理由寫進表裡。
+    - **試點：背景工作的生命週期**（ADR 0058 的四件，分支 refactor/background-work-phase）：改前的旗標、已查到的 5 件歷史 bug 與初步狀態已寫在 `docs/state-machines.md`。四件的暫停回饋現在不一致（只有 AI 找書有「暫停中」），階段表自己判斷要不要一致、理由寫進表裡。
     - **其他候選**（歷史待查，各自開工第一步查；查歷史用 `git log --follow`，檔案搬過家）：
       - 有聲書播放器 `audiobook_player.dart`：`_playing`、`_loading`、`_buffering`、`_ended`、`_error`、`_wantPlay`，加 `_generation`。
       - 朗讀 `reader_tts_controller.dart`：靠 generation 判斷哪一次念還有效。
@@ -35,6 +42,8 @@
       - 同步 `sync_service.dart`：`_again`、`_progressFirst`、`_fullPending`、`_cancelled`、`_authorizingGoogleDrive`。
       - 閱讀器正文捲動 `reader_text_view.dart`：`_dragging`、`_sawUserScroll`、`_rebuildQueued`、`_captureFramePending`、`_textWaitsForBreath`，旁邊已有 `PumpState`。
       - 目錄面板 `reader_side_panel.dart`：`_built`、`_builtCovering`、`_open`、`_openedSinceClosed`、`_dragging`、`_dragAbandoned`。
+      - 分組清單的進場 `grouped_list.dart`：還在進場、進場播完、已換成內容（#455 留下的）。
+      - 路由換頁 `app_page_transition.dart`：手勢中、被蓋住停在半途、放開後收尾（#457 留下的）。
       - 動畫類：紙 `loading_veil.dart`（`_sweep`、`_skeletonSweep`、`_usingBreath`、`_settling`）、進場 `launch_entrance.dart`（`_revealStarted`、`_breathScheduled`、`_breathSettled`、`_passThrough`）、骨架呼吸 `skeleton.dart`（幾個類別各有 `_breathing`、`_resting`、`_still`、`_allowed`、`_waiting`）、定格換場 `snapshot_sweep.dart`（已有 `_Phase`，看還剩哪些旗標）。
     - **順序**：試點整個做完、對照寫出來再往下，不等使用者看；之後不碰同一批檔的候選可以開新對話並行（每個一條分支、一個 PR），`PLAN.md` 只由開工的那個對話改。純邏輯的在前，動畫類在後。
     - **範圍**：候選全部做（使用者 2026-11-19 定的），沒出過錯不是跳過的理由。只在讀程式後發現那幾個旗標會同時成立、不是一組互斥階段時跳過，先跟使用者說明。
