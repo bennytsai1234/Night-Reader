@@ -18,6 +18,7 @@
 | 骨架呼吸 | `_hold`、`_waiting`、`_restFrom`、`_still`、`_restarted`（另有 `_allowed`、`_visible`、`_usingShared`、`SkeletonRest._resting` 留著，見下方） | `_BreathStage`：等開始、呼吸（從哪一輪起、是不是從最深起）、收住中、收住了；跟著共用呼吸的骨架照抄這一個值 | 等開始又收住了；收住了卻沒有收住的起點；等開 App 呼吸時底下的收住照樣在變 | 3 件（見下方） | 3 件，都碰不到（見下方） | #466 |
 | 閱讀器正文捲動 | `_initialRestoreCompleted`、`_textWaitsForBreath`、`_pendingReveal`、`_revealTimer`、`_dragging`、`_sawUserScroll`（`_rebuildQueued`、`_captureFramePending` 留成旗標）；`PumpState` 兩邊各寫 | 正文的 `_TextStage`（排版中、等掀紙、在畫面上）；手指的 `_FingerScroll`（沒有、在盡頭往外拉、拖動、甩動）；排版預算只照進行中的那次還原或手指算 | 沒排好卻在等呼吸收住；拖動中卻不算手指；被取代的還原改到接手那次的預算 | 2 件（見下方） | 1 件（見下方） | 待開 |
 | 閱讀器目錄面板 | `_built`、`_builtCovering`、`_open`、`_openedSinceClosed`、`_dragging`、`_dragAbandoned` | `_Phase`（收著、按在左緣、準備打開、打開、收起、拉著），收起與拉著帶這一趟打開過沒有 | 收著又被手指拖著；收著卻算打開中；準備打開卻沒有排好的滑出 | 4 件（見下方） | 3 件，審查另 3 件（見下方） | #467 |
+| 定格換場 | `_Phase` 加上 `_session`、`_settle`、`_hold`、`_progress.isAnimating` 拼出的三段（見下方） | `_Stage` 七段：沒在換場、拍「之前」、蓋著「之前」拍「之後」、拍好、換上「之前」、停一下、換場中；這一輪的圖、等待與參數收在 `_Round` | 沒有這一輪卻在拍；兩張圖拍好了卻沒有這一輪；停一下的計時器在換場中還掛著 | 1 件（見下方） | 1 件，另審查找到 1 件換結構弄出的（見下方） | #469 |
 
 ## 各狀態機
 
@@ -865,3 +866,61 @@ ADR 0055 的播放器（`lib/features/audiobook/audiobook_player.dart`），讀�
 | 拖曳被要求收起時記 `_dragAbandoned` | 被要求收起或打開就離開拉著，之後的拖曳只在拉著時算數；按著的途中收著過，這次觸控不理 |
 
 對外的 `isOpen`、`isOnScreen`、`shown`、`onOpenChanged`、`onClosed` 照舊，都由 `_go` 從前後兩個階段算出，三個呼叫處沒改。
+
+### 定格換場
+
+`lib/shared/widgets/skeleton/snapshot_sweep.dart`（ADR 0031、0035）：開 App 書架第一次換成內容時，整個主頁面拍成兩張圖混合著換。只有開 App 的進場在用（`LaunchEntranceMotion.screen`）。
+
+**改前**（2026-11-20，`beta` `8beef6f1`）：
+
+| 欄位 | 意思 |
+|---|---|
+| `_phase`（`_Phase`：畫真的、蓋著「之前」、拍好、混合中） | 螢幕上畫什麼 |
+| `_session`（`Object?`） | 這一輪；null 是沒有，等待回來比它是不是同一個 |
+| `_before`、`_after` | 拍好的兩張圖 |
+| `_captured`、`_run`（`Completer?`） | 等 `capture`、`play` 的人 |
+| `_settle`、`_hold`（`Timer?`）、`_gap`、`_sweep` | 換上「之前」那張之後要做的事、停一下的計時器、停多久、由左而右還是整片淡換 |
+
+`_Phase` 有四個，讀者分得出的有七段，其他三段靠別的欄位拼：「拍『之前』中」是 `_phase` 畫真的而 `_session` 不是 null；「混合中」又分成換上「之前」那張、等這一格畫完做 `_settle`（`_settle` 還在），停一下（`_hold` 在走），真的在混合（`_progress` 在動）；`_start` 要同時看 `_session`、`_phase` 與 `_progress.isAnimating`，`_settleThenHold` 看 `_session` 與 `_phase`。
+
+**歷史上因此出錯的**（`git log -G'enum _Phase' / '_settle' / 'holding'`，打開 diff 看）：
+
+- #130 審查：`settle` 回呼裡結束或換掉了這一次換場，回呼後照樣建起停一下的計時器。原因是「換上『之前』、做 settle」和「停一下」沒有分開的階段，回呼後沒再看這一輪還在不在；補了回呼後再檢查、`_end` 清 `_settle` 與 `_hold`。
+
+查過不算：#141 審查的「拍到一半 `SkeletonSwitcher` 被拆掉，兩張圖一直留著」修在換場切換那邊（`dispose` 時 `finish`）；#268 的「換場中按下直接播完」是改規則。
+
+**階段表**（讀者看到的，照 ADR 0025、0031、0035 與 `docs/design/motion.md`）：
+
+| 階段 | 讀者看到什麼 | 可以走到 | 現在一樣嗎 |
+|---|---|---|---|
+| 沒在換場 | 真的畫面，照常點 | 拍「之前」（`capture` 或 `play`）；`play` 時減少動態或不在畫面上就直接換 | 一樣 |
+| 拍「之前」 | 真的畫面，照常點；等這一格畫完拍下來 | 蓋著「之前」拍「之後」；沒在換場（沒有畫面可拍：`capture` 不拍、`play` 直接換；`finish`；被新的一輪蓋過） | 一樣 |
+| 蓋著「之前」拍「之後」 | 螢幕停在「之前」那張圖、不接點擊；底下已經換好，等它畫完拍下來 | 拍好（`capture`：換回原本的樣子）；換上「之前」（`play`）；沒在換場 | 一樣 |
+| 拍好 | 真的畫面（換回原本的樣子），照常點；開 App 時骨架照常呼吸 | 換上「之前」（`play`）；沒在換場（`finish`、新的一輪、減少動態時 `play`） | 不一樣：`play` 換內容的回呼裡又叫一次 `play`，第二次接手同一輪，第一次的等待永遠不完成 |
+| 換上「之前」 | 停在「之前」那張圖；按下就直接播完、交給底下 | 停一下（這一格畫完、做完 `settle`）；沒在換場（按下、畫面大小變了、`finish`、`settle` 裡結束） | 一樣 |
+| 停一下 | 同上（ADR 0025 的預留停頓，`gap`） | 換場中；沒在換場 | 一樣 |
+| 換場中 | 兩張圖照每個像素的橫向位置混合 0.6 秒；按下就直接播完、交給底下 | 沒在換場（播完、按下、畫面大小變了、`finish`、新的一輪） | 一樣 |
+
+**不收進階段的**：
+
+- 兩張圖、等 `capture` 與 `play` 的人、`settle`、停多久、方向：都是這一輪的東西，收進 `_Round`，結束時一起放掉，不單獨是階段。拍好之後接著 `play`，`capture` 的等待要到換回原本樣子的那一格畫完才完成，和換上「之前」會同時還在。
+- `_progress`：換場的進度，只在換場中動。
+
+**改後**：
+
+| 改前 | 改後 |
+|---|---|
+| `_Phase`（四個）加上 `_session`、`_settle`、`_hold`、`_progress.isAnimating` | `_Stage` 七段，每段寫明螢幕上畫什麼（`_Painted`：真的畫面、蓋著「之前」、兩張圖的混合） |
+| `_session`、`_before`、`_after`、`_captured`、`_run`、`_settle`、`_hold`、`_gap`、`_sweep` 各自是欄位 | 收進這一輪 `_Round`；`_round` 是 null 就是沒在換場，等待回來比它是不是同一輪，`_end` 一次放掉 |
+| 畫的那一層收 `_Phase`，自己再分哪幾個畫真的、哪幾個接點擊 | 只收 `_Painted` |
+| `_start` 看 `_session`、`_phase` 與 `_progress.isAnimating` | 看這一輪是不是停一下 |
+
+對外的 `SnapshotSweepController`（`capture`、`play`、`captured`、`playing`、`finish`）不變；讀者看到的都一樣。
+
+**查到並修掉的**（各一個提交，先寫會失敗的測試）：
+
+- 拍好之後 `play` 換內容的回呼裡又叫一次 `play`：第二次還看到「拍好」、接手同一輪，覆寫了第一次的等待，第一次的 `play` 永遠不完成（Codex 審查找到，改前就有）。改成換內容前先離開拍好，第二次是新的一輪、蓋過第一次，第一次算播完。現在的呼叫端不會這樣叫。
+
+換結構時自己弄出、合併前修掉的（Codex 審查找到）：拍到「之前」後在換內容的回呼裡就結束這一輪，圖落在已經結束的那一輪、沒有放掉。改成先把圖交給這一輪再換內容。改前同一個順序下畫面會一直蓋著舊圖、不接點擊，換結構後已經是真的畫面。
+
+查過、沒修的：拍圖本身失敗（`toImage` 丟錯）或呼叫端的回呼丟錯時，這一輪沒有統一收尾，畫面可能停在蓋著「之前」。改前改後一樣，沒有接縫注入拍圖失敗、也沒看過它發生，留著。
