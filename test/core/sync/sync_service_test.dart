@@ -753,7 +753,11 @@ void main() {
         return later.future;
       };
       b.sync.syncBeforeBackground();
-      await pumpEventQueue();
+      // 等它真的讀到雲端才回到 App；只等一輪事件，CI 上前一輪常還沒開始讀，
+      // 回到 App 時要求的就是它，測的就不是這件事。
+      while (reads == 0) {
+        await pumpEventQueue();
+      }
       b.sync.syncAfterResume();
       final ready = b.sync.progressReady!;
       var readyDone = false;
