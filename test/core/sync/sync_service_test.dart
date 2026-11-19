@@ -429,6 +429,8 @@ void main() {
       settings: SyncSettings(),
       storeFactory: (space, _, _) => space == SyncSpace.none ? null : store,
     );
+    await idle.start();
+    expect(idle.progressReady, isNull, reason: '開書不等');
     await idle.syncAll();
     expect(await idle.pullProgress('x'), isNull);
     expect(store.writes, 0);
@@ -611,6 +613,239 @@ void main() {
     expect((await b.book('b-src')).durChapterTitle, '第三章');
   });
 
+  test(
+    'progress asked for before cancelling a full sync is still sent',
+    () async {
+      await a.addBook('a-src', toc: toc, time: 100);
+      await a.sync.syncAll();
+      await b.addBook('b-src', toc: toc, time: 50);
+      await b.sync.syncAll();
+
+      // B 全面同步讀書源時讀到第三章、退到背景，接著使用者取消；進度那一種
+      // 這一輪已經做過了。
+      final reading = Completer<void>();
+      final stuck = Completer<void>();
+      store.beforeNextRead = (name) {
+        if (name != 'sources.json' || reading.isCompleted) return null;
+        reading.complete();
+        return stuck.future;
+      };
+      final full = b.sync.syncAll();
+      await reading.future;
+      await b.books.updateProgress('b-src', 3, '第三章', 4);
+      b.sync.syncBeforeBackground();
+      b.sync.cancelSync();
+      stuck.complete();
+      await full;
+      while (b.sync.status.value.running) {
+        await pumpEventQueue();
+      }
+
+      await a.sync.syncAll();
+      expect((await a.book('a-src')).durChapterTitle, '第三章');
+    },
+  );
+
+  test('a full sync is done when its own round is, not after a progress round '
+      'asked for during it', () async {
+    await a.addBook('a-src', toc: toc, time: 100);
+    await a.sync.syncAll();
+
+    // 全面同步讀書源時退到背景，排了一輪進度同步；那一輪讀進度時卡住。
+    var sourcesRead = false;
+    final extraReading = Completer<void>();
+    final extra = Completer<void>();
+    store.beforeNextRead = (name) {
+      if (name == 'sources.json' && !sourcesRead) {
+        sourcesRead = true;
+        a.sync.syncBeforeBackground();
+      } else if (name == 'progress.json' && sourcesRead) {
+        extraReading.complete();
+        return extra.future;
+      }
+      return null;
+    };
+    var done = false;
+    final full = a.sync.syncAll().then((_) => done = true);
+    await extraReading.future;
+    await pumpEventQueue();
+
+    expect(done, isTrue, reason: '進度框不等補跑的那一輪');
+    expect(a.sync.status.value.running, isTrue, reason: '補跑的那一輪還在跑');
+
+    extra.complete();
+    await full;
+    while (a.sync.status.value.running) {
+      await pumpEventQueue();
+    }
+  });
+
+  test(
+    'the reader stops waiting for progress when the space is down',
+    () async {
+      final down = _FailingStore()
+        ..failing['progress.json'] = const SyncStoreException('連不上同步空間');
+      final service = SyncService(
+        settings: SyncSettings(),
+        bases: SyncBaseStorage(
+          directory: () async => Directory('${baseDir.path}/down'),
+        ),
+        storeFactory: (_, _, _) => down,
+        kinds: (service) => [a.progress(service)],
+      );
+
+      await service.start();
+
+      expect(service.progressReady, isNull);
+      expect(service.status.value.error, '連不上同步空間');
+    },
+  );
+
+  test('a full sync asked for on hearing "stopping" is not cancelled by the '
+      'cancel that caused it', () async {
+    await a.addBook('a-src', toc: toc, time: 100);
+    await a.sync.syncAll();
+
+    final reading = Completer<void>();
+    final stuck = Completer<void>();
+    store.beforeNextRead = (name) {
+      if (name != 'sources.json' || reading.isCompleted) return null;
+      reading.complete();
+      return stuck.future;
+    };
+    final first = a.sync.syncAll();
+    await reading.future;
+    Future<FullSyncResult>? again;
+    void onStatus() {
+      if (a.sync.status.value.phase == SyncPhase.stopping) {
+        again ??= a.sync.syncAll();
+      }
+    }
+
+    a.sync.status.addListener(onStatus);
+    addTearDown(() => a.sync.status.removeListener(onStatus));
+    a.sync.cancelSync();
+    stuck.complete();
+
+    expect(await first, isA<FullSyncStopped>());
+    expect(await again!, isA<FullSyncDone>());
+  });
+
+  group('coming back while an earlier sync is still running', () {
+    setUp(() async {
+      await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
+      await a.sync.syncAll();
+      await b.addBook('b-src', toc: toc, time: 100);
+    });
+
+    test('the reader waits for the round asked for on coming back, not the '
+        'one that read the cloud before', () async {
+      // 退到背景的那一輪讀雲端時卡住；這時回到 App，下一輪讀雲端也卡住。
+      final earlier = Completer<void>();
+      final later = Completer<void>();
+      final laterReading = Completer<void>();
+      var reads = 0;
+      store.beforeNextRead = (name) {
+        if (name != 'progress.json') return null;
+        reads++;
+        if (reads == 1) return earlier.future;
+        laterReading.complete();
+        return later.future;
+      };
+      b.sync.syncBeforeBackground();
+      await pumpEventQueue();
+      b.sync.syncAfterResume();
+      final ready = b.sync.progressReady!;
+      var readyDone = false;
+      unawaited(ready.then((_) => readyDone = true));
+
+      earlier.complete();
+      await laterReading.future;
+      await pumpEventQueue();
+      expect(readyDone, isFalse, reason: '前一輪讀的是回到 App 之前的雲端');
+
+      later.complete();
+      await ready;
+      while (b.sync.status.value.running) {
+        await pumpEventQueue();
+      }
+    });
+
+    test('coming back while the launch sync reads the cloud waits for the '
+        'next round too', () async {
+      final earlier = Completer<void>();
+      final later = Completer<void>();
+      final laterReading = Completer<void>();
+      var reads = 0;
+      store.beforeNextRead = (name) {
+        if (name != 'progress.json') return null;
+        reads++;
+        if (reads == 1) return earlier.future;
+        laterReading.complete();
+        return later.future;
+      };
+      final launch = b.sync.start();
+      while (reads == 0) {
+        await pumpEventQueue();
+      }
+      final atLaunch = b.sync.progressReady!;
+      b.sync.syncAfterResume();
+      final ready = b.sync.progressReady!;
+      var readyDone = false;
+      var atLaunchDone = false;
+      unawaited(ready.then((_) => readyDone = true));
+      unawaited(atLaunch.then((_) => atLaunchDone = true));
+
+      earlier.complete();
+      await laterReading.future;
+      await pumpEventQueue();
+      expect(readyDone, isFalse);
+      expect(atLaunchDone, isFalse, reason: '開 App 時就在等的也等新的一輪');
+
+      later.complete();
+      await ready;
+      await atLaunch;
+      await launch;
+    });
+
+    test(
+      'coming back as the last sync reports done waits for the new round',
+      () async {
+        final later = Completer<void>();
+        final laterReading = Completer<void>();
+        Future<void>? ready;
+        void onStatus() {
+          if (b.sync.status.value.running || ready != null) return;
+          store.beforeNextRead = (name) {
+            if (name != 'progress.json') return null;
+            laterReading.complete();
+            return later.future;
+          };
+          b.sync.syncAfterResume();
+          ready = b.sync.progressReady;
+        }
+
+        b.sync.status.addListener(onStatus);
+        addTearDown(() => b.sync.status.removeListener(onStatus));
+        b.sync.syncProgress();
+        while (ready == null) {
+          await pumpEventQueue();
+        }
+        var readyDone = false;
+        unawaited(ready!.then((_) => readyDone = true));
+        await laterReading.future;
+        await pumpEventQueue();
+        expect(readyDone, isFalse, reason: '新的一輪還沒讀到雲端');
+
+        later.complete();
+        await ready;
+        while (b.sync.status.value.running) {
+          await pumpEventQueue();
+        }
+      },
+    );
+  });
+
   test('a full sync asked for when the last round reports done runs, and the '
       'next daily sync is still progress only', () async {
     await a.addBook('a-src', toc: toc, time: 200);
@@ -766,6 +1001,10 @@ void main() {
     a.sync.requestSyncProgressFirst();
     stuck.complete();
     await running;
+    // 全面那一輪做完就完成；要求時排的那一輪進度同步接著跑。
+    while (a.sync.status.value.running) {
+      await pumpEventQueue();
+    }
 
     // 書源那一步做完，馬上把進度送上去，再做替換規則這些。
     final afterSources = order.sublist(order.indexOf('sources.json'));
