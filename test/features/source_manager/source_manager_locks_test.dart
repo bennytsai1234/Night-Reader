@@ -12,29 +12,43 @@ import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 可以把讀清單卡住的 DAO。
+/// 可以把讀清單卡住的 DAO。[gate] 卡在讀之前；[hold] 開著時每一次讀先讀好、
+/// 回傳前各自卡在 [held] 的一個 completer，一個一個放行。
 class _GatedDao extends BookSourceDao {
   _GatedDao(super.db);
 
   Completer<void>? gate;
+  var hold = false;
+  final held = <Completer<void>>[];
 
   @override
   Future<List<BookSource>> getAllPart() async {
     await gate?.future;
-    return super.getAllPart();
+    final rows = await super.getAllPart();
+    if (hold) {
+      final release = Completer<void>();
+      held.add(release);
+      await release.future;
+    }
+    return rows;
   }
 }
 
-/// 寫進資料庫前卡住的匯入。
+/// 寫進資料庫前卡住的匯入。[mergeSkipped] 時只寫進去、不併重複書源，像背景
+/// 工作在跑時 [mergeDuplicateSources] 直接回傳。
 class _GatedImport extends SourceImportService {
-  _GatedImport(BookSourceDao dao) : super(dao: dao);
+  _GatedImport(this._dao, {this.mergeSkipped = false}) : super(dao: _dao);
 
+  final BookSourceDao _dao;
+  final bool mergeSkipped;
   final gate = Completer<void>();
 
   @override
   Future<SourceImportCount> importSources(List<BookSource> sources) async {
     await gate.future;
-    return super.importSources(sources);
+    if (!mergeSkipped) return super.importSources(sources);
+    await _dao.insertOrUpdateAll(sources);
+    return (imported: sources.length, merged: 0);
   }
 }
 
@@ -166,21 +180,58 @@ void main() {
     final provider = await loaded();
     provider.toggleSelect('https://a.example');
 
-    dao.gate = Completer<void>();
+    dao.hold = true;
     final deleting = provider.deleteSelected();
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await _until(() => dao.held.length == 1);
     expect(provider.isMutationBusy, isTrue);
     expect(provider.isSourceLocked('https://b.example'), isTrue);
     expect(provider.canReorder, isFalse);
     // 還沒讀完：清單照舊，不畫骨架。
     expect(provider.totalSourceCount, 3);
 
-    dao.gate!.complete();
+    dao.hold = false;
+    dao.held.single.complete();
     await deleting;
     expect(provider.totalSourceCount, 2);
     expect(provider.isMutationBusy, isFalse);
     expect(provider.isSourceLocked('https://b.example'), isFalse);
     expect(provider.canReorder, isTrue);
+  });
+
+  test('a batch job whose reload is overtaken by a background reload keeps '
+      'the list busy until the newer reload is out', () async {
+    final provider = await loaded();
+    provider.toggleSelect('https://a.example');
+
+    dao.hold = true;
+    final deleting = provider.deleteSelected();
+    await _until(() => dao.held.length == 1);
+    // 校驗做完、同步套用這類背景重讀，蓋過批次作業自己的重讀。
+    final background = provider.loadSources(showLoading: false);
+    await _until(() => dao.held.length == 2);
+
+    dao.held[0].complete();
+    await deleting;
+    expect(provider.isMutationBusy, isTrue);
+    expect(provider.canReorder, isFalse);
+
+    dao.held[1].complete();
+    await background;
+    expect(provider.totalSourceCount, 2);
+    expect(provider.isMutationBusy, isFalse);
+  });
+
+  test('an import whose own merge was skipped merges in its reload', () async {
+    final merge = _GatedMerge(dao)..gate.complete();
+    final importer = _GatedImport(dao, mergeSkipped: true)..gate.complete();
+    final provider = await loaded(
+      importService: importer,
+      mergeDuplicates: merge.call,
+    );
+
+    await provider.importSources([_source('https://a.example#copy')]);
+    expect(provider.totalSourceCount, 3);
+    expect(await dao.getByUrl('https://a.example#copy'), isNull);
   });
 
   test('a reload after the first load keeps the list and locks the list '
@@ -268,7 +319,12 @@ void main() {
     await merge.started.future;
 
     // 校驗做完、同步套用這類背景重讀，正好在第一次讀清單併重複書源時開始。
+    dao.hold = true;
     final reload = provider.loadSources(showLoading: false);
+    await _until(() => dao.held.length == 1);
+    // 讀到的是併之前的清單，回來時還在併。
+    dao.hold = false;
+    dao.held.single.complete();
     await Future<void>.delayed(const Duration(milliseconds: 20));
     expect(provider.isLoading, isTrue);
 

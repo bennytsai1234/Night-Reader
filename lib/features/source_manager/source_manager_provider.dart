@@ -260,8 +260,8 @@ class SourceImportService {
 typedef SourceTag = ({BookSourceKind? kind, String? group});
 
 /// 整份書源清單現在被誰占著（`docs/state-machines.md`「書源管理」）。占著的
-/// 由自己收：第一次讀與重讀由最新一次讀清單收尾時收，匯入與批次作業做完收；
-/// 它們裡面的重讀不碰階段。
+/// 由自己收：第一次讀與重讀由最新一次讀清單收尾時收；匯入與批次作業做完收，
+/// 這時最新一次讀清單還沒讀完就換成重讀、交給它收。批次作業裡的重讀不碰階段。
 enum _ListWork {
   /// 第一次讀：骨架照上次的樣子畫，什麼都不能改。
   opening,
@@ -270,10 +270,10 @@ enum _ListWork {
   idle,
 
   /// 重讀：讀完第一次之後要等它的讀清單（改了書源之後、從編輯頁回來、
-  /// 按了重試）。清單留著，選單灰掉。
+  /// 按了重試、匯入寫完之後）。清單留著，選單灰掉。
   reloading,
 
-  /// 匯入：寫進資料庫、併重複書源、重讀。
+  /// 匯入：寫進資料庫（含匯入自己併重複書源），寫完換成重讀。
   importing,
 
   /// 批次作業：刪、移動、改分組、校驗、清標記；每一列都鎖住。
@@ -393,6 +393,19 @@ class SourceManagerProvider with ChangeNotifier {
   /// 正在併重複書源（ADR 0062）：在讀清單裡做，會和第一次讀、重讀同時成立，
   /// 所以不是 [_work] 的一個階段。這段時間其他改書源的動作等它。
   Future<int>? _merging;
+
+  /// 最新一次讀清單收尾時的序號；和 [_loadGeneration] 不同就是最新一次還在讀。
+  int _settledGeneration = 0;
+
+  /// [owner]（匯入、批次作業）做完了，放開清單；最新一次讀清單還在讀（例如
+  /// 背景重讀蓋過了自己的重讀）就交給它收，清單到它讀完都算重讀。
+  void _release(_ListWork owner) {
+    if (_work != owner) return;
+    _work = _settledGeneration == _loadGeneration
+        ? _ListWork.idle
+        : _ListWork.reloading;
+    notifyListeners();
+  }
 
   /// 讀清單時能不能併重複書源：書源管理自己在改書源（匯入、批次作業、
   /// 校驗、有一列在改）時不併，做完重讀時再併。
@@ -746,6 +759,7 @@ class SourceManagerProvider with ChangeNotifier {
       // 最新一次讀取收尾：一律發布結果，也收掉第一次讀與重讀，含被它取代
       // 的那幾次留下的（匯入、批次作業由它們自己收）。
       if (!_disposed && generation == _loadGeneration) {
+        _settledGeneration = generation;
         if (_work case _ListWork.opening || _ListWork.reloading) {
           _work = _ListWork.idle;
         }
@@ -1435,11 +1449,13 @@ class SourceManagerProvider with ChangeNotifier {
     notifyListeners();
     try {
       final count = await _importService.importSources(sources);
+      // 寫完了：剩下的重讀和一般的重讀一樣，可以併重複書源（背景工作在跑
+      // 時匯入自己沒併、這時剛做完的），由最新一次讀清單收。
+      _work = _ListWork.reloading;
       await loadSources(showLoading: false);
       return count;
     } finally {
-      _work = _ListWork.idle;
-      notifyListeners();
+      _release(_ListWork.importing);
     }
   }
 
@@ -1464,11 +1480,7 @@ class SourceManagerProvider with ChangeNotifier {
     return true;
   }
 
-  void _endBatchOperation() {
-    if (_work != _ListWork.batch) return;
-    _work = _ListWork.idle;
-    notifyListeners();
-  }
+  void _endBatchOperation() => _release(_ListWork.batch);
 
   /// 不同書源的單筆修改可以同時進行；同一筆、清單被占著（[_work] 不是閒著）、
   /// 併重複書源中或校驗中則拒絕。
