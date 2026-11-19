@@ -61,6 +61,9 @@ Future<void> _pumpReveal(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 16));
 }
 
+/// 最後一次寫進資料庫的閱讀進度（章、字）。
+({int chapter, int pos})? _savedProgress;
+
 class _FakeBookDao extends Fake implements BookDao {
   @override
   Future<int?> updateProgress(
@@ -70,7 +73,10 @@ class _FakeBookDao extends Fake implements BookDao {
     int pos, {
     double visualOffsetPx = 0.0,
     String? readerAnchorJson,
-  }) async => null;
+  }) async {
+    _savedProgress = (chapter: chapterIndex, pos: pos);
+    return null;
+  }
 }
 
 class _FakeChapterDao extends Fake implements ChapterDao {
@@ -1699,6 +1705,145 @@ void main() {
     expect(position.pixels, closeTo(afterSettle + 60, 0.5));
     await gesture.up();
     await settle(tester);
+  });
+
+  group('手指捲動', () {
+    Future<void> flingUp(WidgetTester tester) async {
+      await tester.fling(
+        find.byType(CustomScrollView),
+        const Offset(0, -300),
+        3000,
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(scrollPosition(tester).isScrollingNotifier.value, isTrue);
+    }
+
+    testWidgets('a fling saves where it comes to rest', (tester) async {
+      await pumpReader(tester);
+      await settle(tester);
+      final before = runtime.state.visibleLocation;
+      _savedProgress = null;
+
+      await flingUp(tester);
+      await settle(tester);
+
+      final rest = runtime.state.visibleLocation;
+      expect(scrollPosition(tester).isScrollingNotifier.value, isFalse);
+      expect((
+        rest.chapterIndex,
+        rest.charOffset,
+      ), isNot((before.chapterIndex, before.charOffset)));
+      expect(_savedProgress, (
+        chapter: rest.chapterIndex,
+        pos: rest.charOffset,
+      ));
+    });
+
+    testWidgets('a page turn while the fling runs leaves the text to it', (
+      tester,
+    ) async {
+      await pumpReader(tester);
+      await settle(tester);
+      await flingUp(tester);
+
+      final turn = viewport.moveToNextPage!();
+      await settle(tester);
+      expect(await turn, isFalse, reason: '甩動中的捲動歸手指，翻頁不接');
+
+      final rest = scrollPosition(tester).pixels;
+      final next = viewport.moveToNextPage!();
+      await settle(tester);
+      expect(await next, isTrue, reason: '停下之後照常翻頁');
+      expect(scrollPosition(tester).pixels, greaterThan(rest));
+    });
+
+    testWidgets('pulling at the edge keeps the text to the finger', (
+      tester,
+    ) async {
+      await pumpReader(tester);
+      await settle(tester);
+      final position = scrollPosition(tester);
+      expect(position.pixels, closeTo(position.minScrollExtent, 0.5));
+
+      // 書首往下拉：正文不動，手指還按著時翻頁不接。
+      final gesture = await tester.startGesture(const Offset(200, 200));
+      for (var step = 0; step < 5; step++) {
+        await gesture.moveBy(const Offset(0, 40));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(position.pixels, closeTo(position.minScrollExtent, 0.5));
+      final turn = viewport.moveToNextPage!();
+      await tester.pump(const Duration(milliseconds: 16));
+      await gesture.up();
+      await settle(tester);
+      expect(await turn, isFalse, reason: '手指按著時捲動歸手指');
+
+      final next = viewport.moveToNextPage!();
+      await settle(tester);
+      expect(await next, isTrue, reason: '放開之後照常翻頁');
+    });
+  });
+
+  testWidgets('text laid out while the skeleton breathes waits for the '
+      'breath to settle before it is built', (tester) async {
+    final previous = Completer<String?>();
+    final neverLoaded = Completer<String?>();
+    await pumpReader(
+      tester,
+      waitForOpen: false,
+      customRuntime: _makeRuntime(
+        paragraphs: 400,
+        // 第一頁在這一章裡，往前的領先量跨進前一章。
+        initialLocation: const ReaderLocation(chapterIndex: 1, charOffset: 600),
+        contentLoader: (index, chapter) => switch (index) {
+          0 => previous.future,
+          1 => Future.value(chapter.content),
+          _ => neverLoaded.future,
+        },
+      ),
+    );
+    LoadingVeilController veil() =>
+        tester.widget<LoadingVeil>(find.byType(LoadingVeil)).controller;
+    // 第一頁排好、骨架長完，前一章還沒到：停過 restBeforeBreath 就開始呼吸。
+    for (
+      var frame = 0;
+      frame < 2000 && !(veil().hasSkeleton && !veil().isSkeletonFading);
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(veil().hasSkeleton, isTrue);
+    await tester.pump(
+      LoadingVeilController.restBeforeBreath +
+          const Duration(milliseconds: 200),
+    );
+
+    // 前一章很短、幾幀就排好：之後等的是呼吸。
+    previous.complete(_chapter(0, paragraphs: 40).content);
+    var waited = Duration.zero;
+    while (waited < const Duration(seconds: 10) &&
+        find.byType(CustomScrollView).evaluate().isEmpty) {
+      await tester.pump(const Duration(milliseconds: 16));
+      waited += const Duration(milliseconds: 16);
+    }
+    expect(find.byType(CustomScrollView), findsOneWidget);
+    // 呼吸剛開始 0.2 秒：等這一口呼完、停回最深才建正文，不在半淺時凍住。
+    expect(
+      waited,
+      greaterThanOrEqualTo(
+        Skeleton.breathCycle - const Duration(milliseconds: 300),
+      ),
+    );
+    await settle(tester);
+    expect(runtime.state.hasStableWorld, isTrue, reason: '開書做完');
+    expect(runtime.pendingLocation, isNull);
+    final position = scrollPosition(tester);
+    expect(
+      position.pixels - position.minScrollExtent,
+      greaterThan(0),
+      reason: '停在第 1 章裡、前一章接在上面',
+    );
+    expect(runtime.state.visibleLocation.chapterIndex, 1);
   });
 
   group('沒有可用的紀錄時，骨架照排好的第一頁畫', () {
