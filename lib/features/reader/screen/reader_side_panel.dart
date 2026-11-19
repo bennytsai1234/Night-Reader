@@ -136,10 +136,12 @@ class _ReaderSidePanelState extends State<ReaderSidePanel>
   }
 
   /// 換到下一個階段：對外的通知與要不要重建都只在這裡，照前後兩個階段算。
-  /// 先換好階段再動 [_position]，動畫的狀態通知是同步的。
-  void _go(_Phase next) {
+  /// 先換好階段再動 [_position]，動畫的狀態通知是同步的。傳回 [next] 還是
+  /// 不是現在的階段：開關的通知裡又要求打開或收起，就已經換成別的（剩下的
+  /// 通知由那一次發），呼叫的地方不再動畫。
+  bool _go(_Phase next) {
     final before = _phase;
-    if (identical(before, next)) return;
+    if (identical(before, next)) return true;
     if (before case _Preparing(:final hold)) hold?.cancel();
     _phase = next;
     if (next is _Hidden) _closings++;
@@ -153,9 +155,11 @@ class _ReaderSidePanelState extends State<ReaderSidePanel>
     if (before.open != next.open) {
       if (next.open) FocusScope.of(context).setFirstFocus(_focusScope);
       widget.onOpenChanged?.call(next.open);
+      if (!identical(_phase, next)) return false;
     }
     _shown.value = next.shown;
     if (next is _Hidden && before.opened) widget.onClosed?.call();
+    return identical(_phase, next);
   }
 
   void _requestOpen() {
@@ -164,8 +168,7 @@ class _ReaderSidePanelState extends State<ReaderSidePanel>
         _prepareOpening();
       case _Closing() || _Dragging():
         // 收起途中、或手指拉著時要求打開：從這裡滑過去，這次拖曳剩下的不理。
-        _go(const _Open());
-        _position.fling();
+        if (_go(const _Open())) _position.fling();
       case _Preparing() || _Open():
         return;
     }
@@ -175,7 +178,7 @@ class _ReaderSidePanelState extends State<ReaderSidePanel>
   /// 滑；那一幀很重時再停 [AppMotion.stillGap]（ADR 0037 策略一）。
   void _prepareOpening() {
     final preparing = _Preparing();
-    _go(preparing);
+    if (!_go(preparing)) return;
     final started = Stopwatch()..start();
     unawaited(
       SchedulerBinding.instance.endOfFrame.then((_) {
@@ -192,8 +195,7 @@ class _ReaderSidePanelState extends State<ReaderSidePanel>
   }
 
   void _slideOpen() {
-    _go(const _Open());
-    _position.fling();
+    if (_go(const _Open())) _position.fling();
   }
 
   void _requestClose() {
@@ -215,15 +217,13 @@ class _ReaderSidePanelState extends State<ReaderSidePanel>
       _go(const _Hidden());
       return;
     }
-    _go(_Closing(opened: _phase.opened));
-    _position.fling(velocity: -1);
+    if (_go(_Closing(opened: _phase.opened))) _position.fling(velocity: -1);
   }
 
   /// 放手時過了一半：滑到全開。已經全開就不動，不播一段原地的動畫（那幾幀
   /// 暗幕會跟著重畫）。
   void _settleOpen() {
-    _go(const _Open());
-    if (!_position.isCompleted) _position.fling();
+    if (_go(const _Open()) && !_position.isCompleted) _position.fling();
   }
 
   /// 收到底：只在收起時算數，手指拉回左緣時還是拉著。
@@ -247,8 +247,7 @@ class _ReaderSidePanelState extends State<ReaderSidePanel>
   void _handleDragStart(DragStartDetails details) {
     if (_touchOutlived) return;
     final from = _phase;
-    _go(_Dragging(open: from.open, opened: from.opened));
-    _position.stop();
+    if (_go(_Dragging(open: from.open, opened: from.opened))) _position.stop();
   }
 
   void _handleDragUpdate(DragUpdateDetails details) {
@@ -268,10 +267,10 @@ class _ReaderSidePanelState extends State<ReaderSidePanel>
     final velocity = details.velocity.pixelsPerSecond.dx;
     if (velocity.abs() >= _minFlingVelocity) {
       final visualVelocity = velocity / _width;
-      _go(
-        visualVelocity > 0 ? const _Open() : _Closing(opened: dragging.opened),
-      );
-      _position.fling(velocity: visualVelocity);
+      final next = visualVelocity > 0
+          ? const _Open()
+          : _Closing(opened: dragging.opened);
+      if (_go(next)) _position.fling(velocity: visualVelocity);
     } else if (_position.value < 0.5) {
       _slideClosed();
     } else {

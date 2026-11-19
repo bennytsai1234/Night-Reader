@@ -724,6 +724,56 @@ void main() {
     expect(bodyTaps, 0);
   });
 
+  testWidgets('closing from the open notice, or opening again from the close '
+      'notice, leaves the panel settled', (tester) async {
+    panel = ReaderSidePanelController();
+    addTearDown(panel.dispose);
+    var closeOnOpen = true;
+    var reopenOnClose = false;
+    openChanges = [];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReaderSidePanel(
+          controller: panel,
+          onOpenChanged: (open) {
+            openChanges.add(open);
+            if (open && closeOnOpen) {
+              closeOnOpen = false;
+              panel.close();
+            }
+            if (!open && reopenOnClose) {
+              reopenOnClose = false;
+              panel.open();
+            }
+          },
+          onClosed: () => closes++,
+          panel: const Drawer(child: SizedBox.expand()),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    panel.open();
+    await tester.pump();
+    await tester.pump(AppMotion.stillGap);
+    await tester.pumpAndSettle();
+    expect(openChanges, [true, false]);
+    expect(closes, 1);
+    expectSettled(tester);
+
+    // 打開好之後收起，收起的通知裡又要求打開：照打開走完。
+    panel.open();
+    await tester.pump();
+    await tester.pump(AppMotion.stillGap);
+    await tester.pumpAndSettle();
+    reopenOnClose = true;
+    panel.close();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(openChanges, [true, false, true, false, true]);
+    expect(closes, 1);
+    expectSettled(tester);
+  });
+
   testWidgets('a touch before the slide starts closes the panel before it '
       'shows: a tap beside it, or an up-and-down swipe', (tester) async {
     await pumpPanel(tester);
