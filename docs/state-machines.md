@@ -19,6 +19,7 @@
 | 閱讀器正文捲動 | `_initialRestoreCompleted`、`_textWaitsForBreath`、`_pendingReveal`、`_revealTimer`、`_dragging`、`_sawUserScroll`（`_rebuildQueued`、`_captureFramePending` 留成旗標）；`PumpState` 兩邊各寫 | 正文的 `_TextStage`（排版中、等掀紙、在畫面上）；手指的 `_FingerScroll`（沒有、在盡頭往外拉、拖動、甩動）；排版預算只照進行中的那次還原或手指算 | 沒排好卻在等呼吸收住；拖動中卻不算手指；被取代的還原改到接手那次的預算 | 2 件（見下方） | 1 件（見下方） | 待開 |
 | 閱讀器目錄面板 | `_built`、`_builtCovering`、`_open`、`_openedSinceClosed`、`_dragging`、`_dragAbandoned` | `_Phase`（收著、按在左緣、準備打開、打開、收起、拉著），收起與拉著帶這一趟打開過沒有 | 收著又被手指拖著；收著卻算打開中；準備打開卻沒有排好的滑出 | 4 件（見下方） | 3 件，審查另 3 件（見下方） | #467 |
 | 定格換場 | `_Phase` 加上 `_session`、`_settle`、`_hold`、`_progress.isAnimating` 拼出的三段（見下方） | `_Stage` 七段：沒在換場、拍「之前」、蓋著「之前」拍「之後」、拍好、換上「之前」、停一下、換場中；這一輪的圖、等待與參數收在 `_Round` | 沒有這一輪卻在拍；兩張圖拍好了卻沒有這一輪；停一下的計時器在換場中還掛著 | 1 件（見下方） | 1 件，另審查找到 1 件換結構弄出的（見下方） | #469 |
+| 分組清單的進場 | `_entering`（`bool?`）、`_entranceFinished`、`_revealed` | `_EntranceStage`：直接畫、還在進場、進場播完、已換成內容 | 不在進場卻算進場播完；換成內容了卻還在進場 | 沒有（見下方） | 沒有 | （待補） |
 
 ## 各狀態機
 
@@ -924,3 +925,32 @@ ADR 0055 的播放器（`lib/features/audiobook/audiobook_player.dart`），讀�
 換結構時自己弄出、合併前修掉的（Codex 審查找到）：拍到「之前」後在換內容的回呼裡就結束這一輪，圖落在已經結束的那一輪、沒有放掉。改成先把圖交給這一輪再換內容。改前同一個順序下畫面會一直蓋著舊圖、不接點擊，換結構後已經是真的畫面。
 
 查過、沒修的：拍圖本身失敗（`toImage` 丟錯）或呼叫端的回呼丟錯時，這一輪沒有統一收尾，畫面可能停在蓋著「之前」。改前改後一樣，沒有接縫注入拍圖失敗、也沒看過它發生，留著。
+
+### 分組清單的進場
+
+`lib/shared/widgets/lists/grouped_list.dart` 的 `_GroupedEntrance`：設定各頁、關於各頁這類推入頁面的分組清單（`GroupedListView`）與閱讀器的面板（`GroupedSheetContent`）。推入頁面進場中先只畫骨架，進場播完才在骨架底下逐列建立、照骨架換場換成內容（ADR 0018、0029）。
+
+**改前**（2026-11-20，`beta` `d1187063`）：
+
+| 欄位 | 意思 | 誰設 |
+|---|---|---|
+| `_entering`（`bool?`） | 掛上時所在的頁面還在進場：true 走骨架這條路，false 直接畫，null 是還沒看（只在第一次 `didChangeDependencies` 之前） | 第一次 `didChangeDependencies`，之後不變 |
+| `_entranceFinished` | 進場播完的下一格，可以換場了 | 等進場播完（`TransitionSettled.entered`）再等一格 |
+| `_revealed` | 骨架換成內容了，骨架的樣子不再照寬度、字級重算，只有項目數變了才補算 | 換場切換（`SkeletonSwitcher`）的 `onRevealed`，不重建 |
+
+三個布林值照先後一個接一個成立，畫面拼成：`_entering != true` 直接畫，否則交給換場切換、`loading: !_entranceFinished || !widget.ready`；算骨架樣子時另看 `_revealed`。`ready`（資料準備好了沒）是建構參數，不算旗標。
+
+**歷史**（`git log -G'bool _entranceFinished' / 'bool _revealed' / -S'_entering'`，打開 diff 看）：#97 加 `_entering` 與原本的 `_loading`，#102 加 `_revealed`（面板換成內容後不重排骨架），#236 把 `_loading` 換成 `_entranceFinished` 並加上 `ready`（資料到了才換場）。都是加功能，沒有因為旗標組合修過 bug。
+
+**階段表**（讀者看到的，照 ADR 0018、0029 與 `docs/design/loading.md`）：
+
+| 階段 | 讀者看到什麼 | 可以走到 | 現在一樣嗎 |
+|---|---|---|---|
+| 直接畫 | 不是在進場中掛上的（分頁、已經在畫面上的頁面、面板開著時重建）：第一格就是內容，沒有骨架 | （不再換） | 一樣 |
+| 還在進場 | 推入動畫播放中：整頁一個骨架，形狀照每一項本身算，不建任何一列 | 進場播完（進場最後一格的下一格） | 一樣 |
+| 進場播完 | 資料好了就在骨架底下一格建一組、封面最多等一下，照骨架換場換成內容；資料還沒好骨架照舊（形狀照最新的寬度、字級與項目重算） | 已換成內容（換場播完） | 一樣 |
+| 已換成內容 | 內容；骨架的樣子不再重算，只有項目數變了才補算（鍵盤升降、面板重建不重排骨架的字） | （不再換） | 一樣 |
+
+資料準備好之後又變回沒好（`ready` 從 true 變 false）時，換場切換會長回骨架，但階段停在已換成內容，骨架的樣子不照新的寬度重算。現在的七個呼叫端都只從沒好變成好（重試也不設回沒好），碰不到，維持現狀。
+
+**不收進階段的**：`ready` 是建構參數；骨架樣子的快取（`_cached`、`_cachedFor`）是算過的結果。
