@@ -131,7 +131,8 @@ enum _FetchIssue {
   staleInfo('書籍資訊更新失敗，目前顯示已儲存內容'),
   tocFailed('目前來源目錄載入失敗，建議換源後再試'),
 
-  /// 目錄要登入才讀得到，書源也有登入：那一列點了去登入（ADR 0038）。
+  /// 目錄擋在登入牆後；書源有登入時那一列點了去登入（ADR 0038），沒有時
+  /// 照目錄沒抓到寫（[BookDetailProvider._shownFetchIssue]）。
   tocNeedsLogin('目錄需要登入後閱讀');
 
   const _FetchIssue(this.message);
@@ -165,12 +166,20 @@ class BookDetailProvider extends ChangeNotifier {
   /// 書源問題那一列寫什麼；null 是沒有這一列。書源本身不能讀時寫它的健康
   /// 狀態，蓋過這一輪抓書源的結果。
   String? get sourceIssueMessage =>
-      _sourceUnreadableReason ?? _fetchIssue.message;
+      _sourceUnreadableReason ?? _shownFetchIssue.message;
 
   /// [sourceIssueMessage] 那一列點了去登入（ADR 0038）。
   bool get loginRequired =>
       _sourceUnreadableReason == null &&
-      _fetchIssue == _FetchIssue.tocNeedsLogin;
+      _shownFetchIssue == _FetchIssue.tocNeedsLogin;
+
+  /// 這一輪抓書源的結果照現在手上的書源怎麼寫：擋在登入牆後、書源卻沒有
+  /// （或已經拿掉）登入時，寫成目錄沒抓到。
+  _FetchIssue get _shownFetchIssue => switch (_fetchIssue) {
+    _FetchIssue.tocNeedsLogin when !(_currentSource?.hasLogin ?? false) =>
+      _FetchIssue.tocFailed,
+    final issue => issue,
+  };
 
   String? get _sourceUnreadableReason {
     final health = _currentSource?.runtimeHealth;
@@ -476,8 +485,7 @@ class BookDetailProvider extends ChangeNotifier {
         if (_fetchIssue.isToc) _fetchIssue = _FetchIssue.none;
       } catch (e) {
         final needsLogin =
-            _currentSource!.hasLogin &&
-            (e is LoginCheckException || LoginCheckException.describes('$e'));
+            e is LoginCheckException || LoginCheckException.describes('$e');
         _fetchIssue = needsLogin
             ? _FetchIssue.tocNeedsLogin
             : _FetchIssue.tocFailed;

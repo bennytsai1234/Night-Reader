@@ -420,6 +420,28 @@ void main() {
       expect(row(provider), (_tocNeedsLogin, true));
     });
 
+    test('a TOC behind a login on a source whose login was removed is just '
+        'a failed TOC', () async {
+      await storeSource(login: true);
+      service.toc = _Toc.needsLogin;
+      final provider = await open();
+
+      await storeSource();
+      await provider.reloadSource();
+      expect(row(provider), (_tocFailed, false));
+    });
+
+    test('a TOC behind a login on a source that was deleted is just a failed '
+        'TOC', () async {
+      await storeSource(login: true);
+      service.toc = _Toc.needsLogin;
+      final provider = await open();
+
+      await db.bookSourceDao.deleteByUrl(_origin);
+      await provider.reloadSource();
+      expect(row(provider), (_tocFailed, false));
+    });
+
     test('stale book info still says so', () async {
       await storeSource();
       service.infoFails = true;
