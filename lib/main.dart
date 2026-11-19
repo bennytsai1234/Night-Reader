@@ -26,7 +26,7 @@ import 'shared/theme/app_chrome.dart';
 import 'shared/theme/app_style.dart';
 import 'shared/theme/app_tokens.dart';
 import 'shared/theme/custom_app_theme.dart';
-import 'shared/navigation/app_page_transition.dart';
+import 'shared/navigation/transition_origin.dart';
 import 'shared/navigation/app_route_observer.dart';
 import 'shared/navigation/status_bar.dart';
 import 'shared/theme/theme_reveal_scope.dart';

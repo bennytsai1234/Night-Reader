@@ -8,6 +8,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../../layout/readable_width.dart';
 import '../../navigation/app_page_transition.dart';
+import '../../navigation/transition_origin.dart';
 import '../../navigation/transition_settled.dart';
 import '../../theme/app_chrome.dart';
 import '../../theme/app_haptics.dart';
