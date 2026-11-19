@@ -52,9 +52,9 @@ class DownloadTask {
   bool get isFailed => status == statusFailed;
   bool get hasFailures => errorCount > 0 || isFailed;
 
-  /// 可以重試：失敗了，或跑完但有章節失敗。下載中、排隊中的不行（那一輪
-  /// 還在跑，歸零計數會把失敗的章節當成完成）。
-  bool get canRetry =>
+  /// 停在失敗：失敗了，或停下時有章節失敗（下載中、排隊中的不算）。能不能
+  /// 重試還要看那一輪停住了沒（`DownloadService.canRetry`）。
+  bool get endedWithFailures =>
       isFailed || (errorCount > 0 && !isDownloading && !isWaiting);
 
   /// 下載佇列那一列的紅字：哪一章（[unit] 是這本書的單位：章、話、集）與

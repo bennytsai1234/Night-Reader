@@ -398,8 +398,10 @@ class _StyleCard extends StatelessWidget {
   static const double aspectRatio = 3 / 4;
   static const double labelGap = AppSpacing.sm;
 
-  /// 頁上「夜」的字級。
+  /// 頁上「夜」的字級、上緣與下緣（行高 1.1）；正文線從下緣底下開始。
   static const double glyphSize = 24;
+  static const double glyphTop = 4;
+  static const double glyphBottom = glyphTop + glyphSize * 1.1;
 
   static TextStyle labelStyle({required bool selected}) => AppTextStyles.labelSm
       .copyWith(fontWeight: selected ? FontWeight.w600 : FontWeight.w500);
@@ -412,7 +414,7 @@ class _StyleCard extends StatelessWidget {
         ? Duration.zero
         : AppMotion.menu;
     final page = Padding(
-      padding: const EdgeInsets.fromLTRB(7, 4, 7, 0),
+      padding: const EdgeInsets.fromLTRB(7, glyphTop, 7, 0),
       child: Align(
         alignment: Alignment.topLeft,
         child: UiText(
@@ -552,8 +554,8 @@ class _FoldedPagePainter extends CustomPainter {
     const thickness = 3.0;
     const lineGap = 6.5;
     final paint = Paint()..color = ink.withValues(alpha: 0.85);
-    // 從「夜」底下開始。
-    var top = size.height * 0.5;
+    // 從頁面一半、而且在「夜」底下開始：窄視窗的書頁矮，一半會壓到字。
+    var top = math.max(size.height * 0.5, _StyleCard.glyphBottom + 3);
     for (var i = 0; i < _lines.length; i++) {
       if (top + thickness > size.height - 4) break;
       final factor = _lines[i];

@@ -14,6 +14,7 @@ import 'package:night_reader/features/reader/features/settings/reader_prefs_repo
 import 'package:night_reader/features/reader/features/settings/reader_settings_controller.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_font_picker_row.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
@@ -1047,6 +1048,7 @@ class _ResetButton extends StatelessWidget implements GroupedSkeletonItem {
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         padding: _padding,
         minimumSize: Size.zero,
+        disabledForegroundColor: context.disabledForeground,
         // 字級沿用預設的 labelLarge（主題裡就是 uiSm），自己帶 textStyle
         // 會蓋掉主題的字族。
       ),

@@ -859,7 +859,9 @@ class GlassCapsule extends StatelessWidget {
       ),
     );
     capsule = Semantics(
-      button: enabled,
+      // 停用時照樣是按鈕，報停用（同選單項目）。
+      button: true,
+      enabled: enabled,
       selected: selected,
       label: UiLanguageText.convertNullable(context, tooltip),
       child: PressScale(scale: 0.95, onTap: onTap, child: capsule),

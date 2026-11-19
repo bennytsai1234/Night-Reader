@@ -213,6 +213,8 @@ class _ReaderStyleSelector extends StatelessWidget
       label: context.ui(style.label),
       selected: selected,
       button: true,
+      // excludeSemantics 也排除了子樹手勢的點擊動作，要在這裡補上。
+      onTap: onTap,
       excludeSemantics: true,
       child: GestureDetector(
         onTap: onTap,

@@ -195,6 +195,8 @@ class _ActionButton extends StatelessWidget {
       enabled: onTap != null,
       label: context.ui(tooltip ?? label),
       excludeSemantics: true,
+      // excludeSemantics 也排除了子樹手勢的點擊動作，要在這裡補上。
+      onTap: onTap,
       child: PressScale(
         scale: 0.95,
         onTap: onTap,

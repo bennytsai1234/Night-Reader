@@ -44,6 +44,8 @@ final class DownloadFailure implements Exception {
       HandshakeException() => badCertificate,
       TimeoutException() => slow,
       LoginCheckException() => loginRequired,
+      // 沒有網頁可開的是看圖填驗證碼，只有書源的登入頁能填。
+      SourceVerificationException(request: null) => codeRequired,
       SourceVerificationException() => verificationRequired,
       HumanVerificationRequiredException() => humanCheck,
       SiteBlockedException() => siteBlocked,
@@ -61,14 +63,16 @@ final class DownloadFailure implements Exception {
       RuleJsException() ||
       RegexTimeoutException() ||
       JsoupException() ||
-      SourceException() => sourceBroken(part),
+      SourceException() ||
+      // 網站回的資料不是書源說的那樣（例如漫畫正文裡沒有圖、圖片網址回網頁）。
+      FormatException() => sourceBroken(part),
       AudioDownloadRefused(:final message) => DownloadFailure('不能下載', message),
       FileSystemException(:final osError) when _noSpace(osError) => noSpace,
       FileSystemException() ||
       SqliteException() ||
       DriftWrappedException() => saveFailed,
       // 錯誤從別的 isolate 只帶回文字：先看是不是上面那幾種說法。
-      IsolateTaskError(:final message) => _fromText(message, part),
+      IsolateTaskError(:final message) => _fromText(message),
       _ => appError,
     };
   }
@@ -82,6 +86,7 @@ final class DownloadFailure implements Exception {
     '要網頁驗證',
     '書源要在網頁上驗證，打開這本書照提示驗證後重試',
   );
+  static const codeRequired = DownloadFailure('要輸入驗證碼', '書源要輸入驗證碼，登入書源後重試');
   static const humanCheck = DownloadFailure('網站要真人驗證', '網站要求真人驗證、夜讀不能自動通過，換源');
   static const siteBlocked = DownloadFailure('網站封鎖', '網站封鎖了目前的網路，換個網路後重試或換源');
   static const challengeFailed = DownloadFailure(
@@ -107,11 +112,17 @@ final class DownloadFailure implements Exception {
     '書源抓不到${part.label}，校驗或 AI 修復書源，或換源',
   );
 
+  /// 先看包在裡面的原始錯誤，認不出再看網站回的狀態碼，最後才看錯誤種類。
   static DownloadFailure _dio(DioException error, DownloadPart part) {
     final inner = error.error;
-    if (inner != null && inner is! DioException) {
+    if (inner is DioException) return _dio(inner, part);
+    if (inner != null) {
       final described = DownloadFailure.of(inner, part: part);
       if (!identical(described, appError)) return described;
+    }
+    // 存 Cookie 這類攔截器失敗時，網站的錯誤回應包在 unknown 裡。
+    if (error.response?.statusCode case final code? when code >= 400) {
+      return _status(code, part);
     }
     return switch (error.type) {
       DioExceptionType.connectionTimeout ||
@@ -148,15 +159,13 @@ final class DownloadFailure implements Exception {
           error.errorCode == 112 || // Windows 的 ERROR_DISK_FULL
           error.message.toLowerCase().contains('no space'));
 
-  static DownloadFailure _fromText(String text, DownloadPart part) {
-    for (final known in [
-      humanCheck,
-      siteBlocked,
-      challengeFailed,
-      loginRequired,
-      verificationRequired,
-    ]) {
-      if (_markers[known]!.any(text.contains)) return known;
+  /// 錯誤只剩文字時，比對夜讀自己的固定說法與系統錯誤的固定字樣。
+  static DownloadFailure _fromText(String text) {
+    final lower = text.toLowerCase();
+    for (final MapEntry(key: failure, value: markers) in _markers.entries) {
+      if (markers.any((marker) => lower.contains(marker.toLowerCase()))) {
+        return failure;
+      }
     }
     return appError;
   }
@@ -167,6 +176,17 @@ final class DownloadFailure implements Exception {
     challengeFailed: [ChallengeNotPassedException().message],
     loginRequired: [LoginCheckException.marker],
     verificationRequired: [SourceVerificationException.marker],
+    codeRequired: ['需要輸入驗證碼'],
+    noSpace: ['No space left', 'ENOSPC'],
+    badCertificate: ['HandshakeException', 'CERTIFICATE_VERIFY_FAILED'],
+    slow: ['TimeoutException', 'timed out'],
+    unreachable: [
+      'SocketException',
+      'Failed host lookup',
+      'Connection refused',
+      'Connection reset',
+      'Network is unreachable',
+    ],
   };
 
   @override

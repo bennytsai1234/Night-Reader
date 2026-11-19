@@ -627,6 +627,14 @@ class GroupedIconTile extends StatelessWidget {
   }
 }
 
+/// 去掉顏色、只留明暗（照 Rec. 709 的亮度）。
+const ColorFilter _greyscale = ColorFilter.matrix(<double>[
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0, 0, 0, 1, 0, //
+]);
+
 /// 分組清單的一列：列首（圖示方塊或任意 widget）、標題、副標、右側數值、
 /// 右側控件與箭頭。按下時整列高亮，不畫水波紋。
 class GroupedRow extends StatelessWidget
@@ -844,7 +852,10 @@ class GroupedRow extends StatelessWidget
         child: Row(
           children: [
             if (leading != null) ...[
-              leading!,
+              // 停用的列首（圖示方塊的顏料色）去色，和標題一起變中性灰。
+              enabled
+                  ? leading!
+                  : ColorFiltered(colorFilter: _greyscale, child: leading!),
               const SizedBox(width: AppGrouped.iconGap),
             ],
             Expanded(

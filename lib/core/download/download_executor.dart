@@ -419,6 +419,9 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         cancelToken: cancelToken,
       );
       run = plan.run;
+      // 這一輪被停下（退役、書源改網址）的話，規劃好的結果不寫進任務；
+      // 照取消收尾（下面的 catch 不把取消記成失敗）。
+      if (cancelToken.cancelError case final cancelled?) throw cancelled;
       // 進度是範圍裡每一章各算一次：已經有正文的直接算完成。總數照這次
       // 換算的範圍：排進來時可能還沒有目錄，排隊期間目錄也可能多了章節。
       if (plan.total != task.totalCount) {
@@ -488,6 +491,9 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
                 DownloadFailure.of(error, part: DownloadPart.content),
               );
             }
+            // 結果回來前這一輪已被停下：放行後整輪重來，這章不算成功也不算
+            // 失敗（正文若已存好，下一輪規劃時會算成已下載）。
+            if (cancelToken.isCancelled) return;
             if (result.failure case final failure?) {
               task.errorCount++;
               consecutiveFailures++;
@@ -522,7 +528,11 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         await nextChapterEnd();
       }
 
-      if (!stoppedEarly && task.status != DownloadTask.statusPaused) {
+      // 被停下的一輪（最後一批章節已送出、迴圈照常走完時也一樣）不結算：
+      // 狀態留給停下它的那一方（退役刪掉任務、書源改網址放行後排回去）。
+      if (!stoppedEarly &&
+          !cancelToken.isCancelled &&
+          task.status != DownloadTask.statusPaused) {
         task.status = task.errorCount > 0
             ? DownloadTask.statusFailed
             : DownloadTask.statusCompleted;

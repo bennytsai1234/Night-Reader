@@ -138,6 +138,14 @@ void main() {
       AppPalette.rust,
     );
 
+    // 讀屏聚焦到列上的重試鈕也點得了。
+    final semantics = tester.ensureSemantics();
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('重試').first),
+      containsSemantics(isButton: true, isEnabled: true, hasTapAction: true),
+    );
+    semantics.dispose();
+
     await tester.tap(find.byIcon(Icons.more_horiz_rounded));
     await tester.pumpAndSettle();
     await tester.tap(find.text('重試失敗的'));

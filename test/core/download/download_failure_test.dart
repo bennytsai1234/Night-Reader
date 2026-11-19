@@ -6,6 +6,7 @@ import 'package:night_reader/core/download/download_failure.dart';
 import 'package:night_reader/core/engine/source_isolate/isolate_channel.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
+import 'package:night_reader/core/source/source_interaction.dart';
 
 DioException response(int code) {
   final options = RequestOptions(path: 'https://book.example/c/1');
@@ -69,6 +70,30 @@ void main() {
       '空間不足',
       '清出空間',
     ),
+    'a 403 wrapped by a failing cookie save': (
+      DioException(
+        requestOptions: options,
+        response: Response<void>(requestOptions: options, statusCode: 403),
+        error: Exception('cookie jar is read-only'),
+      ),
+      '網站拒絕',
+      '換源',
+    ),
+    'a Dio error wrapping another one': (
+      DioException(requestOptions: options, error: response(404)),
+      '網站找不到',
+      '校驗書源',
+    ),
+    'offline, as text from another isolate': (
+      IsolateTaskError('SocketException: Failed host lookup: book.example'),
+      '連不上網站',
+      '檢查網路',
+    ),
+    'a captcha the source wants typed in': (
+      SourceVerificationException(null),
+      '要輸入驗證碼',
+      '登入書源',
+    ),
     'text from another isolate': (
       IsolateTaskError(HumanVerificationRequiredException().message),
       '網站要真人驗證',
@@ -96,6 +121,18 @@ void main() {
     expect(failure, same(DownloadFailure.appError));
     expect(failure.message, contains('重試'));
     expect(failure.message, contains('App 日誌'));
+  });
+
+  test('a comic page with no images, or an image URL that returns a page, '
+      'is the source not giving images', () {
+    for (final error in [
+      const FormatException('這一話的正文裡沒有圖'),
+      const FormatException('網站回的不是圖：https://book.example/1.jpg'),
+    ]) {
+      final failure = DownloadFailure.of(error, part: DownloadPart.images);
+      expect(failure.reason, '書源抓不到圖片');
+      expect(failure.message, contains('換源'));
+    }
   });
 
   test('a source that returns no TOC names the TOC', () {

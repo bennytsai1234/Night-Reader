@@ -193,6 +193,8 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
       title: ending ? backgroundWorkEnding : '結束',
       destructive: true,
       showChevron: false,
+      // 「正在結束…」不能再按，和停用的動作同一種灰。
+      enabled: !ending,
       onTap: ending ? null : () => unawaited(_run.end()),
     );
     if (_run.isPaused) {

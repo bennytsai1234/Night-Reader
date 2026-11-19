@@ -72,7 +72,7 @@ class DownloadManagerPage extends StatelessWidget {
         tasks: List<DownloadTask>.of(service.tasks),
         paused: service.isPaused,
         hasActive: service.tasks.any((task) => !task.isCompleted),
-        hasRetryable: service.tasks.any((task) => task.canRetry),
+        hasRetryable: service.tasks.any(service.canRetry),
         hasCompleted: service.tasks.any((task) => task.isCompleted),
       ),
       // 任務會原地更新進度，清單只看身分與順序；進度由對應的列訂閱。
@@ -140,7 +140,7 @@ class DownloadManagerPage extends StatelessWidget {
                 case _QueueAction.resumeAll:
                   if (service.isPaused) service.togglePause();
                 case _QueueAction.retryFailed:
-                  for (final task in current.where((t) => t.canRetry)) {
+                  for (final task in current.where(service.canRetry)) {
                     service.retryTask(task.bookUrl);
                   }
                 case _QueueAction.clearCompleted:
@@ -240,7 +240,7 @@ class DownloadManagerPage extends StatelessWidget {
     DownloadTask task,
     int index,
     int taskCount,
-  ) => _Subscribed<(bool, int, int, int, int, String?)>(
+  ) => _Subscribed<(bool, int, int, int, int, String?, bool)>(
     // 列的狀態跟著書走，上移、下移時整列一起搬。
     key: ValueKey(task.bookUrl),
     // 任務是可變物件，取值而不是取物件本身，才能辨認哪一列有變。
@@ -251,6 +251,8 @@ class DownloadManagerPage extends StatelessWidget {
       task.errorCount,
       task.status,
       task.failureSummary(unit: service.kindOf(task.bookUrl).unit),
+      // 按了暫停的那一輪收尾完，鈕才換成重試。
+      service.canRetry(task),
     ),
     builder: (context, _) =>
         _buildTaskContent(context, service, task, index, taskCount),
@@ -273,7 +275,7 @@ class DownloadManagerPage extends StatelessWidget {
         : rawProgress;
     final active = task.isDownloading || task.isWaiting;
     // 下載中有章節失敗時照樣可以暫停；停下來之後才換成重試。
-    final canRetry = task.canRetry;
+    final canRetry = service.canRetry(task);
     // 「暫停全部」時進行中的任務其實停著，單本的暫停／繼續交給頁首的恢復全部。
     final globallyPaused = service.isPaused && active;
     final failureSummary = task.failureSummary(
@@ -427,7 +429,8 @@ class DownloadManagerPage extends StatelessWidget {
     BookSourceKind kind,
   ) {
     final chrome = AppChrome.of(context);
-    Widget detailRow(String label, String value) {
+    // [translate] 給 false 的是書名這類書的資料：照閱讀偏好轉換（ADR 0066）。
+    Widget detailRow(String label, String value, {bool translate = true}) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
         child: Row(
@@ -438,7 +441,7 @@ class DownloadManagerPage extends StatelessWidget {
               width: 80,
               child: UiText(label, style: TextStyle(color: chrome.sectionText)),
             ),
-            Expanded(child: UiText(value)),
+            Expanded(child: UiText(value, translate: translate)),
           ],
         ),
       );
@@ -451,7 +454,7 @@ class DownloadManagerPage extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          detailRow('書籍', task.bookName),
+          detailRow('書籍', context.zh(task.bookName), translate: false),
           detailRow('失敗類型', task.lastErrorReason ?? '下載失敗'),
           if (task.lastErrorChapterIndex != null)
             detailRow(
@@ -477,7 +480,7 @@ class DownloadManagerPage extends StatelessWidget {
     if (task.isCompleted && task.errorCount == 0) {
       return '下載完成';
     }
-    if (task.canRetry) {
+    if (task.endedWithFailures) {
       // 還沒有目錄（例如抓目錄就失敗）時總數是 0，不寫「0/0 章」。
       if (task.totalCount <= 0) return '下載失敗';
       final failed = task.errorCount > 0 ? '，${task.errorCount} $unit失敗' : '';
@@ -501,7 +504,7 @@ class DownloadManagerPage extends StatelessWidget {
     required bool globallyPaused,
   }) {
     // 失敗時這一行只寫進度，用一般字色；危險色只給下一行的原因。
-    if (task.canRetry) return AppChrome.of(context).sectionText;
+    if (task.endedWithFailures) return AppChrome.of(context).sectionText;
     if (task.isPaused || globallyPaused) return context.warning;
     if (task.isCompleted) return context.success;
     return AppChrome.of(context).sectionText;
@@ -882,6 +885,8 @@ class _TaskControlButton extends StatelessWidget
         label: label,
         excludeSemantics: true,
         enabled: onPressed != null,
+        // excludeSemantics 也排除了子樹手勢的點擊動作，要在這裡補上。
+        onTap: onPressed,
         child: PressScale(
           onTap: onPressed,
           // 命中區放大到 44（設計系統的圓形按鈕尺寸），圓鈕維持 34 置中；
