@@ -198,15 +198,19 @@ void main() {
   });
   tearDown(() => db.close());
 
-  Future<void> storeSource({bool login = false, String? group}) =>
-      db.bookSourceDao.upsert(
-        BookSource(
-          bookSourceUrl: _origin,
-          bookSourceName: '書源',
-          loginUrl: login ? 'https://source.example/login' : null,
-          bookSourceGroup: group,
-        ),
-      );
+  Future<void> storeSource({
+    bool login = false,
+    String? group,
+    bool enabled = true,
+  }) => db.bookSourceDao.upsert(
+    BookSource(
+      bookSourceUrl: _origin,
+      bookSourceName: '書源',
+      loginUrl: login ? 'https://source.example/login' : null,
+      bookSourceGroup: group,
+      enabled: enabled,
+    ),
+  );
 
   Book searchResult() => Book(
     bookUrl: _bookUrl,
@@ -505,6 +509,23 @@ void main() {
       await storeSource(login: true, group: paidSourceGroupTag);
       await provider.reloadSource();
       expect(row(provider), (paidSourceHealth.description, false));
+    });
+  });
+
+  group('書源停用之後', () {
+    test('downloading and checking for updates say the source cannot be '
+        'read, not the old TOC problem', () async {
+      await storeSource(login: true);
+      service.toc = _Toc.needsLogin;
+      final provider = await open(updates: _Updates(db));
+
+      await storeSource(login: true, enabled: false);
+      await provider.reloadSource();
+      final download = await provider.queueDownloadAll();
+      expect(download.message, '目前來源無法提供正文，請先換源後再試。');
+      final update = await provider.checkForUpdates();
+      expect(update.success, isFalse);
+      expect(update.message, '檢查更新失敗：找不到可閱讀書源');
     });
   });
 

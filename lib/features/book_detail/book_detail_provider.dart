@@ -609,7 +609,7 @@ class BookDetailProvider extends ChangeNotifier {
       return '目前找不到書源，請先換源後再試。';
     }
     if (!source.isReadingEnabledByRuntime) {
-      return sourceIssueMessage ?? '目前來源無法提供正文，請先換源後再試。';
+      return _sourceUnreadableReason ?? '目前來源無法提供正文，請先換源後再試。';
     }
 
     if (_allChapters.isEmpty) {
@@ -1002,7 +1002,7 @@ class BookDetailProvider extends ChangeNotifier {
       }
       final source = _currentSource;
       if (source == null || !source.isReadingEnabledByRuntime) {
-        throw StateError(sourceIssueMessage ?? '找不到可閱讀書源');
+        throw StateError(_sourceUnreadableReason ?? '找不到可閱讀書源');
       }
 
       // 和書架的檢查共用：書架正在查這本時接上同一次。寫回由共用的檢查
