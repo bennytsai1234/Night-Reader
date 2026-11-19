@@ -667,11 +667,11 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   );
 
   /// 新的一次搜尋開始前清掉上一次的：詳情帶回的封面、固定的順序與篩選。
-  /// 條件在這時定下（頁首膠囊當時的樣子）。傳回給 [SearchRun.start] 的號碼。
+  /// 條件在這時定下（頁首膠囊當時的樣子）：先離開接回的那一次，條件才不照
+  /// 它的。傳回給 [SearchRun.start] 的號碼。
   int _beginSearch(String searchKey, SearchScope scope) {
-    final conditions = _conditions(scope);
     _leaveBackground();
-    final ticket = _run.begin(searchKey, conditions);
+    final ticket = _run.begin(searchKey, _conditions(scope));
     _resetCovers();
     _heldOrder = null;
     clearResultFilters();

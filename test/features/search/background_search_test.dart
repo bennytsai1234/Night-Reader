@@ -7,6 +7,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/ai_find_dao.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -18,6 +19,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/background_work/background_work.dart';
 import 'package:night_reader/core/services/background_work/reading_fetches.dart';
 import 'package:night_reader/features/search/background_search.dart';
+import 'package:night_reader/features/search/models/search_scope.dart';
 import 'package:night_reader/features/search/search_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -506,6 +508,54 @@ void main() {
     addTearDown(resumed.dispose);
     expect(resumed.kind, BookSourceKind.novel);
     expect(names(resumed), hasLength(3));
+  });
+
+  group('changing the conditions on a resumed page searches with the new '
+      'ones', () {
+    final comic = BookSource(
+      bookSourceUrl: 'https://丁.example',
+      bookSourceName: '丁',
+      bookSourceType: SourceType.image,
+      customOrder: 3,
+    );
+
+    /// 搜小說、放到背景、搜完，再從沒帶關鍵字的入口接回。
+    Future<(SearchProvider, _Loader)> resumed() async {
+      await GetIt.instance<BookSourceDao>().upsert(comic);
+      final background = searches();
+      final loader = _Loader();
+      final provider = await page(background, loader);
+      unawaited(provider.search('night'));
+      await until(() => loader.sent.length == 3);
+      provider.moveToBackground();
+      provider.dispose();
+      for (final name in ['甲', '乙', '丙']) {
+        loader.answer(name);
+      }
+      await until(() => background.current!.isFinished);
+      final reopened = await page(background, loader, resume: true);
+      addTearDown(reopened.dispose);
+      expect(reopened.kind, BookSourceKind.novel);
+      loader.sent.clear();
+      return (reopened, loader);
+    }
+
+    test('another kind', () async {
+      final (provider, loader) = await resumed();
+      provider.setKind(BookSourceKind.comic);
+      expect(provider.kind, BookSourceKind.comic);
+      await until(() => loader.sent.isNotEmpty);
+      expect(loader.sent, ['丁']);
+      expect(provider.kind, BookSourceKind.comic);
+    });
+
+    test('one source of another kind', () async {
+      final (provider, loader) = await resumed();
+      await provider.updateSearchScope(SearchScope.fromSource(comic));
+      await until(() => loader.sent.isNotEmpty);
+      expect(loader.sent, ['丁']);
+      expect(provider.kind, BookSourceKind.comic);
+    });
   });
 
   test('retrying failed sources after a background search is an ordinary '
