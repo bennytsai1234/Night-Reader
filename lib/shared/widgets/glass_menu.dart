@@ -170,8 +170,10 @@ class GlassMenuButton<T> extends StatelessWidget {
             label: UiLanguageText.convertNullable(context, tooltip),
             child: PressScale(
               onTap: onTap,
-              // 停用透明度同 [GlassIconButton]。
-              child: enabled ? child! : Opacity(opacity: 0.38, child: child!),
+              // 停用時同 [GlassIconButton]（[AppDisabled]）。
+              child: enabled
+                  ? child!
+                  : Opacity(opacity: AppDisabled.opacity, child: child!),
             ),
           );
         }
@@ -494,7 +496,10 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
               ),
             );
           }
-          final color = entry.destructive ? danger : scheme.onSurface;
+          // 不能用的項目一律中性灰，危險色不留（[AppDisabled]）。
+          final color = entry.destructive && entry.enabled
+              ? danger
+              : scheme.onSurface;
           widgets.add(
             // 讀屏要知道哪一項已勾選（單選群組或獨立的開關）、哪一項停用；
             // 畫面上只靠勾號與透明度表示。沒有勾號的一般動作照按鈕念，
@@ -509,7 +514,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                     ? () => Navigator.of(context).pop(entry.value)
                     : null,
                 child: Opacity(
-                  opacity: entry.enabled ? 1 : 0.4,
+                  opacity: entry.enabled ? 1 : AppDisabled.opacity,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       minHeight: entry.subtitle == null

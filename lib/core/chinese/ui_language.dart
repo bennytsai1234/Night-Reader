@@ -92,18 +92,17 @@ extension UiLanguageContext on BuildContext {
   String ui(String text) => UiLanguageText.convert(this, text);
 }
 
-/// 「最新：章名」：標籤與沒有章名時的 [fallback] 照介面語言，章名照閱讀
-/// 偏好的繁簡轉換（ADR 0066）。整段用 `translate: false` 顯示。
+/// 「最新：章名」：標籤照介面語言，章名照閱讀偏好的繁簡轉換（ADR 0066）。
+/// 沒有章名時整行寫 [fallback]（例如「沒有最新章節」），照介面語言。整段用
+/// `translate: false` 顯示。
 String latestChapterLine(
   BuildContext context,
   String? title, {
   required String fallback,
 }) {
   final trimmed = title?.trim();
-  final value = trimmed == null || trimmed.isEmpty
-      ? context.ui(fallback)
-      : context.zh(trimmed);
-  return '${context.ui('最新：')}$value';
+  if (trimmed == null || trimmed.isEmpty) return context.ui(fallback);
+  return '${context.ui('最新：')}${context.zh(trimmed)}';
 }
 
 /// 只轉換 App 的固定介面文字；書籍內容依閱讀偏好的繁簡轉換設定。

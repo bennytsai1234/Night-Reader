@@ -143,7 +143,7 @@ class DownloadManagerPage extends StatelessWidget {
               padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
               child: const AppStateView(
                 icon: Icons.download_done_rounded,
-                title: '暫無背景下載任務',
+                title: '沒有背景下載任務',
               ),
             )
           : SwipeActionsGroup(
@@ -858,6 +858,8 @@ class _TaskControlButton extends StatelessWidget
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // 停用時強調色換回一般字色，整顆再降透明度（[AppDisabled]）。
+    final tone = onPressed == null ? scheme.onSurface : scheme.primary;
     final label = context.ui(tooltip);
     return Tooltip(
       message: label,
@@ -872,7 +874,7 @@ class _TaskControlButton extends StatelessWidget
           // 命中區放大到 44（設計系統的圓形按鈕尺寸），圓鈕維持 34 置中；
           // 點偏一點不會打開整列的選單。
           child: Opacity(
-            opacity: onPressed == null ? 0.38 : 1,
+            opacity: onPressed == null ? AppDisabled.opacity : 1,
             child: SizedBox.square(
               dimension: AppGlass.buttonSize,
               child: Center(
@@ -881,9 +883,9 @@ class _TaskControlButton extends StatelessWidget
                   height: _circle,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: scheme.primary.withValues(alpha: 0.12),
+                    color: tone.withValues(alpha: 0.12),
                   ),
-                  child: Icon(icon, size: 20, color: scheme.primary),
+                  child: Icon(icon, size: 20, color: tone),
                 ),
               ),
             ),

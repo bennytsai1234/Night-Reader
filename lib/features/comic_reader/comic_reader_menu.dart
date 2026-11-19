@@ -148,7 +148,7 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
                           children: [
                             Expanded(
                               child: ReaderMenuIcon(
-                                icon: Icons.list_rounded,
+                                icon: Icons.format_list_bulleted_rounded,
                                 label: '目錄',
                                 onTap: widget.onOpenChapters,
                                 menuStyle: menuStyle,
@@ -188,7 +188,9 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
     );
     final buttonStyle = TextButton.styleFrom(
       foregroundColor: menuStyle.foreground,
-      disabledForegroundColor: menuStyle.foreground.withValues(alpha: 0.38),
+      disabledForegroundColor: menuStyle.foreground.withValues(
+        alpha: AppDisabled.opacity,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
       minimumSize: const Size(AppGlass.buttonSize, AppGlass.buttonSize),
       shape: const StadiumBorder(),

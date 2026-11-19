@@ -816,7 +816,11 @@ class GroupedRow extends StatelessWidget
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final chrome = AppChrome.of(context);
-    final titleColor = destructive
+    // 停用的列整列降到 [AppDisabled.opacity]，標題的危險色、強調色先換回
+    // 一般字色，和停用的選單項目同一種灰。
+    final titleColor = !enabled
+        ? scheme.onSurface
+        : destructive
         ? (Theme.of(context).brightness == Brightness.dark
               ? AppPalette.rustDark
               : AppPalette.rust)
@@ -913,7 +917,7 @@ class GroupedRow extends StatelessWidget
     );
 
     if (!enabled) {
-      row = Opacity(opacity: 0.45, child: row);
+      row = Opacity(opacity: AppDisabled.opacity, child: row);
     }
     if (onTap == null && onLongPress == null) {
       // 標題文字本來就會併進這個節點，再設 label 讀屏會念成「標題、標題、值」。
@@ -992,7 +996,11 @@ class GroupedSwitch extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? () => toggle(value, onChanged!) : null,
-        child: Opacity(opacity: enabled ? 1 : 0.38, child: track),
+        // 開關的開或關是狀態，停用時軌道顏色留著，只降透明度。
+        child: Opacity(
+          opacity: enabled ? 1 : AppDisabled.opacity,
+          child: track,
+        ),
       ),
     );
   }

@@ -270,8 +270,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   Widget _buildNoExploreSources(ExploreProvider provider) {
     return AppStateView(
       icon: Icons.travel_explore_outlined,
-      title: '目前沒有可用的發現書源',
-      description: '到書源管理啟用支援發現功能的書源。',
+      title: '沒有支援發現的書源',
       primaryAction: AppStateAction(
         label: '管理書源',
         icon: Icons.source_outlined,
@@ -380,7 +379,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                     ),
                     child: provider.expandedKinds.isEmpty
                         ? UiText(
-                            '暫無分類',
+                            '沒有分類',
                             style: AppTextStyles.bodySm.copyWith(
                               color: AppChrome.of(context).sectionText,
                             ),

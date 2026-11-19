@@ -8,6 +8,7 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_haptics.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/popup_routes.dart';
@@ -378,9 +379,7 @@ class _StepButton extends StatelessWidget {
                   child: Icon(
                     icon,
                     size: 18,
-                    color: enabled
-                        ? onSurface
-                        : onSurface.withValues(alpha: 0.38),
+                    color: enabled ? onSurface : context.disabledForeground,
                   ),
                 ),
               ),

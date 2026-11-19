@@ -12,6 +12,7 @@ import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
@@ -663,30 +664,31 @@ class BookshelfEditToolbar extends StatelessWidget {
               enabled: action.onPressed != null,
               child: PressScale(
                 onTap: action.onPressed,
-                child: Opacity(
-                  opacity: action.onPressed == null ? 0.38 : 1,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        action.icon,
-                        size: 22,
-                        color: action.destructive ? danger : scheme.onSurface,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      action.icon,
+                      size: 22,
+                      color: context.actionColor(
+                        action.destructive ? danger : scheme.onSurface,
+                        enabled: action.onPressed != null,
                       ),
-                      const SizedBox(height: 2),
-                      DragOverflowText(
-                        child: UiText(
-                          action.label,
-                          maxLines: 1,
-                          style: AppTextStyles.uiXs.copyWith(
-                            color: action.destructive
-                                ? danger
-                                : scheme.onSurface,
+                    ),
+                    const SizedBox(height: 2),
+                    DragOverflowText(
+                      child: UiText(
+                        action.label,
+                        maxLines: 1,
+                        style: AppTextStyles.uiXs.copyWith(
+                          color: context.actionColor(
+                            action.destructive ? danger : scheme.onSurface,
+                            enabled: action.onPressed != null,
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),

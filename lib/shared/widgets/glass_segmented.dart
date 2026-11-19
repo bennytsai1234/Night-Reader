@@ -8,6 +8,7 @@ import '../theme/app_chrome.dart';
 import '../theme/app_haptics.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
+import '../theme/context_ext.dart';
 import 'grouped_list_skeleton.dart';
 import 'skeleton.dart';
 
@@ -255,7 +256,7 @@ class _GlassSegmentedState<T> extends State<GlassSegmented<T>>
               dense: widget.dense,
               color: widget.segments[i].enabled
                   ? scheme.onSurface
-                  : scheme.onSurface.withValues(alpha: 0.38),
+                  : context.disabledForeground,
               onTap: () => _select(i),
             ),
           ),

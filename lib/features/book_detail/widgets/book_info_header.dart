@@ -187,7 +187,9 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.primary;
+    // 停用時強調色換回一般字色，整顆再降透明度（[AppDisabled]）。
+    final scheme = Theme.of(context).colorScheme;
+    final color = onTap == null ? scheme.onSurface : scheme.primary;
     Widget button = Semantics(
       button: true,
       enabled: onTap != null,
@@ -227,8 +229,9 @@ class _ActionButton extends StatelessWidget {
         ),
       ),
     );
-    // 停用透明度同 [GlassIconButton]。
-    if (onTap == null) button = Opacity(opacity: 0.38, child: button);
+    if (onTap == null) {
+      button = Opacity(opacity: AppDisabled.opacity, child: button);
+    }
     if (tooltip != null && tooltip != label) {
       button = Tooltip(message: context.ui(tooltip!), child: button);
     }

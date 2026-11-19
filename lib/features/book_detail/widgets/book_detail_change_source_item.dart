@@ -107,7 +107,7 @@ class BookDetailChangeSourceItem extends StatelessWidget {
                           latestChapterLine(
                             context,
                             searchBook.latestChapterTitle,
-                            fallback: '無最新章節資訊',
+                            fallback: '沒有最新章節',
                           ),
                           translate: false,
                           maxLines: 1,

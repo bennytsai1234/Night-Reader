@@ -256,10 +256,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('匯入書源'), hasAny ? findsNothing : findsOneWidget);
-        expect(
-          find.text('目前沒有可用的發現書源'),
-          hasAny ? findsOneWidget : findsNothing,
-        );
+        expect(find.text('沒有支援發現的書源'), hasAny ? findsOneWidget : findsNothing);
       },
     );
   }
@@ -790,7 +787,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('匯入書源'), findsNothing);
-    expect(find.text('目前沒有可用的發現書源'), findsNothing);
+    expect(find.text('沒有支援發現的書源'), findsNothing);
 
     hasAny.add(false);
     // 第一幀收到事件、開始淡入，再過一段才量。
@@ -812,6 +809,6 @@ void main() {
     expect(opacity, lessThan(1));
     await tester.pumpAndSettle();
     expect(find.text('匯入書源'), findsOneWidget);
-    expect(find.text('目前沒有可用的發現書源'), findsNothing);
+    expect(find.text('沒有支援發現的書源'), findsNothing);
   });
 }
