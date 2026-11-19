@@ -701,6 +701,36 @@ void main() {
     },
   );
 
+  test('a full sync asked for on hearing "stopping" is not cancelled by the '
+      'cancel that caused it', () async {
+    await a.addBook('a-src', toc: toc, time: 100);
+    await a.sync.syncAll();
+
+    final reading = Completer<void>();
+    final stuck = Completer<void>();
+    store.beforeNextRead = (name) {
+      if (name != 'sources.json' || reading.isCompleted) return null;
+      reading.complete();
+      return stuck.future;
+    };
+    final first = a.sync.syncAll();
+    await reading.future;
+    Future<FullSyncResult>? again;
+    void onStatus() {
+      if (a.sync.status.value.phase == SyncPhase.stopping) {
+        again ??= a.sync.syncAll();
+      }
+    }
+
+    a.sync.status.addListener(onStatus);
+    addTearDown(() => a.sync.status.removeListener(onStatus));
+    a.sync.cancelSync();
+    stuck.complete();
+
+    expect(await first, isA<FullSyncStopped>());
+    expect(await again!, isA<FullSyncDone>());
+  });
+
   group('coming back while an earlier sync is still running', () {
     setUp(() async {
       await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);

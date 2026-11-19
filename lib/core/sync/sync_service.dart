@@ -424,18 +424,19 @@ class SyncService {
   void cancelSync() {
     final run = _run;
     if (run == null) return;
-    if (run.round == SyncPhase.full) {
-      run.round = SyncPhase.stopping;
-      if (status.value.phase == SyncPhase.full) {
-        status.value = status.value.copyWith(phase: SyncPhase.stopping);
-      }
-    }
     // 排的時候可能也有人要過進度（退到背景、有聲書存好進度），分不出來就
     // 照要過算，不漏送。
     if (run.next == _Next.full) {
       run.next = _Next.progress;
       run.nextFullWaiters?.complete(const FullSyncStopped());
       run.nextFullWaiters = null;
+    }
+    // 排隊改完才通知：聽到「停下中」才要求的全面同步排在後面，不被這次取消。
+    if (run.round == SyncPhase.full) {
+      run.round = SyncPhase.stopping;
+      if (status.value.phase == SyncPhase.full) {
+        status.value = status.value.copyWith(phase: SyncPhase.stopping);
+      }
     }
   }
 
@@ -476,6 +477,7 @@ class SyncService {
   Future<void> _runRounds(_SyncRun run) async {
     final timer = Stopwatch()..start();
     var rounds = 0;
+    var settled = false;
     try {
       while (true) {
         rounds++;
@@ -484,9 +486,7 @@ class SyncService {
         run.fullWaiters = null;
         switch (run.next) {
           case _Next.none:
-            if (status.value.enabled && timer.elapsedMilliseconds >= 1000) {
-              AppLog.i('同步總耗時：${timer.elapsedMilliseconds}ms，共 $rounds 輪');
-            }
+            settled = true;
             return;
           case _Next.progress:
             run.round = SyncPhase.progress;
@@ -502,6 +502,12 @@ class SyncService {
       run.fullWaiters?.complete(const FullSyncFailed('同步失敗'));
       run.nextFullWaiters?.complete(const FullSyncFailed('同步失敗'));
       _finishRun();
+      // 放下之後才記：記日誌時要求的同步開新的一段，不排進已經不再看的隊。
+      if (settled &&
+          status.value.enabled &&
+          timer.elapsedMilliseconds >= 1000) {
+        AppLog.i('同步總耗時：${timer.elapsedMilliseconds}ms，共 $rounds 輪');
+      }
     }
   }
 
