@@ -11,7 +11,9 @@
 ///   `a++`、`a?+`、`a{2,3}+`）拿掉後面多出來的 `+`：Dart 沒有這兩種寫法，
 ///   換掉後只在回溯行為上不同，多數規則的比對結果相同。
 ///
-/// [wholeInput] 同 Java `matches()`：整段都要符合。
+/// [wholeInput] 同 Java `matches()`：整段都要符合。寫錯的 [pattern] 一樣丟
+/// [FormatException]：先照原樣編一次再包，不然 `[abc` 這類少了括號的寫法
+/// 會和包在外面的字接起來，變成另一個合法、什麼都對得上的寫法。
 RegExp javaRegExp(String pattern, {bool wholeInput = false}) {
   var options = '';
   var body = pattern;
@@ -29,14 +31,16 @@ RegExp javaRegExp(String pattern, {bool wholeInput = false}) {
     multiLine: multiLine,
     comments: options.contains('x'),
   );
-  if (wholeInput) source = '$_inputStart(?:$source)$_inputEnd';
-  return RegExp(
+  RegExp compile(String source) => RegExp(
     source,
     caseSensitive: !options.contains('i'),
     multiLine: multiLine,
     dotAll: options.contains('s'),
     unicode: options.contains('u'),
   );
+  if (!wholeInput) return compile(source);
+  compile(source);
+  return compile('$_inputStart(?:$source)$_inputEnd');
 }
 
 final RegExp _leadingFlags = RegExp(r'^\(\?([imsux]+)\)');
