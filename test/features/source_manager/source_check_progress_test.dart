@@ -47,6 +47,20 @@ Future<SourceCheckIsolateHandle> _searchBroken(
   );
 }
 
+/// 讀書源先出錯 [failures] 次（例如資料庫忙），之後照常。
+class _FlakyDao extends BookSourceDao {
+  _FlakyDao(super.db, this.failures);
+  int failures;
+  int reads = 0;
+
+  @override
+  Future<BookSource?> getByUrl(String url) async {
+    reads++;
+    if (failures-- > 0) throw StateError('資料庫讀不到');
+    return super.getByUrl(url);
+  }
+}
+
 /// 書源列的校驗結果與「沒有異常」篩選要對得上：校驗之後書源被別處改寫
 /// （AI 修好存檔、清除校驗標記），列上不能再顯示那次校驗的結果。
 void main() {
@@ -197,5 +211,20 @@ void main() {
     await provider.clearCheckMarks({url});
 
     expect(service.progressOf(url), isNull);
+  });
+
+  test('a check that breaks midway does not block the next one', () async {
+    final flaky = _FlakyDao(db, 2);
+    final checker = CheckSourceService(sourceDao: flaky, spawn: _searchBroken);
+    addTearDown(checker.dispose);
+
+    // 讀書源出錯、記錄錯誤時又讀不到：這一輪丟出來。
+    await expectLater(checker.check([url]), throwsA(isA<StateError>()));
+    expect(checker.isChecking, isFalse);
+
+    final reads = flaky.reads;
+    await checker.check([url]);
+    expect(flaky.reads, greaterThan(reads), reason: '下一輪照常校驗');
+    expect(checker.finishedRunCount, 1);
   });
 }

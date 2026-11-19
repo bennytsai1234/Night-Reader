@@ -596,6 +596,18 @@ class CheckSourceService extends ChangeNotifier {
         shouldContinue: () => isChecking,
         onFinished: onFinished,
       ).run(normalizedUrls);
+    } catch (_) {
+      // 夜讀自己的校驗流程出錯（記錄錯誤時又讀不到書源）：這一輪沒有結果，
+      // 已經排的寫照寫，回到閒著，不然下一輪永遠開不了。
+      _phase = _CheckPhase.stopping;
+      _activeTasks.clear();
+      try {
+        await _flushPendingStatusWrites();
+      } finally {
+        _phase = _CheckPhase.idle;
+        _notifyIfAlive(immediate: true);
+      }
+      rethrow;
     } finally {
       // 校驗結束（無論正常、取消或例外）都清除 JS 靜態快取。
       // _resolvedJsLibCache 的 key 本身就是完整 jsLib 字串，
