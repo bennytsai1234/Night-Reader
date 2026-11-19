@@ -273,7 +273,7 @@ void main() {
     expect(reopened.completedSources, 2);
     expect(reopened.totalSources, 3);
     expect(reopened.failedSources, 1);
-    expect(reopened.isBackgroundPaused, isTrue);
+    expect(reopened.stage, SearchStage.paused);
 
     await reopened.resumeBackground();
     await settle();
@@ -307,7 +307,7 @@ void main() {
     addTearDown(reopened.dispose);
     await settle();
     expect(names(reopened), hasLength(3));
-    expect(reopened.isBackgroundPaused, isFalse);
+    expect(reopened.stage, isNot(SearchStage.paused));
   });
 
   test('ending a background search keeps what it found', () async {
@@ -440,7 +440,7 @@ void main() {
     provider.stopSearch();
     await until(() => background.current!.isFinished);
     expect(background.current!.isFinished, isTrue);
-    expect(provider.isBackgroundPaused, isFalse);
+    expect(provider.stage, isNot(SearchStage.paused));
   });
 
   test('ending while the pause waits for the results file ends it', () async {
@@ -633,7 +633,7 @@ void main() {
     await until(() => loader.sent.length == 4);
     expect(loader.sent.last, '乙');
     expect(names(resumed), unorderedEquals(['甲書', '丙書']));
-    expect(resumed.showsMoveToBackground, isTrue);
+    expect(resumed.stage, SearchStage.searching);
   });
 
   Future<void> disable(String name) async {
@@ -927,7 +927,7 @@ void main() {
     final restarted = searches(loader2);
     await restarted.restore();
     final reopened = await page(restarted, loader2, resume: true);
-    expect(reopened.isBackgroundPaused, isTrue);
+    expect(reopened.stage, SearchStage.paused);
     expect(names(reopened), ['甲書']);
     await reopened.resumeBackground();
     await until(() => loader2.sent.length == 2);

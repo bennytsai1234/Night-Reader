@@ -321,9 +321,9 @@ class BackgroundSearchRun extends RepairRun implements SearchRecorder {
   WorkPhase _searchPhase = WorkPhase.running;
   bool _disposed = false;
 
-  /// 接著搜時要搜的書源；`null` 是照條件重新搜（還沒選好書源就暫停的）。
-  List<BookSource>? _remaining;
-  bool _resuming = false;
+  /// 按了繼續、讀回好了、下一次 [run] 要接著搜的：`remaining` 是要搜的書源，
+  /// `null` 是照條件重新搜（還沒選好書源就暫停的）。不是接著搜時是 null。
+  ({List<BookSource>? remaining})? _resume;
 
   /// 接回它的搜尋頁開始了別的搜尋：結束、做完、頁面都關了就收掉，不再接回。
   bool get abandoned => _abandoned;
@@ -350,10 +350,6 @@ class BackgroundSearchRun extends RepairRun implements SearchRecorder {
   @override
   WorkPhase get workPhase => _searchPhase;
 
-  /// 按了暫停或結束、還沒停好。
-  bool get isPausing => phase == WorkPhase.pausing;
-  bool get isStopping => phase == WorkPhase.ending;
-
   @override
   BackgroundWorkStatus get runningStatus {
     final progress = search.total > 0 ? search.completed / search.total : 0.0;
@@ -372,10 +368,8 @@ class BackgroundSearchRun extends RepairRun implements SearchRecorder {
   @override
   Future<WorkPhase> run() async {
     _searchPhase = WorkPhase.running;
-    if (_resuming) {
-      _resuming = false;
-      final remaining = _remaining;
-      _remaining = null;
+    if (_resume case (:final remaining)) {
+      _resume = null;
       await search.continueWith(remaining);
     } else {
       await _writeStart();
@@ -468,27 +462,25 @@ class BackgroundSearchRun extends RepairRun implements SearchRecorder {
   Future<bool> prepareResume() async {
     await search.mergeRestored();
     if (search.sourceUrls.isEmpty) {
-      _remaining = null;
+      _resume = (remaining: null);
     } else {
       final done = {...search.searched.keys, ...search.failedNotes.keys};
       final enabled = {
         for (final source in await getIt<BookSourceDao>().getEnabled())
           if (source.isSearchEnabledByRuntime) source.bookSourceUrl: source,
       };
-      _remaining = [
-        for (final url in search.sourceUrls)
-          if (!done.contains(url)) ?enabled[url],
-      ];
+      _resume = (
+        remaining: [
+          for (final url in search.sourceUrls)
+            if (!done.contains(url)) ?enabled[url],
+        ],
+      );
     }
-    _resuming = true;
     return true;
   }
 
   @override
-  void discardResume() {
-    _remaining = null;
-    _resuming = false;
-  }
+  void discardResume() => _resume = null;
 
   /// 接回它的搜尋頁開始了別的搜尋：正在跑或暫停中的結束，結果不留。
   void abandon() {

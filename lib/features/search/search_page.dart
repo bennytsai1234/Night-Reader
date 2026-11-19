@@ -292,7 +292,7 @@ class _SearchViewState extends State<SearchView> {
                     right: 0,
                     // 搜尋結束時停在最後的進度淡出，不在一幀內消失。
                     child: _FadeSwap(
-                      child: provider.isSearching || provider.isBackgroundPaused
+                      child: provider.stage.unfinished
                           ? ListenableBuilder(
                               key: const ValueKey('progress'),
                               listenable: provider.progressUpdates,
@@ -344,9 +344,7 @@ class _SearchViewState extends State<SearchView> {
     return [
       if (provider.precisionSearch || !provider.searchScope.isAll)
         _buildFilterStatusPanel(provider),
-      if (provider.isSearching ||
-          provider.isBackgroundPaused ||
-          provider.hasUnfilteredResults)
+      if (provider.stage.unfinished || provider.hasUnfilteredResults)
         _buildStatusSlot(context, provider)
       else if (provider.failedSources > 0)
         _buildFailedSourcesPanel(context, provider),
@@ -543,7 +541,7 @@ class _SearchViewState extends State<SearchView> {
       // blur: false，可以跟著淡。
       child: _FadeSwap(
         alignment: AlignmentDirectional.centerStart,
-        child: p.isSearching || p.isBackgroundPaused
+        child: p.stage.unfinished
             ? KeyedSubtree(
                 key: const ValueKey('progress'),
                 child: _buildSearchProgress(p),
@@ -565,38 +563,37 @@ class _SearchViewState extends State<SearchView> {
   );
 
   Widget _buildSearchProgressContent(SearchProvider p) {
-    final text = p.isBackgroundPausing
-        ? backgroundWorkPausing
-        : p.isBackgroundStopping
-        ? backgroundWorkEnding
-        : p.isBackgroundPaused
-        ? '已暫停 ${p.completedSources}/${p.totalSources}'
-        : searchProgressText(
-            completed: p.completedSources,
-            total: p.totalSources,
-            waiting: p.waitingSources,
-          );
-    final action = p.showsMoveToBackground
-        ? PlainTextAction(
-            label: '放到背景',
-            small: true,
-            onPressed: p.canMoveToBackground ? p.moveToBackground : null,
-          )
-        : p.isBackgroundPaused
-        ? PlainTextAction(
-            label: '繼續',
-            small: true,
-            onPressed: p.canResumeBackground
-                ? () => unawaited(p.resumeBackground())
-                : null,
-          )
-        : p.isInBackground && !p.isBackgroundPausing && !p.isBackgroundStopping
-        ? PlainTextAction(
-            label: '暫停',
-            small: true,
-            onPressed: p.pauseBackground,
-          )
-        : null;
+    final stage = p.stage;
+    final text = switch (stage) {
+      SearchStage.pausing => backgroundWorkPausing,
+      SearchStage.ending => backgroundWorkEnding,
+      SearchStage.paused => '已暫停 ${p.completedSources}/${p.totalSources}',
+      _ => searchProgressText(
+        completed: p.completedSources,
+        total: p.totalSources,
+        waiting: p.waitingSources,
+      ),
+    };
+    final action = switch (stage) {
+      SearchStage.searching => PlainTextAction(
+        label: '放到背景',
+        small: true,
+        onPressed: p.canMoveToBackground ? p.moveToBackground : null,
+      ),
+      SearchStage.paused || SearchStage.ending => PlainTextAction(
+        label: '繼續',
+        small: true,
+        onPressed: p.canResumeBackground
+            ? () => unawaited(p.resumeBackground())
+            : null,
+      ),
+      SearchStage.inBackground => PlainTextAction(
+        label: '暫停',
+        small: true,
+        onPressed: p.pauseBackground,
+      ),
+      SearchStage.idle || SearchStage.pausing => null,
+    };
     return Padding(
       padding: const EdgeInsets.only(left: AppGrouped.rowPadding),
       child: Row(

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/core/source_switch/same_book.dart';
 import 'package:night_reader/core/database/dao/ai_find_dao.dart';
 import 'package:night_reader/features/search/ai_find/ai_find_run.dart';
@@ -49,6 +50,44 @@ extension SearchResultSortModeDisplay on SearchResultSortMode {
         return '最新章節';
     }
   }
+}
+
+/// 搜尋頁的進度那一列、頁首「結束」與頁首下緣的進度條照哪個樣子
+/// （[SearchProvider.stage]；階段表在 `docs/state-machines.md`「搜尋」）。
+enum SearchStage {
+  /// 沒在搜：還沒搜過，或搜完、按了結束。結果工具列，頁首「搜尋」。
+  idle,
+
+  /// 搜尋頁自己的搜尋在搜：「正在搜尋」與「放到背景」，頁首「結束」。
+  searching,
+
+  /// 放到背景、做著：「正在搜尋」與「暫停」。
+  inBackground,
+
+  /// 放到背景、按了暫停還沒停好：「正在暫停…」，不放動作。
+  pausing,
+
+  /// 放到背景、按了結束還沒停好：「正在結束…」。
+  ending,
+
+  /// 放到背景、暫停中（含按了繼續正在讀回）：「已暫停 124/396」與「繼續」。
+  paused;
+
+  /// 還沒搜完：頁首是「結束」，進度那一列與進度條還在。
+  bool get unfinished => this != idle;
+}
+
+/// 搜尋頁怎麼看著放到背景的那一件（[SearchProvider]）。
+enum _Attachment {
+  /// 沒有接回、放到背景的那一件，或已經放掉了。
+  none,
+
+  /// 接回了，結果等進場播完才放出來；這一頁還不算看著，換頁中返回不算看過
+  /// （ADR 0070）。
+  holding,
+
+  /// 看著：結果放出來了，離開時算這一頁不看了（[RepairRun.detach]）。
+  watching,
 }
 
 /// 輸入框下方的一條建議：搜尋紀錄或書架上的書名。
@@ -151,8 +190,8 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   /// 畫面上的結果：接回放到背景的那一次時，進場播完才放出來，換頁的那幾幀
   /// 不建結果卡（ADR 0018、0070）。
   List<SearchBook> get _shownResults =>
-      _holdingResults ? const [] : _run.results;
-  bool _holdingResults = false;
+      _attachment == _Attachment.holding ? const [] : _run.results;
+  _Attachment _attachment = _Attachment.none;
 
   int get unfilteredResultCount => _shownResults.length;
   int get resultCount => results.length;
@@ -168,32 +207,34 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   int get failedSources => _run.failed;
   int get totalSources => _run.total;
 
-  /// 還沒搜完：搜尋中、放到背景後暫停中，或讀回的結果還沒合併。頁首是
-  /// 「結束」、進度那一列還在。
+  /// 進度那一列、頁首「結束」與進度條的樣子：放到背景的那一件照它的階段，
+  /// 否則照這一次搜尋在不在搜。
+  SearchStage get stage {
+    final background = _background;
+    if (background == null) {
+      return _run.isSearching ? SearchStage.searching : SearchStage.idle;
+    }
+    return switch (background.phase) {
+      WorkPhase.paused || WorkPhase.resuming => SearchStage.paused,
+      WorkPhase.ending when background.isPaused => SearchStage.ending,
+      // 搜尋本身停下了（搜完、按了結束），背景那件還在寫結果檔。
+      _ when !_run.isSearching => SearchStage.idle,
+      WorkPhase.pausing => SearchStage.pausing,
+      _ => SearchStage.inBackground,
+    };
+  }
+
+  /// 還沒搜完（[stage]），或接回的結果還沒放出來：列結果，不列空狀態。
   bool get isUnfinished =>
-      isSearching || isBackgroundPaused || _run.isRestoring || _holdingResults;
+      stage.unfinished || _attachment == _Attachment.holding;
 
-  /// 進度那一列的「放到背景」：搜尋中、還沒放到背景時才有；別的背景工作在跑
-  /// 時灰掉（ADR 0070）。
-  bool get showsMoveToBackground => _background == null && isSearching;
+  /// 進度那一列的「放到背景」能不能按：別的背景工作在跑時灰掉（ADR 0070）。
   bool get canMoveToBackground =>
-      showsMoveToBackground && _backgroundSearches.canMoveToBackground;
+      stage == SearchStage.searching && _backgroundSearches.canMoveToBackground;
 
-  /// 放到背景、正在跑（含按了暫停或結束還沒停好）。
-  bool get isInBackground => _background?.isRunning ?? false;
-
-  /// 放到背景、按了暫停還沒停好。
-  bool get isBackgroundPausing => _background?.isPausing ?? false;
-
-  /// 放到背景、按了結束還沒停好。
-  bool get isBackgroundStopping => _background?.isStopping ?? false;
-
-  /// 放到背景、停在暫停中。
-  bool get isBackgroundPaused => _background?.isPaused ?? false;
-
-  /// 暫停中的「繼續」能不能按：別的背景工作在跑時灰掉。
+  /// 暫停中的「繼續」能不能按：別的背景工作在跑、結果還沒放出來時灰掉。
   bool get canResumeBackground =>
-      !_holdingResults && (_background?.canResume ?? false);
+      _attachment != _Attachment.holding && (_background?.canResume ?? false);
   bool get precisionSearch => _precisionSearch;
 
   /// 頁首膠囊與結果照哪一類：畫面上這一次搜尋的（接回的、重試的也是），
@@ -326,7 +367,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   Future<void> _init() async {
     _entered = true;
-    if (_holdingResults) await _reveal();
+    if (_attachment == _Attachment.holding) await _reveal();
     if (_disposed) return;
     await _bookshelfTracker.initialize(onChanged: notifyListeners);
     await _loadGroups();
@@ -779,14 +820,9 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   /// 進場播完了：之後才接回的那一件直接放出結果。
   bool _entered = false;
 
-  /// 這一頁已經算看著那一件（[RepairRun.attach]）：結果放出來之後才算，換頁
-  /// 途中就返回的不算看過，存檔留著（ADR 0070）。
-  bool _attached = false;
-
   /// 接回：結果先不放，進場播完才放（[_reveal]）。
   void _attach(BackgroundSearchRun background) {
     _listen(_run = background.search);
-    _holdingResults = true;
     _adopt(background, attach: false);
     // 類別、範圍、精準照那一次的，不寫回偏好。
     if (_run.conditions case final conditions?) {
@@ -816,11 +852,14 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   Future<void> _reveal() async {
     if (_run.isRestoring) await _run.mergeRestored();
     final background = _background;
-    if (_disposed || background == null || !_holdingResults) return;
-    _holdingResults = false;
-    if (!_attached && !background.isDisposed) {
+    if (_disposed || background == null || _attachment != _Attachment.holding) {
+      return;
+    }
+    if (background.isDisposed) {
+      _attachment = _Attachment.none;
+    } else {
       background.attach();
-      _attached = true;
+      _attachment = _Attachment.watching;
     }
     notifyListeners();
   }
@@ -830,22 +869,22 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
       ..route = _route
       ..addListener(notifyListeners);
     if (attach) background.attach();
-    _attached = attach;
+    _attachment = attach ? _Attachment.watching : _Attachment.holding;
   }
 
   /// 不再看著那一件：背景那件照它自己的生命週期收掉。
   void _release(BackgroundSearchRun background) {
     background.removeListener(notifyListeners);
+    final watching = _attachment == _Attachment.watching;
+    _attachment = _Attachment.none;
     if (background.isDisposed) return;
     background.route = null;
-    if (_attached) background.detach();
-    _attached = false;
+    if (watching) background.detach();
   }
 
   /// 接回或放到背景之後開始了別的搜尋：背景那次結束、不留，換成 [next]
   /// （沒給是新的一份）。
   void _leaveBackground({SearchRun? next}) {
-    _holdingResults = false;
     final background = _background;
     if (background == null) return;
     _background = null;
@@ -874,7 +913,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   /// 別的背景工作開始或結束：「放到背景」「繼續」跟著能不能按。
   void _slotChanged() {
-    if (isSearching || isBackgroundPaused) notifyListeners();
+    if (stage.unfinished) notifyListeners();
   }
 
   // ═══════════════════════════════════════════

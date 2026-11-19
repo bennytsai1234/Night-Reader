@@ -54,6 +54,38 @@ abstract interface class SearchRecorder {
   );
 }
 
+/// 一次搜尋走到哪一段（`docs/state-machines.md`「搜尋」）。互斥；讀者看到的
+/// 只有搜尋中（[inProgress]）與否，各段的差別是之後的回報怎麼算。
+enum _Phase {
+  /// 沒在搜：還沒搜過、搜完、按了結束，或暫停好了。
+  idle,
+
+  /// 讀回的暫停中或做完的搜尋，結果還沒合併成卡（[SearchRun.mergeRestored]）。
+  restored,
+
+  /// 送出了、頁面還在存搜尋紀錄：[SearchRun.start] 才開始送書源；這段時間按了
+  /// 結束、暫停或開始新的一次就不送。
+  saving,
+
+  /// 照條件搜（新的一次，或暫停前還沒選好書源的接著搜）：選好的書源記下來。
+  searching,
+
+  /// 重試失敗的書源：「共 N 個」照整次搜尋的書源數，不縮成重試的數量。
+  retrying,
+
+  /// 接著搜暫停的搜尋剩下的書源：進度接著前面搜完的數。
+  continuing,
+
+  /// 暫停放到背景的搜尋：不再送書源，等背景那件存好結果記成已暫停
+  /// （[SearchRun.markPaused]）。畫面上照舊是搜尋中，背景那件寫「正在暫停…」。
+  halted;
+
+  bool get inProgress => switch (this) {
+    idle || restored => false,
+    saving || searching || retrying || continuing || halted => true,
+  };
+}
+
 /// 進度的訂閱與結果清單分開，書源每次送出或回來不必重建搜尋結果。
 class _ProgressUpdates extends ChangeNotifier {
   void publish() => notifyListeners();
@@ -82,7 +114,7 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     required Map<String, SearchFailureNote> failed,
   }) : _readingFetches = readingFetches ?? ReadingFetches.instance,
        _sourceUrls = sourceUrls,
-       _unmerged = true {
+       _phase = _Phase.restored {
     _model = _newModel();
     _searched.addAll(searched);
     _failedNotes.addAll(failed);
@@ -128,7 +160,11 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   SearchConditions? conditions;
 
   List<SearchBook> results = const [];
-  bool isSearching = false;
+
+  _Phase _phase = _Phase.idle;
+
+  /// 搜尋中：送出了、還沒搜完、沒按結束、沒暫停好。
+  bool get isSearching => _phase.inProgress;
 
   /// 已經送出、還沒回來的書源名稱。
   List<String> waitingSources = const [];
@@ -139,7 +175,6 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
 
   /// 這次搜尋的書源總數；重試失敗書源時不會被縮成重試的數量。
   int searchedSourceCount = 0;
-  bool _retrying = false;
 
   final _ProgressUpdates _progress = _ProgressUpdates();
   Listenable get progressUpdates => _progress;
@@ -156,14 +191,10 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   Map<String, SearchFailureNote> get failedNotes => _failedNotes;
   final Map<String, SearchFailureNote> _failedNotes = {};
 
-  /// 下一次選好書源時記下（新的一次搜尋；重試與接著搜不改）。
-  bool _choosing = false;
-
-  bool _unmerged = false;
   bool _disposed = false;
 
   /// 讀回的結果還沒合併成卡。
-  bool get isRestoring => _unmerged;
+  bool get isRestoring => _phase == _Phase.restored;
 
   /// 放到背景之後記下每個書源的那一位。
   SearchRecorder? recorder;
@@ -181,10 +212,8 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   Future<void>? get running => _attempt?.future;
   Completer<void>? _attempt;
 
-  /// [begin] 之後、[start] 之前（頁面在存搜尋紀錄）：這段時間按了結束、
-  /// 暫停或開始新的一次，[start] 就不開始。
+  /// 第幾次 [begin]：[start] 只開始最後一次的。
   int _ticket = 0;
-  bool _pending = false;
 
   /// 送出搜尋後、引擎真正開始前（存歷史、讀書源清單）就先進入搜尋中，這段
   /// 空檔才不會閃出空狀態，也擋住重複送出。傳回給 [start] 的號碼。
@@ -201,16 +230,12 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     _sourceUrls = const [];
     _doneBefore = 0;
     _failuresBefore = const [];
-    _unmerged = false;
-    _choosing = true;
-    _retrying = false;
-    isSearching = true;
+    _phase = _Phase.saving;
     completed = 0;
     total = 0;
     failed = 0;
     waitingSources = const [];
     _startAttempt();
-    _pending = true;
     notifyListeners();
     return ++_ticket;
   }
@@ -238,10 +263,10 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   /// 照 [begin] 的條件開始搜；[ticket] 不是最後一次 [begin] 的、或這段時間
   /// 按了結束或暫停時不開始。
   Future<void> start(int ticket) {
-    if (_disposed || ticket != _ticket || !_pending) {
+    if (_disposed || ticket != _ticket || _phase != _Phase.saving) {
       return Future<void>.value();
     }
-    _pending = false;
+    _phase = _Phase.searching;
     return _searchByConditions();
   }
 
@@ -294,23 +319,17 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     failures.clear();
     _failuresBefore = const [];
     _doneBefore = 0;
+    _phase = _Phase.retrying;
     _startAttempt();
-    final attempt = _attempt;
     notifyListeners();
-    _retrying = true;
-    try {
-      await _track(
-        _model.searchSources(
-          key: key,
-          sources: sources,
-          precisionSearch: conditions!.precision,
-          initialResults: existing,
-        ),
-      );
-    } finally {
-      // 取消了還沒回來的書源可能晚很久才結束：這時已經是別的一次，不動它的。
-      if (identical(_attempt, attempt)) _retrying = false;
-    }
+    await _track(
+      _model.searchSources(
+        key: key,
+        sources: sources,
+        precisionSearch: conditions!.precision,
+        initialResults: existing,
+      ),
+    );
   }
 
   /// 接著搜暫停的搜尋：只搜 [remaining]，前面搜完的結果帶著、進度接著數。
@@ -319,11 +338,10 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   Future<void> continueWith(List<BookSource>? remaining) async {
     await mergeRestored();
     // 引擎真正開始前（讀字典、讀同時搜幾個）就算搜尋中，不閃出工具列。
-    isSearching = true;
+    _phase = remaining == null ? _Phase.searching : _Phase.continuing;
     _startAttempt();
     notifyListeners();
     if (remaining == null) {
-      _choosing = true;
       await _searchByConditions();
       return;
     }
@@ -342,8 +360,8 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   /// 讀回的結果合成搜尋頁的卡、找回失敗的書源，並把搜到的書放回搜尋快取
   /// （開 App 時清掉了；從結果進書籍詳情後換源、換封面先列它們）；只做一次。
   Future<void> mergeRestored() async {
-    if (!_unmerged) return;
-    _unmerged = false;
+    if (_phase != _Phase.restored) return;
+    _phase = _Phase.idle;
     final raw = [for (final books in _searched.values) ...books];
     results = SearchModel.cardsOf(raw, key, conditions!.precision);
     final dao = getIt<BookSourceDao>();
@@ -373,29 +391,28 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   /// 使用者按「結束」：已經收到的結果照常併入，再停下。
   void stop() {
     _model.stopSearch();
-    isSearching = false;
+    _endAttemptIfSaving();
+    if (isSearching) _phase = _Phase.idle;
     waitingSources = const [];
-    _endAttemptIfPending();
     notifyListeners();
   }
 
   /// 暫停放到背景的搜尋：已經收到的結果照常併入，不再送書源，正在搜的取消
-  /// （繼續時重搜它們）。
+  /// （繼續時重搜它們）。搜完了才按的不動。
   void halt() {
     _model.stopSearch();
-    _endAttemptIfPending();
+    _endAttemptIfSaving();
+    if (isSearching) _phase = _Phase.halted;
   }
 
   /// 還沒開始就結束或暫停：等著它的背景工作不必等存搜尋紀錄。
-  void _endAttemptIfPending() {
-    if (!_pending) return;
-    _pending = false;
-    _endAttempt();
+  void _endAttemptIfSaving() {
+    if (_phase == _Phase.saving) _endAttempt();
   }
 
   /// 暫停好了：不在搜尋中，進度停在那裡。
   void markPaused() {
-    isSearching = false;
+    if (isSearching) _phase = _Phase.idle;
     waitingSources = const [];
     notifyListeners();
   }
@@ -427,8 +444,7 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   }
 
   void _rememberSources(List<BookSource> sources) {
-    if (!_choosing) return;
-    _choosing = false;
+    if (_phase != _Phase.searching) return;
     _sourceUrls = [for (final source in sources) source.bookSourceUrl];
     recorder?.sourcesChosen();
   }
@@ -446,7 +462,8 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
 
   @override
   void onSearchStart() {
-    isSearching = true;
+    // 引擎說開始了：各段在送出時已經定好；還沒在搜的就是照條件搜。
+    if (!isSearching) _phase = _Phase.searching;
     failed = _failuresBefore.length;
     completed = _doneBefore;
     total = _doneBefore;
@@ -479,7 +496,7 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
 
   @override
   void onSearchFinish({required bool isEmpty}) {
-    isSearching = false;
+    _phase = _Phase.idle;
     notifyListeners();
   }
 
@@ -494,7 +511,7 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     this.completed = _doneBefore + completed;
     this.total = _doneBefore + total;
     this.failed = _failuresBefore.length + failed;
-    if (!_retrying) searchedSourceCount = this.total;
+    if (_phase != _Phase.retrying) searchedSourceCount = this.total;
     _progress.publish();
   }
 
