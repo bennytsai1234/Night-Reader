@@ -206,19 +206,25 @@ class _AppTransitionState extends State<_AppTransition>
     if (status.isDismissed) _restoreIfUncovered();
   }
 
-  // 停在半途時，回到最上層、上面也沒有頁在換，就從停著的地方回到整頁：用
-  // 公開的手勢入口開始一次手勢、立刻取消，路由自己播完。
+  // 停在半途時，回到最上層、上面也沒有頁在換，就從停著的地方回到整頁：
+  // 用公開的手勢入口再開始一次手勢，照路由開啟的速度等速收回整頁，和這一頁
+  // 自己的收尾一樣由這裡結束手勢（途中被移除時也是）。
   void _restoreIfUncovered() {
     if (_swipe is! _Stranded ||
         !_route.isCurrent ||
         !widget.secondaryAnimation.isDismissed) {
       return;
     }
-    _swipe = const _Idle();
-    if (_progress >= 1) return;
-    _route
-      ..handleStartBackGesture(progress: _progress)
-      ..handleCancelBackGesture();
+    if (_progress >= 1) {
+      _swipe = const _Idle();
+      return;
+    }
+    _route.handleStartBackGesture(progress: _progress);
+    _runFinish(
+      to: 1,
+      duration: _route.transitionDuration * (1 - _progress),
+      curve: Curves.linear,
+    );
   }
 
   @override
@@ -341,10 +347,14 @@ class _AppTransitionState extends State<_AppTransition>
 
   void _cancel() => _runFinish(to: 1, duration: BackSwipe.cancelDuration);
 
-  void _runFinish({required double to, required Duration duration}) {
+  void _runFinish({
+    required double to,
+    required Duration duration,
+    Curve curve = BackSwipe.curve,
+  }) {
     _backTicker.stop();
     _back.clear();
-    _swipe = _Settling(from: _progress, to: to);
+    _swipe = _Settling(from: _progress, to: to, curve: curve);
     _finish
       ..duration = duration
       ..forward(from: 0);
@@ -365,7 +375,7 @@ class _AppTransitionState extends State<_AppTransition>
       progress: lerpDouble(
         swipe.from,
         swipe.to,
-        BackSwipe.curve.transform(_finish.value),
+        swipe.curve.transform(_finish.value),
       )!,
     );
   }
@@ -491,13 +501,15 @@ final class _Dragging extends _Swipe {
   const _Dragging();
 }
 
-/// 放開後照 [BackSwipe] 的時長從 [from] 送到 [to]：0 是返回，1 是彈回。
-/// 途中再拖、系統再送都不接手；途中有頁蓋上來就停在半途（[_Stranded]）。
+/// 放開後照 [BackSwipe] 的時長從 [from] 送到 [to]：0 是返回，1 是彈回；
+/// 停在半途後補回整頁也是這一段（等速）。途中再拖、系統再送都不接手；途中
+/// 有頁蓋上來就停在半途（[_Stranded]）。
 final class _Settling extends _Swipe {
-  const _Settling({required this.from, required this.to});
+  const _Settling({required this.from, required this.to, required this.curve});
 
   final double from;
   final double to;
+  final Curve curve;
 
   bool get goesBack => to == 0;
 }

@@ -713,6 +713,33 @@ void main() {
       expect(find.text('新頁'), findsNothing);
     });
 
+    testWidgets('removing the page while it comes back whole ends the '
+        'gesture', (tester) async {
+      await pumpApp(tester, AppPageTransition.slide);
+      await push(tester);
+      final page = tester.element(find.text('新頁'));
+      final route = ModalRoute.of(page)!;
+      final gesture = await holdDrag(tester);
+      unawaited(
+        showDialog<void>(
+          context: page,
+          builder: (_) => const AlertDialog(content: Text('對話框')),
+        ),
+      );
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      Navigator.pop(tester.element(find.text('對話框')));
+      // 對話框關掉後這一頁開始回到整頁，途中被程式移除。
+      await tester.pump();
+      expect(Navigator.of(home).userGestureInProgress, isTrue);
+      Navigator.of(home).removeRoute(route);
+      await tester.pumpAndSettle();
+      expect(find.text('新頁'), findsNothing);
+      expect(Navigator.of(home).userGestureInProgress, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('closing the page in code mid-drag ends the gesture', (
       tester,
     ) async {
