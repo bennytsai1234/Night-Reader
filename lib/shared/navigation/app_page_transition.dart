@@ -185,16 +185,34 @@ class _AppTransitionState extends State<_AppTransition>
       oldWidget.secondaryAnimation.removeStatusListener(_onCoveredStatus);
       _listen(widget.secondaryAnimation, _onCoveredStatus);
     }
-    // 路由狀態變了才會重建到這裡，例如蓋在上面的頁被關掉（[ModalRoute.didPopNext]）。
-    // 蓋上來的是對話框這類不帶動底下頁面的路由時，關掉它不會有下面
-    // [_onCoveredStatus] 的那一下，從這裡補回。建構中不能通知 Navigator，
-    // 等這一幀畫完。
-    if (_swipe is _Stranded) {
+    // 上面推入或關掉一頁（[ModalRoute.didChangeNext]、[ModalRoute.didPopNext]）
+    // 時路由會重建到這裡。收尾中被蓋住時從這裡停下（整頁一下就蓋住時，收尾
+    // 的計時器跟著這一頁不在畫面上就停了，等不到下一格）；對話框這類不帶動
+    // 底下頁面的路由關掉時，沒有 [_onCoveredStatus] 的那一下，從這裡補回。
+    // 建構中不能通知 Navigator，等這一幀畫完。
+    final swipe = _swipe;
+    if ((swipe is _Settling && !_route.isCurrent) ||
+        (swipe is _Stranded && _uncovered)) {
       SchedulerBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _restoreIfUncovered();
+        if (mounted) _onRouteChanged();
       });
     }
   }
+
+  void _onRouteChanged() {
+    switch (_swipe) {
+      case final _Settling swipe when !_route.isCurrent:
+        _finish.stop();
+        _settle(swipe);
+      case _Stranded():
+        _restoreIfUncovered();
+      case _:
+    }
+  }
+
+  /// 這一頁在最上層，上面也沒有頁在換。
+  bool get _uncovered =>
+      _route.isCurrent && widget.secondaryAnimation.isDismissed;
 
   void _listen(Animation<double> animation, AnimationStatusListener listener) {
     listener(animation.status);
@@ -210,11 +228,7 @@ class _AppTransitionState extends State<_AppTransition>
   // 用公開的手勢入口再開始一次手勢，照路由開啟的速度等速收回整頁，和這一頁
   // 自己的收尾一樣由這裡結束手勢（途中被移除時也是）。
   void _restoreIfUncovered() {
-    if (_swipe is! _Stranded ||
-        !_route.isCurrent ||
-        !widget.secondaryAnimation.isDismissed) {
-      return;
-    }
+    if (_swipe is! _Stranded || !_uncovered) return;
     if (_progress >= 1) {
       _swipe = const _Idle();
       return;
@@ -354,7 +368,14 @@ class _AppTransitionState extends State<_AppTransition>
   }) {
     _backTicker.stop();
     _back.clear();
-    _swipe = _Settling(from: _progress, to: to, curve: curve);
+    final swipe = _Settling(from: _progress, to: to, curve: curve);
+    _swipe = swipe;
+    // 已經被蓋住（例如推入新頁時 Navigator 取消了正在拖的手指）：路由不讓
+    // 手勢改進度，直接停在半途。
+    if (!_route.isCurrent) {
+      _settle(swipe);
+      return;
+    }
     _finish
       ..duration = duration
       ..forward(from: 0);

@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book/book.dart';
@@ -934,6 +935,43 @@ void main() {
         expect(route.popGestureEnabled, isTrue);
       });
     }
+
+    testWidgets('a page that covers it at once right after commit does not '
+        'send it back later', (tester) async {
+      await pumpApp(tester, AppPageTransition.slide);
+      await push(tester);
+      final page = tester.element(find.text('新頁'));
+      final route = ModalRoute.of(page)!;
+      await send(tester, 'startBackGesture', event(0, 0));
+      await send(tester, 'updateBackGestureProgress', event(100, 0.3));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+      await send(tester, 'commitBackGesture');
+      // 收尾開始後的下一幀，收尾那一格跑完之後（例如別的動畫播完時）才推入
+      // 一個不播動畫的整頁：這一幀畫完，這一頁就不在畫面上了。
+      await tester.pump(const Duration(milliseconds: 8));
+      SchedulerBinding.instance.scheduleFrameCallback((_) {
+        Navigator.push(
+          page,
+          PageRouteBuilder<void>(
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+            pageBuilder: (_, _, _) =>
+                const Scaffold(body: Center(child: Text('第三頁'))),
+          ),
+        );
+      });
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      // 被蓋住時不返回：手勢結束，這一頁停在半途。
+      expect(Navigator.of(home).userGestureInProgress, isFalse);
+      Navigator.pop(tester.element(find.text('第三頁')));
+      await tester.pumpAndSettle();
+      expect(tester.getCenter(find.text('新頁')), const Offset(400, 300));
+      expect(route.animation!.value, 1);
+      expect(Navigator.of(home).userGestureInProgress, isFalse);
+    });
 
     testWidgets('closing the page in code mid-gesture ends the gesture', (
       tester,
