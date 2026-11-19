@@ -1,3 +1,6 @@
+/// @docImport 'package:flutter/rendering.dart';
+library;
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -12,7 +15,7 @@ import '../lists/swipe_actions.dart';
 
 /// 分組清單裡自己給骨架樣子的一項：一般的列與組已經認得（[GroupedItemShape.of]），
 /// 頁面自己的區塊（風格卡、色票列、分段控制、輸入框）實作這個介面，照元件
-/// build 用的同一份版面常數與字樣，在 [width] 裡真的把字排出來。
+/// build 用的同一份版面常數與字樣，在 `width` 裡真的把字排出來。
 abstract interface class GroupedSkeletonItem {
   GroupedItemShape skeletonShape(BuildContext context, {required double width});
 }

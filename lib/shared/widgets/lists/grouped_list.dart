@@ -1,3 +1,6 @@
+/// @docImport '../glass/glass.dart';
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:flutter/scheduler.dart';
