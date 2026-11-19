@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
@@ -19,7 +18,6 @@ import 'package:night_reader/features/reader/features/highlight/reader_highlight
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/storage/books_in_use.dart';
 import 'package:night_reader/core/download/download_service.dart';
-import 'package:night_reader/core/source/source_interaction.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_page.dart';
@@ -34,6 +32,7 @@ import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
 import 'package:night_reader/features/reader/screen/reader_controller_host.dart';
 import 'package:night_reader/features/reader/screen/reader_chapter_info.dart';
 import 'package:night_reader/features/reader/screen/reader_change_source.dart';
+import 'package:night_reader/features/reader/screen/reader_source_remedy.dart';
 import 'package:night_reader/features/reader/use_cases/reader_page_coordinator.dart';
 import 'package:night_reader/features/reader/use_cases/coordinators/reader_page_exit_coordinator.dart';
 import 'package:night_reader/features/reader/session/reader_session_facade.dart';
@@ -50,8 +49,6 @@ import 'package:night_reader/features/reader/features/settings/reader_settings_s
 import 'package:night_reader/features/reader/screen/reader_device_channel.dart';
 import 'package:night_reader/features/reader/screen/reader_page_shell.dart';
 import 'package:night_reader/features/reader/screen/reader_window_settings.dart';
-import 'package:night_reader/features/source_login/source_browser_page.dart';
-import 'package:night_reader/features/source_login/source_login_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
@@ -105,6 +102,20 @@ class _ReaderPageState extends State<ReaderPage>
     book: widget.book,
     host: _host,
     info: _chapterInfo,
+  );
+
+  /// 讀不到正文時的按鈕列、登入與網頁驗證（[ReaderSourceRemedy]）。
+  late final ReaderSourceRemedy _remedy = ReaderSourceRemedy(
+    context: () => context,
+    mounted: () => mounted,
+    book: widget.book,
+    host: _host,
+    info: _chapterInfo,
+    changeSource: _changeSource,
+    showNotice: _showNotice,
+    jumpToChapter: _jumpToChapterFromDrawer,
+    exit: _handleExitIntent,
+    restoreMenuWhenUncovered: _restoreMenuWhenUncovered,
   );
 
   late final ReaderChapterInfo _chapterInfo = ReaderChapterInfo(
@@ -287,7 +298,7 @@ class _ReaderPageState extends State<ReaderPage>
 
   void _handleControllerChanged() {
     _dismissSyncHintIfMoved();
-    _drainRuntimeNotice();
+    _remedy.drainNotice();
     _coordinator.maybeFollowTtsHighlight();
     _scheduleRebuild();
   }
@@ -571,98 +582,13 @@ class _ReaderPageState extends State<ReaderPage>
                 alignment: Alignment.bottomCenter,
                 child: SafeArea(
                   minimum: const EdgeInsets.all(24),
-                  child: _buildReaderErrorActions(runtime),
+                  child: _remedy.errorActions(runtime),
                 ),
               ),
           ],
         );
       },
     );
-  }
-
-  Widget _buildReaderErrorActions(ReaderRuntime runtime) {
-    final message = runtime.state.unavailableMessage ?? '';
-    if (_verificationFor(message) case final request?) {
-      // 書源要在網頁上驗證：「前往驗證」排第一，關掉就重開（ADR 0038）。
-      return _readerErrorActions(
-        runtime,
-        first: (
-          label: '前往驗證',
-          icon: Icons.open_in_browser_rounded,
-          onPressed: () => unawaited(_verify(request)),
-        ),
-      );
-    }
-    if (LoginCheckException.describes(message)) {
-      // 要登入才讀得到：「登入」排第一，登入完自動重開（ADR 0038）。
-      return FutureBuilder<BookSource?>(
-        future: _loginSource(),
-        builder: (context, snapshot) => _readerErrorActions(
-          runtime,
-          first: switch (snapshot.data) {
-            final source? => (
-              label: '登入',
-              icon: Icons.login_rounded,
-              onPressed: () => unawaited(_login(source)),
-            ),
-            null => null,
-          },
-        ),
-      );
-    }
-    return _readerErrorActions(runtime);
-  }
-
-  /// 開書失敗的按鈕列；[first] 是能解決這次失敗的那一顆（登入、前往驗證），
-  /// 有的話排第一、重試退成次要。
-  Widget _readerErrorActions(
-    ReaderRuntime runtime, {
-    ({String label, IconData icon, VoidCallback onPressed})? first,
-  }) {
-    void retry() => unawaited(_retryReader(runtime));
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        if (first != null) ...[
-          FilledButton.icon(
-            onPressed: first.onPressed,
-            icon: Icon(first.icon),
-            label: UiText(first.label),
-          ),
-          OutlinedButton.icon(
-            onPressed: retry,
-            icon: const Icon(Icons.refresh),
-            label: const UiText('重試'),
-          ),
-        ] else
-          FilledButton.icon(
-            onPressed: retry,
-            icon: const Icon(Icons.refresh),
-            label: const UiText('重試'),
-          ),
-        // 本地書沒有換源，灰著留在原位（ADR 0059）。
-        OutlinedButton.icon(
-          onPressed: widget.book.isLocal ? null : _changeSource.show,
-          icon: const Icon(Icons.swap_horiz),
-          label: const UiText('換源'),
-        ),
-        TextButton.icon(
-          onPressed: _handleExitIntent,
-          icon: const Icon(Icons.arrow_back),
-          label: const UiText('返回'),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _retryReader(ReaderRuntime runtime) async {
-    if (runtime.chapterCount <= 0) {
-      await runtime.openBook();
-      return;
-    }
-    await runtime.reloadContentPreservingLocation();
   }
 
   void _openChapters() => _chapterPanel.open();
@@ -769,123 +695,6 @@ class _ReaderPageState extends State<ReaderPage>
     _drawerClosed = null;
   }
 
-  void _drainRuntimeNotice() {
-    final notice = _host.runtime?.takeUserNotice();
-    if (!mounted || notice == null || notice.message.isEmpty) return;
-    final (:message, :chapterIndex) = notice;
-    if (_verificationFor(message) case final request?) {
-      // 書源要在網頁上驗證：提示旁給「前往驗證」，關掉就重抓取不到的那一章。
-      _showNotice(
-        message,
-        action: (
-          label: '前往驗證',
-          onPressed: () =>
-              unawaited(_verify(request, failedChapter: chapterIndex)),
-        ),
-      );
-      return;
-    }
-    if (!LoginCheckException.describes(message)) {
-      _showNotice(message);
-      return;
-    }
-    // 要登入才讀得到：提示旁給「登入」，登入完重抓取不到的那一章（ADR 0038）。
-    unawaited(
-      _loginSource().then((source) {
-        if (!mounted) return;
-        _showNotice(
-          message,
-          action: source == null
-              ? null
-              : (
-                  label: '登入',
-                  onPressed: () =>
-                      unawaited(_login(source, failedChapter: chapterIndex)),
-                ),
-        );
-      }),
-    );
-  }
-
-  /// 這本書的書源，有登入（ADR 0038）時才有；換源會換掉整個閱讀頁，所以
-  /// 一頁查一次。
-  Future<BookSource?> _loginSource() => _loginSourceLookup ??= () async {
-    if (widget.book.isLocal) return null;
-    final source = await _host.dependencies.sourceDao.getByUrl(
-      widget.book.origin,
-    );
-    return source != null && source.hasLogin ? source : null;
-  }();
-  Future<BookSource?>? _loginSourceLookup;
-
-  /// 開書源的登入；登入資料變了就重抓（[_refetchFailed]）。[ticket] 是從
-  /// 選單開的那一次：等選單滑出才推頁，回來後選單滑回來。
-  Future<void> _login(
-    BookSource source, {
-    ReaderMenuDepartureTicket? ticket,
-    int? failedChapter,
-  }) async {
-    final changed = await openSourceLogin(
-      context,
-      source,
-      beforePush: ticket == null
-          ? null
-          : () async {
-              final ready =
-                  await ticket.menusGone &&
-                  mounted &&
-                  ticket.canDepart &&
-                  (pageRouteOf(context)?.isCurrent ?? false);
-              if (!ready && mounted) _host.releaseAutoPage();
-              return ready;
-            },
-    );
-    if (!mounted) return;
-    if (ticket != null) _restoreMenuWhenUncovered();
-    if (!changed) return;
-    await _refetchFailed(failedChapter);
-  }
-
-  /// 失敗是因為書源要在網頁上驗證時，書源要開的那一頁（ADR 0038）。
-  SourceBrowseRequest? _verificationFor(String message) {
-    if (widget.book.isLocal ||
-        !SourceVerificationException.describes(message)) {
-      return null;
-    }
-    return SourceInteraction.verificationFor(widget.book.origin);
-  }
-
-  /// 「前往驗證」：開書源要的那一頁，關掉就重抓（[_refetchFailed]；不論
-  /// 有沒有按完成，網頁的 Cookie 都存了）。
-  Future<void> _verify(
-    SourceBrowseRequest request, {
-    int? failedChapter,
-  }) async {
-    await openSourceVerification(
-      context,
-      sourceUrl: widget.book.origin,
-      sourceName: widget.book.originName,
-      request: request,
-    );
-    if (mounted) await _refetchFailed(failedChapter);
-  }
-
-  /// 登入或驗證回來之後重抓：開書失敗的重開；取不到的是別章
-  /// （[failedChapter]，例如跳章或捲到下一章時）就跳過去；否則重抓這一章、
-  /// 停在原位。
-  Future<void> _refetchFailed([int? failedChapter]) async {
-    final runtime = _host.runtime;
-    if (runtime == null) return;
-    if (runtime.state.lifecycle == ReaderLifecycle.unavailable) {
-      await _retryReader(runtime);
-    } else if (failedChapter != null &&
-        failedChapter != _chapterInfo.currentChapterIndex(runtime)) {
-      _jumpToChapterFromDrawer(failedChapter);
-    } else {
-      await _refetchCurrentChapter();
-    }
-  }
-
   void _showNotice(
     String message, {
     ReaderNoticeAction? action,
@@ -941,7 +750,7 @@ class _ReaderPageState extends State<ReaderPage>
     _lookingUpMore = true;
     final BookSource? loginSource;
     try {
-      loginSource = await _loginSource();
+      loginSource = await _remedy.loginSource();
     } finally {
       _lookingUpMore = false;
     }
@@ -987,10 +796,10 @@ class _ReaderPageState extends State<ReaderPage>
         await _changeSource.show();
       case _ReaderMoreAction.refetchChapter:
         _host.menu.dismissControls();
-        await _refetchCurrentChapter();
+        await _remedy.refetchCurrentChapter();
       case _ReaderMoreAction.login:
         if (loginSource != null) {
-          await _login(loginSource, ticket: _departMenu());
+          await _remedy.login(loginSource, ticket: _departMenu());
         }
       case _ReaderMoreAction.bookDetail:
         await _showBookDetail();
@@ -1142,18 +951,6 @@ class _ReaderPageState extends State<ReaderPage>
         _host.menu.showControls();
       }),
     );
-  }
-
-  /// 書源回了擋爬蟲頁或不完整的正文時，向書源重抓這一章、停在原位；
-  /// 抓不到時保留原本的正文並顯示原因。
-  Future<void> _refetchCurrentChapter() async {
-    final runtime = _host.runtime;
-    if (runtime == null || !runtime.state.hasStableWorld) return;
-    _showNotice('正在重新取得本章…');
-    final succeeded = await runtime.reloadContentPreservingLocation(
-      refetch: true,
-    );
-    if (mounted && succeeded) _showNotice('已重新取得本章');
   }
 
   /// 從閱讀器開的詳情：點章節回來跳到那一章（見 [resolveDetailChapter]），
