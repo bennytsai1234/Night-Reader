@@ -204,6 +204,31 @@ void main() {
     expect(sync.commits, 0);
   });
 
+  test('打不開時按播放鍵或收聽圓鈕就是重試', () async {
+    // 第一次開書就打不開：播放引擎還沒建起來。
+    final other = await bookWithoutChapters();
+    source.chapterList = Completer()..complete(null);
+    await player.open(other);
+    expect(player.phase, AudiobookPhase.openFailed);
+
+    source.chapterList = Completer()
+      ..complete([
+        for (var i = 0; i <= 6; i++)
+          BookChapter(
+            url: 'https://audio.test/b2/ep$i',
+            title: '第 $i 集',
+            bookUrl: other.bookUrl,
+            index: i,
+          ),
+      ]);
+    await player.toggle();
+    await pumpEventQueue();
+
+    expect(player.chapters, hasLength(7));
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/b2/ep5.mp3');
+    expect(player.playing, isTrue);
+  });
+
   test('播著的書算開著，停了才放掉：播的時候不自動換源（ADR 0069）', () async {
     // 開著時換了源，之後存的收聽進度寫不到換過去的那本。
     await player.open(book);

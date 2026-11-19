@@ -517,11 +517,14 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   // --- 播放控制 ---
 
   Future<void> play() async {
+    final book = _book;
     final engine = _engine;
-    if (_book == null || engine == null) return;
     switch (_phase) {
-      case AudiobookPhase.idle || AudiobookPhase.openFailed:
+      case AudiobookPhase.idle:
         return;
+      // 打不開：按播放就是重試，接著上次聽的地方。
+      case AudiobookPhase.openFailed:
+        if (book != null) await open(book);
       // 這一集播不出來：從停下的地方重新載入；播完了：從這一集開頭。
       case AudiobookPhase.failed:
         await _load(_index, start: position.value, autoplay: true);
@@ -532,6 +535,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       case AudiobookPhase.opening || AudiobookPhase.loading:
         _wantPlay = true;
       case AudiobookPhase.playing || AudiobookPhase.paused:
+        if (engine == null) return;
         _wantPlay = true;
         await _startPlaying(engine);
     }
