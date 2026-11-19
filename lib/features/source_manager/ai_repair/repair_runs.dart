@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
@@ -434,11 +435,10 @@ class BatchRepairRun extends RepairRun {
   bool get workPaused => _pausedWork;
 
   @override
-  BackgroundWorkStatus get status =>
-      _batch.isStopped || (_batch.isPaused && _batch.isRunning)
+  BackgroundWorkStatus get status => _batch.phase.settling
       ? BackgroundWorkStatus.settling(
           title,
-          pausing: _batch.isPaused,
+          pausing: _batch.phase == WorkPhase.pausing,
           progress: repairBatchProgress(_batch),
         )
       : BackgroundWorkStatus(
@@ -586,8 +586,11 @@ class SingleRepairRun extends RepairRun {
   @override
   BackgroundWorkStatus get status {
     final title = 'AI 修復 · ${_session.job.original.bookSourceName}';
-    if (_session.isStopped || (_session.isPaused && _session.isRunning)) {
-      return BackgroundWorkStatus.settling(title, pausing: _session.isPaused);
+    if (_session.phase.settling) {
+      return BackgroundWorkStatus.settling(
+        title,
+        pausing: _session.phase == WorkPhase.pausing,
+      );
     }
     return BackgroundWorkStatus(
       title: title,

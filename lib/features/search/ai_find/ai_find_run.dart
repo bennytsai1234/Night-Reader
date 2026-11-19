@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/core/ai_find/ai_find_library.dart';
 import 'package:night_reader/core/ai_find/ai_find_session.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
@@ -134,10 +135,10 @@ class AiFindRun extends RepairRun {
 
   @override
   BackgroundWorkStatus get status {
-    if (_session.isPausing || _session.isStopped) {
+    if (_session.phase.settling) {
       return BackgroundWorkStatus.settling(
         'AI 找書',
-        pausing: !_session.isStopped,
+        pausing: _session.phase == WorkPhase.pausing,
       );
     }
     return BackgroundWorkStatus(

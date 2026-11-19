@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/diagnostics/crash_trail.dart';
@@ -216,24 +217,39 @@ class AiRepairSession extends ChangeNotifier {
   AgentStats? get stats => _stats;
   Future<void>? _startTask;
   Completer<void>? _pasteCompletion;
-  bool _running = false;
-  bool _stopped = false;
-  bool _paused = false;
+  WorkPhase _phase = WorkPhase.ready;
   bool _disposed = false;
 
   bool get usesClipboard => service == null;
-  bool get isRunning => _running;
 
-  /// 按了結束（還沒停好或已經停好）；暫停不算。
-  bool get isStopped => _stopped && !_paused;
+  /// 走到哪：還沒開始、做著、正在暫停、正在結束、已暫停（停下、書源不改，
+  /// 不算結束；接著做是這個書源從頭重修，ADR 0058）、等貼回（剪貼簿）、做完
+  /// （含結束）。
+  WorkPhase get phase => _phase;
+  bool get isRunning => _phase.active;
 
-  /// 按了暫停：停下、書源不改，不算結束；接著做是這個書源從頭重修
-  /// （背景工作接著做，ADR 0058）。
-  bool get isPaused => _paused;
+  /// 按了結束、還沒停好（正在暫停時按的也算：結束蓋過暫停）。
+  bool get isStopped => _phase == WorkPhase.ending;
 
-  /// 做完（或停下）。剪貼簿等使用者貼回時不算。
-  bool get isFinished =>
-      !_running && !_paused && (_stopped || job.outcome != null);
+  bool get isPaused => _phase == WorkPhase.paused;
+
+  /// 做完（或結束）。剪貼簿等使用者貼回時不算。
+  bool get isFinished => _phase == WorkPhase.finished;
+
+  /// 按了暫停或結束、還沒停好：做著的那一步看到就收手。
+  bool get _halting => _phase.settling;
+
+  /// 一段跑完（[_run] 或貼回的校驗）：照結果與按了什麼定下一個階段。暫停時
+  /// 正好在存修好的書源：存完就算做完，不再是暫停。
+  void _settle() {
+    _phase = switch (_phase) {
+      _ when job.outcome != null => WorkPhase.finished,
+      WorkPhase.pausing => WorkPhase.paused,
+      WorkPhase.ending => WorkPhase.finished,
+      _ => job.awaitingPaste ? WorkPhase.waiting : WorkPhase.finished,
+    };
+  }
+
   Future<void> get completion =>
       _pasteCompletion?.future ?? _startTask ?? Future<void>.value();
 
@@ -242,14 +258,14 @@ class AiRepairSession extends ChangeNotifier {
 
   Future<void> start() {
     if (_startTask != null) return _startTask!;
-    if (_stopped || _disposed || job.outcome != null) {
+    if (_phase != WorkPhase.ready || _disposed || job.outcome != null) {
       return Future<void>.value();
     }
     return _startTask = _run();
   }
 
   Future<void> _run() async {
-    _running = true;
+    _phase = WorkPhase.running;
     CrashTrail.action('開始 AI 修復：${job.original.bookSourceName}');
     _notify();
     try {
@@ -258,7 +274,7 @@ class AiRepairSession extends ChangeNotifier {
       // 校驗、試抓或存檔丟出沒料到的錯：記成沒修好，做著的步驟標失敗，
       // 不讓畫面停在轉圈。
       AppLog.e('AI 修書源出錯', error: error, stackTrace: stack);
-      if (job.outcome == null && !_stopped) {
+      if (job.outcome == null && !_halting) {
         for (final step in job.steps) {
           if (step.state == AiRepairStepState.running) {
             step
@@ -269,7 +285,8 @@ class AiRepairSession extends ChangeNotifier {
         _fail(job, '修復出錯，書源沒有改：$error');
       }
     } finally {
-      _running = false;
+      final ended = _phase == WorkPhase.ending;
+      _settle();
       // 抓到的網頁只給這次的 AI 用；整批修復一次開幾十段，不留在記憶體。
       // 開場試抓的報告也帶著整頁原文：做完了（等貼回書源的不算）一起放掉。
       _pages.clear();
@@ -286,12 +303,10 @@ class AiRepairSession extends ChangeNotifier {
           }
         }
       }
-      // 暫停時正好在存修好的書源：存完就算做完，不再是暫停。
-      if (job.outcome != null) _paused = false;
       CrashTrail.action(
-        'AI 修復${_paused
+        'AI 修復${_phase == WorkPhase.paused
             ? '暫停了'
-            : _stopped
+            : ended
             ? '結束了'
             : '做完了'}：${job.original.bookSourceName}',
       );
@@ -302,17 +317,21 @@ class AiRepairSession extends ChangeNotifier {
   /// 結束：做著的那一步標成結束，修到一半的不改。暫停中的直接收尾。
   void stop() {
     if (job.outcome != null) return;
-    if (_paused && !_running) {
-      _paused = false;
-      _endSteps();
-      _notify();
-      return;
+    switch (_phase) {
+      case WorkPhase.paused:
+        _phase = WorkPhase.finished;
+        _endSteps();
+        _notify();
+        return;
+      case WorkPhase.ending || WorkPhase.finished:
+        return;
+      case WorkPhase.running || WorkPhase.pausing:
+        // 正在暫停時按結束：結束蓋過暫停，照做著時按結束的走。
+        _phase = WorkPhase.ending;
+      case _:
+        _phase = WorkPhase.finished;
     }
-    // 正在暫停時按結束：結束蓋過暫停，照做著時按結束的走。
-    if (_stopped && !_paused) return;
     CrashTrail.action('按了結束：AI 修復 ${job.original.bookSourceName}');
-    _paused = false;
-    _stopped = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已結束');
     if (!job._committing) _endSteps();
     _notify();
@@ -338,10 +357,17 @@ class AiRepairSession extends ChangeNotifier {
   /// 暫停：做著的那一步停下、書源不改，結果不寫（背景工作接著做，ADR 0058）。
   /// 正在存修好的書源時停不下來，存完就算做完。剪貼簿的修復不暫停。
   void pause() {
-    if (_stopped || job.outcome != null || usesClipboard) return;
+    if (job.outcome != null || usesClipboard) return;
+    switch (_phase) {
+      case WorkPhase.running:
+        _phase = WorkPhase.pausing;
+      case WorkPhase.ready:
+        // 還沒輪到就暫停（整批暫停時）：直接停好。
+        _phase = WorkPhase.paused;
+      case _:
+        return;
+    }
     CrashTrail.action('按了暫停：AI 修復 ${job.original.bookSourceName}');
-    _stopped = true;
-    _paused = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已暫停');
     if (!job._committing) {
       for (final step in job.steps) {
@@ -357,7 +383,9 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 剪貼簿：使用者貼回 AI 修好的書源。讀不出書源時傳回原因、什麼都不做。
   Future<String?> submitPaste(String text) async {
-    if (!job.awaitingPaste || _running || _stopped || _disposed) return null;
+    if (!job.awaitingPaste || _phase != WorkPhase.waiting || _disposed) {
+      return null;
+    }
     if (text.length > aiRepairMaxReplyLength) return '貼回的內容太長';
     final json = pastedSourceJson(text);
     final candidate = json == null ? null : candidateOrNull(job.original, json);
@@ -365,7 +393,7 @@ class AiRepairSession extends ChangeNotifier {
     job.awaitingPaste = false;
     final pending = Completer<void>();
     _pasteCompletion = pending;
-    _running = true;
+    _phase = WorkPhase.running;
     _notify();
     try {
       log
@@ -374,11 +402,11 @@ class AiRepairSession extends ChangeNotifier {
       await _validate(job, candidate, '');
     } catch (error, stack) {
       AppLog.e('AI 貼回書源出錯', error: error, stackTrace: stack);
-      if (!_stopped) {
+      if (!_halting) {
         _fail(job, '校驗貼回的書源出錯，書源沒有改：$error');
       }
     } finally {
-      _running = false;
+      _settle();
       _notify();
       pending.complete();
       if (identical(_pasteCompletion, pending)) _pasteCompletion = null;
@@ -405,7 +433,7 @@ class AiRepairSession extends ChangeNotifier {
     log
       ..redact = ((text) => _redact(job, text))
       ..header(_serviceText, prompt: aiRepairPromptVersion);
-    if (_stopped) return;
+    if (_halting) return;
 
     final checkStep = _addStep(job, aiRepairCheckStage);
     log.section(aiRepairCheckStage);
@@ -415,7 +443,7 @@ class AiRepairSession extends ChangeNotifier {
     final checked = prior != null
         ? prior.result
         : await _guard(() => _check(original, _cancelToken));
-    if (_stopped) return;
+    if (_halting) return;
     final checkText = _checkText(checked);
     final before = checked == null
         ? null
@@ -450,7 +478,7 @@ class AiRepairSession extends ChangeNotifier {
     log.section(aiRepairFetchStage);
     final probeWatch = Stopwatch()..start();
     final probe = await _guard(() => _probe(original, _cancelToken));
-    if (_stopped || probe == null) return;
+    if (_halting || probe == null) return;
     job._firstProbe = probe;
     final numbered = withPageIds(_pages, probe);
     _finish(fetchStep, _fetchText(probe));
@@ -509,7 +537,7 @@ class AiRepairSession extends ChangeNotifier {
     );
     final end = await runAgent(agent, ask: _ask!, cancelToken: _cancelToken);
     _stats = end.stats;
-    if (_stopped || job.outcome != null) {
+    if (_halting || job.outcome != null) {
       _logStats(end);
       return;
     }
@@ -587,7 +615,7 @@ class AiRepairSession extends ChangeNotifier {
     log.section(aiRepairVerifyStage);
     final checkWatch = Stopwatch()..start();
     var checked = await _guard(() => _check(candidate, _cancelToken));
-    if (_stopped) return null;
+    if (_halting) return null;
     bool usable(SourceCheckIsolateResult? result) =>
         usableFix(result, job.original, candidate, before: job._before);
     if (probeSucceeded && !usable(checked)) {
@@ -603,12 +631,12 @@ class AiRepairSession extends ChangeNotifier {
         Future<void>.delayed(recheckDelay),
         _cancelToken.whenCancel,
       ]);
-      if (_stopped) return null;
+      if (_halting) return null;
       checkWatch.reset();
       checked = await _guard<SourceCheckIsolateResult?>(
         () => _check(candidate, _cancelToken),
       );
-      if (_stopped) return null;
+      if (_halting) return null;
     }
     final checkText = _checkText(checked);
     log.both('${AiRepairLog.seconds(checkWatch)}：$checkText');
@@ -761,7 +789,7 @@ class AiRepairSession extends ChangeNotifier {
     try {
       return await work();
     } on DioException catch (error) {
-      if (CancelToken.isCancel(error) || _stopped) return null;
+      if (CancelToken.isCancel(error) || _halting) return null;
       rethrow;
     }
   }
@@ -800,7 +828,7 @@ final class _AgentHost implements RepairAgentHost {
   final AiRepairJob job;
 
   @override
-  bool get stopped => s._stopped;
+  bool get stopped => s._halting;
 
   @override
   Future<T?> guard<T>(Future<T> Function(CancelToken cancelToken) work) =>

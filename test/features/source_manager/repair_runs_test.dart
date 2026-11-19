@@ -166,9 +166,6 @@ void main() {
       ..stageDone = 7
       ..stageTotal = 24;
     expect(run.status.text, 'AI 修，7／24 個網站');
-
-    batch.stop();
-    expect(run.status.text, '正在結束…');
   });
 
   test('a single repair notification says what is being done, not which '

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
@@ -284,7 +285,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
         end,
       ];
     }
-    final pausing = _session.isPaused;
+    final pausing = _session.phase == WorkPhase.pausing;
     return [
       GroupedRow(
         title: pausing ? backgroundWorkPausing : '暫停',
@@ -460,7 +461,9 @@ class _AiRepairPageState extends State<AiRepairPage> {
     if (steps.last.state == AiRepairStepState.running) {
       return AiRepairStepState.running;
     }
-    if (job.outcome != null || _session.isPaused) {
+    if (job.outcome != null ||
+        _session.phase == WorkPhase.pausing ||
+        _session.phase == WorkPhase.paused) {
       return AiRepairStepState.failed;
     }
     return AiRepairStepState.running;

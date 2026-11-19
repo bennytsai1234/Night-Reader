@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_step.dart';
@@ -210,7 +211,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
         end,
       ];
     }
-    final pausing = _batch.isPaused;
+    final pausing = _batch.phase == WorkPhase.pausing;
     return [
       GroupedRow(
         title: pausing ? backgroundWorkPausing : '暫停',

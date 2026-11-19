@@ -569,7 +569,6 @@ void main() {
     b.stop();
     await b.start();
     expect(asked, isEmpty);
-    expect(b.isStopped, isTrue);
     expect(b.isRunning, isFalse);
     expect(b.isFinished, isTrue);
     expect(b.count(RepairOutcome.notTried), 1);
