@@ -440,6 +440,40 @@ void main() {
     expect(provider.isBackgroundPaused, isFalse);
   });
 
+  test('ending while the pause waits for the results file ends it', () async {
+    final hold = Completer<void>();
+    var holding = false;
+    final background = BackgroundSearches(
+      work: work,
+      directory: () async {
+        if (holding) await hold.future;
+        return dir;
+      },
+      readingFetches: ReadingFetches(),
+    );
+    final loader = _Loader();
+    final provider = await page(background, loader);
+    addTearDown(provider.dispose);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.isNotEmpty);
+    provider.moveToBackground();
+    await settle();
+    // 一個書源回來了，它那一行卡在寫檔：暫停停好之前要等它。
+    holding = true;
+    loader.answer(loader.sent.first);
+    await settle();
+    provider.pauseBackground();
+    final run = background.current!;
+    await until(() => run.search.running == null);
+    expect(run.isPaused, isFalse, reason: '還在等結果檔寫完');
+
+    provider.stopSearch();
+    hold.complete();
+    await until(() => !run.isRunning);
+    expect(run.isFinished, isTrue, reason: '結束蓋過暫停');
+    expect(run.isPaused, isFalse);
+  });
+
   test('pausing keeps a source that has just come back', () async {
     final background = searches();
     final loader = _Loader();

@@ -12,6 +12,7 @@ import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/core/background_work/paused_work_file.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
 import 'package:night_reader/features/source_manager/ai_repair/source_repair_page.dart';
@@ -56,12 +57,28 @@ class _MemoryFile extends PausedWorkFile {
   }
 }
 
+/// 刪存檔要等 [gate]：工作本身做完、頁面那層還在收尾的那一段看得到。
+class _SlowToCloseFile extends _MemoryFile {
+  _SlowToCloseFile(this.gate);
+  final Completer<void> gate;
+
+  @override
+  Future<void> close() async {
+    await gate.future;
+    await super.close();
+  }
+}
+
 class _FakePlatform implements BackgroundWorkPlatform {
   final List<String> calls = [];
+
+  /// 每次送出的通知放了哪些按鈕。
+  final List<List<String>> actions = [];
 
   @override
   Future<bool> show(BackgroundWorkStatus status) async {
     calls.add('${status.text}｜${status.permille}');
+    actions.add(status.actions);
     return true;
   }
 
@@ -166,9 +183,6 @@ void main() {
       ..stageDone = 7
       ..stageTotal = 24;
     expect(run.status.text, 'AI 修，7／24 個網站');
-
-    batch.stop();
-    expect(run.status.text, '正在結束…');
   });
 
   test('a single repair notification says what is being done, not which '
@@ -573,6 +587,155 @@ void main() {
     expect(find.text('繼續'), findsOneWidget);
     run.disposeWork();
     run.dispose();
+  });
+
+  group('ending while the pause is still settling', () {
+    /// AI 回覆要等 [gate] 才停得下來：按了暫停、還沒停好的那一段看得到。
+    /// 沒給 [gate] 時等到取消就停。
+    AiRepairSession slowToStop(Completer<void>? gate) => AiRepairSession(
+      source: _s('one'),
+      service: _service,
+      check: (source, _) async => SourceCheckIsolateResult(
+        stage: 'content',
+        message: '正文為空',
+        isHealthy: false,
+        updatedSourceJson: source.toJson(),
+        logs: const [],
+      ),
+      probe: (_, _, {start}) async =>
+          const SourceProbeReport(logs: [], requests: []),
+      ask: (_, token) async {
+        await (gate?.future ?? token.whenCancel);
+        throw DioException.requestCancelled(
+          requestOptions: RequestOptions(),
+          reason: token.cancelError?.message ?? '',
+        );
+      },
+      apply: (_, _) async {},
+      secrets: (_) async => const {},
+      backups: AiRepairBackups(),
+    );
+
+    testWidgets('a single repair page shows pausing, then ending, then done; '
+        'the notification says the same', (tester) async {
+      final gate = Completer<void>();
+      final file = _MemoryFile();
+      final run = SingleRepairRun(
+        slowToStop(gate),
+        progress: file,
+        work: work,
+        navigator: () => null,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: run.page(),
+        ),
+      );
+      run.start();
+      for (var i = 0; i < 20 && run.session.job.steps.length < 3; i++) {
+        await tester.runAsync(_flush);
+      }
+      await tester.pump();
+      expect(find.text('暫停'), findsOneWidget);
+      expect(find.text('結束'), findsOneWidget);
+
+      run.pauseNow();
+      await tester.pump();
+      expect(run.status.text, '正在暫停…');
+      expect(run.status.actions, isEmpty);
+      expect(find.text('正在暫停…'), findsOneWidget);
+      expect(find.text('結束'), findsOneWidget, reason: '正在暫停時還能按結束');
+
+      await run.end();
+      await tester.pump();
+      expect(run.status.text, '正在結束…');
+      expect(find.text('正在結束…'), findsOneWidget);
+
+      gate.complete();
+      for (var i = 0; i < 40 && !run.isFinished; i++) {
+        await tester.runAsync(_flush);
+      }
+      await _settle(tester);
+      expect(run.isFinished, isTrue, reason: '結束蓋過暫停');
+      expect(run.isPaused, isFalse);
+      expect(run.session.job.explanation, '已結束，書源沒有改。');
+      expect(file.closed, isTrue);
+      expect(work.isBusy, isFalse);
+      expect(find.text('完成'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(_flush);
+      run
+        ..disposeWork()
+        ..dispose();
+    });
+
+    test('after end, the notification keeps no buttons while the save is '
+        'still being deleted', () async {
+      final gate = Completer<void>();
+      final run = SingleRepairRun(
+        slowToStop(null),
+        progress: _SlowToCloseFile(gate),
+        work: work,
+        navigator: () => null,
+      );
+      run.start();
+      for (var i = 0; i < 20 && run.session.job.steps.length < 3; i++) {
+        await _flush();
+      }
+      await run.end();
+      for (var i = 0; i < 20 && !run.session.isFinished; i++) {
+        await _flush();
+      }
+      await _flush();
+      expect(run.session.isFinished, isTrue);
+      expect(run.isFinished, isFalse, reason: '還在刪存檔');
+
+      final ending = platform.calls.indexWhere((c) => c.startsWith('正在結束…'));
+      expect(ending, isNot(-1));
+      expect(
+        platform.actions.skip(ending),
+        everyElement(isEmpty),
+        reason: '按了結束之後不再放回「暫停」「結束」',
+      );
+      expect(run.phase, WorkPhase.ending);
+
+      gate.complete();
+      for (var i = 0; i < 20 && !run.isFinished; i++) {
+        await _flush();
+      }
+      expect(platform.calls.last, 'hide');
+    });
+
+    test('a batch ends rather than pauses, and the notification says '
+        'ending', () async {
+      final gate = Completer<void>();
+      final file = _MemoryFile();
+      final run = BatchRepairRun(
+        _batch(gate: gate),
+        title: '修復異常書源',
+        progress: file,
+        work: work,
+        navigator: () => null,
+      );
+      run.start();
+      await _flush();
+      run.pauseNow();
+      expect(run.status.text, '正在暫停…');
+
+      await run.end();
+      expect(run.status.text, '正在結束…');
+      gate.complete();
+      await run.batch.completion;
+      await _flush();
+      await _flush();
+
+      expect(run.isFinished, isTrue);
+      expect(run.isPaused, isFalse);
+      expect(file.closed, isTrue);
+      expect(work.isBusy, isFalse);
+      expect(platform.calls.last, 'hide');
+    });
   });
 
   group('pausing a repair', () {

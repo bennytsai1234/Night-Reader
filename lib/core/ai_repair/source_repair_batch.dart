@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -224,20 +225,22 @@ class SourceRepairBatch extends ChangeNotifier {
   final CancelToken _cancelToken = CancelToken();
   CheckSourceService? _activeRecheckService;
   Future<void>? _startTask;
-  bool _running = false;
-  bool _stopped = false;
-  bool _paused = false;
+  WorkPhase _phase = WorkPhase.ready;
   bool _disposed = false;
   final List<AiRepairSession> _sessions = [];
 
-  bool get isRunning => _running;
+  /// 走到哪：還沒開始、做著、正在暫停、正在結束、已暫停（已經有結果的留著，
+  /// 接著做時用同一批書源重開，有結果的不再處理，ADR 0058）、做完。
+  WorkPhase get phase => _phase;
+  bool get isRunning => _phase.active;
 
-  /// 按了結束（還沒停好或已經停好）；暫停不算。
-  bool get isStopped => _stopped && !_paused;
+  /// 按了結束、還沒停好（正在暫停時按的也算：結束蓋過暫停）。
+  bool get isStopped => _phase == WorkPhase.ending;
 
-  /// 按了暫停：已經有結果的留著，接著做時用同一批書源重開，有結果的不再
-  /// 處理（ADR 0058）。
-  bool get isPaused => _paused;
+  bool get isPaused => _phase == WorkPhase.paused;
+
+  /// 按了暫停或結束、還沒停好：做著的那一段看到就收手。
+  bool get _halting => _phase.settling;
 
   bool get isFinished => stage == RepairStage.done;
 
@@ -293,22 +296,24 @@ class SourceRepairBatch extends ChangeNotifier {
 
   Future<void> start() {
     if (_startTask != null) return _startTask!;
-    if (_stopped || _disposed || isFinished) return Future<void>.value();
+    if (_phase != WorkPhase.ready || _disposed || isFinished) {
+      return Future<void>.value();
+    }
     return _startTask = _run();
   }
 
   Future<void> _run() async {
-    _running = true;
+    _phase = WorkPhase.running;
     CrashTrail.action('開始修復異常書源（${items.length} 個）');
     _notify();
     try {
       await _recheckAll();
-      if (!_stopped) await _checkSites();
-      if (!_stopped) await _moveSites();
-      if (!_stopped) await _repairWithAi();
+      if (!_halting) await _checkSites();
+      if (!_halting) await _moveSites();
+      if (!_halting) await _repairWithAi();
     } catch (error, stack) {
       AppLog.e('修復異常書源失敗', error: error, stackTrace: stack);
-      if (!_stopped) {
+      if (!_halting) {
         errorMessage = '$error';
         failedStage = stage;
       }
@@ -316,15 +321,16 @@ class SourceRepairBatch extends ChangeNotifier {
       for (final item in items) {
         item.priorCheck = null;
       }
-      if (_paused) {
+      if (_phase == WorkPhase.pausing) {
         // 暫停：沒結果的留著，接著做時再處理。
-        _running = false;
+        _phase = WorkPhase.paused;
         CrashTrail.action('修復異常書源暫停了');
         _notify();
       } else {
-        _closeUnfinished(_stopped ? '已結束' : errorMessage ?? '沒輪到');
-        _running = false;
-        CrashTrail.action(_stopped ? '修復異常書源結束了' : '修復異常書源做完了');
+        final ended = _phase == WorkPhase.ending;
+        _closeUnfinished(ended ? '已結束' : errorMessage ?? '沒輪到');
+        _phase = WorkPhase.finished;
+        CrashTrail.action(ended ? '修復異常書源結束了' : '修復異常書源做完了');
         _notify();
       }
     }
@@ -345,28 +351,37 @@ class SourceRepairBatch extends ChangeNotifier {
   /// （或還沒開始接著做的）直接收尾。
   void stop() {
     if (isFinished) return;
-    if (_paused || (_startTask == null && !_stopped)) {
-      _paused = false;
-      _stopped = true;
-      stoppedStage = _startTask == null ? null : stage;
-      _closeUnfinished('已結束');
-      _notify();
-      return;
+    switch (_phase) {
+      case WorkPhase.ending || WorkPhase.finished:
+        return;
+      case WorkPhase.running || WorkPhase.pausing:
+        // 正在暫停時按結束：結束蓋過暫停，照做著時按結束的走。
+        CrashTrail.action('按了結束：修復異常書源（做到${_stageName(stage)}）');
+        _phase = WorkPhase.ending;
+        stoppedStage = stage;
+        _cancelAll('已結束', pause: false);
+        _notify();
+        return;
+      case _:
+        // 已暫停或還沒開始：直接收尾，暫停時停在半途的 AI 修復跟著結束，
+        // 點進去看到的是已結束。
+        _phase = WorkPhase.finished;
+        stoppedStage = _startTask == null ? null : stage;
+        // 先定好整批的結果再結束那幾件修復：它們結束時會通知整批，聽的人
+        // 看到的已經是做完。
+        _closeUnfinished('已結束');
+        for (final session in _sessions) {
+          session.stop();
+        }
+        _notify();
     }
-    if (_stopped) return;
-    CrashTrail.action('按了結束：修復異常書源（做到${_stageName(stage)}）');
-    _stopped = true;
-    stoppedStage = stage;
-    _cancelAll('已結束', pause: false);
-    _notify();
   }
 
   /// 暫停：做著的 AI 修復與校驗停下、書源不改，已經有結果的留著。
   void pause() {
-    if (_stopped || isFinished || _startTask == null) return;
+    if (_phase != WorkPhase.running || isFinished) return;
     CrashTrail.action('按了暫停：修復異常書源（做到${_stageName(stage)}）');
-    _stopped = true;
-    _paused = true;
+    _phase = WorkPhase.pausing;
     _cancelAll('已暫停', pause: true);
     _notify();
   }
@@ -426,7 +441,7 @@ class SourceRepairBatch extends ChangeNotifier {
     _enter(RepairStage.checking, toCheck.length);
     if (toCheck.isEmpty) return;
     void progress(int completed) {
-      if (_stopped || _disposed || stage != RepairStage.checking) return;
+      if (_halting || _disposed || stage != RepairStage.checking) return;
       final done = completed.clamp(0, toCheck.length);
       if (stageDone == done) return;
       stageDone = done;
@@ -445,7 +460,7 @@ class SourceRepairBatch extends ChangeNotifier {
       progress,
       keep,
     );
-    if (_stopped) return;
+    if (_halting) return;
     final entries = {for (final entry in checked) entry.sourceUrl: entry};
     for (final item in toCheck) {
       final entry = entries[item.source.bookSourceUrl];
@@ -491,9 +506,9 @@ class SourceRepairBatch extends ChangeNotifier {
       final site = checker == null
           ? await checkSite(source, cancelToken: _cancelToken)
           : await checker(source);
-      if (_stopped) return;
+      if (_halting) return;
       for (final item in entry.value) {
-        if (_stopped) return;
+        if (_halting) return;
         item.site = site;
         if (site.verdict == SiteVerdict.gone) {
           await _markGone(item.source, site);
@@ -514,7 +529,7 @@ class SourceRepairBatch extends ChangeNotifier {
     ];
     _enter(RepairStage.moving, moving.length);
     await _pool(moving, siteConcurrency, (item) async {
-      if (_stopped) return;
+      if (_halting) return;
       final candidate = movedSource(item.source, item.site!.movedTo!);
       if (await _passes(item, candidate)) {
         _finish(item, RepairOutcome.moved, '換成 ${candidate.bookSourceUrl}');
@@ -529,7 +544,7 @@ class SourceRepairBatch extends ChangeNotifier {
       ..sort((a, b) => _aiOrder(a.first).compareTo(_aiOrder(b.first)));
     _enter(RepairStage.repairing, bySite.length);
     await _pool(bySite, aiConcurrency, (group) async {
-      if (_stopped) return;
+      if (_halting) return;
       final lead = group.first;
       final others = group.skip(1).toList();
       final session = _session(lead.source, lead);
@@ -550,12 +565,12 @@ class SourceRepairBatch extends ChangeNotifier {
         lead.source = fixed;
         _finish(lead, RepairOutcome.aiFixed, job.explanation ?? 'AI 修好了');
         await _share(lead, others, fixed);
-      } else if (!_stopped) {
+      } else if (!_halting) {
         _finish(lead, RepairOutcome.notFixed, job.explanation ?? '沒修好');
         if (job.confirmedUnfixable) {
           await _markUnfixable(lead.source, job.giveUpWhy);
           for (final item in others) {
-            if (_stopped) return;
+            if (_halting) return;
             _finish(
               item,
               RepairOutcome.notFixed,
@@ -579,7 +594,7 @@ class SourceRepairBatch extends ChangeNotifier {
     BookSource fixed,
   ) async {
     for (final item in siblings) {
-      if (_stopped) return;
+      if (_halting) return;
       final candidate = sharedSource(item.source, fixed);
       if (await _passes(item, candidate)) {
         item.sharedFrom = lead;
@@ -588,7 +603,7 @@ class SourceRepairBatch extends ChangeNotifier {
           RepairOutcome.shared,
           '套用「${lead.source.bookSourceName}」修好的規則',
         );
-      } else if (!_stopped) {
+      } else if (!_halting) {
         _finish(
           item,
           RepairOutcome.notFixed,
@@ -600,9 +615,9 @@ class SourceRepairBatch extends ChangeNotifier {
 
   /// 校驗 [candidate]，通過（或只剩原本就壞的發現頁）就存進去，傳回存了沒。
   Future<bool> _passes(RepairItem item, BookSource candidate) async {
-    if (_stopped) return false;
+    if (_halting) return false;
     final checked = await _check(candidate, _cancelToken);
-    if (_stopped ||
+    if (_halting ||
         checked == null ||
         !usableFix(checked, item.source, candidate, before: item.before)) {
       return false;
@@ -722,7 +737,7 @@ class SourceRepairBatch extends ChangeNotifier {
   ) async {
     var next = 0;
     Future<void> worker() async {
-      while (next < list.length && !_stopped) {
+      while (next < list.length && !_halting) {
         final value = list[next++];
         // 一件出錯只算那一件：其他工人照做，整批等全部做完才結束。
         try {
@@ -746,7 +761,7 @@ class SourceRepairBatch extends ChangeNotifier {
   @override
   void dispose() {
     if (_disposed) return;
-    if (!_paused) stop();
+    if (_phase != WorkPhase.paused && _phase != WorkPhase.pausing) stop();
     _disposed = true;
     for (final session in _sessions) {
       session

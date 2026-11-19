@@ -1353,6 +1353,39 @@ void main() {
     expect(s.job.outcome, AiRepairOutcome.repaired);
   });
 
+  test('pausing and then ending while the fixed source is being saved reports '
+      'it as saved, not as ended unchanged', () async {
+    late AiRepairSession s;
+    s = AiRepairSession(
+      source: _source('https://site.example'),
+      service: _service,
+      check: (source, _) async => _checked(source),
+      probe: (source, _, {start}) async => _probe(source),
+      ask: (_, _) async => fakeAiReply(_command('submit')),
+      apply: (source, _) async {
+        s
+          ..pause()
+          ..stop();
+        applied.add(source);
+      },
+      secrets: (_) async => const {},
+      backups: backups,
+    );
+
+    await s.start();
+
+    expect(applied, hasLength(1));
+    expect(s.job.outcome, AiRepairOutcome.repaired);
+    expect(s.isFinished, isTrue);
+    expect(s.isPaused, isFalse);
+    expect(s.log.summary, isNot(contains('已結束，書源沒有改')));
+    expect(
+      [for (final step in s.job.steps) step.detail],
+      isNot(contains('已結束')),
+      reason: '存檔中按的暫停與結束都等存完，不標在步驟上',
+    );
+  });
+
   test('a fix is not saved over a source that changed or was deleted while '
       'the AI worked on it', () async {
     for (final conflict in ['修的這段時間書源被改過了（例如同步），沒有存。', '修的這段時間書源被刪掉了，沒有存。']) {

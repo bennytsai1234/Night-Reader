@@ -831,6 +831,8 @@ class SourceManagerProvider with ChangeNotifier {
     final job = SourceCheckJob.current;
     if (job != null) {
       job.endFromSystem();
+      // 正在暫停時按的：校驗服務已經停了、不會再通知，狀態列要換成「正在結束…」。
+      notifyListeners();
     } else if (pausedCheck.isPaused) {
       unawaited(pausedCheck.end(service: checkService));
     } else {

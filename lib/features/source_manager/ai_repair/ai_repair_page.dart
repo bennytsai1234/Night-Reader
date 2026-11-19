@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
@@ -241,7 +242,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
       return;
     }
     await run.resume();
-    if (mounted && run.isPaused && !run.isEnding) _say('書源已經不在了，沒辦法接著修');
+    if (mounted && run.phase == WorkPhase.paused) _say('書源已經不在了，沒辦法接著修');
   }
 
   /// 最後一張卡片：背景跑的修復做著時「暫停｜結束」，暫停中「繼續｜結束」
@@ -258,7 +259,9 @@ class _AiRepairPageState extends State<AiRepairPage> {
         ),
       ];
     }
-    final ending = _session.isStopped || (run?.isEnding ?? false);
+    // 背景跑的照頁面那層的階段；剪貼簿的修復沒有背景工作，照修復本身。
+    final phase = run?.phase ?? _session.phase;
+    final ending = phase == WorkPhase.ending;
     final end = GroupedRow(
       title: ending ? backgroundWorkEnding : '結束',
       destructive: true,
@@ -284,7 +287,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
         end,
       ];
     }
-    final pausing = _session.isPaused;
+    final pausing = phase == WorkPhase.pausing;
     return [
       GroupedRow(
         title: pausing ? backgroundWorkPausing : '暫停',
@@ -460,7 +463,9 @@ class _AiRepairPageState extends State<AiRepairPage> {
     if (steps.last.state == AiRepairStepState.running) {
       return AiRepairStepState.running;
     }
-    if (job.outcome != null || _session.isPaused) {
+    if (job.outcome != null ||
+        _session.phase == WorkPhase.pausing ||
+        _session.phase == WorkPhase.paused) {
       return AiRepairStepState.failed;
     }
     return AiRepairStepState.running;

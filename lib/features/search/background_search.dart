@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/widgets.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
@@ -289,9 +290,6 @@ _Restored? _readResults(String path) {
   return null;
 }
 
-/// 按了暫停或結束、還沒停好：結束蓋過暫停（正在暫停時按結束，就是結束）。
-enum _Settling { none, pausing, ending }
-
 /// 一件放到背景的搜尋（ADR 0070，ADR 0058 的第五件背景工作）：搜尋頁關了照跑，
 /// 通知欄標題「搜尋書籍 · 關鍵字」、內文同搜尋頁的進度那一列。暫停是不再送
 /// 新的書源、正在搜的取消，按繼續只搜沒搜完的；結束是結果留著、不再續搜。
@@ -318,8 +316,9 @@ class BackgroundSearchRun extends RepairRun implements SearchRecorder {
   /// 結果檔的第一行寫了（讀回的那件本來就有）。
   bool _headerWritten;
 
-  _Settling _settling = _Settling.none;
-  bool _pausedWork = false;
+  /// 搜尋走到哪：做著、正在暫停、正在結束（結束蓋過暫停：正在暫停時按結束，
+  /// 就是結束）。搜尋本身不知道暫停，由這裡記。
+  WorkPhase _searchPhase = WorkPhase.running;
   bool _disposed = false;
 
   /// 接著搜時要搜的書源；`null` 是照條件重新搜（還沒選好書源就暫停的）。
@@ -349,25 +348,17 @@ class BackgroundSearchRun extends RepairRun implements SearchRecorder {
   bool get canPause => true;
 
   @override
-  bool get workPaused => _pausedWork;
+  WorkPhase get workPhase => _searchPhase;
 
   /// 按了暫停或結束、還沒停好。
-  bool get isPausing => _settling == _Settling.pausing;
-  bool get isStopping => _settling == _Settling.ending;
+  bool get isPausing => phase == WorkPhase.pausing;
+  bool get isStopping => phase == WorkPhase.ending;
 
   @override
-  BackgroundWorkStatus get status {
-    final title = '搜尋書籍 · ${search.key}';
+  BackgroundWorkStatus get runningStatus {
     final progress = search.total > 0 ? search.completed / search.total : 0.0;
-    if (_settling != _Settling.none) {
-      return BackgroundWorkStatus.settling(
-        title,
-        pausing: isPausing,
-        progress: progress,
-      );
-    }
     return BackgroundWorkStatus(
-      title: title,
+      title: '搜尋書籍 · ${search.key}',
       text: searchProgressText(
         completed: search.completed,
         total: search.total,
@@ -379,9 +370,8 @@ class BackgroundSearchRun extends RepairRun implements SearchRecorder {
   }
 
   @override
-  Future<void> run() async {
-    _settling = _Settling.none;
-    _pausedWork = false;
+  Future<WorkPhase> run() async {
+    _searchPhase = WorkPhase.running;
     if (_resuming) {
       _resuming = false;
       final remaining = _remaining;
@@ -391,16 +381,17 @@ class BackgroundSearchRun extends RepairRun implements SearchRecorder {
       await _writeStart();
       await (search.running ?? Future<void>.value());
     }
-    final settling = _settling;
-    _settling = _Settling.none;
-    if (settling == _Settling.pausing) {
-      // 停好了才算暫停：每個搜完的書源都已經寫進結果檔。
+    if (_searchPhase == WorkPhase.pausing) {
+      // 停好了才算暫停：每個搜完的書源都已經寫進結果檔。等的時候按了結束
+      // 就是結束（結束蓋過暫停）。
       await _file.flush();
-      _pausedWork = true;
-      search.markPaused();
-      return;
+      if (_searchPhase == WorkPhase.pausing) {
+        search.markPaused();
+        return WorkPhase.paused;
+      }
     }
     await _file.write('${jsonEncode({'end': true})}\n');
+    return WorkPhase.finished;
   }
 
   /// 放到背景的那一刻：條件、要搜的書源與已經搜完的書源一次寫下。書源還沒
@@ -457,14 +448,14 @@ class BackgroundSearchRun extends RepairRun implements SearchRecorder {
 
   @override
   void stop() {
-    _settling = _Settling.ending;
+    _searchPhase = WorkPhase.ending;
     search.stop();
   }
 
   @override
   void pause() {
-    if (_settling != _Settling.none) return;
-    _settling = _Settling.pausing;
+    if (_searchPhase != WorkPhase.running) return;
+    _searchPhase = WorkPhase.pausing;
     search.halt();
   }
 
