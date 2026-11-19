@@ -562,7 +562,7 @@ class _Trip {
       case _NoTrip(:final offstageFrame):
         _phase = _AtStart(
           closing: status == AnimationStatus.reverse,
-          firstFrame: offstageFrame,
+          offstageFrame: offstageFrame,
         );
       case _Moving() || _Following():
     }
@@ -595,9 +595,17 @@ class _Trip {
     switch (_phase) {
       case _NoTrip() || _OnRouteClock() || _Following():
         return time;
-      case _AtStart(:final closing, firstFrame: null):
-        // 不是從起點開始的一趟不調整。
+      case _AtStart(:final closing, firstFrame: null, :final offstageFrame):
         if (time > 0) {
+          if (offstageFrame != null && offstageFrame != stamp) {
+            _phase = _CatchingUp(
+              closing: closing,
+              firstFrame: offstageFrame,
+              resume: time,
+            );
+            return 0;
+          }
+          // 不是從起點開始的一趟不調整。
           _phase = _OnRouteClock(closing: closing);
           return time;
         }
@@ -640,11 +648,13 @@ sealed class _Moving extends _TripPhase {
 }
 
 /// 從頭開始的一趟停在起點：[firstFrame] 是第一幀的時間戳（null 是還沒
-/// 畫到），那一幀花掉的時間不算。
+/// 畫到），那一幀花掉的時間不算。推入時第一幀在 offstage（[offstageFrame]），
+/// 看得到的第一幀已經走了一段，就從 offstage 那一幀起算。
 final class _AtStart extends _Moving {
-  const _AtStart({required super.closing, this.firstFrame});
+  const _AtStart({required super.closing, this.firstFrame, this.offstageFrame});
 
   final Duration? firstFrame;
+  final Duration? offstageFrame;
 }
 
 /// 第二幀起照剩下的時間走完整段：[resume] 是那時這一趟已經走掉的時間比例，

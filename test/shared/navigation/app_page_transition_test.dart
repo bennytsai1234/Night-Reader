@@ -354,6 +354,43 @@ void main() {
     expect(find.text('新頁'), findsNothing);
   });
 
+  for (final postFrame in [false, true]) {
+    testWidgets('a slow first frame does not make the page jump when the page '
+        'is pushed ${postFrame ? 'after a frame' : 'from an animation'}', (
+      tester,
+    ) async {
+      await pumpApp(tester, AppPageTransition.slide);
+      void open() => Navigator.push(
+        home,
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Center(child: Text('新頁'))),
+        ),
+      );
+      // 在一幀的動畫階段裡推入（例如等別的動畫播完才開頁），或在一幀畫完
+      // 之後才推入。
+      if (postFrame) {
+        SchedulerBinding.instance.addPostFrameCallback((_) => open());
+        await tester.pump();
+      } else {
+        SchedulerBinding.instance.scheduleFrameCallback((_) => open());
+      }
+      double left() => tester.getRect(find.byType(Scaffold).last).left;
+      final xs = <double>[];
+      await tester.pump();
+      // 第一幀很重（新頁第一次建立）：下一幀晚了 100ms 才到；之後每 16ms 一幀。
+      await tester.pump(const Duration(milliseconds: 100));
+      if (find.text('新頁').evaluate().isNotEmpty) xs.add(left());
+      for (var i = 0; i < 3; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        xs.add(left());
+      }
+      // 那 100ms 不算進動畫：頭幾幀從起點一小步一小步走。
+      expect(xs.first, greaterThan(800 - 200));
+      await tester.pumpAndSettle();
+      expect(left(), 0);
+    });
+  }
+
   testWidgets('slide closes fast first, then eases into place', (tester) async {
     await pumpApp(tester, AppPageTransition.slide);
     await push(tester);
