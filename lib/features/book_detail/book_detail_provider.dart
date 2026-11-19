@@ -425,7 +425,7 @@ class BookDetailProvider extends ChangeNotifier {
         ..origin = stored.origin
         ..originName = stored.originName;
     }
-    _fetchIssue = _FetchIssue.none;
+    // 只重讀書源，書籍資訊與目錄沒有重抓：抓書源的結果照舊。
     await _loadSource();
     notifyListeners();
   }

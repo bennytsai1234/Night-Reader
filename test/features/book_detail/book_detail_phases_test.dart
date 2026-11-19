@@ -410,6 +410,25 @@ void main() {
   });
 
   group('從書源編輯或除錯頁回來', () {
+    test('a TOC behind a login still offers to log in', () async {
+      await storeSource(login: true);
+      service.toc = _Toc.needsLogin;
+      final provider = await open();
+
+      await provider.reloadSource();
+      expect(provider.totalChapterCount, 0);
+      expect(row(provider), (_tocNeedsLogin, true));
+    });
+
+    test('stale book info still says so', () async {
+      await storeSource();
+      service.infoFails = true;
+      final provider = await open();
+
+      await provider.reloadSource();
+      expect(row(provider), (_staleInfo, false));
+    });
+
     test('a source that can no longer be read shows its health without '
         'login', () async {
       await storeSource(login: true);
