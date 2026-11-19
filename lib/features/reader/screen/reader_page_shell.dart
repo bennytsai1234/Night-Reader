@@ -32,6 +32,7 @@ import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton_text.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
+import 'package:night_reader/features/reader/features/tts/reader_tts_phase.dart';
 
 /// 閱讀頁面框架的垂直幾何：頁首、正文、頁尾各佔的高度。
 ///
@@ -174,8 +175,7 @@ class ReaderPageShell extends StatelessWidget {
     required this.onScrubEnd,
     this.brightnessControl,
     this.sleepTimer,
-    this.isTtsPlaying = false,
-    this.isTtsPaused = false,
+    this.ttsPhase = ReaderTtsPhase.idle,
     this.onMenuHidden,
     this.onChapterPanelChanged,
     this.onChapterPanelClosed,
@@ -278,8 +278,7 @@ class ReaderPageShell extends StatelessWidget {
   final ValueChanged<double> onScrubEnd;
   final Widget? brightnessControl;
   final SleepTimer? sleepTimer;
-  final bool isTtsPlaying;
-  final bool isTtsPaused;
+  final ReaderTtsPhase ttsPhase;
 
   /// 上下選單與亮度條收完、完全移出畫面時呼叫。三塊同時出發、收起時長
   /// 相同，跟著下方選單的收起動畫。
@@ -479,8 +478,7 @@ class ReaderPageShell extends StatelessWidget {
                           onScrubEnd: onScrubEnd,
                           progressListenable: progressListenable,
                           sleepTimer: sleepTimer,
-                          isTtsPlaying: isTtsPlaying,
-                          isTtsPaused: isTtsPaused,
+                          ttsPhase: ttsPhase,
                           onHidden: onMenuHidden,
                         ),
                       ),

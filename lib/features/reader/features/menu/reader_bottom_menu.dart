@@ -14,6 +14,7 @@ import 'reader_menu_controller.dart';
 import 'reader_menu_style.dart';
 
 import 'package:night_reader/core/chinese/ui_language.dart';
+import 'package:night_reader/features/reader/features/tts/reader_tts_phase.dart';
 
 /// 選單與頁首頁尾用到的章節資訊。目前這一章（[current]）是小訊號：捲動
 /// 途中換章時，只有章名、上一章／下一章這幾個聽它的小元件更新，閱讀頁
@@ -66,8 +67,7 @@ class ReaderBottomMenu extends StatelessWidget {
     required this.onScrubEnd,
     this.progressListenable,
     this.sleepTimer,
-    this.isTtsPlaying = false,
-    this.isTtsPaused = false,
+    this.ttsPhase = ReaderTtsPhase.idle,
     this.onHidden,
     this.horizontalInset = AppGrouped.margin,
     this.onAutoPageSettings,
@@ -119,8 +119,7 @@ class ReaderBottomMenu extends StatelessWidget {
 
   /// 朗讀定時；朗讀還沒準備好時為 null，定時鍵灰著（ADR 0059）。
   final SleepTimer? sleepTimer;
-  final bool isTtsPlaying;
-  final bool isTtsPaused;
+  final ReaderTtsPhase ttsPhase;
 
   /// 收起動畫播完、選單完全移出畫面時呼叫（見 [ReaderMenuEntrance]）。
   final VoidCallback? onHidden;
@@ -209,11 +208,11 @@ class ReaderBottomMenu extends StatelessWidget {
       if (sleepTimer case final timer?)
         SleepTimerButton(
           timer: timer,
-          tooltip: isTtsPlaying
-              ? '暫停朗讀'
-              : isTtsPaused
-              ? '繼續朗讀'
-              : '定時朗讀',
+          tooltip: switch (ttsPhase) {
+            ReaderTtsPhase.idle => '定時朗讀',
+            ReaderTtsPhase.reading => '暫停朗讀',
+            ReaderTtsPhase.paused => '繼續朗讀',
+          },
           tint: tint,
           color: menuStyle.foreground,
           accent: menuStyle.accent,
