@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
-import 'package:night_reader/features/reader/screen/reader_page.dart';
+import 'package:night_reader/features/reader/screen/reader_menu_pages.dart';
 
 void main() {
   const bookUrl = 'https://s.example/book/1';
