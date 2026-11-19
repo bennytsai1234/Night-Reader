@@ -567,8 +567,10 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   void setKind(BookSourceKind kind) {
     if (kind == this.kind) return;
     _chosenKind = kind;
-    notifyListeners();
-    if (lastSearchKey.isNotEmpty) {
+    // 搜過的由新的一次開始時通知：先離開接回的那一次，頁首才不先讀到它的類別。
+    if (lastSearchKey.isEmpty) {
+      notifyListeners();
+    } else {
       unawaited(search(lastSearchKey));
     }
   }
