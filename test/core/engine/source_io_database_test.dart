@@ -9,9 +9,9 @@ import 'package:night_reader/core/database/dao/cache_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/cache.dart';
-import 'package:night_reader/core/services/cache_manager.dart';
-import 'package:night_reader/core/services/http_client.dart' as app_http;
-import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/core/utils/cache_manager.dart';
+import 'package:night_reader/core/network/http_client.dart' as app_http;
+import 'package:night_reader/core/network/network_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // 送進書源 isolate 的工作都在頂層函式裡建立，只捕捉參數。

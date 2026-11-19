@@ -12,8 +12,8 @@ import 'package:night_reader/core/models/book/chapter_alignment.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
-import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
+import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
 
 import 'change_source_sites.dart';

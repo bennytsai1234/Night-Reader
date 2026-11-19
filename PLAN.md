@@ -4,26 +4,10 @@
 
 - **AI 找書寫進 README 與網站**：使用者 2026-11-13 定的：等 AI 找書的回合數量過、跑穩再加（ADR 0060）。
 - **整理架構，照順序做三段**：使用者 2026-11-18 要的，2026-11-19 定了順序：搬資料夾與改名 → 拆大檔 → 狀態機。理由：搬檔是機械的工作，先做完；agent 找程式靠搜尋，資料夾位置對它影響小，真正吃力的是常改的大檔與互相牽動的旗標，所以拆檔對準最常改的檔（2026-10-19 起改最多的：`reader_v2_page.dart` 39 次、`reader_v2_page_shell.dart` 28、`skeleton.dart` 22、`source_check_isolate.dart` 22、`hybrid_reader_screen.dart` 20）。使用者先把還開著的 PR 合併完、手上的問題都修完，才開工；開工由使用者說。
-  - **避開衝突**：每批開工前查還沒合併、又改到 `lib/` 的分支，碰到同一批的檔，等它合併再搬；第一批要改 386 個檔的 import，搬的期間沒有別的對話在改 `lib/`。每個 PR 做好就收尾，不放著。
-  - **1. 搬資料夾與改名，三批，每批一個 PR**
+  - **避開衝突**：每批開工前查還沒合併、又改到 `lib/` 的分支，碰到同一批的檔，等它合併再搬。每個 PR 做好就收尾，不放著。
+  - **1. 搬資料夾與改名，三批，每批一個 PR**（第一批拆掉 `lib/core/services/` 已做完，2026-11-19）
     - **搬法**：搬檔的提交只動檔案位置、檔名和跟著改的 import，內容一行不改，git 才追得到搬家前的歷史（`git log --follow`）。改類別名稱、刪檔、併檔會改內容，在同一個 PR 裡另做提交。`test/` 照 `lib/` 的結構，測試跟著搬。文件裡寫到的路徑與檔名一起改（完整路徑用路徑 grep，只寫檔名的用檔名 grep）。驗證：`flutter analyze` 通過、搬過的測試照跑。
     - **命名原則**（第三批收尾時寫進 `CODING_STANDARDS.md`）：名字說它是什麼，不說第幾版或怎麼做出來的（V2、hybrid、new、legacy 拿掉，`helper`、`utils`、`manager` 能換成具體說法就換）；資料夾照讀者看得到的功能、用 `GLOSSARY.md` 的詞，一個詞對到一個地方；檔名是主要類別名稱的小寫寫法；`core/` 放沒有畫面的、`features/` 放畫面，同一件事兩邊各有一部分要是刻意的分層。
-    - **第一批：拆掉 `lib/core/services/`**（使用者 2026-11-19 確認）。各組搬到 `core/` 底下，和已有的同類資料夾併：
-      - `core/source/`：`book_source_service`、`source_dedupe`、`source_interaction`、`source_login_session`、`source_debug_service`、`rule_big_data_service`、`content_next_page`、`chapter_content_kind`
-      - `core/source_check/`：`check_source_service`、`source_check_isolate`、`source_check_diagnostics`
-      - `core/source_switch/`：`source_switch_service`、`source_switch_handoff`、`auto_source_switch`、`same_book`
-      - `core/network/`（已有）：`http_client`、`network_service`、`cookie_store`、`rate_limiter`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service`
-      - `core/playback/`：`tts_service`、`tts_speech_coordinator`、`sleep_timer`、`system_playback/` 的兩個檔
-      - `core/storage/`（已有）：`book_storage_service`、`book_chapter_files`、`book_cover_storage_service`、`book_illustration_storage`、`reader_chapter_content_storage`、`reader_chapter_content_store`、`chapter_content_preparation_pipeline`、`book_toc_replacer`、`books_in_use`、`bookshelf_state_tracker`、`resource_service`
-      - `core/download/`：`download/` 的三個檔、`download_service`、`book_update_service`、`audio_chapter_download`
-      - `core/background_work/`：`background_work/` 的三個檔
-      - `core/backup/`：`backup_service`、`restore_service`、`login_data_backup`、`bookshelf_exchange_service`、`export_book_service`、`highlight_export`
-      - `core/app_update/`：`update_service`、`update_preferences`、`app_update_installer`、`app_version`
-      - `core/diagnostics/`：`app_log_service`、`crash_handler`、`crash_trail`、`process_exits`
-      - `core/chinese/`：`chinese_utils`、`chinese_display`、`ui_language`
-      - `core/platform/`：`app_permission_service`、`app_file_selection_service`
-      - 併進已有的：`local_book_service` 進 `local_book/`；`local_comic_service`、`comic_folder_picker` 進 `comic/`；`encoding_detect`（網路與規則也用）、`cache_manager` 進 `utils/`；`default_data` 進 `database/`
-      - 另一個提交：刪掉沒人用的 `services/event_bus.dart`（`core/engine/app_event_bus.dart` 的舊複本）與 `source_check_js_worker_probe.dart`（沒有呼叫的地方，`docs/agents/auto-audit.md` 裡的名字一起拿掉）；`cache_manager` 的 `LruMemoryCache` 和 `utils/lru_map.dart` 的 `LruMap` 核對行為後併成一個。
     - **第二批：改掉歷史名字**（使用者 2026-11-19 確認）。`features/reader_v2/` 改成 `features/reader/`，類別 `ReaderV2…` 改成 `Reader…`（117 個，和現有 `Reader…` 類別不撞名），`main.dart` 的 `ReaderApp` 改成 `NightReaderApp`；`reader_v2/hybrid/`（28 個 `Hybrid…` 類別）讀過那批程式再提名字給使用者定；`features/welcome/`（裡面是分頁主畫面 `MainPage`）改成 `features/home/`；`features/cache_manager/`（只有下載管理頁）改成 `features/downloads/`。PR 分兩個提交：先搬資料夾與檔名，再改類別名稱。`GLOSSARY.md` 的「Reader V2」與文件裡的寫法一起改（照 `domain-modeling`）。
     - **第三批：其他平放的資料夾與名不符實的檔名**。`lib/shared/widgets/` 30 個檔、`lib/core/models/` 27 個檔照用途分，新結構先列給使用者看。2026-11-19 掃過檔名和類別名稱對不上的，真的名不符實的約 10 個，例如 `source_switch_handoff.dart`（`SourceSwitchOperationLease`）、`utils/source_progress.dart`（`SourceDebugNote`）、`source_batch_toolbar.dart`（`SelectActionBar`）、`login_check.dart`（`LoginWall`）、`text_selection_overlay.dart`（`ReaderTextSelectionLayer`）；開工時把這個掃描做成 `tool/` 的檢查、核對有沒有漏的，在 `AGENTS.md` 寫一行怎麼用。
   - **2. 拆大檔**：一個大檔一個 PR，常改的先拆。開拆前先載入 `codebase-design`，分析這個檔和用它的地方，給使用者看切法：切成哪幾個模組、每個模組對外的介面、每塊做刪掉測試的結果（刪掉後複雜度是消失，還是散回呼叫的地方）；使用者定了才拆。照介面切，不照類別或行數切：例如 `skeleton.dart` 照類別會拆出一般與捲動清單兩個骨架換場，兩邊各自做一次「由左而右換掉骨架」，要先看能不能共用一個模組。使用者 2026-11-19 定的：不另外跑一次全專案的架構審查（`/improve-codebase-architecture`），常改的檔已經從改動紀錄量出來，散在小檔裡的重複與沒人用的檔在第 1 段經手時處理。1500 行以上的：`skeleton.dart` 2148、`hybrid_reader_screen.dart` 2103、`source_check_isolate.dart` 1849、`grouped_list.dart` 1584、`reader_v2_page.dart` 1529、`ai_repair_session.dart` 1512、`app_page_transition.dart` 1495（`idna_mapping_table.dart`、`public_suffix_rules.dart` 是資料表，不拆）。

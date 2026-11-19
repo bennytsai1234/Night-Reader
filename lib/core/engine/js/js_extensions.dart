@@ -28,9 +28,9 @@ import 'extensions/js_java_stream.dart';
 import 'extensions/js_jsoup_extensions.dart';
 import 'extensions/js_url_extensions.dart';
 
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/cookie_store.dart';
-import 'package:night_reader/core/services/source_interaction.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/network/cookie_store.dart';
+import 'package:night_reader/core/source/source_interaction.dart';
 import 'package:night_reader/core/utils/html_formatter.dart';
 
 export 'js_extensions_base.dart';

@@ -9,7 +9,7 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/constant/book_type.dart';
 import 'package:night_reader/core/models/download_task.dart';
-import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/main.dart';
 import 'package:night_reader/shared/widgets/launch_entrance.dart';

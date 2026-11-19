@@ -8,7 +8,7 @@ import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/ai_repair/repair_batch_export.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/background_work/background_work.dart';
+import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';

@@ -1,5 +1,5 @@
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/chinese/chinese_utils.dart';
 
 /// 舊目錄第 [oldIndex] 章（章名 [oldTitle]）在 [newChapters] 裡是第幾章：
 /// 先找同名的章（[sameChapterTitle]：繁簡、空白不同也算），再找同一個

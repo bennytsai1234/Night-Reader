@@ -11,20 +11,20 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/bookmark.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmarks.dart';
 import 'package:night_reader/core/models/highlight.dart';
-import 'package:night_reader/core/services/highlight_export.dart';
+import 'package:night_reader/core/backup/highlight_export.dart';
 import 'package:night_reader/features/reader_v2/features/highlight/reader_v2_highlight_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/highlight/reader_v2_highlights.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/services/book_cover_storage_service.dart';
-import 'package:night_reader/core/services/books_in_use.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
-import 'package:night_reader/core/services/download_service.dart';
-import 'package:night_reader/core/services/source_interaction.dart';
-import 'package:night_reader/core/services/source_switch_service.dart';
+import 'package:night_reader/core/storage/book_cover_storage_service.dart';
+import 'package:night_reader/core/storage/books_in_use.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
+import 'package:night_reader/core/download/download_service.dart';
+import 'package:night_reader/core/source/source_interaction.dart';
+import 'package:night_reader/core/source_switch/source_switch_service.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
@@ -71,7 +71,7 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_progress_sync.
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
 import 'package:provider/provider.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 class ReaderV2Page extends StatefulWidget {
   const ReaderV2Page({

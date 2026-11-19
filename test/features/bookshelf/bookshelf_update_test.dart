@@ -14,7 +14,7 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/book_update_service.dart';
+import 'package:night_reader/core/download/book_update_service.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

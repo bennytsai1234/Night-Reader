@@ -9,7 +9,7 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import '../search_provider.dart';
 
 import 'package:night_reader/shared/widgets/search_field.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// SearchAppBar - 搜尋頁面頂部欄
 /// (對標 Legado SearchActivity 的 TitleBar + SearchView)

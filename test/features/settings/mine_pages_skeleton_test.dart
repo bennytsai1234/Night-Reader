@@ -2,7 +2,7 @@
 // 0029）：每一行字、圖示、開關、風格卡與卡片都在內容的位置、一樣大。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/services/app_version.dart';
+import 'package:night_reader/core/app_update/app_version.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';

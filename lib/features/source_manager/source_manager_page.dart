@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:night_reader/core/exception/user_error.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
-import 'package:night_reader/core/services/app_file_selection_service.dart';
+import 'package:night_reader/core/platform/app_file_selection_service.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -47,7 +47,7 @@ import 'widgets/source_check_status_bar.dart';
 import 'widgets/source_manager_menus.dart';
 import 'widgets/source_manager_dialogs.dart';
 
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 class SourceManagerPage extends StatefulWidget {
   const SourceManagerPage({super.key});

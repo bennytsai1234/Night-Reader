@@ -1,58 +1,67 @@
 import 'dart:collection';
 
-/// A simple LRU (Least Recently Used) cache backed by a [LinkedHashMap].
+/// 照最近使用排序的快取：放不下時先丟最久沒用的。
 ///
-/// When the number of entries exceeds [maxSize], the oldest (least recently
-/// used) entry is evicted. Accessing an entry via [[]] promotes it to the
-/// most-recent position.
+/// 上限 [maxSize] 預設算筆數；給了 [sizeOf] 就算每筆大小的加總，單筆就超過
+/// 上限的不存（同一個鍵原本的值也一起拿掉）。讀取（`[]`、[putIfAbsent]）與
+/// 寫入都算用過，排到最後；存的是 null 也一樣。
 class LruMap<K, V> {
   final int maxSize;
+  final int Function(V value) _sizeOf;
   final LinkedHashMap<K, V> _map = LinkedHashMap<K, V>();
+  int _size = 0;
 
-  LruMap({this.maxSize = 200}) : assert(maxSize > 0);
+  LruMap({this.maxSize = 200, int Function(V value)? sizeOf})
+    : assert(maxSize > 0),
+      _sizeOf = sizeOf ?? _one;
 
-  /// Returns the number of entries in the cache.
+  static int _one(Object? _) => 1;
+
+  /// 存了幾筆。
   int get length => _map.length;
 
-  /// Whether the cache contains the given [key].
+  /// 從最久沒用的排到最近用過的；看這裡不算用過。
+  Iterable<K> get keys => _map.keys;
+
   bool containsKey(K key) => _map.containsKey(key);
 
-  /// Retrieves the value for [key], promoting it to most-recent.
-  /// Returns `null` if the key is absent.
+  /// [key] 存的值，並排到最後；沒有時是 null。
   V? operator [](K key) {
-    final value = _map.remove(key);
-    if (value != null) {
-      _map[key] = value;
-    }
+    if (!_map.containsKey(key)) return null;
+    final value = _map.remove(key) as V;
+    _map[key] = value;
     return value;
   }
 
-  /// Inserts or updates [key] with [value], evicting the oldest entry if the
-  /// cache exceeds [maxSize].
   void operator []=(K key, V value) {
-    // Remove first so re-insertion places it at the end.
-    _map.remove(key);
-    _map[key] = value;
-    if (_map.length > maxSize) {
-      _map.remove(_map.keys.first);
+    remove(key);
+    final size = _sizeOf(value);
+    if (size > maxSize) return;
+    while (_size + size > maxSize && _map.isNotEmpty) {
+      remove(_map.keys.first);
     }
+    _map[key] = value;
+    _size += size;
   }
 
-  /// If [key] is absent, calls [ifAbsent] to produce a value, inserts it, and
-  /// returns it. If [key] is present, promotes it and returns the existing
-  /// value.
+  /// 有 [key] 就回傳存的值並排到最後；沒有就用 [ifAbsent] 做一個存起來。
   V putIfAbsent(K key, V Function() ifAbsent) {
-    if (_map.containsKey(key)) {
-      // Promote to most-recent.
-      final value = _map.remove(key) as V;
-      _map[key] = value;
-      return value;
-    }
+    if (_map.containsKey(key)) return this[key] as V;
     final value = ifAbsent();
     this[key] = value;
     return value;
   }
 
-  /// Removes all entries.
-  void clear() => _map.clear();
+  /// 拿掉 [key]，回傳原本存的值；沒有時是 null。
+  V? remove(K key) {
+    if (!_map.containsKey(key)) return null;
+    final value = _map.remove(key) as V;
+    _size -= _sizeOf(value);
+    return value;
+  }
+
+  void clear() {
+    _map.clear();
+    _size = 0;
+  }
 }

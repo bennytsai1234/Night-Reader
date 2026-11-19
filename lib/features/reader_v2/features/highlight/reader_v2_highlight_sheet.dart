@@ -9,8 +9,8 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/core/services/ui_language.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
 
 /// 點正文上已畫的標註打開的面板：畫到的字、換顏色、換底色或底線、備忘、
 /// 複製、刪除。換了就存，不另按儲存；備忘在面板收起或切到別的 App 時存。

@@ -8,7 +8,7 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/network/redirects.dart';
 import 'package:night_reader/core/network/str_response.dart';
-import 'package:night_reader/core/services/cache_manager.dart';
+import 'package:night_reader/core/utils/cache_manager.dart';
 
 import '../../../test_helper.dart';
 

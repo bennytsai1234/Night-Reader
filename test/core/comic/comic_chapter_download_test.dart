@@ -8,8 +8,8 @@ import 'package:night_reader/core/comic/comic_chapter_download.dart';
 import 'package:night_reader/core/comic/comic_chapter_files.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/book_chapter_files.dart';
-import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/storage/book_chapter_files.dart';
+import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:path/path.dart' as p;
 

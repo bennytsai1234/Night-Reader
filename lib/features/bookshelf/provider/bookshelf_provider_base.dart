@@ -7,9 +7,9 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_reading_state.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
-import 'package:night_reader/core/services/book_update_service.dart';
-import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
+import 'package:night_reader/core/download/book_update_service.dart';
+import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/di/injection.dart';
 
 enum BookshelfSortMode {

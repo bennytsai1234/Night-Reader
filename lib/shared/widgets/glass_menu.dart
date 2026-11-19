@@ -13,7 +13,7 @@ import 'glass.dart';
 import 'popup_routes.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 情境選單的一個項目。
 sealed class GlassMenuEntry<T> {

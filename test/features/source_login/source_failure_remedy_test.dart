@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/source_interaction.dart';
+import 'package:night_reader/core/source/source_interaction.dart';
 import 'package:night_reader/features/source_login/source_failure_remedy.dart';
 
 const _sourceUrl = 'https://remedy.test';

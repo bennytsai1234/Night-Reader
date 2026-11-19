@@ -6,16 +6,16 @@ import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/exception/user_error.dart';
-import 'package:night_reader/core/services/book_cover_storage_service.dart';
-import 'package:night_reader/core/services/download_service.dart';
-import 'package:night_reader/core/services/source_switch_service.dart';
+import 'package:night_reader/core/storage/book_cover_storage_service.dart';
+import 'package:night_reader/core/download/download_service.dart';
+import 'package:night_reader/core/source_switch/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/book_chapter_files.dart';
+import 'package:night_reader/core/storage/book_chapter_files.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/features/about/app_log_page.dart';
@@ -40,8 +40,8 @@ import 'package:night_reader/shared/widgets/toc_volume_row.dart';
 import 'audiobook_player.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
-import 'package:night_reader/core/services/ui_language.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
 
 /// 有聲書播放器（`docs/design/audiobook.md`「播放器」）：集數清單是主體，
 /// 控制在底部的浮動玻璃膠囊，膠囊上方是倍速、定時、播放模式三顆圓鈕。

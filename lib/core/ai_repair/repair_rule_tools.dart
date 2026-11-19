@@ -14,7 +14,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/network/request_log.dart';
-import 'package:night_reader/core/services/chapter_content_kind.dart';
+import 'package:night_reader/core/source/chapter_content_kind.dart';
 
 /// AI 修復的「解析」與「跑程式」（ADR 0054）：在書源 worker 裡跑，規則 JS
 /// 和書源一樣執行（可以用 `java.*`，要等的請求照常送）。

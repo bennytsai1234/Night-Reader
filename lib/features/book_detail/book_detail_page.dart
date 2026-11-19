@@ -16,7 +16,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/models/book_reading_state.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/export_book_service.dart';
+import 'package:night_reader/core/backup/export_book_service.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
@@ -49,7 +49,7 @@ import 'widgets/book_info_toc_bar.dart';
 import 'widgets/book_read_capsule.dart';
 import 'widgets/change_source_sheet.dart';
 
-import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 import 'package:night_reader/features/settings/local_book_sync_dialog.dart'
     show formatMegabytes;

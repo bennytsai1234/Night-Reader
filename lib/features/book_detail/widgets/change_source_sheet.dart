@@ -3,7 +3,7 @@ import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/services/source_switch_service.dart';
+import 'package:night_reader/core/source_switch/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
 import 'package:night_reader/features/book_detail/widgets/book_detail_change_source_filter_bar.dart';

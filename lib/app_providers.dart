@@ -2,8 +2,8 @@ import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 
 import 'core/di/injection.dart';
-import 'core/services/download_service.dart';
-import 'core/services/tts_service.dart';
+import 'core/download/download_service.dart';
+import 'core/playback/tts_service.dart';
 import 'features/bookshelf/bookshelf_provider.dart';
 import 'features/explore/explore_provider.dart';
 import 'features/settings/settings_provider.dart';

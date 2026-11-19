@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
-import 'package:night_reader/core/services/same_book.dart';
+import 'package:night_reader/core/source_switch/same_book.dart';
 import 'package:night_reader/core/database/dao/ai_find_dao.dart';
 import 'package:night_reader/features/search/ai_find/ai_find_run.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -13,8 +13,8 @@ import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/search_keyword.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/bookshelf_state_tracker.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/storage/bookshelf_state_tracker.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

@@ -3,8 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/services/book_update_service.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/download/book_update_service.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_read_progress.dart';
@@ -16,7 +16,7 @@ import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 書卡上選取（勾號、圓圈、讓位、卡片底色）與角標的動畫時長：系統關閉動畫
 /// 時一律為 0，這組同步的動畫一起直接到位。

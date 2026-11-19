@@ -5,7 +5,7 @@ import 'package:html/parser.dart' as html_parser;
 import '../encode/charsets.dart';
 import '../js_extensions.dart';
 
-import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 
 extension JsStringExtensions on JsExtensions {

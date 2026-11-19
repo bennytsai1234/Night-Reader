@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/features/bookshelf/provider/bookshelf_provider_base.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';

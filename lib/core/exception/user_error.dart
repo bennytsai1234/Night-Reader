@@ -6,7 +6,7 @@ import 'package:drift/drift.dart' show DriftWrappedException;
 import 'package:drift/native.dart' show SqliteException;
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:night_reader/core/exception/app_exception.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 
 /// 「[action]失敗：原因」給畫面用，原始錯誤寫進 App 日誌。
 ///

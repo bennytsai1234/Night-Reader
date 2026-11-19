@@ -21,8 +21,8 @@ import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
 import 'package:night_reader/shared/widgets/toc_volume_row.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
-import 'package:night_reader/core/services/ui_language.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
 
 /// 閱讀器左側的面板：「目錄」「書籤」「標註」三個分頁，頂端的分段切換。
 class ReaderV2ChaptersDrawer extends StatefulWidget {

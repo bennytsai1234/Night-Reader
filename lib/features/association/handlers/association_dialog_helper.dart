@@ -12,7 +12,7 @@ import 'association_base.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
-import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
+import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/features/source_manager/widgets/import_preview_sheet.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';

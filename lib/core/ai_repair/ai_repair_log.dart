@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:intl/intl.dart';
 import 'package:night_reader/core/network/request_log.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/crash_handler.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/crash_handler.dart';
 
 /// 一次 AI 修復的紀錄，分兩份（ADR 0054）：
 /// - **摘要**（[summary]）：每一步的結論與花的時間、AI 每一輪下的指令與

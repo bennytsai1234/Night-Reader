@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:intl/intl.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/crash_handler.dart';
+import 'package:night_reader/core/diagnostics/crash_handler.dart';
 
 import 'ai_repair_secrets.dart';
 import 'source_repair_batch.dart';

@@ -7,8 +7,8 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 typedef ExploreKindsLoader = Future<List<ExploreKind>> Function(

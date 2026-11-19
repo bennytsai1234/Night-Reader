@@ -8,10 +8,10 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/services/book_illustration_storage.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
-import 'package:night_reader/core/services/download_service.dart';
-import 'package:night_reader/core/services/reader_chapter_content_store.dart';
+import 'package:night_reader/core/storage/book_illustration_storage.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
+import 'package:night_reader/core/download/download_service.dart';
+import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 

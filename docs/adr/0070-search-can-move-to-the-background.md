@@ -48,7 +48,7 @@
 | `GLOSSARY.md` | 做：「背景工作」加上搜尋書籍 |
 | `docs/design/` | 做：`screens.md` 的「搜尋」「背景工作」 |
 | iPhone | 照 ADR 0058：沒有通知；離開夜讀時系統停住夜讀，回來接著送，這段時間正在搜的書源多半逾時、算失敗，可以「重試失敗」；被收掉時照暫停 |
-| 自動巡檢 | 不改分段：新檔在已分段的 `lib/features/search/` 與 `lib/core/services/background_work/` |
+| 自動巡檢 | 不改分段：新檔在已分段的 `lib/features/search/` 與 `lib/core/background_work/` |
 | 小說、漫畫、有聲、本地書 | 三類書源一樣搜、一樣放到背景；本地書不適用。閱讀的抓章插隊三類的閱讀器都接 |
 
 ## 後果

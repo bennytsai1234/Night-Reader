@@ -8,11 +8,11 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
-import 'package:night_reader/core/services/source_debug_service.dart';
+import 'package:night_reader/core/source/source_debug_service.dart';
 
 import 'source_debug_provider.dart';
 
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 enum _DebugAction { copy, restart }
 

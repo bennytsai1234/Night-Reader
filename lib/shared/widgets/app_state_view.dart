@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 enum AppStateTone { neutral, error }

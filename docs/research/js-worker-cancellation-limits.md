@@ -19,8 +19,8 @@
 
 ## 現況與可重現路徑
 
-1. `lib/core/services/check_source_service.dart`：`CheckSourceService._sourceCheckConcurrency = 8`；`_SourceCheckExecutionPool.run` 的八個非同步迴圈，在 `await checkSource(...)` 返回後立即從佇列領下一個書源。
-2. `lib/core/services/source_check_isolate.dart`：`spawnSourceCheck` 每個書源開新的 `SourceWorker`；到 `Timer(timeout)` 時 `finish(null)` 呼叫 `worker.kill`，隨即 `completer.complete(null)`。此時仍未證明 isolate 真的退出。
+1. `lib/core/source_check/check_source_service.dart`：`CheckSourceService._sourceCheckConcurrency = 8`；`_SourceCheckExecutionPool.run` 的八個非同步迴圈，在 `await checkSource(...)` 返回後立即從佇列領下一個書源。
+2. `lib/core/source_check/source_check_isolate.dart`：`spawnSourceCheck` 每個書源開新的 `SourceWorker`；到 `Timer(timeout)` 時 `finish(null)` 呼叫 `worker.kill`，隨即 `completer.complete(null)`。此時仍未證明 isolate 真的退出。
 3. `lib/core/engine/source_isolate/source_isolate.dart`：`SourceWorker.kill` 先關信箱、釋放限流紀錄、拒絕未完成結果，再呼叫 `_isolate.kill(priority: Isolate.beforeNextEvent)`。若同步原生 `evaluate` 永不返回，這條 isolate 不會進入下一事件。
 4. 同檔 `SourceWorker._spawn` 確實有 `Isolate.spawn(onExit: exit.sendPort)` 與 `exit.listen`，但目前 `SourceWorker._onExit` 是在 `kill()` 中直接執行（只用來清 `SourceIo._worker`），**不能當成真的退出確認**。目前 `_live` 也在 `kill()` 立刻移除，不代表實際存活數。
 5. `SourceIsolate.workerCount = 4` 是平常搜尋、閱讀、下載使用的常駐書源 isolate；這次超額風險主要來自一個書源一條的臨時校驗 isolate。AI 網站檢查、試抓、規則修復和登入也有額外 `SourceWorker.spawn` 呼叫點，若擴充全域資源上限，須一起界定範圍。

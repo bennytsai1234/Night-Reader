@@ -10,10 +10,10 @@ import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/book_storage_service.dart';
-import 'package:night_reader/core/services/local_book_service.dart';
-import 'package:night_reader/core/services/local_comic_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/storage/book_storage_service.dart';
+import 'package:night_reader/core/local_book/local_book_service.dart';
+import 'package:night_reader/core/comic/local_comic_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:path/path.dart' as p;
 

@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/local_book/txt_parser.dart';
-import 'package:night_reader/core/services/encoding_detect.dart';
-import 'package:night_reader/core/services/local_book_service.dart';
+import 'package:night_reader/core/utils/encoding_detect.dart';
+import 'package:night_reader/core/local_book/local_book_service.dart';
 
 final File _journeyToTheWest = File(
   '${Directory.current.path}${Platform.pathSeparator}test${Platform.pathSeparator}fixtures${Platform.pathSeparator}西游记.txt',

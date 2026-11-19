@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import '../models/base_source.dart';
 import '../models/book_source.dart';
-import '../services/cookie_store.dart';
-import '../services/app_log_service.dart';
+import '../network/cookie_store.dart';
+import '../diagnostics/app_log_service.dart';
 
 /// 送給 AI 的內容裡換掉秘密的那段字。
 const String aiRepairRedacted = '«已遮蔽»';

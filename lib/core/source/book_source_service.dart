@@ -1,0 +1,622 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/utils/source_progress.dart';
+import 'package:night_reader/core/utils/string_utils.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/base_source.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/source/explore_kind.dart';
+import 'package:night_reader/core/comic/comic_chapter_download.dart';
+import 'package:night_reader/core/engine/explore_url_parser.dart';
+import 'package:night_reader/core/engine/rule_data_fields.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
+import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
+import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart';
+import 'package:night_reader/core/engine/web_book/illustration_fetcher.dart';
+import 'package:night_reader/core/engine/web_book/web_book_service.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/network/request_log.dart';
+import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
+import 'package:night_reader/core/download/download_service.dart';
+import 'package:night_reader/core/source/source_interaction.dart';
+import 'package:night_reader/core/sync/source_sync.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// BookSourceService - 書源核心業務調度 (對標 Android model/webBook/WebBook.kt)
+///
+/// 書源的抓取與解析都在書源 isolate 執行（ADR 0028），畫面執行緒只收結果；
+/// 已經在書源 isolate 裡（例如規則 JS 呼叫回來）或沒開書源 isolate 時原地
+/// 執行。送過去的書與章節是複本，規則在複本上改的欄位（例如
+/// `book.putVariable`）跑完後抄回傳入的物件，和原地執行時一樣。
+class BookSourceService {
+  /// 獲取書籍詳情 (對標 getBookInfoAwait)
+  Future<Book> getBookInfo(
+    BookSource source,
+    Book book, {
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _bookInfoTask(source, book),
+    source: source,
+    book: book,
+    cancelToken: cancelToken,
+  );
+
+  /// 從書籍詳情頁取封面與字數（和 [getBookInfo] 同一條解析），給清單補上
+  /// 清單規則沒給的；只把這兩個欄位傳回畫面執行緒，不帶整頁 HTML。沒抓到
+  /// 的是空字串。
+  Future<({String coverUrl, String wordCount})> getCoverAndWordCount(
+    BookSource source,
+    Book book, {
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _coverAndWordCountTask(source, book),
+    source: source,
+    cancelToken: cancelToken,
+  );
+
+  /// 獲取目錄列表 (對標 getChapterListAwait)
+  Future<List<BookChapter>> getChapterList(
+    BookSource source,
+    Book book, {
+    int? chapterLimit,
+    int? pageConcurrency,
+    CancelToken? cancelToken,
+    bool requireComplete = false,
+  }) => _runOnSource(
+    _chapterListTask(
+      source,
+      book,
+      chapterLimit: chapterLimit,
+      pageConcurrency: pageConcurrency,
+      requireComplete: requireComplete,
+    ),
+    source: source,
+    book: book,
+    cancelToken: cancelToken,
+  );
+
+  /// 獲取正文內容。
+  ///
+  /// 正文分頁必須完整走完才算成功；達安全上限仍有下一頁時直接失敗，
+  /// 避免只抓到前半章卻被上層當 ready 寫入正文快取。
+  Future<String> getContent(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    String? nextChapterUrl,
+    int? pageConcurrency,
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _contentTask(
+      source,
+      book,
+      chapter,
+      nextChapterUrl: nextChapterUrl,
+      pageConcurrency: pageConcurrency,
+    ),
+    source: source,
+    book: book,
+    chapter: chapter,
+    cancelToken: cancelToken,
+  );
+
+  /// [content]（一章的正文）裡還沒存的插圖抓進 [dir]，回傳還沒抓到、也還
+  /// 不能確定抓不到的張數（[IllustrationFetcher]，ADR 0050）。
+  Future<int> fetchIllustrations(
+    BookSource source,
+    Book book,
+    String content, {
+    required String dir,
+    bool retryMissing = true,
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _illustrationTask(source, book, content, dir, retryMissing),
+    source: source,
+    book: book,
+    cancelToken: cancelToken,
+  );
+
+  /// 漫畫一話依序的圖片網址（[ComicChapterDownload.pageUrls]，ADR 0052）；
+  /// [remember] 時記進這一話的暫存資料夾。
+  Future<List<String>> getComicPageUrls(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    bool remember = true,
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _comicPageUrlsTask(source, book, chapter, remember),
+    source: source,
+    book: book,
+    chapter: chapter,
+    cancelToken: cancelToken,
+  );
+
+  /// 漫畫一話的第 [index] 張（[ComicChapterDownload.pageBytes]）：已經抓到
+  /// 的直接讀，否則照書源抓；[keep] 時存進暫存資料夾。
+  Future<Uint8List> getComicPage(
+    BookSource source,
+    Book book,
+    BookChapter chapter,
+    int index,
+    String url, {
+    bool keep = true,
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _comicPageTask(source, book, chapter, index, url, keep),
+    source: source,
+    book: book,
+    chapter: chapter,
+    cancelToken: cancelToken,
+  );
+
+  /// 有聲書一集的音訊請求（ADR 0055）：跑正文規則拿到音訊網址，組成播放器
+  /// 要抓的網址與標頭。
+  Future<AudioRequest> getAudioRequest(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _audioRequestTask(source, book, chapter),
+    source: source,
+    book: book,
+    chapter: chapter,
+    cancelToken: cancelToken,
+  );
+
+  /// 搜尋書籍 (對標 searchBookAwait)
+  ///
+  /// [filter]、[shouldBreak] 會跟著送進書源 isolate，要在只捕捉書名、作者
+  /// 這類資料的頂層函式裡建立（`CODING_STANDARDS.md`）。
+  Future<List<SearchBook>> searchBooks(
+    BookSource source,
+    String key, {
+    int page = 1,
+    bool Function(String name, String author)? filter,
+    bool Function(int size)? shouldBreak,
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _searchTask(
+      source,
+      key,
+      page: page,
+      filter: filter,
+      shouldBreak: shouldBreak,
+    ),
+    source: source,
+    cancelToken: cancelToken,
+  );
+
+  /// 發現/探索書籍 (對標 exploreBookAwait)
+  Future<List<SearchBook>> exploreBooks(
+    BookSource source,
+    String url, {
+    int? page = 1,
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _exploreTask(source, url, page: page),
+    source: source,
+    cancelToken: cancelToken,
+  );
+
+  /// 發現頁的分類（對標 BookSource.getExploreKinds）；`<js>`、`@js:` 規則
+  /// 也在書源 isolate 執行。
+  Future<List<ExploreKind>> exploreKinds(
+    String? exploreUrl, {
+    BookSource? source,
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _exploreKindsTask(exploreUrl, source),
+    source: source,
+    cancelToken: cancelToken,
+  );
+
+  /// 精確搜尋：書名與作者都相同的第一本。
+  Future<List<SearchBook>> preciseSearch(
+    BookSource source,
+    String name,
+    String author, {
+    CancelToken? cancelToken,
+  }) => searchBooks(
+    source,
+    name,
+    filter: _exactBook(name, author),
+    shouldBreak: stopAtFirstSearchResult,
+    cancelToken: cancelToken,
+  );
+
+  Future<List<Book>> importBookshelf(String url) async {
+    final result = await BookshelfExchangeService().importFromUrl(url);
+    if (result.books <= 0) return [];
+    return getIt<BookDao>().getInBookshelf();
+  }
+
+  /// 儲存編輯後的書源。網址改過時，以原網址記的一切跟著搬到新網址（書架上
+  /// 的書、搜尋結果、已下載的正文見 [BookSourceDao.saveEdited]，登入資訊與
+  /// 變數見 [BaseSource.moveCachedIdentity]）；搬的時候這些書的下載先停住，
+  /// 搬完照原本的狀態接著下載，不會有一輪用舊網址寫正文。
+  Future<void> saveEditedSource(
+    BookSource source, {
+    String? previousUrl,
+  }) async {
+    final sourceDao = getIt<BookSourceDao>();
+    if (previousUrl == null || previousUrl == source.bookSourceUrl) {
+      return sourceDao.saveEdited(source);
+    }
+    final books = await getIt<BookDao>().bookUrlsFromOrigin(previousUrl);
+    final otherSources = [
+      for (final other in await sourceDao.getAllPart()) other.bookSourceUrl,
+    ];
+    final release = books.isEmpty
+        ? null
+        : await DownloadService().holdBooks(books);
+    try {
+      await BaseSource.moveCachedIdentity(
+        previousUrl,
+        source.getKey(),
+        otherKeys: otherSources,
+        commit: () => sourceDao.saveEdited(source, previousUrl: previousUrl),
+      );
+    } finally {
+      release?.call();
+    }
+    // 同步時別台照這份紀錄把舊網址的書搬過去（ADR 0039）。
+    await SourceMoves(await SharedPreferences.getInstance())
+        .record(from: previousUrl, to: source.bookSourceUrl);
+  }
+
+  /// 重複書源 [from] 併進 [into]（ADR 0062；做法見
+  /// [BookSourceDao.mergeInto]）。合併時暫停這些
+  /// 書的下載，記一筆書源搬家給同步。傳回真的併掉的網址。
+  Future<List<String>> mergeSources(List<String> from, String into) async {
+    final books = [
+      for (final url in from)
+        if (url != into) ...await getIt<BookDao>().bookUrlsFromOrigin(url),
+    ];
+    final release = books.isEmpty
+        ? null
+        : await DownloadService().holdBooks(books);
+    final List<String> merged;
+    try {
+      merged = await getIt<BookSourceDao>().mergeInto(from, into);
+    } finally {
+      release?.call();
+    }
+    // 同步時別台照這份紀錄把併掉的書源的書搬過去（ADR 0039）。
+    final moves = SourceMoves(await SharedPreferences.getInstance());
+    for (final url in merged) {
+      await moves.record(from: url, to: into);
+    }
+    return merged;
+  }
+
+  /// 依 URL 取得書源
+  Future<BookSource?> getSourceByUrl(String url) =>
+      getIt<BookSourceDao>().getByUrl(url);
+
+  /// 取得書籍所有章節（用於不帶完整 provider 的頁面）
+  Future<List<BookChapter>> getBookChapters(String bookUrl) =>
+      getIt<ChapterDao>().getByBook(bookUrl);
+}
+
+/// 搜尋找到第一本就停，給 [BookSourceService.searchBooks] 的 `shouldBreak`。
+/// 頂層函式送得進書源 isolate。
+bool stopAtFirstSearchResult(int size) => size >= 1;
+
+bool Function(String name, String author) _exactBook(
+  String name,
+  String author,
+) =>
+    (n, a) => n == name && a == author;
+
+// ── 送進書源 isolate 的工作 ─────────────────────────────────────────
+//
+// 每個工作在只捕捉書源、書、章節與參數的頂層函式裡建立，連同捕捉的變數複製
+// 到書源 isolate。
+
+typedef _Work<R> = Future<R> Function(CancelToken cancelToken);
+
+_Work<Book> _bookInfoTask(BookSource source, Book book) =>
+    (cancelToken) =>
+        WebBook.getBookInfoAwait(source, book, cancelToken: cancelToken);
+
+_Work<({String coverUrl, String wordCount})> _coverAndWordCountTask(
+  BookSource source,
+  Book book,
+) => (cancelToken) async {
+  final info = await WebBook.getBookInfoAwait(
+    source,
+    book,
+    cancelToken: cancelToken,
+  );
+  // 字數照書籍詳情的寫法：字數欄沒有時從分類（例如「玄幻,25萬字」）取。
+  return (
+    coverUrl: info.coverUrl ?? '',
+    wordCount: StringUtils.displayWordCount(info.wordCount, info.kind),
+  );
+};
+
+_Work<List<BookChapter>> _chapterListTask(
+  BookSource source,
+  Book book, {
+  required int? chapterLimit,
+  required int? pageConcurrency,
+  required bool requireComplete,
+}) =>
+    (cancelToken) => WebBook.getChapterListAwait(
+      source,
+      book,
+      chapterLimit: chapterLimit,
+      pageConcurrency: pageConcurrency,
+      cancelToken: cancelToken,
+      requireComplete: requireComplete,
+    );
+
+_Work<String> _contentTask(
+  BookSource source,
+  Book book,
+  BookChapter chapter, {
+  required String? nextChapterUrl,
+  required int? pageConcurrency,
+}) =>
+    (cancelToken) => CompleteContentFetcher.fetch(
+      source,
+      book,
+      chapter,
+      nextChapterUrl: nextChapterUrl,
+      pageConcurrency: pageConcurrency,
+      cancelToken: cancelToken,
+    );
+
+_Work<int> _illustrationTask(
+  BookSource source,
+  Book book,
+  String content,
+  String dir,
+  bool retryMissing,
+) =>
+    (cancelToken) => IllustrationFetcher.fetch(
+      source,
+      book,
+      content,
+      dir,
+      retryMissing: retryMissing,
+      cancelToken: cancelToken,
+    );
+
+_Work<List<String>> _comicPageUrlsTask(
+  BookSource source,
+  Book book,
+  BookChapter chapter,
+  bool remember,
+) =>
+    (cancelToken) => ComicChapterDownload.pageUrls(
+      source,
+      book,
+      chapter,
+      remember: remember,
+      cancelToken: cancelToken,
+    );
+
+_Work<Uint8List> _comicPageTask(
+  BookSource source,
+  Book book,
+  BookChapter chapter,
+  int index,
+  String url,
+  bool keep,
+) =>
+    (cancelToken) => ComicChapterDownload.pageBytes(
+      source,
+      book,
+      chapter,
+      index,
+      url,
+      keep: keep,
+      cancelToken: cancelToken,
+    );
+
+_Work<AudioRequest> _audioRequestTask(
+  BookSource source,
+  Book book,
+  BookChapter chapter,
+) =>
+    (cancelToken) => AudioUrlResolver.resolve(
+      source,
+      book,
+      chapter,
+      cancelToken: cancelToken,
+    );
+
+_Work<List<SearchBook>> _searchTask(
+  BookSource source,
+  String key, {
+  required int page,
+  required bool Function(String name, String author)? filter,
+  required bool Function(int size)? shouldBreak,
+}) =>
+    (cancelToken) => WebBook.searchBookAwait(
+      source,
+      key,
+      page: page,
+      filter: filter,
+      shouldBreak: shouldBreak,
+      cancelToken: cancelToken,
+    );
+
+_Work<List<SearchBook>> _exploreTask(
+  BookSource source,
+  String url, {
+  required int? page,
+}) =>
+    (cancelToken) => WebBook.exploreBookAwait(
+      source,
+      url,
+      page: page,
+      cancelToken: cancelToken,
+    );
+
+_Work<List<ExploreKind>> _exploreKindsTask(
+  String? exploreUrl,
+  BookSource? source,
+) =>
+    (cancelToken) => ExploreUrlParser.parseAsync(exploreUrl, source: source);
+
+// ── 規則改過的欄位抄回呼叫端 ───────────────────────────────────────
+
+/// 一個欄位在工作開始與結束時的值。
+typedef _Change = (Object? before, Object? after);
+
+final class _Ran<R> {
+  const _Ran(this.result, this.bookChanges, this.chapterChanges);
+
+  final R result;
+  final Map<String, _Change> bookChanges;
+  final Map<String, _Change> chapterChanges;
+}
+
+/// 書源除錯用：[body] 裡經由 [BookSourceService] 跑的書源工作，一邊跑一邊把
+/// 實際送出的請求網址交給 [onRequest]、引擎寫給除錯看的話（[SourceDebugNote]，
+/// 例如書單是空的、改照詳情頁解析）交給 [onNote]，照發生的順序，工作失敗時
+/// 也交。
+Future<T> withSourceDebugLog<T>({
+  required void Function(String url) onRequest,
+  required void Function(String note) onNote,
+  required Future<T> Function() body,
+}) => runZoned(
+  body,
+  zoneValues: {_debugLogZoneKey: (onRequest: onRequest, onNote: onNote)},
+);
+
+typedef _DebugLog = ({
+  void Function(String url) onRequest,
+  void Function(String note) onNote,
+});
+
+final Object _debugLogZoneKey = Object();
+
+/// 在書源 isolate 執行 [work]，把規則在 [book]、[chapter] 上改的欄位
+/// （[bookRuleFields]、[chapterRuleFields]）抄回傳入的物件。
+///
+/// 改了什麼由工作本身在開始與結束時比對（[_tracked]），所以送出前排隊的
+/// 這段時間、以及執行期間畫面執行緒改了這本書（例如閱讀進度），都不會被當
+/// 成規則的改動、被複本的舊值蓋掉。同一個 [source] 的工作送到同一條書源
+/// isolate（[SourceIsolate.run] 的 `affinity`）。
+Future<R> _runOnSource<R>(
+  _Work<R> work, {
+  BookSource? source,
+  Book? book,
+  BookChapter? chapter,
+  CancelToken? cancelToken,
+}) async {
+  // 付費章節的正文、圖、音訊都不抓（ADR 0057）：網站只會回付費提示，夜讀
+  // 也不替使用者買。閱讀器、下載、朗讀、校驗都經過這裡。
+  if (chapter != null && chapter.isLocked) throw LockedChapterException();
+  final debug = Zone.current[_debugLogZoneKey] as _DebugLog?;
+  final _Ran<R> ran;
+  try {
+    ran = await SourceIsolate.run(
+      // 外層已經在記請求時（原地執行時書源工作裡又叫回來的工作，或書源
+      // 除錯外面又包一層記請求的），請求照送出的順序記進外層的紀錄。
+      _tracked(
+        work,
+        book,
+        chapter,
+        recordRequests: debug != null && !isRecordingRequestUrls,
+      ),
+      affinity: source?.bookSourceUrl,
+      cancelToken: cancelToken,
+      onProgress: debug == null
+          ? null
+          : (entry) => switch (entry) {
+              LoggedRequestLine(:final line) => debug.onRequest(line),
+              SourceDebugNote(:final message) => debug.onNote(message),
+              _ => null,
+            },
+    );
+  } on SourceVerificationException catch (error) {
+    // 取消後才交回的：書源 isolate 停在等網路時還沒收到取消，認不出來。
+    if (cancelToken?.cancelError case final cancelled?) throw cancelled;
+    // 記下要開的網頁，閱讀器的失敗提示旁給「前往驗證」。
+    final request = error.request;
+    if (source != null && request != null) {
+      SourceInteraction.rememberVerification(source.bookSourceUrl, request);
+    }
+    rethrow;
+  }
+  if (book != null) _apply(bookRuleFields, ran.bookChanges, book);
+  if (chapter != null) _apply(chapterRuleFields, ran.chapterChanges, chapter);
+  return ran.result;
+}
+
+/// 包住 [work]：在執行它的 isolate 裡，開始前與結束後各讀一次 [book]、
+/// [chapter] 的規則欄位，只傳回有變的。[book]、[chapter] 和 [work] 捕捉的是
+/// 同一份（同一則訊息複製過去的物件仍是同一個）。[recordRequests] 時一邊跑
+/// 一邊交回實際送出的請求網址（[LoggedRequestLine]）。
+_Work<_Ran<R>> _tracked<R>(
+  _Work<R> work,
+  Book? book,
+  BookChapter? chapter, {
+  required bool recordRequests,
+}) => (cancelToken) async {
+  final bookBefore = book == null ? null : _readFields(bookRuleFields, book);
+  final chapterBefore = chapter == null
+      ? null
+      : _readFields(chapterRuleFields, chapter);
+  final requests = RequestLog(live: true);
+  // 書源要使用者驗證而失敗時，失敗照實說是要驗證（ADR 0038）。
+  Future<R> run() => SourceInteraction.watchVerification(
+    () => work(cancelToken),
+    cancelToken: cancelToken,
+  );
+  final result = recordRequests ? await requests.run(run) : await run();
+  return _Ran(
+    result,
+    book == null ? const {} : _changes(bookRuleFields, bookBefore!, book),
+    chapter == null
+        ? const {}
+        : _changes(chapterRuleFields, chapterBefore!, chapter),
+  );
+};
+
+Map<String, Object?> _readFields<T>(
+  Map<String, RuleDataField<T>> fields,
+  T target,
+) => {
+  for (final MapEntry(:key, :value) in fields.entries) key: value.read(target),
+};
+
+Map<String, _Change> _changes<T>(
+  Map<String, RuleDataField<T>> fields,
+  Map<String, Object?> before,
+  T target,
+) => {
+  for (final MapEntry(:key, :value) in fields.entries)
+    if (value.read(target) case final now when now != before[key])
+      key: (before[key], now),
+};
+
+/// 原地執行時規則已經改在 [target] 上，再寫一次值相同，不影響結果。
+void _apply<T>(
+  Map<String, RuleDataField<T>> fields,
+  Map<String, _Change> changes,
+  T target,
+) {
+  for (final MapEntry(key: name, value: (before, after)) in changes.entries) {
+    final field = fields[name]!;
+    final merge = field.merge;
+    field.write(
+      target,
+      merge == null ? after : merge(field.read(target), before, after),
+    );
+  }
+}

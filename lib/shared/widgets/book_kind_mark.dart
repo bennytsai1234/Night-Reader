@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 漫畫、有聲書的記號（ADR 0053）：同名的小說、漫畫、有聲是不同的書，搜尋
 /// 結果卡在封面左下角放這個記號分出來（docs/design/screens.md「搜尋」）。

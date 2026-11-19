@@ -19,7 +19,7 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 外觀與主題：淺色與深色各用的風格、深色用純黑、強調色、深淺、玻璃效果、
 /// 換頁動畫與介面字型。當下深淺用的風格決定 App 介面、閱讀正文與閱讀選單的配色。
