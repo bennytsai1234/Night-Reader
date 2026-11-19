@@ -831,3 +831,19 @@ ADR 0055 的播放器（`lib/features/audiobook/audiobook_player.dart`），讀�
 | 淡掉中 | 整頁一起淡掉，紙留著 | 沒有、長出中（新的一頁，從現在的濃淡長） | 一樣 |
 
 「長出中」「淡掉中」「沒有」照骨架動畫的方向與進度，不另記；這次收成一個的是長完之後那三個（照常、停著等、收住）。
+
+**不收進階段的**：`_sweep`、`_usingBreath`、`_disposed`、`_reduceMotion`、`_attachedVeils`（理由見上）。
+
+**重構時查到並修掉的**：沒有。讀程式與偵測測試確認上面每一格現在都照做；正文層那一節查到的排版預算，是正文層的事。
+
+**改後**：
+
+| 改前 | 改後 |
+|---|---|
+| `_settling`、`_breathTimer` | `_BreathPlan`：`_BreatheWhenRested`（照常）、`_Resting`（停著等，計時收在裡面）、`_Held`（收住） |
+| `_skeletonSweep` | 拿掉，改成照骨架動畫的方向與設定算（`_skeletonSweeps`） |
+| `_sweep`、`_usingBreath` | 照舊（理由見上） |
+
+改後寫不出來的組合：收住了還排著呼吸的計時、骨架在淡掉卻還記著由左而右。讀者看得到的沒有變。
+
+和正文層的「等掀紙」是同一件事的兩邊：正文層記自己在等掀紙（`_AwaitingReveal`），紙只記「長完也不呼吸」（`_Held`），由正文層的 `settleBreath`、`resumeBreath` 與 `cover` 帶著走；兩邊各記自己要的那一半，不合成一個。

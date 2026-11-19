@@ -45,21 +45,24 @@ class LoadingVeilController {
   /// 紙完全淡出時呼叫，呼叫端據此把 [LoadingVeil] 移出畫面。
   final VoidCallback? onHidden;
 
-  /// 這一次掀紙是不是由左而右。
+  /// 上一次掀紙是不是由左而右。掀到一半又蓋回去時照它倒回來，這時骨架換場
+  /// 的設定可能已經不同，所以記下來；從靜止開始淡入時整張一起淡。
   bool _sweep = false;
 
   /// 骨架出現的方式與時長，見 [skeletonReveal]。
   SkeletonReveal _skeletonReveal = const SkeletonReveal();
 
-  /// 這一次骨架出現是不是由左而右；骨架自己淡掉時一律整頁淡。
-  bool _skeletonSweep = false;
+  /// 骨架正在由左而右長出：長出中而且設定是由左而右；淡掉時一律整頁淡。
+  bool get _skeletonSweeps =>
+      _skeleton.status == AnimationStatus.forward && _skeletonReveal.sweeps;
 
   final AnimationController _cover;
   final AnimationController _skeleton;
   final SharedSkeletonBreath _breath;
   final bool _ownsBreath;
 
-  /// 紙上的骨架正在用 [_breath]（登記成它的使用者）。
+  /// 紙上的骨架正在用 [_breath]（登記成它的使用者）：登記與取消要成對，值由
+  /// [_syncPulse] 照畫面算。
   bool _usingBreath = false;
   int _attachedVeils = 0;
   bool _reduceMotion = false;
@@ -87,7 +90,6 @@ class LoadingVeilController {
     if (_skeletonReveal == value) return;
     _skeletonReveal = value;
     if (_skeleton.status == AnimationStatus.forward) {
-      _skeletonSweep = value.sweeps;
       _skeleton.duration = value.duration;
       unawaited(_skeleton.forward());
     }
@@ -140,7 +142,7 @@ class LoadingVeilController {
   /// 等 [covered] 再拿掉）；否則直接蓋滿。掀紙途中再淡入時沿用那次掀紙的
   /// 方式倒回來，其他時候整張一起淡。
   void cover({bool skeleton = true, bool fade = false}) {
-    _settling = false;
+    if (_plan is _Held) _plan = const _BreatheWhenRested();
     if (fade && !_reduceMotion) {
       if (!_cover.isAnimating) _sweep = false;
       unawaited(_cover.forward());
@@ -163,7 +165,6 @@ class LoadingVeilController {
       _skeleton.value = 1;
     } else {
       if (!_skeleton.isCompleted) unawaited(_breath.settle());
-      _skeletonSweep = _skeletonReveal.sweeps;
       _skeleton.duration = _skeletonReveal.duration;
       unawaited(_skeleton.forward());
     }
@@ -176,7 +177,6 @@ class LoadingVeilController {
   /// 呼吸就從現在起收住，淡掉的同時把這一口呼完，新骨架長出時已經靜止。
   void hideSkeleton() {
     if (!_reduceMotion) unawaited(_breath.settle());
-    _skeletonSweep = false;
     if (_reduceMotion || _skeleton.isDismissed) {
       _skeleton.value = 0;
     } else {
@@ -190,16 +190,28 @@ class LoadingVeilController {
   /// 約 0.37 秒），要上網抓的也不會讓骨架靜止太久、看起來像當掉。
   static const Duration restBeforeBreath = Duration(milliseconds: 500);
 
-  Timer? _breathTimer;
+  /// 骨架長完之後的呼吸怎麼安排：照常、停著等、收住（[_BreathPlan]）。
+  _BreathPlan _plan = const _BreatheWhenRested();
 
-  /// 骨架長完：先停在最深 [restBeforeBreath]，正文還沒排好才開始呼吸。
+  /// 骨架長完：先停在最深 [restBeforeBreath]，正文還沒排好才開始呼吸；收住
+  /// 時不停也不呼吸。
   void _waitThenBreathe() {
-    _breathTimer?.cancel();
-    if (_settling) return;
-    _breathTimer = Timer(restBeforeBreath, () {
-      _breathTimer = null;
-      if (!_settling && _skeleton.isCompleted) _breath.begin();
-    });
+    if (_plan is _Held) return;
+    _stopResting();
+    _plan = _Resting(
+      Timer(restBeforeBreath, () {
+        _plan = const _BreatheWhenRested();
+        if (_skeleton.isCompleted) _breath.begin();
+      }),
+    );
+  }
+
+  /// 停著等的計時作廢。
+  void _stopResting() {
+    if (_plan case _Resting(:final timer)) {
+      timer.cancel();
+      _plan = const _BreatheWhenRested();
+    }
   }
 
   /// 正文排好、要掀紙前收住骨架的呼吸，和開 App 換場前一樣（ADR 0035）：
@@ -208,9 +220,8 @@ class LoadingVeilController {
   /// 靜止時完成，之後才在紙底下建正文，掀紙時骨架不再呼吸（ADR 0037
   /// 策略一、二）。收的是共用的那口呼吸，頁首頁尾的骨架一起收。
   Future<void> settleBreath() async {
-    _settling = true;
-    _breathTimer?.cancel();
-    _breathTimer = null;
+    _stopResting();
+    _plan = const _Held();
     await _grown;
     if (_disposed) return;
     await _breath.settle();
@@ -242,12 +253,9 @@ class LoadingVeilController {
   /// 這次掀紙作廢、紙還要再等：骨架已經長完就從現在起停 [restBeforeBreath]
   /// 再呼吸（收住途中時等這一口呼完再起），還在長的等長完才算。
   void resumeBreath() {
-    _settling = false;
+    if (_plan is _Held) _plan = const _BreatheWhenRested();
     if (_skeleton.isCompleted) _waitThenBreathe();
   }
-
-  /// 正文排好、在等收住（[settleBreath]）：骨架長完時不開始呼吸。
-  bool _settling = false;
 
   /// 正文已排好：照 [reveal] 的方式與時長掀開紙。
   void reveal([SkeletonReveal reveal = const SkeletonReveal()]) {
@@ -262,7 +270,7 @@ class LoadingVeilController {
 
   void dispose() {
     _disposed = true;
-    _breathTimer?.cancel();
+    _stopResting();
     _settleGrownWaiters();
     _cover.removeStatusListener(_onCoverStatus);
     _skeleton.removeStatusListener(_onSkeletonStatus);
@@ -402,7 +410,7 @@ class _LoadingVeilState extends State<LoadingVeil> {
             return Skeleton.screenSpan(box, viewWidth);
           },
           sweep: () => controller._sweep,
-          skeletonSweep: () => controller._skeletonSweep,
+          skeletonSweep: () => controller._skeletonSweeps,
           spec: widget.spec,
           lines: widget.lines,
           titleLines: widget.titleLines,
@@ -586,4 +594,30 @@ class _LoadingVeilPainter extends CustomPainter {
       !identical(oldDelegate.blockLines, blockLines) ||
       oldDelegate.backgroundColor != backgroundColor ||
       oldDelegate.textColor != textColor;
+}
+
+/// 紙上骨架長完之後的呼吸怎麼安排（`docs/state-machines.md`「紙」）。骨架長出
+/// 中、淡掉中、沒有，照骨架動畫的方向與進度，不另記。
+sealed class _BreathPlan {
+  const _BreathPlan();
+}
+
+/// 照常：長完就停 [LoadingVeilController.restBeforeBreath] 再呼吸，或已經在
+/// 呼吸。
+final class _BreatheWhenRested extends _BreathPlan {
+  const _BreatheWhenRested();
+}
+
+/// 長完了，停在最深等 [LoadingVeilController.restBeforeBreath]；到了正文還沒
+/// 排好就開始呼吸。
+final class _Resting extends _BreathPlan {
+  _Resting(this.timer);
+
+  final Timer timer;
+}
+
+/// 正文排好、等收住掀紙（[LoadingVeilController.settleBreath]）：長完也不
+/// 呼吸，直到又蓋紙或這次掀紙作廢。
+final class _Held extends _BreathPlan {
+  const _Held();
 }
