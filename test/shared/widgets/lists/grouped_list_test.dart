@@ -49,6 +49,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('书签'), findsOneWidget);
+    expect(find.text('書名'), findsOneWidget);
     expect(find.text('书名'), findsNothing);
   });
 }
