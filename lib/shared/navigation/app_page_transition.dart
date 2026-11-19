@@ -138,17 +138,12 @@ class _AppTransitionState extends State<_AppTransition>
 
   late final HorizontalDragGestureRecognizer _drag;
 
-  /// 手指放開後把頁面送完（或彈回）的那一段；進度直接寫回路由。
+  /// 手指放開後把頁面送完（或彈回）的那一段（[_Settling]）；進度直接寫回
+  /// 路由。
   late final AnimationController _finish;
-  double _finishFrom = 1;
-  double _finishTo = 1;
 
-  /// 正在由這一頁處理的返回手勢。
-  bool _tracking = false;
-
-  /// 手勢途中有新頁蓋上來，路由停在半途（不是最上層時 [ModalRoute] 不讓
-  /// 手勢改它的進度）；蓋上來的頁關掉後要把這一頁補回整頁。
-  bool _stranded = false;
+  /// 這一頁的返回手勢走到哪個階段（`docs/state-machines.md`「路由換頁」）。
+  _Swipe _swipe = const _Idle();
 
   /// 系統預測返回：觸控速度與重新取樣的進度。
   final PredictiveBackTracker _back = PredictiveBackTracker();
@@ -202,12 +197,12 @@ class _AppTransitionState extends State<_AppTransition>
 
   void _onCoveredStatus(AnimationStatus status) {
     _under.update(status);
-    if (status.isDismissed && _stranded) _restore();
+    if (status.isDismissed && _swipe is _Stranded) _restore();
   }
 
   // 用公開的手勢入口把路由送回整頁：開始一次手勢、立刻取消，路由自己播完。
   void _restore() {
-    _stranded = false;
+    _swipe = const _Idle();
     if (!_route.isCurrent || _progress >= 1) return;
     _route
       ..handleStartBackGesture(progress: _progress)
@@ -222,7 +217,7 @@ class _AppTransitionState extends State<_AppTransition>
     _drag.dispose();
     _finish.dispose();
     _backTicker.dispose();
-    if (_tracking) {
+    if (_swipe is _Dragging || _swipe is _Settling) {
       // 手勢途中頁面被程式關掉。卸載時整棵樹鎖著，通知 Navigator 會讓其他
       // 頁面重建，要等這一格畫完。
       final navigator = widget.route.navigator;
@@ -240,7 +235,7 @@ class _AppTransitionState extends State<_AppTransition>
   double get _width => context.size?.width ?? 1;
 
   bool get _canStart =>
-      !_tracking && _route.isCurrent && _route.popGestureEnabled;
+      _swipe is _Idle && _route.isCurrent && _route.popGestureEnabled;
 
   // ---------- 左緣右滑 ----------
 
@@ -254,14 +249,14 @@ class _AppTransitionState extends State<_AppTransition>
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
-    if (!_tracking || _finish.isAnimating) return;
+    if (_swipe is! _Dragging) return;
     _route.handleUpdateBackGestureProgress(
       progress: (_progress - details.primaryDelta! / _width).clamp(0.0, 1.0),
     );
   }
 
   void _onDragEnd(DragEndDetails details) {
-    if (!_tracking || _finish.isAnimating) return;
+    if (_swipe is! _Dragging) return;
     final velocity = details.velocity.pixelsPerSecond.dx;
     final dismissed = 1 - _progress;
     if (BackSwipe.goesBack(dismissed: dismissed, velocity: velocity)) {
@@ -272,7 +267,7 @@ class _AppTransitionState extends State<_AppTransition>
   }
 
   void _onDragCancel() {
-    if (_tracking && !_finish.isAnimating) _cancel();
+    if (_swipe is _Dragging) _cancel();
   }
 
   // ---------- Android 系統的預測返回 ----------
@@ -291,12 +286,12 @@ class _AppTransitionState extends State<_AppTransition>
 
   @override
   void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
-    if (!_tracking || _finish.isAnimating) return;
+    if (_swipe is! _Dragging) return;
     _back.record(backEvent, MediaQuery.devicePixelRatioOf(context));
   }
 
   void _onBackTick(Duration _) {
-    if (!_route.isCurrent || _finish.isAnimating) return;
+    if (!_route.isCurrent || _swipe is! _Dragging) return;
     final progress = _back.progress;
     if (progress != null) {
       _route.handleUpdateBackGestureProgress(progress: 1 - progress);
@@ -306,14 +301,12 @@ class _AppTransitionState extends State<_AppTransition>
   // 返回與否由系統決定；這裡只照 Telegram 的時長送完或彈回。
   @override
   void handleCommitBackGesture() {
-    if (_tracking && !_finish.isAnimating) {
-      _completeWith(_back.pixelsPerSecond);
-    }
+    if (_swipe is _Dragging) _completeWith(_back.pixelsPerSecond);
   }
 
   @override
   void handleCancelBackGesture() {
-    if (_tracking && !_finish.isAnimating) _cancel();
+    if (_swipe is _Dragging) _cancel();
   }
 
   // ---------- 共用 ----------
@@ -321,7 +314,7 @@ class _AppTransitionState extends State<_AppTransition>
   double get _progress => widget.animation.value;
 
   void _begin() {
-    _tracking = true;
+    _swipe = const _Dragging();
     _back.clear();
     _route.handleStartBackGesture(progress: _progress);
   }
@@ -337,32 +330,33 @@ class _AppTransitionState extends State<_AppTransition>
   void _cancel() => _runFinish(to: 1, duration: BackSwipe.cancelDuration);
 
   void _runFinish({required double to, required Duration duration}) {
-    if (_backTicker.isActive) _backTicker.stop();
+    _backTicker.stop();
     _back.clear();
-    _finishFrom = _progress;
-    _finishTo = to;
+    _swipe = _Settling(from: _progress, to: to);
     _finish
       ..duration = duration
       ..forward(from: 0);
   }
 
   void _onFinishTick() {
-    if (!_route.isCurrent) return;
+    final swipe = _swipe;
+    if (swipe is! _Settling || !_route.isCurrent) return;
     _route.handleUpdateBackGestureProgress(
       progress: lerpDouble(
-        _finishFrom,
-        _finishTo,
+        swipe.from,
+        swipe.to,
         BackSwipe.curve.transform(_finish.value),
       )!,
     );
   }
 
+  // 收完時有頁蓋在上面，路由不讓手勢改進度，停在半途等補回整頁。
   void _onFinishStatus(AnimationStatus status) {
-    if (status != AnimationStatus.completed) return;
-    _tracking = false;
+    final swipe = _swipe;
+    if (status != AnimationStatus.completed || swipe is! _Settling) return;
     _back.clear();
-    _stranded = !_route.isCurrent;
-    if (_finishTo == 0) {
+    _swipe = _route.isCurrent ? const _Idle() : const _Stranded();
+    if (swipe.goesBack) {
       _route.handleCommitBackGesture();
     } else {
       _route.handleCancelBackGesture();
@@ -449,6 +443,41 @@ class _AppTransitionState extends State<_AppTransition>
       ],
     );
   }
+}
+
+/// 這一頁的返回手勢走到哪個階段；放開後的收尾與被蓋住的停留都只屬於
+/// 這一頁，被蓋住本身（[ModalRoute.isCurrent]）會和跟手、收尾同時成立，在
+/// 進出階段時讀。
+sealed class _Swipe {
+  const _Swipe();
+}
+
+/// 沒在拖：頁面照路由的換頁動畫；在最上層、開完了、可以返回時，左緣與
+/// 系統的返回手勢可以開始。
+final class _Idle extends _Swipe {
+  const _Idle();
+}
+
+/// 跟著左緣右滑或系統的預測返回走；系統手勢由 `_backTicker` 每一格補進度。
+final class _Dragging extends _Swipe {
+  const _Dragging();
+}
+
+/// 放開後照 [BackSwipe] 的時長從 [from] 送到 [to]：0 是返回，1 是彈回。
+/// 途中再拖、系統再送都不接手。
+final class _Settling extends _Swipe {
+  const _Settling({required this.from, required this.to});
+
+  final double from;
+  final double to;
+
+  bool get goesBack => to == 0;
+}
+
+/// 收完時有新頁蓋在上面：不是最上層時 [ModalRoute] 不讓手勢改進度，路由
+/// 停在半途；蓋上來的頁關掉後補回整頁。
+final class _Stranded extends _Swipe {
+  const _Stranded();
 }
 
 /// 一趟轉場（開啟或返回）走到哪：[of] 回傳的 `time` 為這一趟的時間比例
