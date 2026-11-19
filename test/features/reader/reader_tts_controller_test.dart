@@ -5,6 +5,7 @@ import 'package:audio_service_platform_interface/audio_service_platform_interfac
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
@@ -212,11 +213,13 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  /// [gates] 裡的章節等它完成才載入好。
+  /// [gates] 裡的章節等它完成才載入好；[paid] 裡的是付費章節，和書源一樣
+  /// 抓不到正文。
   Future<void> open(
     Map<int, String?> contents, {
     Map<int, String> titles = const {},
     Map<int, Completer<void>> gates = const {},
+    Set<int> paid = const {},
   }) async {
     final book = Book(
       bookUrl: 'http://tts.test',
@@ -235,11 +238,13 @@ void main() {
             title: titles[index] ?? '',
             bookUrl: book.bookUrl,
             index: index,
+            isVip: paid.contains(index),
           ),
       ],
       contentLoader: (index, _) async {
         await gates[index]?.future;
         final content = contents[index];
+        if (paid.contains(index)) throw LockedChapterException();
         if (content == null) {
           throw const ReaderContentUnavailableException('暫時無法取得');
         }
@@ -395,6 +400,131 @@ void main() {
     expect(runtime.takeUserNotice()?.message, '已朗讀到書尾');
   });
 
+  group('reading on', () {
+    test(
+      'finishing a chapter reads on from the next one, the highlight and the '
+      'system info follow',
+      () async {
+        await open({0: '第一句。', 1: '第二章開頭。'}, titles: {0: '第一章', 1: '第二章'});
+        await tts.startFromVisibleLocation();
+        engine.complete();
+        await pumpEventQueue();
+        expect(engine.spoken.last, '第一句。');
+        expect(tts.currentHighlight?.chapterIndex, 0);
+
+        engine.complete();
+        await pumpEventQueue();
+        expect(engine.spoken.last, '第二章');
+        expect(tts.currentHighlight?.chapterIndex, 1);
+        expect(tts.currentHighlight?.sentenceStart, 0);
+        expect(tts.isPlaying, isTrue);
+        expect(system.title, '第二章');
+        expect(system.playing, isTrue);
+      },
+    );
+
+    test('paid chapters ahead are skipped', () async {
+      await open({0: '甲。', 1: null, 2: '丙。'}, paid: {1});
+      await tts.startFromVisibleLocation();
+      engine.complete();
+      await pumpEventQueue();
+
+      expect(engine.spoken, ['甲。', '丙。']);
+      expect(tts.currentHighlight?.chapterIndex, 2);
+    });
+
+    test(
+      'when only paid chapters are left, reading ends and says so',
+      () async {
+        await open({0: '甲。', 1: null}, paid: {1});
+        await tts.startFromVisibleLocation();
+        engine.complete();
+        await pumpEventQueue();
+
+        expect(engine.spoken, ['甲。']);
+        expect(tts.isPlaying, isFalse);
+        expect(tts.currentHighlight, isNull);
+        expect(system.title, isNull);
+        expect(runtime.takeUserNotice()?.message, '付費章節');
+      },
+    );
+
+    test(
+      'a completion the engine reports after pausing does not read on',
+      () async {
+        await open({0: '甲。乙。'});
+        await tts.startFromVisibleLocation();
+
+        tts.onPause();
+        engine.complete();
+        await pumpEventQueue();
+
+        expect(engine.spoken, ['甲。']);
+        expect(tts.isPaused, isTrue);
+        expect(tts.currentHighlight?.sentenceStart, 0);
+      },
+    );
+
+    test('while the picked chapter loads the highlight stays on the sentence '
+        'read last', () async {
+      final second = Completer<void>();
+      await open({0: '甲。乙。', 1: '丙。'}, gates: {1: second});
+      await tts.startFromVisibleLocation();
+
+      tts.onSkipToNext();
+      await pumpEventQueue();
+      expect(tts.currentHighlight?.chapterIndex, 0);
+      tts.onPause();
+      await pumpEventQueue();
+      expect(tts.currentHighlight?.chapterIndex, 0);
+
+      second.complete();
+      await tts.toggle();
+      await pumpEventQueue();
+      expect(tts.currentHighlight?.chapterIndex, 1);
+    });
+  });
+
+  group('ending from the panel', () {
+    test('ending while paused clears the highlight and the system info, the '
+        'next start reads from the page', () async {
+      await open({0: '甲。乙。', 1: '丙。'});
+      await tts.startFromVisibleLocation();
+      engine.complete();
+      await pumpEventQueue();
+      await tts.toggle();
+      expect(tts.isPaused, isTrue);
+
+      await tts.stop();
+      await pumpEventQueue();
+      expect(tts.isPaused, isFalse);
+      expect(tts.isPlaying, isFalse);
+      expect(tts.currentHighlight, isNull);
+      expect(system.title, isNull);
+
+      moveTo(1);
+      await tts.toggle();
+      expect(engine.spoken.last, '丙。');
+    });
+
+    test('ending while the next chapter loads keeps it silent', () async {
+      final second = Completer<void>();
+      await open({0: '甲。', 1: '乙。'}, gates: {1: second});
+      await tts.startFromVisibleLocation();
+      engine.complete();
+      await pumpEventQueue();
+
+      await tts.stop();
+      second.complete();
+      await pumpEventQueue();
+
+      expect(engine.spoken, ['甲。']);
+      expect(tts.isPlaying, isFalse);
+      expect(tts.currentHighlight, isNull);
+      expect(system.title, isNull);
+    });
+  });
+
   group('sleep timer', () {
     testWidgets('pauses on the sentence being read when time is up', (
       tester,
@@ -433,6 +563,19 @@ void main() {
       await tts.toggle();
       await elapse(tester, const Duration(minutes: 10));
       expect(tts.isPlaying, isFalse);
+    });
+
+    testWidgets('keeps counting down across chapters', (tester) async {
+      await open({0: '甲。', 1: '乙。'});
+      await tts.sleepTimer.choose(SleepTimerOption.minutes15);
+      await tts.startFromVisibleLocation();
+      await elapse(tester, const Duration(minutes: 5));
+
+      engine.complete();
+      await tester.pump();
+      expect(engine.spoken.last, '乙。');
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 10));
+      await tts.stop();
     });
 
     testWidgets('a custom timer counts down its own minutes', (tester) async {
