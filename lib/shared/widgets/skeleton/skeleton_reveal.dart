@@ -146,7 +146,8 @@ class SkeletonRevealLayer extends SingleChildRenderObjectWidget {
   }
 }
 
-class RenderSkeletonRevealLayer extends RenderProxyBox {
+class RenderSkeletonRevealLayer extends RenderProxyBox
+    with SkeletonRevealPainting {
   RenderSkeletonRevealLayer({
     required this._presence,
     required this._side,
@@ -157,57 +158,108 @@ class RenderSkeletonRevealLayer extends RenderProxyBox {
   Animation<double> _presence;
   set presence(Animation<double> value) {
     if (identical(_presence, value)) return;
-    if (attached) _presence.removeListener(_onTick);
+    if (attached) _presence.removeListener(revealChanged);
     _presence = value;
-    if (attached) _presence.addListener(_onTick);
-    _onTick();
+    if (attached) _presence.addListener(revealChanged);
+    revealChanged();
   }
 
   SkeletonRevealSide _side;
   set side(SkeletonRevealSide value) {
     if (_side == value) return;
     _side = value;
-    _onTick();
+    revealChanged();
   }
 
   SkeletonRevealSide _incoming;
   set incoming(SkeletonRevealSide value) {
     if (_incoming == value) return;
     _incoming = value;
-    _onTick();
+    revealChanged();
   }
 
   bool _sweep;
   set sweep(bool value) {
     if (_sweep == value) return;
     _sweep = value;
-    _onTick();
+    revealChanged();
   }
-
-  final LayerHandle<OpacityLayer> _opacityLayer = LayerHandle<OpacityLayer>();
-  final LayerHandle<ShaderMaskLayer> _maskLayer =
-      LayerHandle<ShaderMaskLayer>();
-  bool _partial = false;
 
   bool get _isIncoming => _side == _incoming;
 
   /// 換場進度（0 還沒開始、1 換好），由這一層自己出現的進度換算。
-  double get _progress => _isIncoming ? _presence.value : 1 - _presence.value;
+  @override
+  double get revealProgress =>
+      _isIncoming ? _presence.value : 1 - _presence.value;
+
+  @override
+  bool get revealSweep => _sweep;
+
+  @override
+  double revealAlphaFor(double incoming) =>
+      _isIncoming ? incoming : 1 - incoming;
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _presence.addListener(revealChanged);
+  }
+
+  @override
+  void detach() {
+    _presence.removeListener(revealChanged);
+    super.detach();
+  }
+
+  @override
+  bool get alwaysNeedsCompositing => child != null && revealPartial;
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (child == null) {
+      clearRevealLayers();
+      return;
+    }
+    paintRevealed(context, offset, size, super.paint);
+  }
+}
+
+/// 骨架換場一層的畫法，box 版（[RenderSkeletonRevealLayer]）與清單版
+/// （`SliverSkeletonSwitcher` 的內容層）共用：完全透明時不畫，完全不透明時
+/// 直接畫、不另開圖層；整頁淡時一層透明度，由左而右時一層橫向漸層的遮罩
+/// （每個位置的濃度是 [alphaAt]）。
+///
+/// 用它的 render object 在進度或方式變了時呼叫 [revealChanged]，
+/// `alwaysNeedsCompositing` 照 [revealPartial] 回答。
+mixin SkeletonRevealPainting on RenderObject {
+  /// 換場進度：0 還沒開始、1 換好，是經過的時間比例、不套曲線。
+  double get revealProgress;
+
+  /// 這一次換場是不是由左而右。
+  bool get revealSweep;
+
+  /// 換進來那一層的濃度換算成這一層的濃度；這一層就是換進來的那一層時
+  /// 不變。
+  double revealAlphaFor(double incoming) => incoming;
 
   /// 這一層在橫向位置 [u]（0 左緣、1 右緣）的濃度。
-  @visibleForTesting
-  double alphaAt(double u) => _alphaAt(u);
+  double alphaAt(double u) => revealAlphaFor(
+    SkeletonReveal.incomingOpacityAt(revealProgress, u, sweep: revealSweep),
+  );
 
-  double _alphaAt(double u) =>
-      _alphaFor(SkeletonReveal.incomingOpacityAt(_progress, u, sweep: _sweep));
+  bool get _fullyOpaque => alphaAt(0) >= 1 && alphaAt(1) >= 1;
+  bool get _fullyClear => alphaAt(0) <= 0 && alphaAt(1) <= 0;
 
-  /// 換進來那一層的濃度 [incoming] 換算成這一層的濃度。
-  double _alphaFor(double incoming) => _isIncoming ? incoming : 1 - incoming;
+  final LayerHandle<OpacityLayer> _opacityLayer = LayerHandle<OpacityLayer>();
+  final LayerHandle<ShaderMaskLayer> _maskLayer =
+      LayerHandle<ShaderMaskLayer>();
 
-  bool get _fullyOpaque => _alphaAt(0) >= 1 && _alphaAt(1) >= 1;
-  bool get _fullyClear => _alphaAt(0) <= 0 && _alphaAt(1) <= 0;
+  /// 正在換場途中（不是完全透明、也不是完全不透明）：這時要另開圖層。
+  bool get revealPartial => _partial;
+  bool _partial = false;
 
-  void _onTick() {
+  /// 進度或方式變了：重畫，透明到一半與否變了時更新要不要另開圖層。
+  void revealChanged() {
     final partial = !_fullyOpaque && !_fullyClear;
     if (partial != _partial) {
       _partial = partial;
@@ -219,52 +271,49 @@ class RenderSkeletonRevealLayer extends RenderProxyBox {
   @override
   void attach(PipelineOwner owner) {
     super.attach(owner);
-    _presence.addListener(_onTick);
     _partial = !_fullyOpaque && !_fullyClear;
   }
 
   @override
-  void detach() {
-    _presence.removeListener(_onTick);
-    super.detach();
-  }
-
-  @override
   void dispose() {
-    _opacityLayer.layer = null;
-    _maskLayer.layer = null;
+    clearRevealLayers();
     super.dispose();
   }
 
-  @override
-  bool get alwaysNeedsCompositing => child != null && _partial;
+  /// 這一幀不畫（沒有內容或看不到）時放掉上一幀的圖層。
+  void clearRevealLayers() {
+    _opacityLayer.layer = null;
+    _maskLayer.layer = null;
+  }
 
-  @override
-  void paint(PaintingContext context, Offset offset) {
-    final child = this.child;
-    if (child == null || _fullyClear) {
-      _opacityLayer.layer = null;
-      _maskLayer.layer = null;
+  /// 照這一刻的濃度畫 [size] 大小的這一層，[paintChild] 畫底下的內容。
+  void paintRevealed(
+    PaintingContext context,
+    Offset offset,
+    Size size,
+    PaintingContextCallback paintChild,
+  ) {
+    if (_fullyClear) {
+      clearRevealLayers();
       return;
     }
     if (_fullyOpaque) {
-      _opacityLayer.layer = null;
-      _maskLayer.layer = null;
-      context.paintChild(child, offset);
+      clearRevealLayers();
+      paintChild(context, offset);
       return;
     }
-    if (!_sweep) {
+    if (!revealSweep) {
       _maskLayer.layer = null;
       _opacityLayer.layer = context.pushOpacity(
         offset,
-        ui.Color.getAlphaFromOpacity(_alphaAt(0)),
-        super.paint,
+        ui.Color.getAlphaFromOpacity(alphaAt(0)),
+        paintChild,
         oldLayer: _opacityLayer.layer,
       );
       return;
     }
     _opacityLayer.layer = null;
-    final stops = SkeletonReveal.sweepStops(_progress);
+    final stops = SkeletonReveal.sweepStops(revealProgress);
     // 與 RenderShaderMask 相同：漸層用這一層自己的座標，遮罩範圍用畫面座標。
     final local = Offset.zero & size;
     final shader = ui.Gradient.linear(
@@ -272,7 +321,7 @@ class RenderSkeletonRevealLayer extends RenderProxyBox {
       local.centerRight,
       [
         for (final (_, incoming) in stops)
-          Color.fromRGBO(0, 0, 0, _alphaFor(incoming)),
+          Color.fromRGBO(0, 0, 0, revealAlphaFor(incoming)),
       ],
       [for (final (u, _) in stops) u],
     );
@@ -281,6 +330,6 @@ class RenderSkeletonRevealLayer extends RenderProxyBox {
       ..shader = shader
       ..maskRect = offset & size
       ..blendMode = BlendMode.dstIn;
-    context.pushLayer(layer, super.paint, offset);
+    context.pushLayer(layer, paintChild, offset);
   }
 }

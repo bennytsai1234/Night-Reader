@@ -392,106 +392,60 @@ class _SliverRevealLayer extends SingleChildRenderObjectWidget {
   }
 }
 
-class _RenderSliverRevealLayer extends RenderProxySliver {
+class _RenderSliverRevealLayer extends RenderProxySliver
+    with SkeletonRevealPainting {
   _RenderSliverRevealLayer({required this._presence, required this._sweep});
 
   Animation<double> _presence;
   set presence(Animation<double> value) {
     if (identical(_presence, value)) return;
-    if (attached) _presence.removeListener(_onTick);
+    if (attached) _presence.removeListener(revealChanged);
     _presence = value;
-    if (attached) _presence.addListener(_onTick);
-    _onTick();
+    if (attached) _presence.addListener(revealChanged);
+    revealChanged();
   }
 
   bool _sweep;
   set sweep(bool value) {
     if (_sweep == value) return;
     _sweep = value;
-    _onTick();
+    revealChanged();
   }
 
-  final LayerHandle<OpacityLayer> _opacityLayer = LayerHandle<OpacityLayer>();
-  final LayerHandle<ShaderMaskLayer> _maskLayer =
-      LayerHandle<ShaderMaskLayer>();
-  bool _partial = false;
+  @override
+  double get revealProgress => _presence.value;
 
-  double _alphaAt(double u) =>
-      SkeletonReveal.incomingOpacityAt(_presence.value, u, sweep: _sweep);
-  bool get _fullyOpaque => _alphaAt(0) >= 1 && _alphaAt(1) >= 1;
-  bool get _fullyClear => _alphaAt(0) <= 0 && _alphaAt(1) <= 0;
-
-  void _onTick() {
-    final partial = !_fullyOpaque && !_fullyClear;
-    if (partial != _partial) {
-      _partial = partial;
-      markNeedsCompositingBitsUpdate();
-    }
-    markNeedsPaint();
-  }
+  @override
+  bool get revealSweep => _sweep;
 
   @override
   void attach(PipelineOwner owner) {
     super.attach(owner);
-    _presence.addListener(_onTick);
-    _partial = !_fullyOpaque && !_fullyClear;
+    _presence.addListener(revealChanged);
   }
 
   @override
   void detach() {
-    _presence.removeListener(_onTick);
+    _presence.removeListener(revealChanged);
     super.detach();
   }
 
   @override
-  void dispose() {
-    _opacityLayer.layer = null;
-    _maskLayer.layer = null;
-    super.dispose();
-  }
-
-  @override
-  bool get alwaysNeedsCompositing => child != null && _partial;
+  bool get alwaysNeedsCompositing => child != null && revealPartial;
 
   @override
   void paint(PaintingContext context, Offset offset) {
     final child = this.child;
-    if (child == null || !child.geometry!.visible || _fullyClear) {
-      _opacityLayer.layer = null;
-      _maskLayer.layer = null;
+    if (child == null || !child.geometry!.visible) {
+      clearRevealLayers();
       return;
     }
-    if (_fullyOpaque) {
-      _opacityLayer.layer = null;
-      _maskLayer.layer = null;
-      context.paintChild(child, offset);
-      return;
-    }
-    if (!_sweep) {
-      _maskLayer.layer = null;
-      _opacityLayer.layer = context.pushOpacity(
-        offset,
-        Color.getAlphaFromOpacity(_alphaAt(0)),
-        super.paint,
-        oldLayer: _opacityLayer.layer,
-      );
-      return;
-    }
-    _opacityLayer.layer = null;
-    final stops = SkeletonReveal.sweepStops(_presence.value);
-    final size = Size(constraints.crossAxisExtent, geometry!.paintExtent);
-    final shader = LinearGradient(
-      colors: [
-        for (final (_, content) in stops) Color.fromRGBO(0, 0, 0, content),
-      ],
-      stops: [for (final (u, _) in stops) u],
-    ).createShader(Offset.zero & size);
-    final layer = _maskLayer.layer ??= ShaderMaskLayer();
-    layer
-      ..shader = shader
-      ..maskRect = offset & size
-      ..blendMode = BlendMode.dstIn;
-    context.pushLayer(layer, super.paint, offset);
+    paintRevealed(
+      context,
+      offset,
+      Size(constraints.crossAxisExtent, geometry!.paintExtent),
+      super.paint,
+    );
   }
 }
 
