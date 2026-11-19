@@ -24,6 +24,7 @@ void main() {
   Future<StateSetter> pumpPanel(
     WidgetTester tester, {
     ValueNotifier<Brightness>? brightness,
+    bool heavy = false,
   }) async {
     panel = ReaderSidePanelController();
     addTearDown(panel.dispose);
@@ -45,7 +46,11 @@ void main() {
                 // 每次閱讀頁重建都給一個新的面板元件。
                 panel: _CountingPanel(
                   label: '第 $pageBuilds 次',
-                  onBuild: () => panelBuilds++,
+                  onBuild: () {
+                    panelBuilds++;
+                    // 準備那一幀很重：滑出要停 AppMotion.stillGap。
+                    if (heavy) sleep(const Duration(milliseconds: 25));
+                  },
                 ),
                 child: GestureDetector(
                   onTap: () => bodyTaps++,
@@ -592,6 +597,58 @@ void main() {
     expect(openChanges, [true, false]);
     expect(closes, 1);
     expectSettled(tester);
+  });
+
+  testWidgets('pulled out, dragged back to the edge and out again, the panel '
+      'stays with the finger and opens when let go past half', (tester) async {
+    await pumpPanel(tester);
+    final drag = await tester.startGesture(const Offset(5, 300));
+    await tester.pump();
+    for (var i = 0; i < 6; i++) {
+      await drag.moveBy(const Offset(20, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    for (var i = 0; i < 10; i++) {
+      await drag.moveBy(const Offset(-20, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    // 手指還按著、面板貼在左緣：還是拉著，不算收完。
+    expect(panel.shown.value, isTrue);
+    expect(closes, 0);
+    for (var i = 0; i < 12; i++) {
+      await drag.moveBy(const Offset(20, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(tester.getTopRight(find.byType(Drawer)).dx, greaterThan(150));
+    await tester.pump(const Duration(milliseconds: 300));
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(openChanges, [true]);
+    expect(closes, 0);
+    expectSettled(tester);
+  });
+
+  testWidgets('a drag that starts after the panel was closed under the '
+      'finger leaves it closed', (tester) async {
+    await pumpPanel(tester, heavy: true);
+    panel.open();
+    await tester.pump();
+    final drag = await tester.startGesture(const Offset(200, 300));
+    await tester.pump();
+    // 準備打開時按著，按了返回：面板沒出現過就收著。
+    panel.close();
+    await tester.pump();
+    for (var i = 0; i < 14; i++) {
+      await drag.moveBy(const Offset(20, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(openChanges, [true, false]);
+    expect(closes, 1);
+    expectSettled(tester);
+    await tester.tapAt(const Offset(500, 300));
+    expect(bodyTaps, 1);
   });
 
   testWidgets('a touch before the slide starts closes the panel before it '
