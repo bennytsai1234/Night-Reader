@@ -116,11 +116,33 @@ class BookDetailCacheStatus {
   );
 }
 
+/// 這一輪載入到哪：載入中是骨架，載入失敗是錯誤頁與「重試」，可以操作時
+/// 才有選單與閱讀鈕（docs/state-machines.md「書籍詳情」）。
 enum BookDetailWorldState { initializing, ready, unavailable }
 
-class BookDetailProvider extends ChangeNotifier {
-  static const String _bookInfoDegradationMessage = '書籍資訊更新失敗，目前顯示已儲存內容';
+/// 檢查更新、換源、加入或移出書架：三件可以同時進行，各自進行中再按一次
+/// 只回「正在…」，不重複開始（[BookDetailProvider.isRunning]）。
+enum BookDetailAction { checkUpdate, changeSource, updateBookshelf }
 
+/// 這一輪向書源抓書籍資訊與目錄的結果；書源問題那一列照它寫，書源本身
+/// 不能讀時改寫書源的健康狀態（[BookDetailProvider.sourceIssueMessage]）。
+enum _FetchIssue {
+  none(null),
+  staleInfo('書籍資訊更新失敗，目前顯示已儲存內容'),
+  tocFailed('目前來源目錄載入失敗，建議換源後再試'),
+
+  /// 目錄擋在登入牆後；書源有登入時那一列點了去登入（ADR 0038），沒有時
+  /// 照目錄沒抓到寫（[BookDetailProvider._shownFetchIssue]）。
+  tocNeedsLogin('目錄需要登入後閱讀');
+
+  const _FetchIssue(this.message);
+
+  final String? message;
+
+  bool get isToc => this == tocFailed || this == tocNeedsLogin;
+}
+
+class BookDetailProvider extends ChangeNotifier {
   final BookDao _bookDao;
   final ReadRecordDao? _readRecordDao;
   final ChapterDao _chapterDao;
@@ -137,20 +159,42 @@ class BookDetailProvider extends ChangeNotifier {
   List<BookChapter> _allChapters = [];
   List<BookChapter> _displayChapters = [];
   BookDetailWorldState _worldState = BookDetailWorldState.initializing;
-  String? _loadErrorMessage;
   BookSource? _currentSource;
   BookSource? get currentSource => _currentSource;
-  String? _sourceIssueMessage;
-  String? get sourceIssueMessage => _sourceIssueMessage;
+  _FetchIssue _fetchIssue = _FetchIssue.none;
 
-  /// 目錄要登入才讀得到，書源也有登入：[sourceIssueMessage] 那一列點了去
-  /// 登入（ADR 0038）。
-  bool _loginRequired = false;
-  bool get loginRequired => _loginRequired;
+  /// 書源問題那一列寫什麼；null 是沒有這一列。書源本身不能讀時寫它的健康
+  /// 狀態，蓋過這一輪抓書源的結果。
+  String? get sourceIssueMessage =>
+      _sourceUnreadableReason ?? _shownFetchIssue.message;
+
+  /// [sourceIssueMessage] 那一列點了去登入（ADR 0038）。
+  bool get loginRequired =>
+      _sourceUnreadableReason == null &&
+      _shownFetchIssue == _FetchIssue.tocNeedsLogin;
+
+  /// 這一輪抓書源的結果照現在手上的書源與目錄怎麼寫：目錄已經有了（重抓
+  /// 到、別處存好、檢查更新帶回來）就不寫目錄的問題；擋在登入牆後、書源卻
+  /// 沒有（或已經拿掉）登入時，寫成目錄沒抓到。
+  _FetchIssue get _shownFetchIssue => switch (_fetchIssue) {
+    _ when _fetchIssue.isToc && _allChapters.isNotEmpty => _FetchIssue.none,
+    _FetchIssue.tocNeedsLogin when !(_currentSource?.hasLogin ?? false) =>
+      _FetchIssue.tocFailed,
+    final issue => issue,
+  };
+
+  String? get _sourceUnreadableReason {
+    final health = _currentSource?.runtimeHealth;
+    if (health == null ||
+        health.category == SourceHealthCategory.healthy ||
+        health.allowsReading) {
+      return null;
+    }
+    return health.description;
+  }
+
   BookDetailCacheStatus _cacheStatus = BookDetailCacheStatus.empty;
-  bool _isCacheStatusLoading = false;
-  bool _isCheckingUpdate = false;
-  bool _isChangingSource = false;
+  final Set<BookDetailAction> _running = {};
 
   Book get book => _book;
 
@@ -165,12 +209,13 @@ class BookDetailProvider extends ChangeNotifier {
   BookDetailWorldState get worldState => _worldState;
   bool get isLoading => _worldState == BookDetailWorldState.initializing;
   bool get hasReadyWorld => _worldState == BookDetailWorldState.ready;
-  String? get loadErrorMessage => _loadErrorMessage;
+  String? get loadErrorMessage =>
+      _worldState == BookDetailWorldState.unavailable ? '書籍詳情載入失敗，請重試' : null;
   bool get isInBookshelf => _book.isInBookshelf;
   BookDetailCacheStatus get cacheStatus => _cacheStatus;
-  bool get isCacheStatusLoading => _isCacheStatusLoading;
-  bool get isCheckingUpdate => _isCheckingUpdate;
-  bool get isChangingSource => _isChangingSource;
+
+  /// [action] 正在進行。
+  bool isRunning(BookDetailAction action) => _running.contains(action);
   bool get supportsBackgroundDownload => !_book.isLocal;
   DownloadService get _resolvedDownloadService =>
       _downloadService ??= DownloadService();
@@ -298,7 +343,7 @@ class BookDetailProvider extends ChangeNotifier {
   String? _switchedBookUrl;
 
   void _followSwitch(BookSwitchedEvent event) {
-    if (_isChangingSource) return;
+    if (isRunning(BookDetailAction.changeSource)) return;
     if (event.fromBookUrl != (_switchedBookUrl ?? _book.bookUrl)) return;
     _switchedBookUrl = event.toBookUrl;
   }
@@ -320,7 +365,11 @@ class BookDetailProvider extends ChangeNotifier {
     final switched =
         stored.bookUrl != _book.bookUrl || stored.origin != _book.origin;
     _book = stored;
-    if (switched) await _loadSource();
+    if (switched) {
+      // 換了書源：上一個書源抓的結果不算了。
+      _fetchIssue = _FetchIssue.none;
+      await _loadSource();
+    }
     final chapters = await _chapterDao.getByBook(_book.bookUrl);
     if (_disposed) return;
     if (chapters.isNotEmpty || switched) _allChapters = chapters;
@@ -336,11 +385,9 @@ class BookDetailProvider extends ChangeNotifier {
     // 新的一輪載入（重試）：骨架換成照目前手上的書排。第一輪進頁時已經是這個
     // 樣子，不再通知：原本進場一播完就整頁連同骨架重建一次，畫面沒有任何
     // 改變（ADR 0018）。
-    if (_worldState != BookDetailWorldState.initializing ||
-        _loadErrorMessage != null) {
+    if (_worldState != BookDetailWorldState.initializing) {
       _skeletonBook = _book.copyWith();
       _worldState = BookDetailWorldState.initializing;
-      _loadErrorMessage = null;
       notifyListeners();
     }
     try {
@@ -351,6 +398,7 @@ class BookDetailProvider extends ChangeNotifier {
         _book.isInBookshelf = false;
         await _bookDao.upsert(_book);
       }
+      _fetchIssue = _FetchIssue.none;
       await _loadSource();
       // 書架上的書目錄已經存在手機裡，書籍資訊由書架的檢查更新重抓；這裡
       // 不再向書源要，網路差時才不會整頁停在骨架、什麼都不能按。
@@ -369,10 +417,9 @@ class BookDetailProvider extends ChangeNotifier {
       unawaited(_storeDisplayCover());
     } catch (error, stackTrace) {
       AppLog.e('載入書籍詳情失敗: $error', error: error, stackTrace: stackTrace);
-      _loadErrorMessage = '書籍詳情載入失敗，請重試';
       _worldState = BookDetailWorldState.unavailable;
     } finally {
-      if (!_disposed) notifyListeners();
+      notifyListeners();
     }
   }
 
@@ -389,20 +436,13 @@ class BookDetailProvider extends ChangeNotifier {
         ..origin = stored.origin
         ..originName = stored.originName;
     }
+    // 只重讀書源，書籍資訊與目錄沒有重抓：抓書源的結果照舊。
     await _loadSource();
-    if (!_disposed) notifyListeners();
+    notifyListeners();
   }
 
   Future<void> _loadSource() async {
     _currentSource = await _sourceDao.getByUrl(_book.origin);
-    final health = _currentSource?.runtimeHealth;
-    if (health != null &&
-        health.category != SourceHealthCategory.healthy &&
-        !health.allowsReading) {
-      _sourceIssueMessage = health.description;
-    } else {
-      _sourceIssueMessage = null;
-    }
   }
 
   Future<void> _loadBookInfo() async {
@@ -421,21 +461,15 @@ class BookDetailProvider extends ChangeNotifier {
       updatedBook.customCoverUrl = customCoverUrl;
       updatedBook.customCoverLocalPath = customCoverLocalPath;
       _book = updatedBook;
-      _clearBookInfoDegradation();
+      if (_fetchIssue == _FetchIssue.staleInfo) _fetchIssue = _FetchIssue.none;
       await _bookDao.upsert(_book);
     } catch (e) {
       AppLog.e('加載書籍詳情失敗: $e', error: e);
-      _sourceIssueMessage ??= _bookInfoDegradationMessage;
+      if (_fetchIssue == _FetchIssue.none) _fetchIssue = _FetchIssue.staleInfo;
       if (_book.tocUrl.isEmpty) {
         _book.tocUrl = _book.bookUrl;
       }
       await _bookDao.upsert(_book);
-    }
-  }
-
-  void _clearBookInfoDegradation() {
-    if (_sourceIssueMessage == _bookInfoDegradationMessage) {
-      _sourceIssueMessage = null;
     }
   }
 
@@ -450,14 +484,12 @@ class BookDetailProvider extends ChangeNotifier {
       try {
         _allChapters = await _service.getChapterList(_currentSource!, _book);
         await _chapterDao.insertChapters(_allChapters);
-        _loginRequired = false;
       } catch (e) {
-        _loginRequired =
-            _currentSource!.hasLogin &&
-            (e is LoginCheckException || LoginCheckException.describes('$e'));
-        _sourceIssueMessage = _loginRequired
-            ? '目錄需要登入後閱讀'
-            : '目前來源目錄載入失敗，建議換源後再試';
+        final needsLogin =
+            e is LoginCheckException || LoginCheckException.describes('$e');
+        _fetchIssue = needsLogin
+            ? _FetchIssue.tocNeedsLogin
+            : _FetchIssue.tocFailed;
         AppLog.e('加載目錄失敗: $e', error: e);
       }
     }
@@ -577,14 +609,14 @@ class BookDetailProvider extends ChangeNotifier {
       return '目前找不到書源，請先換源後再試。';
     }
     if (!source.isReadingEnabledByRuntime) {
-      return _sourceIssueMessage ?? '目前來源無法提供正文，請先換源後再試。';
+      return _sourceUnreadableReason ?? '目前來源無法提供正文，請先換源後再試。';
     }
 
     if (_allChapters.isEmpty) {
       await _loadChapters();
     }
     if (_allChapters.isEmpty) {
-      return _sourceIssueMessage ?? '目前沒有可下載的章節。';
+      return sourceIssueMessage ?? '目前沒有可下載的章節。';
     }
 
     await _bookDao.upsert(_book);
@@ -700,12 +732,16 @@ class BookDetailProvider extends ChangeNotifier {
   Future<BookDetailOperationResult> changeSource(
     SearchBook newSource, {
     SourceToc? toc,
-  }) async {
-    if (_isChangingSource) {
-      return BookDetailOperationResult.failure('正在換源，請稍候');
-    }
-    _isChangingSource = true;
-    notifyListeners();
+  }) => _runOnce(
+    BookDetailAction.changeSource,
+    BookDetailOperationResult.failure('正在換源，請稍候'),
+    () => _changeSource(newSource, toc),
+  );
+
+  Future<BookDetailOperationResult> _changeSource(
+    SearchBook newSource,
+    SourceToc? toc,
+  ) async {
     final oldBook = _book.copyWith();
     try {
       final prepared = await _sourceSwitchService.prepareSwitch(
@@ -725,7 +761,7 @@ class BookDetailProvider extends ChangeNotifier {
       _book = prepared.migratedBook;
       _currentSource = prepared.source;
       _allChapters = prepared.chapters;
-      _sourceIssueMessage = null;
+      _fetchIssue = _FetchIssue.none;
       try {
         await _refreshCacheStatus(notify: false);
       } catch (e) {
@@ -743,9 +779,6 @@ class BookDetailProvider extends ChangeNotifier {
       return BookDetailOperationResult.failure(
         '換源失敗：${userErrorReason(error)}',
       );
-    } finally {
-      _isChangingSource = false;
-      notifyListeners();
     }
   }
 
@@ -753,23 +786,13 @@ class BookDetailProvider extends ChangeNotifier {
     await setInBookshelf(!isInBookshelf);
   }
 
-  /// 加入或移出書架進行中（加入時可能要先抓目錄、移出時要刪正文與封面）；
-  /// 期間不接受反向操作，兩者才不會交錯寫入。
-  bool get isUpdatingBookshelf => _isUpdatingBookshelf;
-  bool _isUpdatingBookshelf = false;
-
-  Future<BookDetailOperationResult> setInBookshelf(bool value) async {
-    if (_isUpdatingBookshelf) {
-      return BookDetailOperationResult.failure('正在更新書架，請稍候');
-    }
-    _isUpdatingBookshelf = true;
-    try {
-      return await _setInBookshelf(value);
-    } finally {
-      _isUpdatingBookshelf = false;
-      if (!_disposed) notifyListeners();
-    }
-  }
+  /// 加入或移出書架進行中（加入時可能要先抓目錄、移出時要刪正文與封面）時
+  /// 不接受反向操作，兩者才不會交錯寫入。
+  Future<BookDetailOperationResult> setInBookshelf(bool value) => _runOnce(
+    BookDetailAction.updateBookshelf,
+    BookDetailOperationResult.failure('正在更新書架，請稍候'),
+    () => _setInBookshelf(value),
+  );
 
   Future<BookDetailOperationResult> _setInBookshelf(bool value) async {
     if (isInBookshelf == value) {
@@ -960,24 +983,26 @@ class BookDetailProvider extends ChangeNotifier {
         message: '本地書不需要檢查線上更新',
       );
     }
-    if (_isCheckingUpdate) {
-      return const BookDetailUpdateResult(
+    return _runOnce(
+      BookDetailAction.checkUpdate,
+      const BookDetailUpdateResult(
         success: false,
         newChapterCount: 0,
         totalChapterCount: 0,
         message: '正在檢查更新',
-      );
-    }
+      ),
+      _checkForUpdates,
+    );
+  }
 
-    _isCheckingUpdate = true;
-    notifyListeners();
+  Future<BookDetailUpdateResult> _checkForUpdates() async {
     try {
       if (_currentSource == null) {
         await _loadSource();
       }
       final source = _currentSource;
       if (source == null || !source.isReadingEnabledByRuntime) {
-        throw StateError(_sourceIssueMessage ?? '找不到可閱讀書源');
+        throw StateError(_sourceUnreadableReason ?? '找不到可閱讀書源');
       }
 
       // 和書架的檢查共用：書架正在查這本時接上同一次。寫回由共用的檢查
@@ -987,7 +1012,7 @@ class BookDetailProvider extends ChangeNotifier {
       if (saved != null) _book = saved;
       if (result.failed) throw result.error!;
       _allChapters = await _chapterDao.getByBook(_book.bookUrl);
-      _clearBookInfoDegradation();
+      _fetchIssue = _FetchIssue.none;
       await _refreshCacheStatus(notify: false);
       _applyFilter();
       AppEventBus().fire(AppEventBus.upBookshelf);
@@ -1007,8 +1032,21 @@ class BookDetailProvider extends ChangeNotifier {
         totalChapterCount: _allChapters.length,
         message: failureMessage('檢查更新', e),
       );
+    }
+  }
+
+  /// 開始 [action]；它已經在進行就回 [busy]，不重複開始。
+  Future<T> _runOnce<T>(
+    BookDetailAction action,
+    T busy,
+    Future<T> Function() body,
+  ) async {
+    if (!_running.add(action)) return busy;
+    notifyListeners();
+    try {
+      return await body();
     } finally {
-      _isCheckingUpdate = false;
+      _running.remove(action);
       notifyListeners();
     }
   }
@@ -1069,59 +1107,49 @@ class BookDetailProvider extends ChangeNotifier {
   }
 
   Future<void> _refreshCacheStatus({bool notify = true}) async {
-    _isCacheStatusLoading = true;
-    if (notify) notifyListeners();
-    try {
-      final chapterContentDao = _chapterContentDao;
-      final entries = chapterContentDao == null
-          ? const <ReaderChapterContentEntry>[]
-          : await chapterContentDao.getEntriesByBookUrls(<String>[
-              _book.bookUrl,
-            ]);
-      // 只算目前目錄裡的章節（依網址）；舊目錄留下的正文不算進進度。
-      final readableUrls = {
-        for (final chapter in _allChapters)
-          if (chapterHasContent(chapter)) chapter.url,
-      };
-      final storedUrls = <String>{};
-      var contentBytes = 0;
-      for (final entry in entries) {
-        if (entry.origin != _book.origin ||
-            !entry.isReady ||
-            !entry.hasDisplayContent) {
-          continue;
-        }
-        if (readableUrls.contains(entry.chapterUrl)) {
-          storedUrls.add(entry.chapterUrl);
-        }
-        final content = entry.content;
-        if (content != null && content.isNotEmpty) {
-          contentBytes += utf8.encode(content).length;
-        }
+    final chapterContentDao = _chapterContentDao;
+    final entries = chapterContentDao == null
+        ? const <ReaderChapterContentEntry>[]
+        : await chapterContentDao.getEntriesByBookUrls(<String>[_book.bookUrl]);
+    // 只算目前目錄裡的章節（依網址）；舊目錄留下的正文不算進進度。
+    final readableUrls = {
+      for (final chapter in _allChapters)
+        if (chapterHasContent(chapter)) chapter.url,
+    };
+    final storedUrls = <String>{};
+    var contentBytes = 0;
+    for (final entry in entries) {
+      if (entry.origin != _book.origin ||
+          !entry.isReady ||
+          !entry.hasDisplayContent) {
+        continue;
       }
-
-      if (!_book.isLocal) {
-        contentBytes += await BookIllustrationStorage.sizeOf(_book);
+      if (readableUrls.contains(entry.chapterUrl)) {
+        storedUrls.add(entry.chapterUrl);
       }
-      if (_isComic) {
-        storedUrls.addAll(
-          await downloadedComicChapterUrls(_book, _allChapters),
-        );
-        contentBytes += await BookChapterFiles.sizeOf(_book);
+      final content = entry.content;
+      if (content != null && content.isNotEmpty) {
+        contentBytes += utf8.encode(content).length;
       }
-      if (_isAudio) {
-        storedUrls.addAll(await _downloadedAudioUrls());
-        contentBytes += await BookChapterFiles.sizeOf(_book);
-      }
-      _cacheStatus = BookDetailCacheStatus(
-        storedChapterCount: storedUrls.length,
-        totalChapterCount: readableUrls.length,
-        contentBytes: contentBytes,
-      );
-    } finally {
-      _isCacheStatusLoading = false;
-      if (notify && !_disposed) notifyListeners();
     }
+
+    if (!_book.isLocal) {
+      contentBytes += await BookIllustrationStorage.sizeOf(_book);
+    }
+    if (_isComic) {
+      storedUrls.addAll(await downloadedComicChapterUrls(_book, _allChapters));
+      contentBytes += await BookChapterFiles.sizeOf(_book);
+    }
+    if (_isAudio) {
+      storedUrls.addAll(await _downloadedAudioUrls());
+      contentBytes += await BookChapterFiles.sizeOf(_book);
+    }
+    _cacheStatus = BookDetailCacheStatus(
+      storedChapterCount: storedUrls.length,
+      totalChapterCount: readableUrls.length,
+      contentBytes: contentBytes,
+    );
+    if (notify) notifyListeners();
   }
 
   Future<void> _storeDisplayCover() async {
@@ -1129,7 +1157,7 @@ class BookDetailProvider extends ChangeNotifier {
       await _coverStorage.ensureDisplayCoverStored(_book);
       await _bookDao.upsert(_book);
       _announceCover();
-      if (hasReadyWorld && !_disposed) notifyListeners();
+      if (hasReadyWorld) notifyListeners();
     } catch (error) {
       AppLog.e('儲存顯示封面失敗: $error', error: error);
     }
@@ -1144,6 +1172,12 @@ class BookDetailProvider extends ChangeNotifier {
       AppEventBus.bookCover,
       data: BookCoverEvent(bookUrl: _book.bookUrl, cover: cover),
     );
+  }
+
+  /// 頁面關掉之後才做完的工作（檢查更新、換源、存封面）不再通知。
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
   }
 
   @override
