@@ -422,23 +422,45 @@ class AppAiFindLibrary implements AiFindLibrary {
       seconds[record.bookName] =
           (seconds[record.bookName] ?? 0) + record.readTime;
     }
+    final byRecord = {for (final book in books) book.recordName: book};
+    // 送出前先載入這些書的書源：分類與簡介是書源給的，可能帶著它的登入資料
+    // 或 Cookie，秘密要先收進遮蔽清單（Codex 審查）。書源已經刪掉的書不給
+    // 編號，只當口味看：點開推薦會落在不在了的書源上（ADR 0069）。
+    final alive = <String>{};
+    await Future.wait([
+      for (final origin in {
+        for (final book in books)
+          if (!book.isLocal &&
+              book.origin.isNotEmpty &&
+              (book.isInBookshelf || (seconds[book.recordName] ?? 0) > 0))
+            book.origin,
+      })
+        _source(origin)
+            .then<void>((_) => alive.add(origin), onError: (Object _) {}),
+    ]);
+    AiFindShelfEntry entry(Book book, int read, {required bool onShelf}) =>
+        _entry(
+          book,
+          read,
+          onShelf: onShelf,
+          hasSource: alive.contains(book.origin),
+        );
     final entries = <AiFindShelfEntry>[];
     final named = <String>{};
     for (final book in books) {
       if (!book.isInBookshelf) continue;
       named.add(book.recordName);
-      entries.add(_entry(book, seconds[book.recordName] ?? 0, onShelf: true));
+      entries.add(entry(book, seconds[book.recordName] ?? 0, onShelf: true));
     }
     // 讀過、已經移出書架的：資料庫還留著這本書時帶上作者與類別，沒有時照
     // 紀錄名稱還原書名與類別。
-    final byRecord = {for (final book in books) book.recordName: book};
     for (final MapEntry(key: record, value: read) in seconds.entries) {
       if (named.contains(record) || read <= 0) continue;
       final book = byRecord[record];
       final split = BookSourceKind.splitRecordName(record);
       entries.add(
         book != null
-            ? _entry(book, read, onShelf: false)
+            ? entry(book, read, onShelf: false)
             : (
                 name: split.name,
                 author: '',
@@ -462,6 +484,7 @@ class AppAiFindLibrary implements AiFindLibrary {
     Book book,
     int readSeconds, {
     required bool onShelf,
+    required bool hasSource,
   }) {
     final total = book.totalChapterNum;
     return (
@@ -479,8 +502,9 @@ class AppAiFindLibrary implements AiFindLibrary {
       category: book.kind,
       // 書源給的簡介，不送使用者自己改寫的（customIntro）。
       intro: book.intro,
-      // 網路書照它的書源看詳情、讀章節（同搜尋到的書）；本地書沒有書源。
-      book: book.isLocal || book.origin.isEmpty
+      // 網路書照它的書源看詳情、讀章節（同搜尋到的書）；本地書與書源已經
+      // 刪掉的沒有。
+      book: book.isLocal || !hasSource
           ? null
           : SearchBook(
               bookUrl: book.bookUrl,

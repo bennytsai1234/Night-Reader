@@ -68,7 +68,16 @@ sealed class AiFindCommand {
         final kind = _kinds[text('kind') ?? 'novel'];
         final page = integer('page') ?? 1;
         if (keyword == null || kind == null || page < 1) return null;
-        return AiFindSearch(keyword, kind, page, filter: text('filter'));
+        // 沒有一個詞的（例如只有「|」）當沒給：照樣列全部，也不算另一種呼叫。
+        final filter = text('filter');
+        return AiFindSearch(
+          keyword,
+          kind,
+          page,
+          filter: filter != null && aiFindFilterGroups(filter).isNotEmpty
+              ? filter
+              : null,
+        );
       case 'detail':
         final book = id(args['book'], 'b');
         return book == null ? null : AiFindDetail(book);
@@ -130,10 +139,13 @@ final class AiFindSearch extends AiFindCommand {
 }
 
 /// 篩選詞拆成幾組：空白（或逗號、頓號）分開的每一組都要符合，同一組裡用
-/// 「|」分開的符合一個就好。
+/// 「|」（全形「｜」也算）分開的符合一個就好。
 List<List<String>> aiFindFilterGroups(String filter) => [
   for (final group in filter.split(RegExp(r'[\s,，、]+')))
-    if (group.split('|').where((word) => word.trim().isNotEmpty).toList()
+    if (group
+            .split(RegExp('[|｜]'))
+            .where((word) => word.trim().isNotEmpty)
+            .toList()
         case final words when words.isNotEmpty)
       [for (final word in words) word.trim()],
 ];
@@ -263,7 +275,9 @@ final List<AiTool> aiFindTools = [
   ),
   (
     name: 'shelf',
-    description: '看使用者的書架與閱讀紀錄：書名、作者、類別、讀了多久、讀到哪。',
+    description:
+        '看使用者的書架與閱讀紀錄：書名、作者、類別、讀了多久、讀到哪，'
+        '書源給的分類與簡介開頭；有書源的書帶編號，可以拿它看詳情、讀章節、推薦。',
     parameters: _object({}),
   ),
   (

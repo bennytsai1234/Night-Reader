@@ -16,8 +16,8 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 const String aiRepairPrivacyNote =
     '按「AI 修復」或「修復異常書源」時，書源、校驗結果與抓到的網頁會送到這個服務；'
     '登入資料、Cookie 的值與書源變數不送。\n'
-    '按「AI 找書」時，你寫的描述、書架與閱讀紀錄的書名與進度，和搜尋、詳情、'
-    '正文的結果會送到這個服務。';
+    '按「AI 找書」時，你寫的描述、書架與閱讀紀錄的書名與進度、書源給的分類與'
+    '簡介開頭，和搜尋、詳情、正文的結果會送到這個服務。';
 
 /// 「找書的模型」選單裡「同修書源」那一項的值（空字串是自己輸入）。
 const String _sameAsRepair = '\u0000same';

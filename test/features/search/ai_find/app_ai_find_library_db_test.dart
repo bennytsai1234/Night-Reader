@@ -249,8 +249,13 @@ void main() {
 
   test(
     'a shelf book from a source carries its category, the intro the '
-    'source gave and the book to look at; a local book has no book',
+    'source gave and the book to look at, and its source secrets are '
+    'collected first; a local book or one whose source is gone has no book',
     () async {
+      await addSource(
+        'https://a.test',
+        header: '{"Authorization":"Bearer token-abc-123456"}',
+      );
       await getIt<BookDao>().upsertAll([
         Book(
           bookUrl: 'https://a.test/steal',
@@ -269,8 +274,15 @@ void main() {
           origin: BookType.localOrigin,
           isInBookshelf: true,
         ),
+        Book(
+          bookUrl: 'https://gone.test/x',
+          name: '書源刪了',
+          origin: 'https://gone.test',
+          isInBookshelf: true,
+        ),
       ]);
-      final shelf = await AppAiFindLibrary(scope: SearchScope()).shelf();
+      final library = AppAiFindLibrary(scope: SearchScope());
+      final shelf = await library.shelf();
       final byName = {for (final entry in shelf) entry.name: entry};
       final steal = byName['偷香高手']!;
       expect(steal.category, '都市,後宮');
@@ -278,6 +290,12 @@ void main() {
       expect(steal.book?.bookUrl, 'https://a.test/steal');
       expect(steal.book?.origin, 'https://a.test');
       expect(byName['本地書']!.book, isNull);
+      expect(byName['書源刪了']!.book, isNull, reason: '只當口味看');
+      expect(
+        library.secrets,
+        contains(contains('token-abc-123456')),
+        reason: '分類與簡介是書源給的，送出前要能遮',
+      );
     },
   );
 }
