@@ -110,6 +110,18 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
   Future<void> startSearch() async {
     _cancelActiveSearch();
     final searchId = ++_activeSearchId;
+    try {
+      await _search(searchId);
+    } catch (e) {
+      // 任何一步出錯（含讀書源、讀搜尋快取）：收掉搜尋中，寫出原因。
+      if (!_isSearchActive(searchId)) return;
+      isSearching = false;
+      status = failureMessage('搜尋', e);
+      _notifySafely();
+    }
+  }
+
+  Future<void> _search(int searchId) async {
     final enabledSources = await _loadEnabledSources();
     if (!_isSearchActive(searchId)) return;
 
@@ -161,100 +173,93 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
       return;
     }
 
+    var failedSources = 0;
+    var completedSources = 0;
+    final searchPool = Pool(_maxConcurrentSearches);
+    // 抓目錄另外排：搜完就讓出搜尋的位置，抓目錄（一本要詳情加目錄好幾個
+    // 請求）不擋住還沒搜的書源，也不會一次對很多個網站抓目錄。
+    final tocPool = Pool(_maxConcurrentTocs);
+    // 搜完的書源：之後才抓到目錄的快取結果不再加回去，照這次搜到的。
+    final searched = <String>{};
     try {
-      var failedSources = 0;
-      var completedSources = 0;
-      final searchPool = Pool(_maxConcurrentSearches);
-      // 抓目錄另外排：搜完就讓出搜尋的位置，抓目錄（一本要詳情加目錄好幾個
-      // 請求）不擋住還沒搜的書源，也不會一次對很多個網站抓目錄。
-      final tocPool = Pool(_maxConcurrentTocs);
-      // 搜完的書源：之後才抓到目錄的快取結果不再加回去，照這次搜到的。
-      final searched = <String>{};
-      try {
-        final cachedTasks = [
-          for (final result in cachedResults)
-            if (!_tocs.containsKey(_resultKey(result)))
-              () async {
-                final source = sourcesByUrl[result.origin]!;
-                if (!await _loadToc(result, source, searchId, tocPool)) return;
-                if (!_isSearchActive(searchId) ||
-                    searched.contains(result.origin)) {
-                  return;
-                }
-                _addResults([result]);
-                _notifySafely();
-              }(),
-        ];
-        final searchTasks = enabledSources.map((source) async {
-          try {
-            final matching = await searchPool.withResource(() async {
-              if (!_isSearchActive(searchId)) return null;
-              final shouldCheckAuthor =
-                  checkAuthor && book.author.trim().isNotEmpty;
-              final stopwatch = Stopwatch()..start();
-              final results = await _searchNames(
-                source,
-                names,
-                sameBookFilter(
-                  book.name,
-                  book.author,
-                  checkAuthor: shouldCheckAuthor,
-                ),
-              );
-              final elapsed = stopwatch.elapsedMilliseconds;
-              return [
-                for (final result in results)
-                  if (_listable(result)) result..respondTime = elapsed,
-              ];
-            });
-            if (matching == null || !_isSearchActive(searchId)) return;
-            final loaded = await Future.wait([
-              for (final result in matching)
-                _loadToc(result, source, searchId, tocPool),
-            ]);
-            if (!_isSearchActive(searchId)) return;
+      final cachedTasks = [
+        for (final result in cachedResults)
+          if (!_tocs.containsKey(_resultKey(result)))
+            () async {
+              final source = sourcesByUrl[result.origin]!;
+              if (!await _loadToc(result, source, searchId, tocPool)) return;
+              if (!_isSearchActive(searchId) ||
+                  searched.contains(result.origin)) {
+                return;
+              }
+              _addResults([result]);
+              _notifySafely();
+            }(),
+      ];
+      final searchTasks = enabledSources.map((source) async {
+        try {
+          final matching = await searchPool.withResource(() async {
+            if (!_isSearchActive(searchId)) return null;
+            final shouldCheckAuthor =
+                checkAuthor && book.author.trim().isNotEmpty;
+            final stopwatch = Stopwatch()..start();
+            final results = await _searchNames(
+              source,
+              names,
+              sameBookFilter(
+                book.name,
+                book.author,
+                checkAuthor: shouldCheckAuthor,
+              ),
+            );
+            final elapsed = stopwatch.elapsedMilliseconds;
+            return [
+              for (final result in results)
+                if (_listable(result)) result..respondTime = elapsed,
+            ];
+          });
+          if (matching == null || !_isSearchActive(searchId)) return;
+          final loaded = await Future.wait([
+            for (final result in matching)
+              _loadToc(result, source, searchId, tocPool),
+          ]);
+          if (!_isSearchActive(searchId)) return;
+          searched.add(source.bookSourceUrl);
+          _replaceSourceResults(source.bookSourceUrl, [
+            for (final (i, result) in matching.indexed)
+              if (loaded[i]) result,
+          ]);
+        } catch (_) {
+          if (_isSearchActive(searchId)) {
             searched.add(source.bookSourceUrl);
-            _replaceSourceResults(source.bookSourceUrl, [
-              for (final (i, result) in matching.indexed)
-                if (loaded[i]) result,
-            ]);
-          } catch (_) {
-            if (_isSearchActive(searchId)) {
-              searched.add(source.bookSourceUrl);
-              failedSources++;
-              _replaceSourceResults(source.bookSourceUrl, const <SearchBook>[]);
-            }
-          } finally {
-            if (_isSearchActive(searchId)) {
-              completedSources++;
-              _updateSearchingStatus(completedSources, enabledSources.length);
-            }
+            failedSources++;
+            _replaceSourceResults(source.bookSourceUrl, const <SearchBook>[]);
           }
-        }).toList();
-
-        await Future.wait([...cachedTasks, ...searchTasks]);
-        if (!_isSearchActive(searchId)) return;
-
-        isSearching = false;
-        if (allResults.isEmpty) {
-          status = failedSources == enabledSources.length
-              ? '搜尋完成，但所有書源都失敗'
-              : '未找到備用書源';
-        } else if (failedSources > 0) {
-          status = '搜尋完成 ($failedSources 個書源失敗)';
-        } else {
-          status = '搜尋完成 (已自動優選)';
+        } finally {
+          if (_isSearchActive(searchId)) {
+            completedSources++;
+            _updateSearchingStatus(completedSources, enabledSources.length);
+          }
         }
-        _notifySafely();
-      } finally {
-        await searchPool.close();
-        await tocPool.close();
-      }
-    } catch (e) {
+      }).toList();
+
+      await Future.wait([...cachedTasks, ...searchTasks]);
       if (!_isSearchActive(searchId)) return;
+
       isSearching = false;
-      status = failureMessage('搜尋', e);
+      if (allResults.isEmpty) {
+        status = failedSources == enabledSources.length
+            ? '搜尋完成，但所有書源都失敗'
+            : '未找到備用書源';
+      } else if (failedSources > 0) {
+        status = '搜尋完成 ($failedSources 個書源失敗)';
+      } else {
+        status = '搜尋完成 (已自動優選)';
+      }
       _notifySafely();
+    } finally {
+      await searchPool.close();
+      await tocPool.close();
     }
   }
 

@@ -39,10 +39,12 @@ class SourceCheckStatusBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final chrome = AppChrome.of(context);
-    final isChecking = provider.checkService.isChecking;
-    final paused = isChecking ? null : provider.pausedCheck.plan;
     final job = SourceCheckJob.current;
-    final settling = job != null && (job.isPausing || job.isEnding);
+    // 按了暫停或結束、還沒停好：校驗服務已經不派新的書源，但這次校驗還沒
+    // 停好，照校驗中畫，寫「正在暫停…」「正在結束…」，正在暫停時還能按結束。
+    final settling = job != null && job.phase.settling;
+    final isChecking = provider.checkService.isChecking || settling;
+    final paused = isChecking ? null : provider.pausedCheck.plan;
     final report = provider.lastCheckReport;
     final accent = isChecking ? scheme.primary : context.warning;
     final idle = onTap == null;

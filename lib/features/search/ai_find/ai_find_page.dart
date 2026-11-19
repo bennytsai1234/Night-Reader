@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/ai_find/ai_find_avoid.dart';
 import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_find/ai_find_session.dart';
-import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_step.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/models/search/ai_find_record.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
@@ -557,12 +558,12 @@ class _AiFindPageState extends State<AiFindPage> {
         ],
       ),
       ?history,
-      GroupedSection(children: _controls(run, session)),
+      GroupedSection(children: _controls(run)),
     ];
   }
 
-  List<Widget> _controls(AiFindRun run, AiFindSession session) {
-    final ending = session.isStopped || run.isEnding;
+  List<Widget> _controls(AiFindRun run) {
+    final ending = run.phase == WorkPhase.ending;
     final end = GroupedRow(
       title: ending ? backgroundWorkEnding : '結束',
       destructive: true,
@@ -583,13 +584,13 @@ class _AiFindPageState extends State<AiFindPage> {
         end,
       ];
     }
-    final pausing = session.isPausing;
+    final pausing = run.phase == WorkPhase.pausing;
     return [
       GroupedRow(
         title: pausing ? backgroundWorkPausing : '暫停',
         showChevron: false,
-        enabled: !pausing && !session.isStopped,
-        onTap: pausing || session.isStopped ? null : run.pauseNow,
+        enabled: !pausing && !ending,
+        onTap: pausing || ending ? null : run.pauseNow,
       ),
       end,
     ];

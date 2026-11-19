@@ -400,6 +400,18 @@ class _SourceCheckExecutionPool {
   }
 }
 
+/// 一輪校驗走到哪：互斥，按停止到結果寫完之間是 [stopping]。
+enum _CheckPhase {
+  /// 沒有在校驗：可以開始新的一輪。
+  idle,
+
+  /// 校驗中：照常派發書源。
+  checking,
+
+  /// 按了停止（或服務放掉了）：不再派發，等跑著的書源停下、結果寫進資料庫。
+  stopping,
+}
+
 /// CheckSourceService - 書源校驗服務
 /// 參考 legado CheckSourceService，以 group/comment 持久化校驗結果，
 /// 讓來源管理、搜尋池與執行期策略共用同一套狀態。
@@ -410,11 +422,10 @@ class CheckSourceService extends ChangeNotifier {
   static const Duration _notifyThrottleInterval = Duration(milliseconds: 350);
   final BookSourceDao _sourceDao;
 
-  bool _isChecking = false;
-
-  /// 一輪校驗開始到結果全寫進資料庫為止。按停止時 [_isChecking] 先變成
-  /// false，這一輪還要等跑著的書源停下、把結果寫進去才算完。
-  bool _runInProgress = false;
+  /// 一輪校驗開始到結果全寫進資料庫為止不是 [_CheckPhase.idle]：按停止時
+  /// 先變成 [_CheckPhase.stopping]，這一輪還要等跑著的書源停下、把結果寫進去
+  /// 才算完。
+  _CheckPhase _phase = _CheckPhase.idle;
   int _finishedRunCount = 0;
   int _totalCount = 0;
   int _currentCount = 0;
@@ -444,7 +455,7 @@ class CheckSourceService extends ChangeNotifier {
   /// 最近一次校驗的診斷（「校驗詳情」的「複製診斷」）。
   final SourceCheckDiagnostics diagnostics;
 
-  bool get isChecking => _isChecking;
+  bool get isChecking => _phase == _CheckPhase.checking;
 
   /// 已結束（含取消）的校驗次數；結果全部寫進資料庫後才加一，
   /// 書源清單看到它變了就重新讀取。
@@ -466,10 +477,10 @@ class CheckSourceService extends ChangeNotifier {
   /// 書源清單照資料庫重讀了（[sources] 是全部書源），丟掉不再代表書源現況
   /// 的進度，那些列改照資料庫顯示：校驗之後被別處改寫或刪掉的書源（和
   /// 「沒有異常」篩選一致），和校驗停下時還沒做完、停在「等待校驗」的。
-  /// 這一輪還沒做完（[_runInProgress]）不丟：結果分批寫進資料庫，按了停止
+  /// 這一輪還沒做完（停下中也算）不丟：結果分批寫進資料庫，按了停止
   /// 也要等跑著的書源停下、寫完才算數，清單要等做完才重讀。
   void forgetOutdatedProgress(Iterable<BookSource> sources) {
-    if (_runInProgress || _sourceProgress.isEmpty) return;
+    if (_phase != _CheckPhase.idle || _sourceProgress.isEmpty) return;
     final byUrl = {for (final source in sources) source.bookSourceUrl: source};
     _sourceProgress.removeWhere((url, progress) {
       final source = byUrl[url];
@@ -526,7 +537,8 @@ class CheckSourceService extends ChangeNotifier {
     List<SourceCheckEntry> earlier = const [],
     SourceCheckFinished? onFinished,
   }) async {
-    if (_isChecking) return _lastReport;
+    // 上一輪按了停止、還在寫結果時也不開始：開始了，上一輪收尾時會蓋掉這一輪。
+    if (_phase != _CheckPhase.idle) return _lastReport;
 
     return _checkAll(urls, onResult, doneBefore, earlier, onFinished);
   }
@@ -534,7 +546,7 @@ class CheckSourceService extends ChangeNotifier {
   /// 暫停中的校驗按了結束（App 重開過，記憶體裡沒有那次的報告）：照存的
   /// 結果寫成上次校驗摘要。
   void showStoppedReport(List<SourceCheckEntry> entries, int plannedCount) {
-    if (_isChecking) return;
+    if (_phase != _CheckPhase.idle) return;
     _lastReport = SourceCheckReport(entries, plannedCount: plannedCount);
     _statusMsg = _lastReport.summary;
     _notifyIfAlive();
@@ -551,8 +563,7 @@ class CheckSourceService extends ChangeNotifier {
       urls.map((url) => url.trim()).where((url) => url.isNotEmpty),
     ).toList(growable: false);
     final config = _config.normalized();
-    _isChecking = true;
-    _runInProgress = true;
+    _phase = _CheckPhase.checking;
     CrashTrail.action('開始校驗書源（${normalizedUrls.length} 個）');
     _totalCount = doneBefore + normalizedUrls.length;
     _currentCount = doneBefore;
@@ -582,9 +593,21 @@ class CheckSourceService extends ChangeNotifier {
           _currentCount++;
           _notifyIfAlive();
         },
-        shouldContinue: () => _isChecking,
+        shouldContinue: () => isChecking,
         onFinished: onFinished,
       ).run(normalizedUrls);
+    } catch (_) {
+      // 夜讀自己的校驗流程出錯（記錄錯誤時又讀不到書源）：這一輪沒有結果，
+      // 已經排的寫照寫，回到閒著，不然下一輪永遠開不了。
+      _phase = _CheckPhase.stopping;
+      _activeTasks.clear();
+      try {
+        await _flushPendingStatusWrites();
+      } finally {
+        _phase = _CheckPhase.idle;
+        _notifyIfAlive(immediate: true);
+      }
+      rethrow;
     } finally {
       // 校驗結束（無論正常、取消或例外）都清除 JS 靜態快取。
       // _resolvedJsLibCache 的 key 本身就是完整 jsLib 字串，
@@ -593,17 +616,17 @@ class CheckSourceService extends ChangeNotifier {
       JsExtensionsBase.clearCaches();
     }
 
-    final stopped = !_isChecking;
+    final stopped = !isChecking;
     if (stopped) {
       _appendLog('校驗停下了，校驗了 $_currentCount / $_totalCount 個，結果照留');
     }
 
-    _isChecking = false;
+    _phase = _CheckPhase.stopping;
     _activeTasks.clear();
     try {
       await _flushPendingStatusWrites();
     } finally {
-      _runInProgress = false;
+      _phase = _CheckPhase.idle;
     }
     _lastReport = SourceCheckReport([
       ...earlier,
@@ -702,7 +725,7 @@ class CheckSourceService extends ChangeNotifier {
     String url,
     SourceCheckConfig config,
   ) async {
-    if (_isDisposed || !_isChecking) return null;
+    if (_isDisposed || !isChecking) return null;
     _timedOutSourceUrls.add(url);
     final source = await _sourceDao.getByUrl(url);
     if (source == null) return null;
@@ -821,7 +844,7 @@ class CheckSourceService extends ChangeNotifier {
 
   /// 書源的校驗標記被清掉後，上次的摘要已經對不上，一併收起。
   void clearLastReport() {
-    if (_isChecking || !_lastReport.isPresent) return;
+    if (isChecking || !_lastReport.isPresent) return;
     _lastReport = SourceCheckReport.empty;
     _statusMsg = '';
     _logs.clear();
@@ -830,9 +853,9 @@ class CheckSourceService extends ChangeNotifier {
   }
 
   void cancel() {
-    if (!_isChecking) return;
+    if (!isChecking) return;
     CrashTrail.action('停止校驗書源（做完 $_currentCount／$_totalCount 個）');
-    _isChecking = false;
+    _phase = _CheckPhase.stopping;
     for (final handle in _activeTasks.values) {
       handle.abort();
     }
@@ -850,7 +873,7 @@ class CheckSourceService extends ChangeNotifier {
   }
 
   bool _shouldIgnoreSourceUpdate(String sourceUrl) =>
-      _isDisposed || !_isChecking || _timedOutSourceUrls.contains(sourceUrl);
+      _isDisposed || !isChecking || _timedOutSourceUrls.contains(sourceUrl);
 
   void _appendLog(String msg, {String? sourceUrl, bool force = false}) {
     if (_isDisposed) return;
@@ -885,7 +908,7 @@ class CheckSourceService extends ChangeNotifier {
 
   void _notifyIfAlive({bool immediate = false}) {
     if (_isDisposed) return;
-    if (immediate || !_isChecking) {
+    if (immediate || !isChecking) {
       _notifyTimer?.cancel();
       _notifyTimer = null;
       notifyListeners();
@@ -902,7 +925,7 @@ class CheckSourceService extends ChangeNotifier {
   void dispose() {
     if (_isDisposed) return;
     _isDisposed = true;
-    _isChecking = false;
+    if (isChecking) _phase = _CheckPhase.stopping;
     for (final handle in _activeTasks.values) {
       handle.abort();
     }

@@ -23,6 +23,8 @@ import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
+import 'package:night_reader/shared/navigation/app_transition_switch.dart';
+import 'package:night_reader/shared/navigation/back_swipe.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';

@@ -11,8 +11,7 @@ import 'package:night_reader/core/ai_repair/agent_loop.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_log.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
-import 'package:night_reader/core/ai_repair/ai_repair_session.dart'
-    show AiRepairStepState;
+import 'package:night_reader/core/ai_repair/ai_repair_step.dart';
 import 'package:night_reader/core/models/search/ai_find_record.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/search/search_book.dart';

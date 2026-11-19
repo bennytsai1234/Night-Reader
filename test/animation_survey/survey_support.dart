@@ -25,7 +25,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/features/reader/text_view/overlay/loading_veil.dart';
-import 'package:night_reader/shared/navigation/app_page_transition.dart';
+import 'package:night_reader/shared/navigation/app_transition_switch.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
 
 import '../support/app_harness.dart';

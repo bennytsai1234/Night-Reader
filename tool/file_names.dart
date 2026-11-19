@@ -21,7 +21,9 @@ const _reviewed = {
   'lib/main.dart': 'App 的進入點',
   'lib/core/ai_find/ai_find_prompt.dart': '提示詞與 AI 可以下的各種指令',
   'lib/core/ai_repair/agent_loop.dart': 'AI 修復一回合的指令、結果與紀錄',
+  'lib/core/ai_repair/ai_repair_apply.dart': '主角是存修好的書源與還原改前版本的函式',
   'lib/core/ai_repair/ai_repair_prompt.dart': '提示詞與 AI 可以下的各種指令',
+  'lib/core/ai_repair/repair_verdict.dart': '主角是判斷 AI 交出的書源算不算修好的函式',
   'lib/core/database/tables/app_tables.dart': '所有資料表與欄位轉換',
   'lib/core/engine/analyze_rule/analyze_rule_support.dart': '規則解析共用的小型別',
   'lib/core/engine/js/extensions/js_blocking_tasks.dart': '規則 JS 同步等待的工作',
@@ -31,6 +33,7 @@ const _reviewed = {
   'lib/core/models/source/book_source_rules.dart': '書源搜尋、詳情、目錄、正文各段規則',
   'lib/core/network/redirects.dart': '回應的轉址換算（Response 的 extension）',
   'lib/core/source/source_progress.dart': '主角是交回書源工作進度的函式',
+  'lib/core/source_check/source_check_verdict.dart': '主角是把校驗問題歸成健康分組的函式',
   'lib/features/about/privacy_pages.dart': '隱私說明與權限兩頁',
   'lib/features/bookshelf/widgets/bookshelf_book_tiles.dart': '書卡與它的各部分',
   'lib/features/comic_reader/comic_reader_menu.dart': '漫畫閱讀器選單的各部分',
@@ -38,13 +41,13 @@ const _reviewed = {
   'lib/features/reader/features/settings/reader_highlight_style.dart':
       '標註的顏色與深淺',
   'lib/features/reader/text_view/core/text_view_types.dart': '正文層共用的小型別',
-  'lib/features/reader/text_view/view/viewport_commands.dart': '捲動視窗收的指令',
   'lib/features/settings/provider/settings_base.dart':
       '在 provider/ 底下，SettingsProviderBase',
   'lib/features/settings/sync_status_text.dart': '同步的狀態文字與進度框',
   'lib/features/source_login/source_login_form.dart': '登入表單的欄位與按鈕',
   'lib/features/source_manager/widgets/import_preview_sheet.dart':
       '主角是打開匯入預覽的函式',
+  'lib/shared/navigation/transition_poses.dart': '換頁時上下兩頁的樣子',
   'lib/shared/theme/app_tokens.dart': '設計常數',
   'lib/shared/theme/context_ext.dart': 'BuildContext 取配色的 extension',
   'lib/shared/widgets/popups/app_dialogs.dart': '提示框與動作表',

@@ -4,104 +4,29 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:night_reader/core/database/dao/book_source_dao.dart';
-import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
-import 'package:night_reader/core/source/book_source_service.dart';
-import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/core/diagnostics/crash_trail.dart';
 import 'package:night_reader/core/source_check/source_check_isolate.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'agent_loop.dart';
 import 'ai_chat_client.dart';
+import 'ai_repair_apply.dart';
 import 'ai_repair_backups.dart';
+import 'ai_repair_defaults.dart';
 import 'ai_repair_log.dart';
 import 'ai_repair_prompt.dart';
 import 'ai_repair_secrets.dart';
 import 'ai_repair_settings.dart';
+import 'ai_repair_step.dart';
 import 'repair_pages.dart';
+import 'repair_agent.dart';
 import 'repair_rule_tools.dart';
+import 'repair_verdict.dart';
 import 'opening_facts.dart';
 import 'source_probe.dart';
-
-/// 一步的狀態：還沒開始、做著、做完、失敗。
-enum AiRepairStepState { waiting, running, done, failed }
-
-/// 修復的固定幾段：修復頁一段一列，AI 的輪併成中間的「AI 修改規則」。
-const String aiRepairCheckStage = '校驗原本的書源';
-const String aiRepairFetchStage = '抓網頁';
-const String aiRepairVerifyStage = '校驗修好的書源';
-
-/// 一步是哪一種：固定的一段（校驗、抓網頁）、AI 的一輪，或換一段新的對話
-/// 重新開始。修復頁把後兩種併成「AI 修改規則」一段，過程收在「經過」裡
-/// （docs/design/screens.md「AI 修書源」）。
-enum AiRepairStepKind { stage, round, restart }
-
-/// 修復過程的一步。
-class AiRepairStep {
-  AiRepairStep(
-    this.title, {
-    this.detail,
-    this.state = AiRepairStepState.running,
-    this.kind = AiRepairStepKind.stage,
-  });
-
-  /// 固定的一段是頁面上的標題；AI 的一輪是紀錄裡的段名（「第 3 輪」），
-  /// 頁面不顯示。
-  final String title;
-
-  /// AI 的一輪是它在做的事（「看網頁 網址…」「AI 改了搜尋，試抓：…」），
-  /// 其他是這一步的結果。
-  String? detail;
-  AiRepairStepState state;
-  final AiRepairStepKind kind;
-
-  /// 寫成一句：AI 的一輪是它在做的事，重新開始寫原因，其他是「標題：結果」。
-  /// 通知內文與整批修復「正在修」的副標用它。
-  String get line => switch (kind) {
-    AiRepairStepKind.round => detail ?? '',
-    AiRepairStepKind.restart => '重新開始：${detail ?? ''}',
-    AiRepairStepKind.stage => detail == null ? title : '$title：$detail',
-  };
-
-  /// 存成暫停的工作（背景工作接著做，ADR 0058）。
-  Map<String, Object?> toJson() => {
-    'title': title,
-    'detail': ?detail,
-    'state': state.name,
-    'kind': kind.name,
-  };
-
-  /// 存檔沒寫種類時當成 [kind]。
-  factory AiRepairStep.fromJson(
-    Object? json, {
-    AiRepairStepKind kind = AiRepairStepKind.stage,
-  }) {
-    if (json case {'title': final String title}) {
-      return AiRepairStep(
-        title,
-        detail: switch (json['detail']) {
-          final String detail => detail,
-          _ => null,
-        },
-        state: AiRepairStepState.values.firstWhere(
-          (state) => state.name == json['state'],
-          orElse: () => AiRepairStepState.done,
-        ),
-        kind: AiRepairStepKind.values.firstWhere(
-          (value) => value.name == json['kind'],
-          orElse: () => kind,
-        ),
-      );
-    }
-    throw const FormatException('一步的格式不對');
-  }
-}
 
 /// 一個書源修完的結果。
 enum AiRepairOutcome { repaired, failed }
@@ -148,10 +73,9 @@ class AiRepairJob {
   /// 2026-11-16）。
   String? _beforeUnreachable;
 
-  /// 開場的試抓：[_firstProbe] 是抓到的原樣，[_probe] 是標上頁碼、給 AI 的
-  /// 那份。整件重跑時照 [_firstProbe] 重新標頁碼，開場一字不差。
+  /// 開場的試抓抓到的原樣；標上頁碼、給 AI 的那份在 [RepairAgent]，整件
+  /// 重跑時照這份重新標頁碼。
   SourceProbeReport? _firstProbe;
-  SourceProbeReport? _probe;
 
   /// 這個書源的登入資料、Cookie 與變數的值，送出前遮掉（[aiRepairSecretsOf]）。
   Set<String> _secrets = const {};
@@ -238,12 +162,12 @@ class AiRepairSession extends ChangeNotifier {
          sourceUrl: source.bookSourceUrl,
          directory: logDirectory,
        ),
-       _check = check ?? defaultCheck,
-       _probe = probe ?? _defaultProbe,
-       _fetchPage = fetchPage ?? _defaultFetchPage,
-       _parsePage = parsePage ?? _defaultParsePage,
-       _runJs = runJs ?? _defaultRunJs,
-       _copy = copy ?? _defaultCopy,
+       _check = check ?? AiRepairDefaults.check,
+       _probe = probe ?? AiRepairDefaults.probe,
+       _fetchPage = fetchPage ?? AiRepairDefaults.fetchPage,
+       _parsePage = parsePage ?? AiRepairDefaults.parsePage,
+       _runJs = runJs ?? AiRepairDefaults.runJs,
+       _copy = copy ?? AiRepairDefaults.copy,
        _secretsOf = secrets ?? aiRepairSecretsOf,
        _backups = backups ?? AiRepairBackups.instance {
     _apply =
@@ -251,7 +175,7 @@ class AiRepairSession extends ChangeNotifier {
         (repaired, original) =>
             saveRepairedSource(repaired, original, backups: _backups);
     _onUsage = onUsage;
-    _ask = ask ?? (service == null ? null : _defaultAsk(service!));
+    _ask = ask ?? (service == null ? null : AiRepairDefaults.ask(service!));
   }
 
   void Function(AiUsage usage)? _onUsage;
@@ -293,24 +217,39 @@ class AiRepairSession extends ChangeNotifier {
   AgentStats? get stats => _stats;
   Future<void>? _startTask;
   Completer<void>? _pasteCompletion;
-  bool _running = false;
-  bool _stopped = false;
-  bool _paused = false;
+  WorkPhase _phase = WorkPhase.ready;
   bool _disposed = false;
 
   bool get usesClipboard => service == null;
-  bool get isRunning => _running;
 
-  /// 按了結束（還沒停好或已經停好）；暫停不算。
-  bool get isStopped => _stopped && !_paused;
+  /// 走到哪：還沒開始、做著、正在暫停、正在結束、已暫停（停下、書源不改，
+  /// 不算結束；接著做是這個書源從頭重修，ADR 0058）、等貼回（剪貼簿）、做完
+  /// （含結束）。
+  WorkPhase get phase => _phase;
+  bool get isRunning => _phase.active;
 
-  /// 按了暫停：停下、書源不改，不算結束；接著做是這個書源從頭重修
-  /// （背景工作接著做，ADR 0058）。
-  bool get isPaused => _paused;
+  /// 按了結束、還沒停好（正在暫停時按的也算：結束蓋過暫停）。
+  bool get isStopped => _phase == WorkPhase.ending;
 
-  /// 做完（或停下）。剪貼簿等使用者貼回時不算。
-  bool get isFinished =>
-      !_running && !_paused && (_stopped || job.outcome != null);
+  bool get isPaused => _phase == WorkPhase.paused;
+
+  /// 做完（或結束）。剪貼簿等使用者貼回時不算。
+  bool get isFinished => _phase == WorkPhase.finished;
+
+  /// 按了暫停或結束、還沒停好：做著的那一步看到就收手。
+  bool get _halting => _phase.settling;
+
+  /// 一段跑完（[_run] 或貼回的校驗）：照結果與按了什麼定下一個階段。暫停時
+  /// 正好在存修好的書源：存完就算做完，不再是暫停。
+  void _settle() {
+    _phase = switch (_phase) {
+      _ when job.outcome != null => WorkPhase.finished,
+      WorkPhase.pausing => WorkPhase.paused,
+      WorkPhase.ending => WorkPhase.finished,
+      _ => job.awaitingPaste ? WorkPhase.waiting : WorkPhase.finished,
+    };
+  }
+
   Future<void> get completion =>
       _pasteCompletion?.future ?? _startTask ?? Future<void>.value();
 
@@ -319,14 +258,14 @@ class AiRepairSession extends ChangeNotifier {
 
   Future<void> start() {
     if (_startTask != null) return _startTask!;
-    if (_stopped || _disposed || job.outcome != null) {
+    if (_phase != WorkPhase.ready || _disposed || job.outcome != null) {
       return Future<void>.value();
     }
     return _startTask = _run();
   }
 
   Future<void> _run() async {
-    _running = true;
+    _phase = WorkPhase.running;
     CrashTrail.action('開始 AI 修復：${job.original.bookSourceName}');
     _notify();
     try {
@@ -335,7 +274,7 @@ class AiRepairSession extends ChangeNotifier {
       // 校驗、試抓或存檔丟出沒料到的錯：記成沒修好，做著的步驟標失敗，
       // 不讓畫面停在轉圈。
       AppLog.e('AI 修書源出錯', error: error, stackTrace: stack);
-      if (job.outcome == null && !_stopped) {
+      if (job.outcome == null && !_halting) {
         for (final step in job.steps) {
           if (step.state == AiRepairStepState.running) {
             step
@@ -346,15 +285,14 @@ class AiRepairSession extends ChangeNotifier {
         _fail(job, '修復出錯，書源沒有改：$error');
       }
     } finally {
-      _running = false;
+      final ended = _phase == WorkPhase.ending;
+      _settle();
       // 抓到的網頁只給這次的 AI 用；整批修復一次開幾十段，不留在記憶體。
       // 開場試抓的報告也帶著整頁原文：做完了（等貼回書源的不算）一起放掉。
       _pages.clear();
       if (job.outcome != null) {
         log.finish();
-        job
-          .._firstProbe = null
-          .._probe = null;
+        job._firstProbe = null;
         // 迴圈到了未收斂的門檻直接結束，那一輪的步驟還是執行中：標成沒做完，
         // 畫面不停在轉圈。
         for (final step in job.steps) {
@@ -365,12 +303,10 @@ class AiRepairSession extends ChangeNotifier {
           }
         }
       }
-      // 暫停時正好在存修好的書源：存完就算做完，不再是暫停。
-      if (job.outcome != null) _paused = false;
       CrashTrail.action(
-        'AI 修復${_paused
+        'AI 修復${_phase == WorkPhase.paused
             ? '暫停了'
-            : _stopped
+            : ended
             ? '結束了'
             : '做完了'}：${job.original.bookSourceName}',
       );
@@ -381,15 +317,21 @@ class AiRepairSession extends ChangeNotifier {
   /// 結束：做著的那一步標成結束，修到一半的不改。暫停中的直接收尾。
   void stop() {
     if (job.outcome != null) return;
-    if (_paused) {
-      _paused = false;
-      _endSteps();
-      _notify();
-      return;
+    switch (_phase) {
+      case WorkPhase.paused:
+        _phase = WorkPhase.finished;
+        _endSteps();
+        _notify();
+        return;
+      case WorkPhase.ending || WorkPhase.finished:
+        return;
+      case WorkPhase.running || WorkPhase.pausing:
+        // 正在暫停時按結束：結束蓋過暫停，照做著時按結束的走。
+        _phase = WorkPhase.ending;
+      case _:
+        _phase = WorkPhase.finished;
     }
-    if (_stopped) return;
     CrashTrail.action('按了結束：AI 修復 ${job.original.bookSourceName}');
-    _stopped = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已結束');
     if (!job._committing) _endSteps();
     _notify();
@@ -415,10 +357,17 @@ class AiRepairSession extends ChangeNotifier {
   /// 暫停：做著的那一步停下、書源不改，結果不寫（背景工作接著做，ADR 0058）。
   /// 正在存修好的書源時停不下來，存完就算做完。剪貼簿的修復不暫停。
   void pause() {
-    if (_stopped || job.outcome != null || usesClipboard) return;
+    if (job.outcome != null || usesClipboard) return;
+    switch (_phase) {
+      case WorkPhase.running:
+        _phase = WorkPhase.pausing;
+      case WorkPhase.ready:
+        // 還沒輪到就暫停（整批暫停時）：直接停好。
+        _phase = WorkPhase.paused;
+      case _:
+        return;
+    }
     CrashTrail.action('按了暫停：AI 修復 ${job.original.bookSourceName}');
-    _stopped = true;
-    _paused = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已暫停');
     if (!job._committing) {
       for (final step in job.steps) {
@@ -434,17 +383,17 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 剪貼簿：使用者貼回 AI 修好的書源。讀不出書源時傳回原因、什麼都不做。
   Future<String?> submitPaste(String text) async {
-    if (!job.awaitingPaste || _running || _stopped || _disposed) return null;
+    if (!job.awaitingPaste || _phase != WorkPhase.waiting || _disposed) {
+      return null;
+    }
     if (text.length > aiRepairMaxReplyLength) return '貼回的內容太長';
     final json = pastedSourceJson(text);
-    final candidate = json == null
-        ? null
-        : _candidateOrNull(job.original, json);
+    final candidate = json == null ? null : candidateOrNull(job.original, json);
     if (candidate == null) return '讀不出書源 JSON';
     job.awaitingPaste = false;
     final pending = Completer<void>();
     _pasteCompletion = pending;
-    _running = true;
+    _phase = WorkPhase.running;
     _notify();
     try {
       log
@@ -453,11 +402,11 @@ class AiRepairSession extends ChangeNotifier {
       await _validate(job, candidate, '');
     } catch (error, stack) {
       AppLog.e('AI 貼回書源出錯', error: error, stackTrace: stack);
-      if (!_stopped) {
+      if (!_halting) {
         _fail(job, '校驗貼回的書源出錯，書源沒有改：$error');
       }
     } finally {
-      _running = false;
+      _settle();
       _notify();
       pending.complete();
       if (identical(_pasteCompletion, pending)) _pasteCompletion = null;
@@ -484,7 +433,7 @@ class AiRepairSession extends ChangeNotifier {
     log
       ..redact = ((text) => _redact(job, text))
       ..header(_serviceText, prompt: aiRepairPromptVersion);
-    if (_stopped) return;
+    if (_halting) return;
 
     final checkStep = _addStep(job, aiRepairCheckStage);
     log.section(aiRepairCheckStage);
@@ -494,7 +443,7 @@ class AiRepairSession extends ChangeNotifier {
     final checked = prior != null
         ? prior.result
         : await _guard(() => _check(original, _cancelToken));
-    if (_stopped) return;
+    if (_halting) return;
     final checkText = _checkText(checked);
     final before = checked == null
         ? null
@@ -520,7 +469,7 @@ class AiRepairSession extends ChangeNotifier {
     log
       ..both(
         prior == null
-            ? '${_seconds(checkWatch)}：$checkText'
+            ? '${AiRepairLog.seconds(checkWatch)}：$checkText'
             : '沿用整批修復剛才的校驗：$checkText',
       )
       ..both([...?checked?.diagnostics].join('\n\n'));
@@ -529,12 +478,11 @@ class AiRepairSession extends ChangeNotifier {
     log.section(aiRepairFetchStage);
     final probeWatch = Stopwatch()..start();
     final probe = await _guard(() => _probe(original, _cancelToken));
-    if (_stopped || probe == null) return;
-    job
-      .._firstProbe = probe
-      .._probe = _withPageIds(probe);
+    if (_halting || probe == null) return;
+    job._firstProbe = probe;
+    final numbered = withPageIds(_pages, probe);
     _finish(fetchStep, _fetchText(probe));
-    _logProbe('${_seconds(probeWatch)}：${_fetchText(probe)}', probe);
+    _logProbe('${AiRepairLog.seconds(probeWatch)}：${_fetchText(probe)}', probe);
 
     // 程式讀得到、AI 要好幾輪才推得出來的事實，寫進開場。
     for (final fact in openingFacts(original, probe)) {
@@ -561,32 +509,35 @@ class AiRepairSession extends ChangeNotifier {
       _notify();
       return;
     }
-    await _converse(job);
+    await _converse(job, numbered);
   }
 
-  /// 試抓抓到的網頁登記進 [_pages]，給 AI 的那份每個回應標上頁碼；整頁原文
-  /// 只留在 [_pages]。
-  SourceProbeReport _withPageIds(SourceProbeReport probe) => SourceProbeReport(
-    logs: probe.logs,
-    requests: _pages.add(probe.requests, probe.pages),
-    timedOut: probe.timedOut,
-    contentUsable: probe.contentUsable,
-    unjoinedNextPage: probe.unjoinedNextPage,
-  );
-
   /// 和 AI 來回（ADR 0054）：交給和任務無關的迴圈（[runAgent]），書源修復
-  /// 的開場、指令與驗收在 [_RepairAgent]。對話照原樣一路接下去，前面的內容
+  /// 的開場、指令與驗收在 [RepairAgent]。對話照原樣一路接下去，前面的內容
   /// 不改寫：AI 要靠前面看過的網頁推下一步，開頭不變也讓服務的快取打得中。
   /// 卡住、失控、沒收斂時整件換新對話重跑，次數照 [AiAgentKnobs]。
-  Future<void> _converse(AiRepairJob job) async {
-    final agent = _RepairAgent(this, job);
+  Future<void> _converse(AiRepairJob job, SourceProbeReport probe) async {
+    final agent = RepairAgent(
+      _AgentHost(this, job),
+      job,
+      log: log,
+      pages: _pages,
+      prober: _probe,
+      fetchPage: _fetchPage,
+      parsePage: _parsePage,
+      runJs: _runJs,
+      onUsage: _onUsage,
+      checkResult: job._checkResult!,
+      firstProbe: job._firstProbe!,
+      openingProbe: probe,
+    );
     log.full('（迴圈的設定：${AiAgentKnobs.summary}）');
     log.tools(
       const JsonEncoder.withIndent('  ').convert(aiToolsJson(aiRepairTools)),
     );
     final end = await runAgent(agent, ask: _ask!, cancelToken: _cancelToken);
     _stats = end.stats;
-    if (_stopped || job.outcome != null) {
+    if (_halting || job.outcome != null) {
       _logStats(end);
       return;
     }
@@ -646,16 +597,6 @@ class AiRepairSession extends ChangeNotifier {
     AgentEndKind.failed => '停下',
   };
 
-  /// 不連網站的指令做完：步驟的副標與紀錄。
-  void _local(AiRepairStep step, String title, String reply) {
-    _finish(step, title);
-    log
-      ..note(title)
-      ..full(reply);
-  }
-
-  String _noPage(int page) => '# 沒有頁 $page：目前抓到的網頁是頁 1 到頁 ${_pages.length}。';
-
   /// 校驗 AI 交出（或貼回）的書源，通過才存進去。
   ///
   /// 試抓一路抓到了正文、校驗卻沒過時（網站限流、偶爾回慢），隔
@@ -674,14 +615,14 @@ class AiRepairSession extends ChangeNotifier {
     log.section(aiRepairVerifyStage);
     final checkWatch = Stopwatch()..start();
     var checked = await _guard(() => _check(candidate, _cancelToken));
-    if (_stopped) return null;
+    if (_halting) return null;
     bool usable(SourceCheckIsolateResult? result) =>
         usableFix(result, job.original, candidate, before: job._before);
     if (probeSucceeded && !usable(checked)) {
       step.detail = '${_checkText(checked)}；稍後再校驗一次…';
       log
         ..both(
-          '${_seconds(checkWatch)}：${_checkText(checked)}，'
+          '${AiRepairLog.seconds(checkWatch)}：${_checkText(checked)}，'
           '${recheckDelay.inSeconds} 秒後再校驗一次',
         )
         ..full([...?checked?.diagnostics].join('\n\n'));
@@ -690,22 +631,22 @@ class AiRepairSession extends ChangeNotifier {
         Future<void>.delayed(recheckDelay),
         _cancelToken.whenCancel,
       ]);
-      if (_stopped) return null;
+      if (_halting) return null;
       checkWatch.reset();
       checked = await _guard<SourceCheckIsolateResult?>(
         () => _check(candidate, _cancelToken),
       );
-      if (_stopped) return null;
+      if (_halting) return null;
     }
     final checkText = _checkText(checked);
-    log.both('${_seconds(checkWatch)}：$checkText');
+    log.both('${AiRepairLog.seconds(checkWatch)}：$checkText');
     if (checked != null && !usable(checked)) {
       log.both(checked.diagnostics.join('\n\n'));
     }
     if (checked == null || !usable(checked)) {
       _finish(step, checkText, failed: true);
       if (!last) {
-        final discovery = _discoveryNote(checked, job.original, candidate);
+        final discovery = discoveryNote(checked, job.original, candidate);
         return aiRepairCheckReply(checkText, [
           ?discovery,
           ...?checked?.diagnostics,
@@ -763,74 +704,6 @@ class AiRepairSession extends ChangeNotifier {
     return null;
   }
 
-  /// 校驗的結果可以存：沒問題；或原本搜尋、閱讀有壞（[before] 不是只壞
-  /// 發現頁），現在只剩發現頁失效、而 AI 沒動發現頁用的規則（[touchedDiscovery]）
-  /// ——發現頁原本就壞了，搜尋與閱讀修好了還是比原本好。原本就只壞發現頁、
-  /// 或不知道原本壞在哪（[before] 是 null）的，要整個沒問題才算。
-  static bool usableFix(
-    SourceCheckIsolateResult? result,
-    BookSource original,
-    BookSource candidate, {
-    required SourceHealthCategory? before,
-  }) {
-    if (result == null) return false;
-    if (result.isHealthy) return true;
-    if (before == null || _discoveryOnly.contains(before)) return false;
-    return _onlyDiscoveryFails(result) &&
-        !touchedDiscovery(original, candidate);
-  }
-
-  static bool _onlyDiscoveryFails(SourceCheckIsolateResult result) =>
-      _discoveryOnly.contains(
-        BookSource.fromJson(result.updatedSourceJson).runtimeHealth.category,
-      );
-
-  /// AI 動了發現頁用的規則：改了發現的規則，或改了搜尋規則、而發現頁用搜尋
-  /// 規則解析（[BookListParser.exploreUsesSearchRule]）。2026-11-12 實跑
-  /// 涨姿势：發現沒有自己的書單規則，AI 把搜尋改成網站的 API，發現頁跟著
-  /// 抓不到書，卻照「AI 沒動發現」收下。
-  static bool touchedDiscovery(BookSource original, BookSource candidate) {
-    final parts = changedParts(original, candidate);
-    if (parts.contains('發現')) return true;
-    return parts.contains('搜尋') &&
-        (BookListParser.exploreUsesSearchRule(original) ||
-            BookListParser.exploreUsesSearchRule(candidate));
-  }
-
-  /// 只剩發現頁沒過、AI 改了發現頁借用的搜尋規則時，回給 AI 的那一句事實。
-  static String? _discoveryNote(
-    SourceCheckIsolateResult? result,
-    BookSource original,
-    BookSource candidate,
-  ) {
-    if (result == null || !_onlyDiscoveryFails(result)) return null;
-    final parts = changedParts(original, candidate);
-    if (parts.contains('發現') || !parts.contains('搜尋')) return null;
-    if (!touchedDiscovery(original, candidate)) return null;
-    return aiRepairExploreBorrowsSearch;
-  }
-
-  static const Set<SourceHealthCategory> _discoveryOnly = {
-    SourceHealthCategory.discoveryBroken,
-    SourceHealthCategory.discoveryDetailBroken,
-    SourceHealthCategory.discoveryTocBroken,
-    SourceHealthCategory.discoveryContentBroken,
-  };
-
-  /// AI 回的書源照原本的身分組起來；欄位的型別或數值不對（例如超出範圍的
-  /// 數字）時是 null，當成讀不懂。
-  static BookSource? _candidateOrNull(
-    BookSource original,
-    Map<String, dynamic> json,
-  ) {
-    try {
-      return candidateFrom(original, json);
-    } catch (error) {
-      AppLog.d('AI 回的書源讀不出來: $error');
-      return null;
-    }
-  }
-
   /// 送給 AI、寫進紀錄的文字都經過這裡：開始時讀到的秘密、修復途中重讀
   /// 的（[_refreshSecrets]），加上記憶體裡現在的 Cookie 值。
   String _redact(AiRepairJob job, String text) => redactAiRepairSecrets(text, {
@@ -881,11 +754,6 @@ class AiRepairSession extends ChangeNotifier {
         '${service.effort.isEmpty ? '' : '（思考程度 ${service.effort}）'}';
   }
 
-  /// 一輪問 AI 的紀錄：送出多少、等到第一段資料的時間、花的時間與這輪的
-  /// 用量（服務有回報時；沒回完就斷了時是估的）。
-  static String _seconds(Stopwatch watch) =>
-      '${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒';
-
   static String _tokens(int count) =>
       NumberFormat.decimalPattern().format(count);
 
@@ -921,7 +789,7 @@ class AiRepairSession extends ChangeNotifier {
     try {
       return await work();
     } on DioException catch (error) {
-      if (CancelToken.isCancel(error) || _stopped) return null;
+      if (CancelToken.isCancel(error) || _halting) return null;
       rethrow;
     }
   }
@@ -949,632 +817,63 @@ class AiRepairSession extends ChangeNotifier {
     final stages = probe.stagesReached;
     return '${stages.isEmpty ? '' : '$stages，'}共 ${probe.pageCount} 頁';
   }
-
-  static String _changedText(BookSource before, BookSource after) {
-    final parts = changedParts(before, after);
-    return parts.isEmpty ? 'AI 沒改規則' : 'AI 改了$parts';
-  }
-
-  // ── 預設的實作：真的校驗、試抓、問 AI、存檔 ──────────────────────────
-
-  static Future<SourceCheckConfig> _config() async =>
-      SourceCheckConfig.fromPreferences(await SharedPreferences.getInstance());
-
-  /// 照校驗設定校驗一次（在自己的 isolate 裡，ADR 0051）；逾時是 null。
-  static Future<SourceCheckIsolateResult?> defaultCheck(
-    BookSource source,
-    CancelToken cancelToken,
-  ) async {
-    final config = await _config();
-    final handle = await spawnSourceCheck(
-      source,
-      config.forIsolate,
-      config.sourceTimeoutDuration,
-    );
-    unawaited(cancelToken.whenCancel.then((_) => handle.abort()));
-    return handle.result;
-  }
-
-  static Future<SourceProbeReport> _defaultProbe(
-    BookSource source,
-    CancelToken cancelToken, {
-    String? start,
-  }) async {
-    final config = await _config();
-    return probeSource(
-      source,
-      keyword: start ?? source.getCheckKeyword(config.keyword),
-      timeout: config.sourceTimeoutDuration,
-      cancelToken: cancelToken,
-    );
-  }
-
-  static Future<AiPage> _defaultFetchPage(
-    BookSource source,
-    String url,
-    CancelToken cancelToken,
-  ) async {
-    final config = await _config();
-    return fetchPageForAi(
-      source,
-      url,
-      keyword: source.getCheckKeyword(config.keyword),
-      timeout: config.sourceTimeoutDuration,
-      cancelToken: cancelToken,
-    );
-  }
-
-  static Future<String> _defaultParsePage(
-    BookSource source,
-    String stage,
-    RepairPage page,
-    CancelToken cancelToken,
-  ) async => parseRepairPage(
-    source,
-    stage: stage,
-    body: page.body,
-    url: page.url,
-    timeout: (await _config()).sourceTimeoutDuration,
-    cancelToken: cancelToken,
-  );
-
-  static Future<String> _defaultRunJs(
-    BookSource source,
-    String code,
-    Map<int, String> pages,
-    CancelToken cancelToken,
-  ) async => runRepairJs(
-    source,
-    code: code,
-    pages: pages,
-    timeout: (await _config()).sourceTimeoutDuration,
-    cancelToken: cancelToken,
-  );
-
-  static AgentAsk _defaultAsk(AiService service) {
-    final client = AiChatClient(service);
-    return (messages, cancelToken) => client.complete(
-      messages,
-      tools: aiRepairTools,
-      cancelToken: cancelToken,
-    );
-  }
-
-  static Future<void> _defaultCopy(String text) =>
-      Clipboard.setData(ClipboardData(text: text));
 }
 
-/// AI 修一個書源這件事（[AgentTask]）：開場是書源、校驗結果與試抓，指令是
-/// [AiRepairCommand]，交出與放棄由這裡驗收。工具的結果寫進紀錄、遮掉秘密
-/// 後交給迴圈接進對話。
-final class _RepairAgent implements AgentTask<AiRepairCommand> {
-  _RepairAgent(this.s, this.job) : current = sourceForAi(job.original);
+/// 修復流程給 AI 對話的事（[RepairAgentHost]）：轉給 [AiRepairSession] 的
+/// 私有成員，修復頁看不到。
+final class _AgentHost implements RepairAgentHost {
+  _AgentHost(this.s, this.job);
 
   final AiRepairSession s;
   final AiRepairJob job;
 
-  /// 目前的書源（[sourceForAi] 的格式）：試抓或交出過的那份。
-  Map<String, dynamic> current;
+  @override
+  bool get stopped => s._halting;
 
-  /// 這一輪在修復頁上的那一列。
-  AiRepairStep? step;
+  @override
+  Future<T?> guard<T>(Future<T> Function(CancelToken cancelToken) work) =>
+      s._guard(() => work(s._cancelToken));
 
-  /// 完整紀錄寫到對話的第幾句：每句只寫一次。
-  int logged = 0;
+  @override
+  AiRepairStep addStep(
+    String title, {
+    String? detail,
+    AiRepairStepKind kind = AiRepairStepKind.stage,
+  }) => s._addStep(job, title, detail: detail, kind: kind);
 
-  /// 最後一次試抓到正文的那份書源（JSON 字串）：AI 交出的是同一份時，校驗
-  /// 照「試抓抓到過正文」做（沒過先隔一段時間再校驗一次）。
-  String? _probedOk;
+  @override
+  void finish(AiRepairStep step, String? detail, {bool failed = false}) =>
+      s._finish(step, detail, failed: failed);
 
-  BookSource get original => job.original;
+  @override
+  void fail(String explanation) => s._fail(job, explanation);
 
-  /// 這件修復裡每個請求回過什麼（狀態碼或「沒有回應」），從開場的校驗與
-  /// 試抓起，照順序、同一段裡一樣的只記一次：一下成功、一下 429 或 5xx 的
-  /// 網站，AI 每次成功就以為好了、接著修別段（2026-11-14 白光小说 36 輪
-  /// 用完），程式把這個事實列在開場與結果後面，判斷照舊交給 AI。
-  ///
-  /// 同一個請求是方法、網址、送出的內容與標頭都一樣：只看網址時，白光的
-  /// POST 少帶 submit 回 502、帶了 301，兩個不同的請求被當成時好時壞；換了
-  /// User-Agent 就通是找到修法，也不算。校驗、試抓與工具的請求紀錄都記標頭
-  /// （`RequestLog.sentHeaders`），開場校驗和試抓才對得上。
-  final Map<String, List<String>> _answered = {};
+  @override
+  void notify() => s._notify();
 
-  /// 開場的校驗與試抓裡時好時壞的那一段（[_mixedAnswers]）：只算一次，
-  /// 整件重跑時開場一字不差。
-  String? _openingMixed;
-
-  /// 請求那一行：GET 只寫網址，其他寫方法；轉址的下一跳在網址後面接
-  /// 「（轉址）」，送出的內容寫在「送出：」後面，標頭寫在「標頭：」後面
-  /// （`recordRequestUrl`）。
-  static final RegExp _requestLine = RegExp(
-    r'^(?:(POST|PUT|PATCH|DELETE|HEAD) )?(https?://[^\s（]+)(?:（轉址）)?'
-    r'(?: 送出：(.*?))?(?: 標頭：(.*))?$',
-  );
-
-  static final RegExp _responseLine = RegExp(
-    r'^ *← (?:頁 \d+｜)?(\S+) (\d{3}|沒有回應)',
-  );
-
-  static bool _ok(String status) =>
-      status.length == 3 && (status.startsWith('2') || status.startsWith('3'));
-
-  static bool _failed(String status) =>
-      status == '沒有回應' || status == '429' || status.startsWith('5');
-
-  /// 記下 [text] 裡的回應；其中有請求回過成功也回過失敗時，傳回列出它們的
-  /// 一段，沒有是空字串。回應前面沒有請求那一行的不算（認不出是哪個請求）；
-  /// 轉址後的下一跳是對新網址的 GET。
-  String _mixedAnswers(String text) {
-    final seen = <String, Set<String>>{};
-    ({String url, String key})? request;
-    for (final line in text.split('\n')) {
-      if (_requestLine.firstMatch(line) case final match?) {
-        final method = match.group(1);
-        final url = match.group(2)!;
-        final body = match.group(3);
-        final headers = match.group(4);
-        request = (
-          url: url,
-          key:
-              '${method == null ? '' : '$method '}$url'
-              '${body == null ? '' : ' 送出：$body'}'
-              '${headers == null ? '' : ' 標頭：$headers'}',
-        );
-        continue;
-      }
-      final response = _responseLine.firstMatch(line);
-      if (response == null || request == null) continue;
-      final url = response.group(1)!;
-      final key = url == request.url ? request.key : url;
-      seen.putIfAbsent(key, () => {}).add(response.group(2)!);
-    }
-    for (final MapEntry(key: key, value: statuses) in seen.entries) {
-      _answered.putIfAbsent(key, () => []).addAll(statuses);
-    }
-    final lines = [
-      for (final key in seen.keys)
-        if (_answered[key]! case final all
-            when all.any(_ok) && all.any(_failed))
-          '$key：${all.join('、')}',
-    ];
-    return lines.isEmpty ? '' : '\n\n# 同一個請求這次回過不同的結果\n${lines.join('\n')}';
-  }
+  @override
+  void logProbe(String title, SourceProbeReport probe) =>
+      s._logProbe(title, probe);
 
   @override
   String redact(String text) => s._redact(job, text);
 
   @override
-  List<AiMessage> opening() => aiRepairOpening(
-    source: original,
-    checkResult: job._checkResult!,
-    probe: job._probe!,
-    mixedAnswers: _openingMixed ??= _mixedAnswers(
-      '${job._checkResult!}\n${job._firstProbe!.requests.join('\n')}',
-    ),
+  Future<void> refreshSecrets() => s._refreshSecrets(job);
+
+  @override
+  Future<String?> validate(
+    BookSource candidate,
+    String note, {
+    required bool probeSucceeded,
+  }) => s._validate(
+    job,
+    candidate,
+    note,
+    probeSucceeded: probeSucceeded,
+    last: false,
   );
 
   @override
-  void restart(int attempt, String why) {
-    // 全新的工具狀態：抓過的頁清掉，開場的試抓照原樣重新標頁碼。
-    s._pages.clear();
-    job._probe = s._withPageIds(job._firstProbe!);
-    current = sourceForAi(original);
-    logged = 0;
-    _probedOk = null;
-    // 上一次最後一輪被打斷時還是做著的：收成失敗，「經過」裡不留轉圈的步。
-    for (final last in job.steps) {
-      if (last.state == AiRepairStepState.running) {
-        last.state = AiRepairStepState.failed;
-      }
-    }
-    s._finish(
-      s._addStep(
-        job,
-        '重新開始（第 $attempt 次）',
-        detail: why,
-        kind: AiRepairStepKind.restart,
-      ),
-      why,
-    );
-    s.log
-      ..section('重新開始（第 $attempt 次）')
-      ..both('上一次沒跑完：$why；換一段新的對話，從開場重來');
-  }
-
-  @override
-  void roundStarted(int attempt, int round, List<AiMessage> messages) {
-    job._rounds++;
-    final title = attempt == 1 ? '第 $round 輪' : '第 $attempt 次 · 第 $round 輪';
-    step = s._addStep(
-      job,
-      title,
-      detail: 'AI 回覆中…',
-      kind: AiRepairStepKind.round,
-    );
-    s.log.section(title, round: true);
-    // 完整紀錄照順序寫下每一句，每句只寫一次：對話照原樣一路接下去，每輪
-    // 送出的就是到那時為止的全部。
-    for (final message in messages.skip(logged)) {
-      s.log.message(message.role, message.content);
-    }
-    logged = messages.length;
-  }
-
-  @override
-  void roundEnded(AgentRoundRecord record) {
-    // 按了暫停或結束：做著的那一步已經標好（[AiRepairSession.stop]、[AiRepairSession.pause]）。
-    if (s._stopped) return;
-    final reply = record.reply;
-    if (record.usage case final usage?) s._onUsage?.call(usage);
-    s.log.both(agentRoundText(record));
-    if (reply == null) {
-      final error = record.error ?? '沒有回覆';
-      if (step case final step?) {
-        s._finish(step, error.split('\n').first, failed: true);
-      }
-      s.log.full(error);
-      return;
-    }
-    if (reply.reasoning.isNotEmpty) s.log.thinking(reply.reasoning);
-    if (reply.content.trim().isNotEmpty) s.log.reply(reply.content);
-    for (final call in reply.toolCalls) {
-      s.log.toolCall(call.name, call.arguments);
-    }
-    // AI 回的話接進對話（迴圈做），完整紀錄已經寫了。
-    logged = record.sentMessages + 1;
-  }
-
-  @override
-  void factAdded(String fact) {}
-
-  @override
-  void checkpoint(AgentCheckpoint state) {}
-
-  /// 修書源的工具會改正在修的書源（改了再試抓），照順序執行。
-  @override
-  bool runsAlongside(AiRepairCommand command) => false;
-
-  @override
-  AgentParse<AiRepairCommand> parse(AiToolCall call) {
-    final read = readAiRepairCall(call);
-    if (read.command case final command?) {
-      return AgentCommand(command, read.key);
-    }
-    final malformed = read.malformed;
-    if (step case final step?) s._finish(step, '讀不懂工具呼叫', failed: true);
-    s.log.both(
-      '讀不懂工具呼叫：${read.fact}'
-      '${malformed ? '（這則回覆不接進對話，同一段對話重送）' : ''}',
-    );
-    return AgentBadCommand(read.fact, malformed: malformed);
-  }
-
-  @override
-  String noToolCall(AiReply reply) {
-    if (step case final step?) s._finish(step, '沒有呼叫工具', failed: true);
-    s.log.both('沒有呼叫工具');
-    return '# 這一輪沒有呼叫工具';
-  }
-
-  /// 讀不懂指令裡的東西：步驟標失敗，回 AI 哪裡不對。
-  AgentInvalid invalid(String what, String fact) {
-    if (step case final step?) s._finish(step, what, failed: true);
-    s.log.both(what);
-    return AgentInvalid(fact);
-  }
-
-  /// 指令改過的書源；用了書源沒有的欄位或組不起來是 null（[badChangeReply]
-  /// 說哪裡不對）。
-  (Map<String, dynamic>, BookSource)? candidateOf(AiChange change) {
-    if (aiChangeProblem(change) != null) return null;
-    final json = applyAiChange(current, change);
-    final candidate = AiRepairSession._candidateOrNull(original, json);
-    return candidate == null ? null : (json, candidate);
-  }
-
-  /// [candidateOf] 是 null 時回給 AI 的話。
-  static String badChangeReply(AiChange change) =>
-      switch (aiChangeProblem(change)) {
-        final problem? => '$aiRepairBadCall：$problem',
-        null => aiRepairBadSourceReply,
-      };
-
-  static const AgentStopped _cancelled = AgentStopped(
-    AgentEndKind.cancelled,
-    '已停止',
-  );
-
-  /// 工具的結果；比「結果與前幾次相同」時不看頁碼：同樣的網頁每抓一次就
-  /// 多一個頁碼（2026-11-12 實跑時，一樣的回應因為頁 4、頁 6 被說成不同）。
-  /// [same] 是拿來比的那一份，沒給時比 [text]。
-  AgentToolResult answer(String text, {String? same}) => AgentToolResult(
-    text,
-    same: (same ?? text).replaceAll(RegExp(r'頁 \d+'), '頁 N'),
-  );
-
-  @override
-  Future<AgentResult> execute(AiRepairCommand command) async {
-    final result = await _run(command);
-    // 工具跑完、結果接進對話之前重讀秘密：這一步可能寫了新的 Cookie 或變數。
-    await s._refreshSecrets(job);
-    return switch (result) {
-      // 比「結果與前幾次相同」照工具本身的結果，不算後面附的這段。
-      AgentToolResult(:final text, :final same) => AgentToolResult(
-        '$text${_mixedAnswers(text)}',
-        same: same ?? text,
-      ),
-      AgentRejected(:final reason) => AgentRejected(
-        '$reason${_mixedAnswers(reason)}',
-      ),
-      _ => result,
-    };
-  }
-
-  Future<AgentResult> _run(AiRepairCommand command) async {
-    final step = this.step!;
-    switch (command) {
-      case AiGiveUp(:final reason, :final why):
-        s._finish(step, 'AI 說修不好');
-        s.log.both('AI 說修不好（$why）');
-        job
-          ..confirmedUnfixable = true
-          ..giveUpWhy = why;
-        final label = aiGiveUpLabels[why] ?? why;
-        s._fail(job, 'AI：$label${reason.isEmpty ? '' : '。$reason'}');
-        return const AgentAccepted.gaveUp();
-      case AiFetch(:final url):
-        step.detail = '看網頁 $url…';
-        s._notify();
-        final base =
-            AiRepairSession._candidateOrNull(original, current) ?? original;
-        final watch = Stopwatch()..start();
-        final page = await s._guard(
-          () => s._fetchPage(base, url, s._cancelToken),
-        );
-        if (s._stopped || page == null) return _cancelled;
-        s._finish(step, '看網頁 $url');
-        s.log
-          ..both('看網頁 $url（${AiRepairSession._seconds(watch)}）')
-          ..requests(page.lines, pages: page.pages);
-        // 和抓過的同一頁只給頁碼（[RepairPages.add]）；比前後結果時照完整
-        // 的回應比。
-        return answer(
-          aiRepairFetchReply(url, s._pages.add(page.lines, page.pages)),
-          same: aiRepairFetchReply(url, page.lines),
-        );
-      case AiRead(:final page, :final from, :final length, :final raw):
-        final found = s._pages[page];
-        final reply = found == null
-            ? s._noPage(page)
-            : await readRepairPage(found, from: from, length: length, raw: raw);
-        // 讀頁在別的 isolate 做，回來前按了暫停或結束：步驟已經收成失敗，
-        // 不再蓋回去（同解析頁、跑程式）。
-        if (s._stopped) return _cancelled;
-        s._local(step, '讀頁 $page', reply);
-        return answer(reply);
-      case AiFind(:final page, text: final query, :final from):
-        final found = s._pages[page];
-        final reply = found == null
-            ? s._noPage(page)
-            : await findInRepairPage(found, query, from: from);
-        if (s._stopped) return _cancelled;
-        s._local(step, '在頁 $page 找「$query」', reply);
-        return answer(reply);
-      case AiParse(:final page, :final stage, :final change):
-        final found = s._pages[page];
-        if (found == null) {
-          s._local(step, '解析頁 $page', s._noPage(page));
-          return answer(s._noPage(page));
-        }
-        final BookSource source;
-        if (change == null) {
-          source =
-              AiRepairSession._candidateOrNull(original, current) ?? original;
-        } else {
-          final parsed = candidateOf(change);
-          if (parsed == null) {
-            return invalid('讀不懂 AI 回的書源', badChangeReply(change));
-          }
-          source = parsed.$2;
-        }
-        step.detail = '解析頁 $page…';
-        s._notify();
-        final result = await s._guard(
-          () => s._parsePage(source, stage, found, s._cancelToken),
-        );
-        if (s._stopped || result == null) return _cancelled;
-        final reply =
-            '# 用${change == null ? '目前的' : '改過的'}規則把頁 $page 當成 '
-            '$stage 解析\n$result';
-        s._local(step, '解析頁 $page（$stage）', reply);
-        return answer(reply);
-      case AiJs(:final code):
-        final source =
-            AiRepairSession._candidateOrNull(original, current) ?? original;
-        final pages = {
-          for (final match in RegExp(r'page\(\s*(\d+)\s*\)').allMatches(code))
-            if (s._pages[int.parse(match.group(1)!)] case final page?)
-              page.id: page.body,
-        };
-        step.detail = '跑程式…';
-        s._notify();
-        final result = await s._guard(
-          () => s._runJs(source, code, pages, s._cancelToken),
-        );
-        if (s._stopped || result == null) return _cancelled;
-        s.log.full('### 程式\n$code');
-        s._local(step, '跑程式', '# 程式結果\n$result');
-        return answer('# 程式結果\n$result');
-      case AiTest(:final change, :final from, :final url):
-        final parsed = candidateOf(change);
-        if (parsed == null) {
-          return invalid('讀不懂 AI 回的書源', badChangeReply(change));
-        }
-        final (json, candidate) = parsed;
-        final start = from == 'search'
-            ? null
-            : probeStart(
-                from,
-                keyword: '',
-                url: url,
-                baseUrl: candidate.bookSourceUrl,
-              );
-        if (from != 'search' && start == null) {
-          return invalid(
-            '試抓的 from 不對，或少了 url',
-            '# 讀不懂這個 test：from 要是 search、explore、info、toc 或 content，'
-                '不是 search 時要有 url',
-          );
-        }
-        current = json;
-        final changed = AiRepairSession._changedText(original, candidate);
-        final where = from == 'search' ? '' : '從 $from 開始';
-        step.detail = '$changed，$where試抓中…';
-        s._notify();
-        final watch = Stopwatch()..start();
-        final probe = await s._guard(
-          () => s._probe(candidate, s._cancelToken, start: start),
-        );
-        if (s._stopped || probe == null) return _cancelled;
-        s._logProbe(
-          '$changed，$where試抓（${AiRepairSession._seconds(watch)}）：'
-          '${probe.summary}',
-          probe,
-        );
-        if (!probe.succeeded) {
-          s._finish(step, '$changed，$where試抓：${probe.summary}');
-          return answer(aiRepairProbeReply(s._withPageIds(probe)));
-        }
-        if (probe.unjoinedNextPage case final next?) {
-          final hasRule = (candidate.ruleContent?.nextContentUrl ?? '')
-              .trim()
-              .isNotEmpty;
-          final fact =
-              '正文頁有指向同一章下一頁的連結（$next），'
-              '${hasRule ? 'nextContentUrl 沒有抓到它' : 'ruleContent 沒有 nextContentUrl'}'
-              '，每章只抓到第一頁';
-          s._finish(step, '$changed，$where試抓：$fact', failed: true);
-          s.log.both('試抓：$fact');
-          return AgentRejected('# 書源校驗沒過：$fact');
-        }
-        // 試抓不交出：AI 看過結果自己 submit（使用者 2026-11-13，ADR 0054）。
-        _probedOk = jsonEncode(json);
-        final mismatch = searchInfoMismatch(probe);
-        s._finish(step, '$changed，$where試抓：${probe.summary}');
-        if (mismatch != null) s.log.both('試抓：$mismatch');
-        return answer(
-          aiRepairProbeReply(s._withPageIds(probe), mismatch: mismatch),
-        );
-      case AiSubmit(:final change, :final note):
-        final parsed = candidateOf(change);
-        if (parsed == null) {
-          return invalid('讀不懂 AI 回的書源', badChangeReply(change));
-        }
-        final (json, candidate) = parsed;
-        current = json;
-        final changed = AiRepairSession._changedText(original, candidate);
-        s._finish(step, '$changed，交出');
-        s.log.both('$changed，交出');
-        return submitted(
-          await s._validate(
-            job,
-            candidate,
-            note,
-            probeSucceeded: _probedOk == jsonEncode(json),
-            last: false,
-          ),
-        );
-    }
-  }
-
-  /// 交出後的驗收結果：[failure] 是沒過的原因（[AiRepairSession._validate]）。
-  AgentResult submitted(String? failure) {
-    if (failure != null) return AgentRejected(failure);
-    if (s._stopped) return _cancelled;
-    if (job.outcome == AiRepairOutcome.repaired) return const AgentAccepted();
-    // 規則沒改、只是網站時好時壞（[AiRepairSession._validate]）：算放棄。
-    if (job.confirmedUnfixable) return const AgentAccepted.gaveUp();
-    // 校驗過了卻存不進去（書源在修的時候被改過或刪掉）。
-    return AgentStopped(AgentEndKind.failed, job.explanation ?? '存不進去');
-  }
-}
-
-/// 存修好的書源（AI 修好、換網址或套用同網站修好的規則，ADR 0054）。修的
-/// 這段時間書源被刪掉或改過（例如同步）時不存：存了會蓋掉別處的改動、或把
-/// 刪掉的書源加回來。網址換了開頭時照書源編輯改網址的做法搬過去，書架上的
-/// 書跟著搬；新網址已經有別的書源時不存。存之前留下改前的版本。
-Future<void> saveRepairedSource(
-  BookSource repaired,
-  BookSource original, {
-  AiRepairBackups? backups,
-}) async {
-  final dao = getIt<BookSourceDao>();
-  final current = await dao.getByUrl(original.bookSourceUrl);
-  if (current == null) {
-    throw const AiRepairConflict('修的這段時間書源被刪掉了，沒有存。');
-  }
-  if (changedParts(original, current).isNotEmpty ||
-      current.bookSourceName != original.bookSourceName) {
-    throw const AiRepairConflict('修的這段時間書源被改過了（例如同步），沒有存。');
-  }
-  // 修好了：之前標的「AI 修不好」拿掉。開關、排序與權重照現在的：修的這段
-  // 時間在別處（例如同步）改了，不蓋回修之前的值。
-  repaired
-    ..removeGroup(aiUnfixableSourceGroupTag)
-    ..enabled = current.enabled
-    ..enabledExplore = current.enabledExplore
-    ..customOrder = current.customOrder
-    ..weight = current.weight;
-  final moved = repaired.bookSourceUrl != original.bookSourceUrl;
-  if (moved && await dao.getByUrl(repaired.bookSourceUrl) != null) {
-    throw AiRepairConflict('新網址 ${repaired.bookSourceUrl} 已經有別的書源，沒有存。');
-  }
-  await (backups ?? AiRepairBackups.instance).put(
-    repaired.bookSourceUrl,
-    current.toJson(),
-  );
-  await BookSourceService().saveEditedSource(
-    repaired,
-    previousUrl: moved ? original.bookSourceUrl : null,
-  );
-}
-
-/// 修好的書源存不進去：修的這段時間書源被刪掉或改過。
-class AiRepairConflict implements Exception {
-  const AiRepairConflict(this.message);
-  final String message;
-
-  @override
-  String toString() => message;
-}
-
-/// 把書源還原成 AI 改之前的那份，並刪掉留著的改前版本。AI 換過網址開頭
-/// 的，網址也換回去，書架上的書跟著搬回去。
-///
-/// 傳回真的還原了沒：沒有改前版本、或書源已經刪掉了是 false。
-Future<bool> restoreAiRepair(
-  String sourceUrl, {
-  AiRepairBackups? backups,
-}) async {
-  final store = backups ?? AiRepairBackups.instance;
-  final json = await store.get(sourceUrl);
-  if (json == null) return false;
-  // 書源已經刪掉了（例如另一台同步刪的）：不還原，免得把它加回來。
-  final current = await getIt<BookSourceDao>().getByUrl(sourceUrl);
-  if (current == null) {
-    await store.remove(sourceUrl);
-    return false;
-  }
-  // 換回改前的規則也是改了一版：記下時間，匯入預覽才認得這是新的一版；
-  // 規則和現在一樣就照現在的。
-  final previous = BookSource.fromJson(json);
-  previous.lastUpdateTime = rulesChanged(current, previous)
-      ? DateTime.now().millisecondsSinceEpoch
-      : current.lastUpdateTime;
-  await BookSourceService().saveEditedSource(
-    previous,
-    previousUrl: previous.bookSourceUrl == sourceUrl ? null : sourceUrl,
-  );
-  await store.remove(sourceUrl);
-  return true;
+  void countRound() => job._rounds++;
 }

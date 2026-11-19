@@ -8,7 +8,7 @@ import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/shared/widgets/book/book_cover_widget.dart';
 import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_read_progress.dart';
-import 'package:night_reader/shared/navigation/app_page_transition.dart';
+import 'package:night_reader/shared/navigation/transition_origin.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';

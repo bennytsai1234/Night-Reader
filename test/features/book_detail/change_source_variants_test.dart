@@ -71,6 +71,15 @@ class _HangsOnTraditionalName extends _SingleScriptSites {
   }
 }
 
+/// 搜尋快取讀不出來（資料庫出錯）。
+class _BrokenSearchBookDao extends SearchBookDao {
+  _BrokenSearchBookDao(super.db);
+
+  @override
+  Future<List<SearchBook>> getByNames(Iterable<String> names) =>
+      Future.error(StateError('資料庫壞了'));
+}
+
 const _twSite = 'https://tw.example';
 const _cnSite = 'https://cn.example';
 
@@ -146,6 +155,29 @@ void main() {
 
     expect(provider.allResults.map((r) => r.origin), [_twSite]);
   });
+
+  test(
+    'a search that cannot read the cache stops searching and says why',
+    () async {
+      final provider = BookDetailChangeSourceProvider(
+        Book(
+          bookUrl: '$_twSite/book',
+          origin: _twSite,
+          name: '劍來',
+          author: '烽火戲諸侯',
+        ),
+        service: _SingleScriptSites(),
+        sourceDao: sourceDao,
+        searchBookDao: _BrokenSearchBookDao(db),
+        autoStart: false,
+      );
+      addTearDown(provider.dispose);
+      // 面板右上角的「重新搜尋」。
+      await provider.refreshSearch();
+      expect(provider.isSearching, isFalse);
+      expect(provider.status, startsWith('搜尋失敗'));
+    },
+  );
 
   test('one name timing out keeps what the other name found', () async {
     final provider = BookDetailChangeSourceProvider(

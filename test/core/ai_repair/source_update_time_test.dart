@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
-import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_apply.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';

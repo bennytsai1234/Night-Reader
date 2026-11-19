@@ -3,13 +3,13 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/core/ai_repair/agent_loop.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_log.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
-import 'package:night_reader/core/ai_repair/ai_repair_session.dart'
-    show AiRepairStep, AiRepairStepKind, AiRepairStepState;
+import 'package:night_reader/core/ai_repair/ai_repair_step.dart';
 import 'package:night_reader/core/models/search/ai_find_record.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
@@ -217,23 +217,23 @@ class AiFindSession extends ChangeNotifier {
 
   AgentStats? stats;
 
-  bool _started = false;
-  bool _stopped = false;
-  bool _pausing = false;
-  bool _paused = false;
+  WorkPhase _phase = WorkPhase.ready;
   bool _disposed = false;
 
-  bool get isRunning => _started && outcome == null && !_paused;
-  bool get isFinished => outcome != null;
+  /// 走到哪：還沒開始、做著、正在暫停、正在結束、已暫停（停在一輪開頭，等
+  /// 使用者按繼續或結束）、做完（[outcome] 有值）。
+  WorkPhase get phase => _phase;
 
-  /// 按了結束、還沒停好或已經停好。
-  bool get isStopped => _stopped;
+  bool get isRunning => _phase.active;
+  bool get isFinished => _phase == WorkPhase.finished;
+
+  /// 按了結束、還沒停好（正在暫停時按的也算：結束蓋過暫停）。
+  bool get isStopped => _phase == WorkPhase.ending;
 
   /// 按了暫停、正在等進行中的搜尋停下。
-  bool get isPausing => _pausing && !_paused;
+  bool get isPausing => _phase == WorkPhase.pausing;
 
-  /// 停在一輪開頭，等使用者按繼續或結束。
-  bool get isPaused => _paused;
+  bool get isPaused => _phase == WorkPhase.paused;
 
   /// 現在在做的事：最後一輪的工具（同一輪幾個用「；」接起來），還沒叫工具
   /// 時是 [aiFindThinking]。頁面與通知內文用它。
@@ -250,8 +250,8 @@ class AiFindSession extends ChangeNotifier {
   /// 開始找，或從存的那一輪接著找；回傳找完（結束、出錯也算）或暫停好的
   /// 時刻。
   Future<void> start() async {
-    if (_started) return;
-    _started = true;
+    if (_phase != WorkPhase.ready) return;
+    _phase = WorkPhase.running;
     _notify();
     final resume = _resume;
     _resume = null;
@@ -289,9 +289,9 @@ class AiFindSession extends ChangeNotifier {
       return;
     }
     stats = end.stats;
-    if (end.kind == AgentEndKind.cancelled && _pausing && !_stopped) {
+    if (end.kind == AgentEndKind.cancelled && _phase == WorkPhase.pausing) {
       // 暫停：結果不寫、紀錄不收尾；接著做的是最後存的那一輪開頭。
-      _paused = true;
+      _phase = WorkPhase.paused;
       log
         ..section('暫停')
         ..both('暫停了，存的是第 ${stats!.rounds} 輪問完之後的樣子');
@@ -331,11 +331,14 @@ class AiFindSession extends ChangeNotifier {
   /// 結束：正在跑的搜尋與抓取跟著取消，結果照「已結束」收尾。暫停中（或
   /// 還沒開始接著做）的直接收尾。
   void stop() {
-    if (_stopped || isFinished) return;
-    _stopped = true;
-    if (!_started || _paused) {
-      _end(AiFindOutcome.stopped, '已結束');
-      return;
+    switch (_phase) {
+      case WorkPhase.ending || WorkPhase.finished:
+        return;
+      case WorkPhase.ready || WorkPhase.paused:
+        _end(AiFindOutcome.stopped, '已結束');
+        return;
+      case _:
+        _phase = WorkPhase.ending;
     }
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已結束');
     final last = rounds.lastOrNull;
@@ -350,8 +353,8 @@ class AiFindSession extends ChangeNotifier {
   /// 暫停：正在跑的搜尋與抓取跟著取消；接著做時從最後存的那一輪開頭問起，
   /// 這一輪做到一半的不留。
   void pause() {
-    if (!isRunning || _pausing || _stopped) return;
-    _pausing = true;
+    if (_phase != WorkPhase.running) return;
+    _phase = WorkPhase.pausing;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已暫停');
     _notify();
   }
@@ -396,6 +399,7 @@ class AiFindSession extends ChangeNotifier {
   void _end(AiFindOutcome value, String? reason) {
     outcome = value;
     failure = reason;
+    _phase = WorkPhase.finished;
     final last = rounds.lastOrNull;
     if (last != null && last.state == AiRepairStepState.running) {
       last.state = value == AiFindOutcome.found
@@ -632,7 +636,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     s.log.both(agentRoundText(record));
     final reply = record.reply;
     if (reply == null) {
-      if (!s._stopped) {
+      if (s._phase != WorkPhase.ending) {
         _finishRound((record.error ?? '沒有回覆').split('\n').first, failed: true);
       }
       s.log.full(record.error ?? '沒有回覆');

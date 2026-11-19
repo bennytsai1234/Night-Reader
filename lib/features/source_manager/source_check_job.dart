@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/core/background_work/paused_work_file.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/shared/navigation/root_navigator.dart';
 
@@ -140,7 +141,7 @@ class PausedSourceCheck extends ChangeNotifier {
 }
 
 /// 照 [CheckSourceService.check] 校驗：測試換掉它。
-typedef SourceChecker = Future<void> Function(
+typedef SourceCheckRunner = Future<void> Function(
   List<String> urls, {
   required int doneBefore,
   required List<SourceCheckEntry> earlier,
@@ -200,28 +201,30 @@ class SourceCheckJob implements BackgroundJob {
   final int Function() _done;
   final int Function() _total;
   final VoidCallback _cancel;
-  final SourceChecker _check;
+  final SourceCheckRunner _check;
   final PausedSourceCheck _paused;
   final BackgroundWork _work;
   final NavigatorState? Function() _navigator;
   late final PausedWorkFile _file;
-  bool _pausing = false;
-  bool _ending = false;
+  WorkPhase _phase = WorkPhase.ready;
 
   /// 正在跑的那一次：書源管理的「暫停」「結束」交給它。
   static SourceCheckJob? current;
 
-  bool get isPausing => _pausing && !_ending;
-  bool get isEnding => _ending;
+  /// 走到哪：做著、正在暫停、正在結束；跑完是已暫停（交給
+  /// [PausedSourceCheck]）或做完。
+  WorkPhase get phase => _phase;
+  bool get isPausing => _phase == WorkPhase.pausing;
+  bool get isEnding => _phase == WorkPhase.ending;
 
   BackgroundWorkStatus get status {
     final total = _total();
     final done = _done();
     final progress = total > 0 ? done / total : 0.0;
-    if (_pausing || _ending) {
+    if (_phase.settling) {
       return BackgroundWorkStatus.settling(
         '校驗書源',
-        pausing: !_ending,
+        pausing: _phase == WorkPhase.pausing,
         progress: progress,
       );
     }
@@ -239,6 +242,7 @@ class SourceCheckJob implements BackgroundJob {
     // 一次一件（ADR 0058）：入口已經擋住，這裡是最後一道。
     if (!_work.begin(this, status)) return;
     current = this;
+    _phase = WorkPhase.running;
     void update() => _work.update(this, status);
     _changes.addListener(update);
     _file.saveLater(plan.encode);
@@ -250,16 +254,18 @@ class SourceCheckJob implements BackgroundJob {
         onFinished: (url, entry) {
           plan.finished.add(url);
           if (entry != null) plan.entries.add(entry);
-          if (!_ending) _file.saveLater(plan.encode);
+          if (_phase != WorkPhase.ending) _file.saveLater(plan.encode);
         },
       );
     } finally {
       _changes.removeListener(update);
       if (identical(current, this)) current = null;
       _work.end(this);
-      if (_pausing && !_ending && plan.remaining.isNotEmpty) {
+      if (_phase == WorkPhase.pausing && plan.remaining.isNotEmpty) {
+        _phase = WorkPhase.paused;
         _paused.hold(plan, _file);
       } else {
+        _phase = WorkPhase.finished;
         await _file.close();
       }
     }
@@ -268,8 +274,8 @@ class SourceCheckJob implements BackgroundJob {
   /// 暫停：正在校驗的那幾個停下，接著做時重校；做完的結果留著。
   @override
   void pauseFromSystem() {
-    if (_pausing || _ending) return;
-    _pausing = true;
+    if (_phase.settling) return;
+    _phase = WorkPhase.pausing;
     _work.update(this, status);
     _cancel();
   }
@@ -277,8 +283,8 @@ class SourceCheckJob implements BackgroundJob {
   /// 結束：做完的結果留著，寫成上次校驗摘要。
   @override
   void endFromSystem() {
-    if (_ending) return;
-    _ending = true;
+    if (_phase == WorkPhase.ending) return;
+    _phase = WorkPhase.ending;
     _work.update(this, status);
     unawaited(_file.close());
     _cancel();

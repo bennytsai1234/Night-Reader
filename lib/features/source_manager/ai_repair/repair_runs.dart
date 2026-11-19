@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
@@ -69,6 +70,28 @@ double repairBatchProgress(SourceRepairBatch batch) {
   return (index + part) / repairStages.length;
 }
 
+/// 頁面那層自己記的：工作不知道的那幾段。做著時頁面與通知讀工作本身的階段
+/// （[RepairRun.workPhase]）。
+enum _RunStage {
+  /// 頁面剛推入，推入動畫還沒播完。
+  notStarted,
+
+  /// 工作在跑（含正在暫停、正在結束）。
+  working,
+
+  /// 工作停在做完的那一步回來了，等使用者。
+  paused,
+
+  /// 暫停中按了繼續、正在讀回存檔。
+  resuming,
+
+  /// 暫停中按了結束、正在收尾（刪存檔、寫結果）。
+  endingPaused,
+
+  /// 做完（含結束、出錯）。
+  finished,
+}
+
 /// 一件背景工作的頁面那一半：頁面關了照跑，入口再按推回同一件（ADR 0058）。
 /// 做完、而且有頁面開著看過結果之後，最後一頁關掉才算結束。開 App 時讀回的
 /// 可以是暫停中（[paused]）或做完還沒看過（[finished]，放到背景的搜尋）。
@@ -84,15 +107,17 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
     bool finished = false,
   }) : _work = work ?? BackgroundWork.instance,
        _navigator = navigator ?? (() => rootNavigatorKey.currentState),
-       _started = paused || finished,
-       _paused = paused,
-       _finished = finished {
+       _stage = finished
+           ? _RunStage.finished
+           : paused
+           ? _RunStage.paused
+           : _RunStage.notStarted {
     // 暫停中的頁面要知道位置空出來了沒，「繼續」才跟著能按。
     _work.addListener(_slotChanged);
   }
 
   void _slotChanged() {
-    if (_paused) notifyListeners();
+    if (isPaused) notifyListeners();
   }
 
   @override
@@ -104,50 +129,84 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
   final BackgroundWork _work;
   final NavigatorState? Function() _navigator;
 
-  bool _started;
-  bool _finished;
+  _RunStage _stage;
+
+  /// 做完之後有頁面開著看過結果（和做完同時成立，不是階段）。
   bool _seen = false;
-  bool _paused;
-  bool _resuming = false;
-  bool _ending = false;
   int _pages = 0;
   Route<void>? _topRoute;
 
-  bool get isFinished => _finished;
+  /// 頁面與通知讀的階段（階段表見 `docs/state-machines.md`「背景工作的生命
+  /// 週期」）：做著時照工作本身，其他時候照頁面那層記的。工作本身已經停好、
+  /// 頁面那層還在收尾（存檔、刪存檔、寫過去的找書）時，照它要去的那一頭：
+  /// 停好的是正在暫停，做完的是正在結束。
+  WorkPhase get phase => switch (_stage) {
+    _RunStage.notStarted => WorkPhase.ready,
+    _RunStage.working => switch (workPhase) {
+      WorkPhase.pausing || WorkPhase.paused => WorkPhase.pausing,
+      WorkPhase.ending || WorkPhase.finished => WorkPhase.ending,
+      _ => WorkPhase.running,
+    },
+    _RunStage.paused => WorkPhase.paused,
+    _RunStage.resuming => WorkPhase.resuming,
+    _RunStage.endingPaused => WorkPhase.ending,
+    _RunStage.finished => WorkPhase.finished,
+  };
 
-  /// 停在做完的那一步，等使用者按繼續或結束。
-  bool get isPaused => _paused;
+  /// 工作本身走到哪：做著、正在暫停、正在結束。
+  @protected
+  WorkPhase get workPhase;
+
+  bool get isFinished => _stage == _RunStage.finished;
+
+  /// 暫停中：停在做完的那一步，等使用者按繼續或結束（按了繼續正在讀回、按了
+  /// 結束正在收尾的也算，頁面照舊畫暫停中的樣子）。
+  bool get isPaused => switch (_stage) {
+    _RunStage.paused || _RunStage.resuming || _RunStage.endingPaused => true,
+    _ => false,
+  };
 
   /// 正在跑（含按了暫停或結束、還沒停好）。
-  bool get isRunning => _started && !_finished && !_paused;
+  bool get isRunning => _stage == _RunStage.working;
 
   /// 暫停中按了繼續、正在讀回存檔，或按了結束、正在收尾。
-  bool get isSettling => _resuming || _ending;
-
-  /// 暫停中按了結束、正在收尾。
-  bool get isEnding => _ending;
+  bool get isSettling =>
+      _stage == _RunStage.resuming || _stage == _RunStage.endingPaused;
 
   /// 開著這一件的頁面數。
   @protected
   int get openPages => _pages;
 
   /// 做完而且看過了：入口可以收掉它、下次重開一件。
-  bool get isDone => _finished && _seen && _pages == 0;
+  bool get isDone => isFinished && _seen && _pages == 0;
 
   /// 頁面的「繼續」能不能按：暫停中，而且沒有別的背景工作在跑。
-  bool get canResume => _paused && !isSettling && !_work.isBusy;
+  bool get canResume => _stage == _RunStage.paused && !_work.isBusy;
 
   /// 這件工作暫停後能接著做。不能的，暫停照結束處理。
   bool get canPause => false;
 
+  /// 做著時通知欄的樣子；正在暫停或結束時換成「正在暫停…」「正在結束…」
+  /// （[status]）。
+  @protected
+  BackgroundWorkStatus get runningStatus;
+
   /// 通知欄這時要顯示的樣子。
-  BackgroundWorkStatus get status;
+  BackgroundWorkStatus get status {
+    final running = runningStatus;
+    final phase = this.phase;
+    if (!phase.settling) return running;
+    return BackgroundWorkStatus.settling(
+      running.title,
+      pausing: phase == WorkPhase.pausing,
+      progress: running.progress,
+    );
+  }
 
-  /// 開始做或接著做；回傳做完（結束、出錯也算）或暫停好的時刻。
-  Future<void> run();
-
-  /// [run] 回來時是暫停好了（不是做完）。
-  bool get workPaused => false;
+  /// 開始做或接著做；暫停好了回傳 [WorkPhase.paused]，做完（結束、出錯也算）
+  /// 回傳 [WorkPhase.finished]。
+  @protected
+  Future<WorkPhase> run();
 
   /// 結束：正在做的那一件不改書源，已經存的照存。
   void stop();
@@ -180,17 +239,18 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
   /// 推入動畫播完才開始（ADR 0018）：頁面呼叫。要在 App 看得到時開始，
   /// Android 才肯開前景服務。
   void start() {
-    if (_started) return;
-    _started = true;
+    if (_stage != _RunStage.notStarted) return;
     _launch();
   }
 
   void _launch() {
+    _stage = _RunStage.working;
     _work.begin(this, status);
+    WorkPhase ended = WorkPhase.finished;
     unawaited(
-      run().whenComplete(() {
-        if (workPaused && !_finished) {
-          _paused = true;
+      run().then((value) => ended = value).whenComplete(() {
+        if (ended == WorkPhase.paused) {
+          _stage = _RunStage.paused;
         } else {
           _finish();
         }
@@ -201,68 +261,71 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
   }
 
   void _finish() {
-    _finished = true;
+    _stage = _RunStage.finished;
     if (_pages > 0) _seen = true;
   }
 
   /// 頁面的「繼續」：位置空著才接著做。
   Future<void> resume() async {
     if (!canResume) return;
-    _resuming = true;
+    _stage = _RunStage.resuming;
     notifyListeners();
     try {
       if (!await prepareResume()) return;
-      if (!_paused || _ending || _finished || _work.isBusy) {
+      // 讀回的時候按了結束、或位置被別件佔了：建好的不用了。
+      if (_stage != _RunStage.resuming || _work.isBusy) {
         discardResume();
         return;
       }
       commitResume();
-      _paused = false;
       _launch();
     } finally {
-      _resuming = false;
+      if (_stage == _RunStage.resuming) _stage = _RunStage.paused;
       notifyListeners();
     }
   }
 
   /// 頁面的「暫停」：不能暫停的工作照結束處理。
   void pauseNow() {
-    if (!isRunning) return;
+    if (phase != WorkPhase.running) return;
     canPause ? pause() : stop();
     changed();
   }
 
-  /// 頁面與通知的「結束」：做著的停下收尾，暫停中的直接收尾。
+  /// 頁面與通知的「結束」：做著的停下收尾（正在暫停的也是：結束蓋過暫停），
+  /// 暫停中的直接收尾。
   Future<void> end() async {
-    if (_finished || _ending) return;
-    if (!_paused) {
-      if (!_started) return;
-      stop();
-      changed();
-      return;
-    }
-    _ending = true;
-    notifyListeners();
-    try {
-      await endPaused();
-    } finally {
-      _ending = false;
-      _paused = false;
-      _finish();
-      notifyListeners();
+    switch (_stage) {
+      case _RunStage.working:
+        stop();
+        changed();
+        return;
+      case _RunStage.paused || _RunStage.resuming:
+        _stage = _RunStage.endingPaused;
+        notifyListeners();
+        try {
+          await endPaused();
+        } finally {
+          _finish();
+          notifyListeners();
+        }
+      case _RunStage.notStarted || _RunStage.endingPaused || _RunStage.finished:
+        return;
     }
   }
 
   /// 工作的內容變了：更新通知。
   @protected
   void changed() {
-    if (isRunning) _work.update(this, status);
+    // 工作本身停好或做完之後不再送：通知留在「正在暫停…」「正在結束…」，
+    // 等收尾完一次收掉，不會又放回按鈕。
+    if (isRunning && workPhase.active) _work.update(this, status);
   }
 
   /// 頁面打開與關掉時呼叫，算有沒有人看著。
   void attach() {
     _pages++;
-    if (_finished) _seen = true;
+    if (isFinished) _seen = true;
   }
 
   /// 最上面那一頁的路由：點通知時它已經在最上面就不再推一頁。
@@ -353,7 +416,6 @@ class BatchRepairRun extends RepairRun {
   final BatchRepairReopen _reopen;
   int _seenEdits = 0;
   int _savedDone = -1;
-  bool _pausedWork = false;
   SourceRepairBatch? _next;
 
   static Future<SourceRepairBatch?> _reopenWithService(
@@ -431,35 +493,25 @@ class BatchRepairRun extends RepairRun {
   bool get canPause => true;
 
   @override
-  bool get workPaused => _pausedWork;
+  WorkPhase get workPhase => _batch.phase;
 
   @override
-  BackgroundWorkStatus get status =>
-      _batch.isStopped || (_batch.isPaused && _batch.isRunning)
-      ? BackgroundWorkStatus.settling(
-          title,
-          pausing: _batch.isPaused,
-          progress: repairBatchProgress(_batch),
-        )
-      : BackgroundWorkStatus(
-          title: title,
-          text:
-              '${_repairStageShortTitle(_batch.stage)}，${repairStageProgress(_batch)}',
-          progress: repairBatchProgress(_batch),
-          pausable: true,
-        );
+  BackgroundWorkStatus get runningStatus => BackgroundWorkStatus(
+    title: title,
+    text:
+        '${_repairStageShortTitle(_batch.stage)}，${repairStageProgress(_batch)}',
+    progress: repairBatchProgress(_batch),
+    pausable: true,
+  );
 
   @override
-  Future<void> run() async {
-    _pausedWork = false;
+  Future<WorkPhase> run() async {
     _savedDone = -1;
     _save();
     await _batch.start();
-    if (_batch.isPaused) {
-      _pausedWork = true;
-      return;
-    }
+    if (_batch.isPaused) return WorkPhase.paused;
     await _file.close();
+    return WorkPhase.finished;
   }
 
   @override
@@ -561,7 +613,6 @@ class SingleRepairRun extends RepairRun {
   final PausedWorkFile _file;
   final SingleRepairReopen _reopen;
   final Future<void> Function(BookSource source, String? reason) _markUnfixable;
-  bool _pausedWork = false;
   int _sourceEdits = 0;
 
   @override
@@ -581,24 +632,17 @@ class SingleRepairRun extends RepairRun {
   bool get canPause => true;
 
   @override
-  bool get workPaused => _pausedWork;
+  WorkPhase get workPhase => _session.phase;
 
   @override
-  BackgroundWorkStatus get status {
-    final title = 'AI 修復 · ${_session.job.original.bookSourceName}';
-    if (_session.isStopped || (_session.isPaused && _session.isRunning)) {
-      return BackgroundWorkStatus.settling(title, pausing: _session.isPaused);
-    }
-    return BackgroundWorkStatus(
-      title: title,
-      text: _session.job.steps.lastOrNull?.line ?? '準備中…',
-      pausable: true,
-    );
-  }
+  BackgroundWorkStatus get runningStatus => BackgroundWorkStatus(
+    title: 'AI 修復 · ${_session.job.original.bookSourceName}',
+    text: _session.job.steps.lastOrNull?.line ?? '準備中…',
+    pausable: true,
+  );
 
   @override
-  Future<void> run() async {
-    _pausedWork = false;
+  Future<WorkPhase> run() async {
     _file.save(
       jsonEncode({
         'version': _repairProgressVersion,
@@ -607,10 +651,7 @@ class SingleRepairRun extends RepairRun {
       }),
     );
     await _session.start();
-    if (_session.isPaused) {
-      _pausedWork = true;
-      return;
-    }
+    if (_session.isPaused) return WorkPhase.paused;
     // 單一修復也必須保留「網站不穩定＝無法修復」的可移除狀態。
     if (_session.job.confirmedUnfixable &&
         _session.job.giveUpWhy == 'site_unstable') {
@@ -618,6 +659,7 @@ class SingleRepairRun extends RepairRun {
       _sourceEdits++;
     }
     await _file.close();
+    return WorkPhase.finished;
   }
 
   @override

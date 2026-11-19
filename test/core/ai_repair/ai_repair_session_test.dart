@@ -8,9 +8,12 @@ import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_apply.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_step.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source_check/source_check_isolate.dart';
+import 'package:night_reader/core/source_check/source_checker.dart';
 
 import '../../support/fake_ai.dart';
 
@@ -1348,6 +1351,39 @@ void main() {
 
     expect(applied, hasLength(1));
     expect(s.job.outcome, AiRepairOutcome.repaired);
+  });
+
+  test('pausing and then ending while the fixed source is being saved reports '
+      'it as saved, not as ended unchanged', () async {
+    late AiRepairSession s;
+    s = AiRepairSession(
+      source: _source('https://site.example'),
+      service: _service,
+      check: (source, _) async => _checked(source),
+      probe: (source, _, {start}) async => _probe(source),
+      ask: (_, _) async => fakeAiReply(_command('submit')),
+      apply: (source, _) async {
+        s
+          ..pause()
+          ..stop();
+        applied.add(source);
+      },
+      secrets: (_) async => const {},
+      backups: backups,
+    );
+
+    await s.start();
+
+    expect(applied, hasLength(1));
+    expect(s.job.outcome, AiRepairOutcome.repaired);
+    expect(s.isFinished, isTrue);
+    expect(s.isPaused, isFalse);
+    expect(s.log.summary, isNot(contains('已結束，書源沒有改')));
+    expect(
+      [for (final step in s.job.steps) step.detail],
+      isNot(contains('已結束')),
+      reason: '存檔中按的暫停與結束都等存完，不標在步驟上',
+    );
   });
 
   test('a fix is not saved over a source that changed or was deleted while '

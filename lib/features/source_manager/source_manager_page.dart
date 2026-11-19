@@ -14,7 +14,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:provider/provider.dart';
 
-import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_apply.dart';
 
 import 'ai_repair/ai_repair_page.dart';
 import 'ai_repair/ai_repair_settings_page.dart';
