@@ -67,6 +67,10 @@ final class AiRepairLog {
 
   static String _same(String text) => text;
 
+  /// 紀錄裡寫的花了幾秒（一位小數）。
+  static String seconds(Stopwatch watch) =>
+      '${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒';
+
   /// 還沒寫任何一段。
   bool get isEmpty => _blocks.isEmpty;
 
