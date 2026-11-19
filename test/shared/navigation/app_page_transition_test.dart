@@ -733,9 +733,9 @@ void main() {
         expect(tester.getCenter(find.text('新頁')), const Offset(400, 300));
 
         // 每一頁相鄰兩格的差都在正常換頁一格走得到的範圍內：停著與被帶著
-        // 動的兩頁一格最多約 45，第三頁自己推入、返回時最多約 105（展開）；
-        // 改前新頁一跳 80–1500。
-        const limits = {'主頁': 60.0, '新頁': 60.0, '第三頁': 120.0};
+        // 動的兩頁一格最多約 45，第三頁自己推入、返回時最多約 150（展開縮回
+        // 卡片的開頭）；改前新頁一跳 80–1500、第三頁放開時一跳約 470。
+        const limits = {'主頁': 60.0, '新頁': 60.0, '第三頁': 200.0};
         for (var i = 1; i < frames.length; i++) {
           for (final MapEntry(key: text, value: now) in frames[i].entries) {
             final before = frames[i - 1][text];
@@ -998,6 +998,68 @@ void main() {
         expect(tester.getCenter(find.text('新頁')), const Offset(400, 300));
         expect(route.animation!.value, 1);
         expect(route.popGestureEnabled, isTrue);
+      });
+    }
+
+    for (final (transition, ending) in [
+      for (final transition in AppPageTransition.values)
+        for (final ending in ['commitBackGesture', 'cancelBackGesture'])
+          (transition, ending),
+    ]) {
+      testWidgets('${transition.name}: a page pushed mid-gesture ($ending) '
+          'makes no page jump until this page is whole again', (tester) async {
+        await pumpApp(tester, transition);
+        await tester.tapAt(card.center);
+        await push(tester);
+        final page = tester.element(find.text('新頁'));
+        await send(tester, 'startBackGesture', event(0, 0));
+        await send(tester, 'updateBackGestureProgress', event(200, 0.3));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 40));
+        const frame = Duration(milliseconds: 8);
+        final frames = <Map<String, List<double>>>[];
+        void record() => frames.add({
+          for (final text in ['主頁', '新頁', '第三頁'])
+            if (find.text(text).evaluate().isNotEmpty)
+              text: poseOf(tester, text),
+        });
+        Future<void> pumpFrames(int count) async {
+          for (var i = 0; i < count; i++) {
+            await tester.pump(frame);
+            record();
+          }
+        }
+
+        record();
+        // 系統手勢途中推入第三頁（系統手勢不會被取消），推入途中才放開。
+        Navigator.push(
+          page,
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(body: Center(child: Text('第三頁'))),
+          ),
+        );
+        await pumpFrames(6);
+        await send(tester, ending);
+        await pumpFrames(80);
+        expect(Navigator.of(home).userGestureInProgress, isFalse);
+        Navigator.pop(tester.element(find.text('第三頁')));
+        await pumpFrames(140);
+        expect(tester.getCenter(find.text('新頁')), const Offset(400, 300));
+        expect(Navigator.of(home).userGestureInProgress, isFalse);
+
+        // 同左緣那一項的門檻。
+        const limits = {'主頁': 60.0, '新頁': 60.0, '第三頁': 200.0};
+        for (var i = 1; i < frames.length; i++) {
+          for (final MapEntry(key: text, value: now) in frames[i].entries) {
+            final before = frames[i - 1][text];
+            if (before == null) continue;
+            expect(
+              distance(before, now),
+              lessThan(limits[text]!),
+              reason: '$text 第 $i 格',
+            );
+          }
+        }
       });
     }
 
