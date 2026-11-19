@@ -654,6 +654,21 @@ void main() {
       },
     );
 
+    test('passing a chapter without text keeps the highlight on the sentence '
+        'read last', () async {
+      final third = Completer<void>();
+      await open({0: '甲。', 1: '', 2: '丙。'}, gates: {2: third});
+      await tts.startFromVisibleLocation();
+      final last = tts.currentHighlight;
+      engine.complete();
+      await pumpEventQueue();
+
+      expect(tts.currentHighlight, last);
+      third.complete();
+      await pumpEventQueue();
+      expect(tts.currentHighlight?.chapterIndex, 2);
+    });
+
     test(
       'playing after pausing on a picked chapter shows that chapter',
       () async {

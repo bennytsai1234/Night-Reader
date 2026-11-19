@@ -268,7 +268,7 @@ class ReaderTtsController extends ChangeNotifier
         _finish(_endNoticeAfter(location.chapterIndex));
         return;
       }
-      current = _Loading(_chapterStart(next));
+      current = _Loading(_chapterStart(next), highlight: current.highlight);
       _enter(current);
     }
   }
