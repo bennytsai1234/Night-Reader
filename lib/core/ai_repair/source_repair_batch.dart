@@ -14,6 +14,7 @@ import 'package:night_reader/core/source_check/source_check_isolate.dart';
 import 'package:night_reader/core/utils/public_suffix.dart';
 
 import 'ai_repair_backups.dart';
+import 'ai_repair_apply.dart';
 import 'ai_repair_prompt.dart';
 import 'ai_repair_session.dart';
 import 'ai_repair_settings.dart';
