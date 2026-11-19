@@ -68,6 +68,34 @@ void main() {
     expect(task.errorCount, 1);
   });
 
+  test('a paused task whose run is still finishing cannot be retried yet', () {
+    final service = DownloadService();
+    final task = DownloadTask(
+      bookUrl: 'https://paused-midrun.example',
+      bookName: '書',
+      status: DownloadTask.statusPaused,
+      totalCount: 10,
+      successCount: 4,
+      errorCount: 1,
+    );
+    service.tasks.add(task);
+    // 按了暫停，那一輪還有章節在收尾（還在進行中的任務裡）。
+    service.activeTaskUrls.add(task.bookUrl);
+    addTearDown(() {
+      service.tasks.remove(task);
+      service.activeTaskUrls.remove(task.bookUrl);
+    });
+
+    expect(service.canRetry(task), isFalse);
+    service.retryTask(task.bookUrl);
+    expect(task.status, DownloadTask.statusPaused);
+    expect(task.errorCount, 1);
+
+    // 那一輪停住之後就能重試。
+    service.activeTaskUrls.remove(task.bookUrl);
+    expect(service.canRetry(task), isTrue);
+  });
+
   // 書源改網址時先停下這些書的下載（holdBooks），改完放行。
   group('holding books while their source changes URL', () {
     DownloadTask add(String bookUrl, int status) {
@@ -246,8 +274,12 @@ void main() {
       (t) => t.bookUrl == book.bookUrl,
     );
     expect(stored.lastErrorChapterIndex, finished.lastErrorChapterIndex);
-    expect(stored.failureSummary, isNotNull);
-    expect(stored.failureSummary, finished.failureSummary);
+    expect(stored.failureSummary(), isNotNull);
+    expect(stored.failureSummary(), finished.failureSummary());
+    // 認不得的錯誤（這裡是沒初始化的網路服務）也要說清楚是誰出錯、能怎麼
+    // 做，不寫「發生未預期的錯誤」。
+    expect(finished.lastErrorMessage, isNot(contains('未預期')));
+    expect(finished.lastErrorMessage, contains('重試'));
   });
 
   group('the range of a task', () {

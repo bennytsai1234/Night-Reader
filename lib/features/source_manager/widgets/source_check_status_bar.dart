@@ -60,7 +60,7 @@ class SourceCheckStatusBar extends StatelessWidget {
                 child: InkWell(
                   onTap: onTap,
                   child: Opacity(
-                    opacity: idle ? 0.45 : 1,
+                    opacity: idle ? AppDisabled.opacity : 1,
                     child: Padding(
                       padding: const EdgeInsets.only(
                         left: AppSpacing.lg,
@@ -85,7 +85,7 @@ class SourceCheckStatusBar extends StatelessWidget {
                                 : Icon(
                                     Icons.rule_folder_outlined,
                                     size: 16,
-                                    color: accent,
+                                    color: idle ? scheme.onSurface : accent,
                                   ),
                           ),
                           const SizedBox(width: AppSpacing.md),
@@ -147,7 +147,7 @@ class SourceCheckStatusBar extends StatelessWidget {
   }
 }
 
-/// 膠囊右邊的一顆文字鈕；不能按時灰掉（ADR 0059）。
+/// 膠囊右邊的一顆文字鈕；不能按時換成中性灰（ADR 0059、[AppDisabled]）。
 class _CapsuleButton extends StatelessWidget {
   const _CapsuleButton({
     required this.label,
@@ -162,18 +162,15 @@ class _CapsuleButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,
-    child: Opacity(
-      opacity: onTap == null ? 0.45 : 1,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-        child: Center(
-          widthFactor: 1,
-          child: UiText(
-            label,
-            style: AppTextStyles.uiSm.copyWith(
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      child: Center(
+        widthFactor: 1,
+        child: UiText(
+          label,
+          style: AppTextStyles.uiSm.copyWith(
+            color: context.actionColor(color, enabled: onTap != null),
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),

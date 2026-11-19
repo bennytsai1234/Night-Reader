@@ -268,13 +268,18 @@ class DownloadService extends DownloadBase
     }
   }
 
+  /// [task] 現在可以重試：停在失敗，而且上一輪已經停住。下載中、排隊中，或
+  /// 按了暫停但那一輪還有章節在收尾時不行：歸零計數後，舊一輪的結果會寫回
+  /// 來、把它結算掉。列上的重試鈕、頁首「重試失敗的」與 [retryTask] 共用。
+  bool canRetry(DownloadTask task) =>
+      task.endedWithFailures && !activeTaskUrls.contains(task.bookUrl);
+
   void retryTask(String bookUrl) {
     final task = tasks.cast<DownloadTask?>().firstWhere(
       (t) => t?.bookUrl == bookUrl,
       orElse: () => null,
     );
-    // 下載中或排隊中的任務不能重試：那一輪還在跑，歸零計數會把失敗章節當成完成。
-    if (task == null || task.isDownloading || task.isWaiting) return;
+    if (task == null || !canRetry(task)) return;
 
     task
       ..status = DownloadTask.statusWaiting

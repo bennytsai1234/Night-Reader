@@ -15,6 +15,7 @@ import '../theme/app_chrome.dart';
 import '../theme/app_layers.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
+import '../theme/context_ext.dart';
 import 'launch_entrance.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
@@ -507,8 +508,9 @@ class GlassIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final enabled = onPressed != null;
-    final foreground = (color ?? scheme.onSurface).withValues(
-      alpha: enabled ? 1 : 0.38,
+    final foreground = context.actionColor(
+      color ?? scheme.onSurface,
+      enabled: enabled,
     );
     final inPanel = PanelButtons.of(context);
     final size =
@@ -622,7 +624,7 @@ class GlassTextButton extends StatelessWidget {
                   child: UiText(
                     label,
                     style: AppTextStyles.uiMd.copyWith(
-                      color: color.withValues(alpha: enabled ? 1 : 0.38),
+                      color: context.actionColor(color, enabled: enabled),
                       fontWeight: emphasized || destructive
                           ? FontWeight.w600
                           : FontWeight.w500,
@@ -702,7 +704,7 @@ class PlainTextAction extends StatelessWidget {
     final style = (small ? AppTextStyles.uiSm : AppTextStyles.bodyBase)
         .copyWith(
           height: 1.2,
-          color: base.withValues(alpha: enabled ? 1 : 0.4),
+          color: context.actionColor(base, enabled: enabled),
           fontWeight: emphasized ? FontWeight.w600 : FontWeight.w400,
         );
     return Semantics(
@@ -788,9 +790,10 @@ class GlassCapsule extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final enabled = onTap != null;
-    final color =
-        (foregroundColor ?? (selected ? scheme.primary : scheme.onSurface))
-            .withValues(alpha: enabled ? 1 : 0.45);
+    final color = context.actionColor(
+      foregroundColor ?? (selected ? scheme.primary : scheme.onSurface),
+      enabled: enabled,
+    );
     final style = AppTextStyles.uiSm.copyWith(
       color: color,
       fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
@@ -856,7 +859,9 @@ class GlassCapsule extends StatelessWidget {
       ),
     );
     capsule = Semantics(
-      button: enabled,
+      // 停用時照樣是按鈕，報停用（同選單項目）。
+      button: true,
+      enabled: enabled,
       selected: selected,
       label: UiLanguageText.convertNullable(context, tooltip),
       child: PressScale(scale: 0.95, onTap: onTap, child: capsule),

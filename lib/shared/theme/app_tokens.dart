@@ -51,6 +51,15 @@ class AppSpacing {
   static const double xxxl = 40.0;
 }
 
+/// 不能按的鈕、選單項目與清單列（DESIGN.md 原則 5「選單只有一種樣子」）：
+/// 不管原本是強調色、危險色還是一般字色，文字與圖示一律換成一般字色，再降到
+/// [opacity]。顏色用 `context.disabledForeground`；整個元件包 [Opacity] 時，
+/// 裡面的強調色、危險色同樣先換成一般字色。
+class AppDisabled {
+  AppDisabled._();
+  static const double opacity = 0.4;
+}
+
 /// Border-radius tokens.
 class AppRadius {
   AppRadius._();

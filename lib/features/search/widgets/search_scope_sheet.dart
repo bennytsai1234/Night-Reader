@@ -211,7 +211,7 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
 
   Widget _buildGroupTab(ScrollController scrollController) {
     if (widget.groups.isEmpty) {
-      return _emptyHint('暫無分組');
+      return _emptyHint('沒有分組');
     }
 
     final primary = Theme.of(context).colorScheme.primary;

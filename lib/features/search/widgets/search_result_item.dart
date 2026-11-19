@@ -208,7 +208,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
                       latestChapterLine(
                         context,
                         book.latestChapterTitle,
-                        fallback: '暫無',
+                        fallback: '沒有最新章節',
                       ),
                       translate: false,
                       maxLines: 1,

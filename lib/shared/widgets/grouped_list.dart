@@ -627,6 +627,14 @@ class GroupedIconTile extends StatelessWidget {
   }
 }
 
+/// 去掉顏色、只留明暗（照 Rec. 709 的亮度）。
+const ColorFilter _greyscale = ColorFilter.matrix(<double>[
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0, 0, 0, 1, 0, //
+]);
+
 /// 分組清單的一列：列首（圖示方塊或任意 widget）、標題、副標、右側數值、
 /// 右側控件與箭頭。按下時整列高亮，不畫水波紋。
 class GroupedRow extends StatelessWidget
@@ -816,7 +824,11 @@ class GroupedRow extends StatelessWidget
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final chrome = AppChrome.of(context);
-    final titleColor = destructive
+    // 停用的列整列降到 [AppDisabled.opacity]，標題的危險色、強調色先換回
+    // 一般字色，和停用的選單項目同一種灰。
+    final titleColor = !enabled
+        ? scheme.onSurface
+        : destructive
         ? (Theme.of(context).brightness == Brightness.dark
               ? AppPalette.rustDark
               : AppPalette.rust)
@@ -840,7 +852,10 @@ class GroupedRow extends StatelessWidget
         child: Row(
           children: [
             if (leading != null) ...[
-              leading!,
+              // 停用的列首（圖示方塊的顏料色）去色，和標題一起變中性灰。
+              enabled
+                  ? leading!
+                  : ColorFiltered(colorFilter: _greyscale, child: leading!),
               const SizedBox(width: AppGrouped.iconGap),
             ],
             Expanded(
@@ -913,7 +928,7 @@ class GroupedRow extends StatelessWidget
     );
 
     if (!enabled) {
-      row = Opacity(opacity: 0.45, child: row);
+      row = Opacity(opacity: AppDisabled.opacity, child: row);
     }
     if (onTap == null && onLongPress == null) {
       // 標題文字本來就會併進這個節點，再設 label 讀屏會念成「標題、標題、值」。
@@ -992,7 +1007,11 @@ class GroupedSwitch extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? () => toggle(value, onChanged!) : null,
-        child: Opacity(opacity: enabled ? 1 : 0.38, child: track),
+        // 開關的開或關是狀態，停用時軌道顏色留著，只降透明度。
+        child: Opacity(
+          opacity: enabled ? 1 : AppDisabled.opacity,
+          child: track,
+        ),
       ),
     );
   }

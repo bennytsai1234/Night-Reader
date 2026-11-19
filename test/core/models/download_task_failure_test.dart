@@ -6,18 +6,31 @@ void main() {
       DownloadTask(bookUrl: 'u', bookName: '書')
         ..status = DownloadTask.statusFailed;
 
-  test('a classified failure names the reason, chapter and message', () {
+  test('a chapter failure names the chapter in the book\'s unit and the '
+      'reason', () {
     final task = failed()
-      ..setFailure(reason: '網路錯誤', message: '連線逾時', chapterIndex: 2);
-    expect(task.failureSummary, '網路錯誤，第 3 章：連線逾時');
+      ..setFailure(
+        reason: '連不上網站',
+        message: '連不上網站，檢查網路後重試或換源',
+        chapterIndex: 2,
+      );
+    expect(task.failureSummary(), '第 3 章：連不上網站，檢查網路後重試或換源');
+    expect(task.failureSummary(unit: '話'), '第 3 話：連不上網站，檢查網路後重試或換源');
   });
 
-  test('the generic reason is not repeated after the status line', () {
-    final task = failed()..setFailure(reason: '下載失敗', message: '抓不到目錄');
-    expect(task.failureSummary, '抓不到目錄');
+  test('a failure before any chapter is just the reason', () {
+    final task = failed()
+      ..setFailure(reason: '書源已刪除', message: '這本書的書源已經刪除，換源');
+    expect(task.failureSummary(), '這本書的書源已經刪除，換源');
+  });
+
+  test('a row saved by an older version still shows its message', () {
+    final task = failed()
+      ..setFailure(reason: '下載失敗', message: '發生未預期的錯誤', chapterIndex: 0);
+    expect(task.failureSummary(), '第 1 章：發生未預期的錯誤');
   });
 
   test('nothing recorded means no summary line', () {
-    expect(failed().failureSummary, isNull);
+    expect(failed().failureSummary(), isNull);
   });
 }

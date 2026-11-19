@@ -208,6 +208,58 @@ void main() {
     },
   );
 
+  // 書源改網址（holdBooks）時最後一批章節還卡在網路上：那一輪被停下，
+  // 不能把一章都沒存到的書結算成「下載完成」，放行後要排回去重抓。
+  test(
+    'a source change during the last chapters does not finish the book',
+    () async {
+      final book = Book(
+        bookUrl: '$base/book/hold',
+        origin: '$base/source/hold',
+        name: '改網址時還在下載的書',
+        isInBookshelf: true,
+      );
+      await getIt<BookSourceDao>().upsert(
+        BookSource.fromJson({
+          'bookSourceName': '改',
+          'bookSourceUrl': book.origin,
+        }),
+      );
+      await getIt<BookDao>().upsert(book);
+      await getIt<ChapterDao>().insertChapters([
+        BookChapter(
+          url: '$base/stall/hold',
+          title: '唯一一章',
+          index: 0,
+          bookUrl: book.bookUrl,
+        ),
+      ]);
+      final service = DownloadService();
+      final task = DownloadTask(
+        bookUrl: book.bookUrl,
+        bookName: book.name,
+        totalCount: 1,
+      );
+      service.tasks.add(task);
+      service.isDownloading = true;
+      addTearDown(() {
+        service.isDownloading = false;
+        service.tasks.remove(task);
+      });
+
+      final run = service.processTask(task);
+      await until(() => arrived.contains('/stall/hold'), '卡住的請求');
+      final release = await service.holdBooks([book.bookUrl]);
+      await run;
+
+      expect(task.isCompleted, isFalse, reason: '一章都沒存到');
+      expect(task.successCount, 0);
+      expect(task.errorCount, 0, reason: '停下不是失敗');
+      release();
+      expect(task.isWaiting, isTrue, reason: '放行後排回去用新網址重抓');
+    },
+  );
+
   test('a chapter waiting to retry stops when cancelled', () async {
     final book = Book(
       bookUrl: '$base/book/retry',

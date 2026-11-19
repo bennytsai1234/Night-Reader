@@ -19,11 +19,17 @@ class ChapterContentPreparationResult {
     required this.content,
     required this.status,
     this.failureMessage,
+    this.failureCause,
   });
 
   final String content;
   final ReaderChapterContentStatus status;
   final String? failureMessage;
+
+  /// 失敗時接到的錯誤（正文是空的時候是 [ContentEmptyException]）：
+  /// [failureMessage] 是閱讀器用的固定說法，下載照錯誤種類另外說明
+  /// （`DownloadFailure`）。
+  final Object? failureCause;
 
   bool get isReady => status == ReaderChapterContentStatus.ready;
   bool get isFailed => status == ReaderChapterContentStatus.failed;
@@ -35,11 +41,15 @@ class ChapterContentPreparationResult {
     );
   }
 
-  factory ChapterContentPreparationResult.failed(String message) {
+  factory ChapterContentPreparationResult.failed(
+    String message, {
+    Object? cause,
+  }) {
     return ChapterContentPreparationResult(
       content: message,
       status: ReaderChapterContentStatus.failed,
       failureMessage: message,
+      failureCause: cause,
     );
   }
 }
@@ -254,7 +264,11 @@ class ChapterContentPreparationPipeline {
         cancelToken: cancelToken,
       );
       if (raw.trim().isEmpty) {
-        return ChapterContentPreparationResult.failed('章節內容為空 (可能解析規則有誤)');
+        const message = '章節內容為空 (可能解析規則有誤)';
+        return ChapterContentPreparationResult.failed(
+          message,
+          cause: ContentEmptyException(message),
+        );
       }
       // 插圖抓完（或確定抓不到）這章才算好，抓不到的不畫（ADR 0050）。
       // 連不上的圖留記號，書架自動下載之後再補（[fetchStoredIllustrations]）。
@@ -273,16 +287,24 @@ class ChapterContentPreparationPipeline {
       if (error.type == DioExceptionType.cancel) rethrow;
       return ChapterContentPreparationResult.failed(
         _networkFailureMessage(error),
+        cause: error,
       );
     } on FileSystemException catch (error) {
       return ChapterContentPreparationResult.failed(
         '讀取本地書籍失敗: ${error.message}',
+        cause: error,
       );
     } on LockedChapterException catch (error) {
       // 不是載入出錯：閱讀器在它前面停住、照這句說明（ADR 0057）。
-      return ChapterContentPreparationResult.failed(error.message);
+      return ChapterContentPreparationResult.failed(
+        error.message,
+        cause: error,
+      );
     } on AppException catch (error) {
-      return ChapterContentPreparationResult.failed('加載章節失敗: ${error.message}');
+      return ChapterContentPreparationResult.failed(
+        '加載章節失敗: ${error.message}',
+        cause: error,
+      );
     }
   }
 

@@ -353,7 +353,9 @@ class ReaderBottomMenu extends StatelessWidget {
       onPressed: onPressed,
       style: TextButton.styleFrom(
         foregroundColor: menuStyle.foreground,
-        disabledForegroundColor: menuStyle.foreground.withValues(alpha: 0.38),
+        disabledForegroundColor: menuStyle.foreground.withValues(
+          alpha: AppDisabled.opacity,
+        ),
         // 字級沿用 TextButton 預設的 labelLarge（主題裡就是 uiSm），自己帶
         // textStyle 會蓋掉主題的字族。
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
@@ -411,7 +413,12 @@ class ReaderBottomMenu extends StatelessWidget {
   Widget _buildMainActions(ReaderMenuStyle menuStyle) {
     return Row(
       children: [
-        _menuIcon(Icons.list_rounded, '目錄', onOpenDrawer, menuStyle),
+        _menuIcon(
+          Icons.format_list_bulleted_rounded,
+          '目錄',
+          onOpenDrawer,
+          menuStyle,
+        ),
         _menuIcon(Icons.record_voice_over_outlined, '朗讀', onTts, menuStyle),
         _menuIcon(Icons.format_paint_outlined, '排版', onInterface, menuStyle),
         _menuIcon(Icons.tune_rounded, '進階', onSettings, menuStyle),

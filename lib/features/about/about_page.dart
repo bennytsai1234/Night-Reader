@@ -295,7 +295,7 @@ class _AboutPageState extends State<AboutPage> {
               GroupedRow(
                 leading: const GroupedIconTile(
                   Icons.report_problem_outlined,
-                  tint: AppTint.rust,
+                  tint: AppTint.ink,
                 ),
                 title: '崩潰日誌',
                 onTap: () => Navigator.push(

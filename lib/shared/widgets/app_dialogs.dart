@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../theme/app_chrome.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
+import '../theme/context_ext.dart';
 import 'clause_text.dart';
 import 'glass.dart';
 import 'popup_routes.dart';
@@ -295,7 +296,7 @@ class AppAlert<T> extends StatelessWidget {
                   maxLines: 1,
                   style: AppTextStyles.bodyMd.copyWith(
                     height: 1.2,
-                    color: color.withValues(alpha: action.enabled ? 1 : 0.4),
+                    color: context.actionColor(color, enabled: action.enabled),
                     fontWeight: action.isDefault
                         ? FontWeight.w600
                         : FontWeight.w400,

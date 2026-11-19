@@ -69,7 +69,7 @@ class BookInfoIntro extends StatelessWidget {
         GroupedContent(
           child: UiText(
             intro.isEmpty
-                ? UiLanguageText.convert(context, '暫無簡介')
+                ? UiLanguageText.convert(context, '沒有簡介')
                 : context.zh(intro),
             translate: false,
             style: AppTextStyles.bodyBase.copyWith(

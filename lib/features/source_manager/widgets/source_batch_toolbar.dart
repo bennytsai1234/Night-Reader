@@ -301,7 +301,7 @@ class _BarTextButton extends StatelessWidget {
               child: UiText(
                 label,
                 style: AppTextStyles.uiMd.copyWith(
-                  color: color.withValues(alpha: enabled ? 1 : 0.38),
+                  color: context.actionColor(color, enabled: enabled),
                 ),
               ),
             ),
