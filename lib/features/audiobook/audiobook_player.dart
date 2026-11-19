@@ -553,6 +553,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     if (total != null && target > total) target = total;
     position.value = target;
     await engine.seek(target);
+    // 播完後拖回去：停在拖到的地方，按播放從這裡接著播，不再從開頭。
+    if (_phase == AudiobookPhase.ended) _moveTo(AudiobookPhase.paused);
     _publish();
     await _saveProgress();
   }

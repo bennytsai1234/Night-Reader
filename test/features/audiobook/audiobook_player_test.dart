@@ -386,6 +386,21 @@ void main() {
     expect(player.playing, isTrue);
   });
 
+  test('最後一集播完後拖回去再按播放：從拖到的地方接著播', () async {
+    await player.open(book, chapterIndex: 3);
+    engine.finish();
+    await pumpEventQueue();
+    expect(player.phase, AudiobookPhase.ended);
+
+    await player.seek(const Duration(minutes: 5));
+    expect(player.phase, AudiobookPhase.paused);
+    await player.play();
+
+    expect(engine.opened, hasLength(1));
+    expect(engine.position, const Duration(minutes: 5));
+    expect(player.playing, isTrue);
+  });
+
   test('付費的集跳過，不問書源；後面都是付費的就停在結尾（ADR 0057）', () async {
     await ChapterDao(db).insertChapters([
       BookChapter(
