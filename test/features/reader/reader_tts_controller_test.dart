@@ -136,6 +136,9 @@ class _FakeTtsEngine extends ReaderTtsEngine {
   final StreamController<void> _completions =
       StreamController<void>.broadcast();
   final List<String> spoken = <String>[];
+
+  /// 有值時，下一次停止等第一個完成才停好（引擎回覆得慢）。
+  final List<Completer<void>> stopGates = <Completer<void>>[];
   bool _playing = false;
   String _text = '';
 
@@ -167,6 +170,7 @@ class _FakeTtsEngine extends ReaderTtsEngine {
 
   @override
   Future<void> stop() async {
+    if (stopGates.isNotEmpty) await stopGates.removeAt(0).future;
     _text = '';
     _playing = false;
     notifyListeners();
@@ -515,6 +519,39 @@ void main() {
 
   // 要念的那一章還在載入時，不管怎麼進來都算朗讀中：面板與定時鍵是
   // 「暫停朗讀」，系統播放資訊是要念的那章，暫停停在要念的位置。
+  group('jumping by hand', () {
+    test('ending while the jump waits for the engine stays ended', () async {
+      await open({0: '甲。', 1: '乙。'});
+      await tts.startFromVisibleLocation();
+      moveTo(1);
+      final engineStopped = Completer<void>();
+      engine.stopGates.add(engineStopped);
+
+      final jumping = tts.followManualJump();
+      await tts.stop();
+      engineStopped.complete();
+      await jumping;
+      await pumpEventQueue();
+
+      expect(engine.spoken, ['甲。']);
+      expect(tts.phase, ReaderTtsPhase.idle);
+    });
+
+    testWidgets('the countdown keeps running across a jump', (tester) async {
+      await open({0: '甲。', 1: '乙。'});
+      await tts.sleepTimer.choose(SleepTimerOption.minutes15);
+      await tts.startFromVisibleLocation();
+      await elapse(tester, const Duration(minutes: 5));
+
+      moveTo(1);
+      await tts.followManualJump();
+      await tester.pump();
+      expect(engine.spoken.last, '乙。');
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 10));
+      await tts.stop();
+    });
+  });
+
   group('while the chapter to read loads', () {
     test('starting counts as reading and can be paused', () async {
       final second = Completer<void>();

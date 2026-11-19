@@ -200,20 +200,30 @@ class ReaderTtsController extends ChangeNotifier
   /// 定時）。
   Future<void> toggleTimed() => toggle();
 
-  Future<void> startFromVisibleLocation() async {
-    final location = runtime.state.visibleLocation.normalized(
-      chapterCount: runtime.chapterCount,
-    );
-    await _load(_Loading(location));
+  Future<void> startFromVisibleLocation() => _load(_Loading(_visibleLocation));
+
+  ReaderLocation get _visibleLocation => runtime.state.visibleLocation
+      .normalized(chapterCount: runtime.chapterCount);
+
+  /// 正在念的時候換去念別處（上一章、下一章、手動跳轉）：馬上換到 [loading]，
+  /// 引擎停好、這段期間沒有別的操作才載入。
+  Future<void> _readFromAfterStopping(_Loading loading) async {
+    _enter(loading);
+    await _tts.stop();
+    if (_isCurrent(loading)) await _load(loading);
   }
 
-  /// 使用者手動跳到別處：正在朗讀就從新位置接著念；暫停中則丟掉舊句，
-  /// 下次播放從新位置開始。
+  /// 使用者手動跳到別處：正在朗讀就從新位置接著念（倒數照走）；暫停中則
+  /// 丟掉舊句，下次播放從新位置開始。
   Future<void> followManualJump() async {
-    final wasPlaying = isPlaying;
-    if (phase == ReaderTtsPhase.idle) return;
-    await stop();
-    if (wasPlaying) await startFromVisibleLocation();
+    switch (phase) {
+      case ReaderTtsPhase.idle:
+        return;
+      case ReaderTtsPhase.paused:
+        await stop();
+      case ReaderTtsPhase.reading:
+        await _readFromAfterStopping(_Loading(_visibleLocation));
+    }
   }
 
   /// 載入 [loading] 那一章並從它的位置念起；這一章已沒有可念的內容就往後
@@ -446,13 +456,9 @@ class ReaderTtsController extends ChangeNotifier
     if (current == null) return;
     final target = _chapterAfter(current, delta);
     if (target == null) return;
-    final loading = _Loading(
-      _chapterStart(target),
-      highlight: _highlightSegment,
+    await _readFromAfterStopping(
+      _Loading(_chapterStart(target), highlight: _highlightSegment),
     );
-    _enter(loading);
-    await _tts.stop();
-    if (_isCurrent(loading)) await _load(loading);
   }
 
   /// 從 [from] 往 [delta] 的方向數過去、跳過付費章節的那一章（ADR 0057）；
