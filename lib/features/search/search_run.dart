@@ -113,6 +113,7 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
 
   SearchModel _newModel() => SearchModel(callback: this, loader: _loader)
     ..onSourcesChosen = _rememberSources
+    ..onScopeNarrowed = _narrowScope
     ..onSourceSearched = _recordSearched;
 
   final SearchBookLoader? _loader;
@@ -252,20 +253,27 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   }
 
   Future<void> retryFailed() async {
-    if (key.isEmpty || failures.isEmpty || isSearching) return;
-    final sources = failures
-        .map((failure) => failure.source)
-        .where((source) => source.isSearchEnabledByRuntime)
-        .toList();
-    if (sources.isEmpty) return;
-    final existing = List<SearchBook>.from(results);
-    failures.clear();
-    _failuresBefore = const [];
-    _doneBefore = 0;
-    _startAttempt();
-    notifyListeners();
+    if (key.isEmpty || failures.isEmpty || isSearching || _retrying) return;
     _retrying = true;
     try {
+      // 照現在的書源重試：失敗之後刪掉、停用的略過（同接著搜暫停的搜尋）。
+      final ticket = _ticket;
+      final enabled = {
+        for (final source in await getIt<BookSourceDao>().getEnabled())
+          if (source.isSearchEnabledByRuntime) source.bookSourceUrl: source,
+      };
+      // 讀書源的時候開始了新的一次，這次就不重試。
+      if (_disposed || ticket != _ticket) return;
+      final sources = [
+        for (final failure in failures) ?enabled[failure.source.bookSourceUrl],
+      ];
+      if (sources.isEmpty) return;
+      final existing = List<SearchBook>.from(results);
+      failures.clear();
+      _failuresBefore = const [];
+      _doneBefore = 0;
+      _startAttempt();
+      notifyListeners();
       await _track(
         _model.searchSources(
           key: key,
@@ -374,6 +382,19 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   void resume() => _model.resume();
 
   bool get isPaused => _model.isPaused;
+
+  /// 實際搜的範圍記進條件：頁首照它（照 Legado，分組清掉了就寫清掉後的）。
+  void _narrowScope(String scope) {
+    final c = conditions;
+    if (c == null) return;
+    conditions = (
+      kind: c.kind,
+      byKind: c.byKind,
+      scope: scope,
+      precision: c.precision,
+    );
+    notifyListeners();
+  }
 
   void _rememberSources(List<BookSource> sources) {
     if (!_choosing) return;

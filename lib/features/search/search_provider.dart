@@ -196,10 +196,12 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
       !_holdingResults && (_background?.canResume ?? false);
   bool get precisionSearch => _precisionSearch;
 
-  /// 這次搜的是哪一類書：選的那一類有可搜尋的書源就是它，否則是第一個有的。
-  BookSourceKind get kind {
-    // 接回的那一次照它當時的類別，不管現在哪一類還有書源。
-    if (_snapshot case final conditions?) return conditions.kind;
+  /// 頁首膠囊與結果照哪一類：畫面上這一次搜尋的（接回的、重試的也是），
+  /// 不管現在哪一類還有書源；還沒搜過照 [_kindToSearch]。
+  BookSourceKind get kind => _run.conditions?.kind ?? _kindToSearch;
+
+  /// 新的一次搜哪一類：選的那一類有可搜尋的書源就是它，否則是第一個有的。
+  BookSourceKind get _kindToSearch {
     if (_kindCounts.isEmpty || _kindCounts.containsKey(_chosenKind)) {
       return _chosenKind;
     }
@@ -212,15 +214,19 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   /// 每一類可搜尋的書源數，給類別選單。
   Map<BookSourceKind, int> get kindCounts => _kindCounts;
 
-  /// 照類別篩（書源只有一類時不篩：聚合源搜到的其他類別照樣列出）；接回
-  /// 的那一次照它當時篩不篩。
-  bool get _filtersByKind => _snapshot?.byKind ?? _kindCounts.length > 1;
+  /// 結果照不照類別篩：照畫面上這一次搜尋的；還沒搜過照 [_filtersKindToSearch]。
+  bool get _filtersByKind => _run.conditions?.byKind ?? _filtersKindToSearch;
 
-  /// 接回或放到背景的那一次的條件：頁首膠囊與結果照它。
-  SearchConditions? get _snapshot =>
-      _background == null ? null : _run.conditions;
+  /// 新的一次照不照類別篩：書源只有一類時不篩，聚合源搜到的其他類別照樣列出。
+  bool get _filtersKindToSearch => _kindCounts.length > 1;
   List<String> get sourceGroups => _sourceGroups;
-  SearchScope get searchScope => _searchScope;
+
+  /// 頁首與範圍面板的範圍：畫面上這一次搜尋實際搜的（分組沒有可搜尋的書源
+  /// 時清掉或退回全部）；還沒搜過照選的。新的一次照選的 [_searchScope]。
+  SearchScope get searchScope => switch (_run.conditions) {
+    final conditions? => SearchScope(conditions.scope),
+    null => _searchScope,
+  };
   SearchResultSortMode get sortMode => _sortMode;
   Set<String> get sourceFilters => Set.unmodifiable(_sourceFilters);
   String get authorFilter => _authorFilter;
@@ -567,7 +573,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   void setKind(BookSourceKind kind) {
     if (kind == this.kind) return;
     _chosenKind = kind;
-    // 搜過的由新的一次開始時通知：先離開接回的那一次，頁首才不先讀到它的類別。
+    // 搜過的由新的一次開始時通知：頁首照畫面上那一次的類別，開始前先通知會讀到舊的。
     if (lastSearchKey.isEmpty) {
       notifyListeners();
     } else {
@@ -662,15 +668,15 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   );
 
   SearchConditions _conditions(SearchScope scope) => (
-    kind: kind,
-    byKind: _filtersByKind,
+    kind: _kindToSearch,
+    byKind: _filtersKindToSearch,
     scope: scope.toString(),
     precision: _precisionSearch,
   );
 
   /// 新的一次搜尋開始前清掉上一次的：詳情帶回的封面、固定的順序與篩選。
-  /// 條件在這時定下（頁首膠囊當時的樣子）：先離開接回的那一次，條件才不照
-  /// 它的。傳回給 [SearchRun.start] 的號碼。
+  /// 條件在這時定下，照使用者現在選的（[_conditions]）。傳回給
+  /// [SearchRun.start] 的號碼。
   int _beginSearch(String searchKey, SearchScope scope) {
     _leaveBackground();
     final ticket = _run.begin(searchKey, _conditions(scope));

@@ -584,6 +584,115 @@ void main() {
     expect(resumed.showsMoveToBackground, isTrue);
   });
 
+  Future<void> disable(String name) async {
+    final dao = GetIt.instance<BookSourceDao>();
+    final source = (await dao.getByUrl('https://$name.example'))!;
+    await dao.upsert(source..enabled = false);
+  }
+
+  test('retrying keeps showing what that search found after its kind lost '
+      'its other sources', () async {
+    final dao = GetIt.instance<BookSourceDao>();
+    await dao.upsertAll([
+      // 漫畫類的聚合源：搜小說時也送（ADR 0056）。
+      BookSource(
+        bookSourceUrl: 'https://乙.example',
+        bookSourceName: '乙',
+        bookSourceType: SourceType.image,
+        jsLib: 'function m(){ book.type = 64; }',
+        customOrder: 1,
+      ),
+      BookSource(
+        bookSourceUrl: 'https://戊.example',
+        bookSourceName: '戊',
+        bookSourceType: SourceType.audio,
+        customOrder: 4,
+      ),
+    ]);
+    final background = searches();
+    final loader = _Loader();
+    final provider = await page(background, loader);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.length == 3);
+    expect(loader.sent, ['甲', '乙', '丙']);
+    provider.moveToBackground();
+    provider.dispose();
+    loader
+      ..answer('甲')
+      ..fail('乙')
+      ..answer('丙');
+    await until(() => background.current!.isFinished);
+    await disable('甲');
+    await disable('丙');
+
+    final resumed = await page(background, loader, resume: true);
+    addTearDown(resumed.dispose);
+    expect(names(resumed), unorderedEquals(['甲書', '丙書']));
+    unawaited(resumed.retryFailedSources());
+    await until(() => loader.sent.length == 4);
+    expect(loader.sent.last, '乙');
+    expect(resumed.kind, BookSourceKind.novel);
+    expect(names(resumed), unorderedEquals(['甲書', '丙書']));
+  });
+
+  test('retrying skips failed sources disabled since', () async {
+    final loader = _Loader();
+    final provider = await page(searches(), loader);
+    addTearDown(provider.dispose);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.length == 3);
+    loader
+      ..answer('甲')
+      ..fail('乙')
+      ..fail('丙');
+    await until(() => !provider.isSearching);
+    await disable('乙');
+    loader.sent.clear();
+
+    unawaited(provider.retryFailedSources());
+    await until(() => loader.sent.isNotEmpty);
+    await settle();
+    expect(loader.sent, ['丙']);
+  });
+
+  group('a group with nothing left to search', () {
+    Future<void> group(String name, String group) async {
+      final dao = GetIt.instance<BookSourceDao>();
+      final source = (await dao.getByUrl('https://$name.example'))!;
+      await dao.upsert(source..bookSourceGroup = group);
+    }
+
+    test('searches everything and says so', () async {
+      await group('甲', '甲組');
+      final loader = _Loader();
+      final provider = await page(searches(), loader);
+      addTearDown(provider.dispose);
+      await provider.updateSearchScope(SearchScope('甲組'));
+      await disable('甲');
+
+      unawaited(provider.search('night'));
+      await until(() => loader.sent.length == 2);
+      expect(loader.sent, ['乙', '丙']);
+      expect(provider.searchScope.isAll, isTrue);
+    });
+
+    test('is dropped from the groups searched', () async {
+      await group('甲', '甲組');
+      await group('乙', '乙組');
+      final loader = _Loader();
+      final provider = await page(searches(), loader);
+      addTearDown(provider.dispose);
+      await provider.updateSearchScope(SearchScope('甲組,乙組'));
+      await disable('甲');
+
+      unawaited(provider.search('night'));
+      await until(() => loader.sent.isNotEmpty);
+      await settle();
+      expect(loader.sent, ['乙']);
+      expect(provider.searchScope.toString(), '乙組');
+    });
+  });
+
   test('a results file cut off mid-line is read back up to the last whole '
       'line and stays readable after resuming', () async {
     final background = searches();
