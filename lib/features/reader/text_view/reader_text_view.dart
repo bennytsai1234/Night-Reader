@@ -12,7 +12,7 @@ import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
 import 'package:night_reader/features/reader/features/illustration/reader_illustration_viewer.dart';
 import 'package:night_reader/features/reader/features/settings/reader_highlight_style.dart';
 import 'package:night_reader/features/reader/features/tts/reader_tts_highlight.dart';
-import 'package:night_reader/features/reader/layout/reader_style.dart';
+import 'package:night_reader/features/reader/layout/reader_style_preferences.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/session/reader_operation_token.dart';
 import 'package:night_reader/features/reader/session/reader_runtime.dart';

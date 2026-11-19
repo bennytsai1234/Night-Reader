@@ -14,7 +14,7 @@ import 'package:night_reader/features/reader/features/settings/reader_orientatio
 import 'package:night_reader/features/reader/features/settings/reader_page_turn_speed.dart';
 import 'package:night_reader/features/reader/text_view/layout/reader_paragraph_layout.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
-import 'package:night_reader/features/reader/layout/reader_style.dart';
+import 'package:night_reader/features/reader/layout/reader_style_preferences.dart';
 import 'package:night_reader/features/reader/features/settings/reader_prefs_repository.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_constants.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';

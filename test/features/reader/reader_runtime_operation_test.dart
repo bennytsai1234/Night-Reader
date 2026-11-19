@@ -11,7 +11,7 @@ import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
 import 'package:night_reader/features/reader/features/auto_page/reader_auto_page_controller.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
-import 'package:night_reader/features/reader/layout/reader_style.dart';
+import 'package:night_reader/features/reader/layout/reader_style_preferences.dart';
 import 'package:night_reader/features/reader/screen/reader_controller_host.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/session/reader_operation_token.dart';

@@ -10,7 +10,7 @@ import 'package:night_reader/features/reader/features/settings/reader_highlight_
 import 'package:night_reader/features/reader/features/settings/reader_info_item.dart';
 import 'package:night_reader/features/reader/features/settings/reader_orientation.dart';
 import 'package:night_reader/features/reader/features/settings/reader_page_turn_speed.dart';
-import 'package:night_reader/features/reader/layout/reader_style.dart';
+import 'package:night_reader/features/reader/layout/reader_style_preferences.dart';
 import 'package:night_reader/features/reader/layout/reader_typography.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
