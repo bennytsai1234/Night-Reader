@@ -145,8 +145,10 @@ class _ReaderSidePanelState extends State<ReaderSidePanel>
     if (before case _Preparing(:final hold)) hold?.cancel();
     _phase = next;
     if (next is _Hidden) _closings++;
-    // 建畫面只讀這三件，沒變就不重建：滑出、開始拖、放手都落在畫面正在
-    // 動的幀（ADR 0037 策略二）。面板沿用同一個元件，不跟著重建。
+    // 建畫面只讀這三件，沒變就不重建：開始滑出、拖著打開的面板、放手彈回
+    // 都落在畫面正在動的幀（ADR 0037 策略二）。從左緣開始拖（佔著畫面）、
+    // 放手打開（打開中）時要重建，遮擋與焦點才跟上。面板沿用同一個元件，
+    // 不跟著重建。
     if (before.shown != next.shown ||
         before.covering != next.covering ||
         before.open != next.open) {
