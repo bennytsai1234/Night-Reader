@@ -75,6 +75,25 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// 靜止時面板只有兩種樣子：全開而且算打開中，或收著、不在畫面上；最後
+  /// 一則開關通知和現在一致。
+  void expectSettled(WidgetTester tester) {
+    final visible = find.byType(Drawer).evaluate().isNotEmpty;
+    expect(panel.shown.value, visible, reason: '在畫面上就是 shown');
+    expect(panel.isOpen, visible, reason: '靜止時看得到面板就是打開中');
+    expect(panel.isOnScreen, visible);
+    if (visible) expect(panelLeft(tester), 0);
+    if (openChanges.isNotEmpty) expect(openChanges.last, panel.isOpen);
+  }
+
+  Future<void> pullFromEdge(WidgetTester tester, TestGesture drag) async {
+    await tester.pump();
+    for (var i = 0; i < 12; i++) {
+      await drag.moveBy(const Offset(20, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+  }
+
   testWidgets('the panel is built on first open and kept afterwards; closed, '
       'it is off screen and page rebuilds do not reach it', (tester) async {
     final rebuildPage = await pumpPanel(tester);
@@ -249,6 +268,10 @@ void main() {
     expect(bodyTaps, 2);
     expect(panel.isOpen, isFalse);
     expect(closes, 0);
+    // 按在左緣時先把面板準備好，放開就收回去，沒有通知。
+    expect(panel.shown.value, isFalse);
+    expect(openChanges, isEmpty);
+    expectSettled(tester);
   });
 
   testWidgets('a tap beside the open panel closes it and does not reach the '
@@ -469,6 +492,134 @@ void main() {
     expect(find.byType(Drawer), findsNothing);
     expect(openChanges, [true, false]);
     expect(closes, 1);
+  });
+
+  testWidgets('opening again while it closes slides back from where it is; '
+      'it never counted as closed', (tester) async {
+    await pumpPanel(tester);
+    await openPanel(tester);
+    panel.close();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    final midway = panelLeft(tester);
+    expect(midway, lessThan(0));
+    panel.open();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    // 從收到一半的地方往回滑，不先收到底、也不停頓。
+    expect(panelLeft(tester), greaterThan(midway));
+    await tester.pumpAndSettle();
+    expect(openChanges, [true, false, true]);
+    expect(closes, 0);
+    expectSettled(tester);
+  });
+
+  testWidgets('a fast flick right from the edge opens the panel', (
+    tester,
+  ) async {
+    await pumpPanel(tester);
+    await tester.flingFrom(const Offset(5, 300), const Offset(80, 0), 1500);
+    await tester.pumpAndSettle();
+    expect(openChanges, [true]);
+    expectSettled(tester);
+  });
+
+  testWidgets('pulled out past half and let go slowly, the panel opens; '
+      'pulled back a little from open, it springs back open', (tester) async {
+    await pumpPanel(tester);
+    final pull = await tester.startGesture(const Offset(5, 300));
+    await pullFromEdge(tester, pull);
+    await tester.pump(const Duration(milliseconds: 300));
+    await pull.up();
+    await tester.pumpAndSettle();
+    expect(openChanges, [true]);
+    expectSettled(tester);
+
+    final push = await tester.startGesture(const Offset(280, 300));
+    await tester.pump();
+    for (var i = 0; i < 4; i++) {
+      await push.moveBy(const Offset(-20, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(panelLeft(tester), lessThan(0));
+    await tester.pump(const Duration(milliseconds: 300));
+    await push.up();
+    await tester.pumpAndSettle();
+    expect(openChanges, [true]);
+    expectSettled(tester);
+  });
+
+  testWidgets('a touch on the closing panel holds it where it is; letting go '
+      'without dragging settles it by which half it is in', (tester) async {
+    await pumpPanel(tester);
+    await openPanel(tester);
+    panel.close();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+    final touch = await tester.startGesture(const Offset(100, 300));
+    await tester.pump(const Duration(milliseconds: 16));
+    final held = panelLeft(tester);
+    expect(held, lessThan(0));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(panelLeft(tester), held);
+    final width = tester.getSize(find.byType(Drawer)).width;
+    expect(-held, lessThan(width / 2), reason: '停在過半的地方');
+    await touch.up();
+    await tester.pumpAndSettle();
+    expect(openChanges, [true, false, true]);
+    expect(closes, 0);
+    expectSettled(tester);
+  });
+
+  testWidgets('system back while dragging the open panel closes it; letting '
+      'go does not fling it open again', (tester) async {
+    await pumpPanel(tester);
+    await openPanel(tester);
+    final drag = await tester.startGesture(const Offset(280, 300));
+    await tester.pump();
+    for (var i = 0; i < 3; i++) {
+      await drag.moveBy(const Offset(-20, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    panel.close();
+    await tester.pump();
+    for (var i = 0; i < 4; i++) {
+      await drag.moveBy(const Offset(40, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(openChanges, [true, false]);
+    expect(closes, 1);
+    expectSettled(tester);
+  });
+
+  testWidgets('a touch before the slide starts closes the panel before it '
+      'shows: a tap beside it, or an up-and-down swipe', (tester) async {
+    await pumpPanel(tester);
+    panel.open();
+    await tester.pump();
+    await tester.tapAt(const Offset(500, 300));
+    await tester.pump(AppMotion.stillGap);
+    await tester.pumpAndSettle();
+    expect(openChanges, [true, false]);
+    expect(closes, 1);
+    expect(bodyTaps, 0, reason: '準備打開時觸控已經歸面板');
+    expectSettled(tester);
+
+    panel.open();
+    await tester.pump();
+    final swipe = await tester.startGesture(const Offset(200, 300));
+    for (var i = 0; i < 4; i++) {
+      await swipe.moveBy(const Offset(0, -20));
+    }
+    await swipe.up();
+    await tester.pump(AppMotion.stillGap);
+    await tester.pumpAndSettle();
+    expect(openChanges, [true, false, true, false]);
+    expect(closes, 2);
+    expect(bodyTaps, 0);
+    expectSettled(tester);
   });
 }
 
