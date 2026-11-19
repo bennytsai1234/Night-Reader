@@ -2,12 +2,15 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/sync/source_sync.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// 改前版本放在記憶體裡（正式的寫在 App 的資料夾）。
 class _Backups extends AiRepairBackups {
@@ -28,6 +31,10 @@ void main() {
 
   setUp(() async {
     await GetIt.instance.reset();
+    SharedPreferences.setMockInitialValues({});
+    GetIt.instance.registerSingleton<SharedPreferences>(
+      await SharedPreferences.getInstance(),
+    );
     db = AppDatabase.forTesting(NativeDatabase.memory());
     registerDatabase(db);
     dao = GetIt.instance<BookSourceDao>();
@@ -80,5 +87,46 @@ void main() {
     final restored = (await dao.getByUrl('https://www.old.example'))!;
     expect(restored.searchUrl, 'https://www.old.example/s?q={{key}}');
     expect(restored.lastUpdateTime, greaterThan(1000));
+  });
+
+  test('rules the AI hands back unchanged keep the time', () {
+    final candidate = candidateFrom(source(), sourceForAi(source()));
+    expect(candidate.lastUpdateTime, 1000);
+  });
+
+  test('restoring rules that are the same as now keeps the time', () async {
+    await dao.upsert(source()..lastUpdateTime = 3000);
+    final backups = _Backups()
+      ..saved[source().bookSourceUrl] = source().toJson();
+
+    await restoreAiRepair(source().bookSourceUrl, backups: backups);
+    expect(await storedTime(), 3000);
+  });
+
+  group('rules from the other phone', () {
+    Future<void> apply(BookSource remote) =>
+        SourceSync(prefs: GetIt.instance<SharedPreferences>())
+            .apply({remote.bookSourceUrl: SourceSync.recordOf(remote)});
+
+    test('that changed are a new version here', () async {
+      await dao.upsert(source());
+      await apply(source()..searchUrl = 'https://www.old.example/new');
+      expect(await storedTime(), greaterThan(1000));
+    });
+
+    test('that only carry check marks keep the time', () async {
+      await dao.upsert(source());
+      await apply(
+        source()
+          ..bookSourceGroup = abnormalSourceGroupTag
+          ..addErrorComment('搜尋失敗'),
+      );
+      expect(await storedTime(), 1000);
+    });
+
+    test('for a source new here get a time', () async {
+      await apply(source());
+      expect(await storedTime(), greaterThan(0));
+    });
   });
 }

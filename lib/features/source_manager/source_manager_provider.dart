@@ -143,10 +143,7 @@ class SourceImportService {
 
   /// 預覽匯入：照更新時間（規則這一版的時間）分成新增、檔案比這台新、比這台
   /// 舊、無變化（同 Legado 的 ImportBookSourceViewModel）。
-  Future<ImportPreviewResult> previewImport(
-    List<BookSource> incoming, {
-    List<BookSource> unsupportedSources = const <BookSource>[],
-  }) async {
+  Future<ImportPreviewResult> previewImport(List<BookSource> incoming) async {
     final newSources = <BookSource>[];
     final updatedSources = <BookSource>[];
     final olderSources = <BookSource>[];
@@ -156,7 +153,17 @@ class SourceImportService {
       existingByUrl[source.bookSourceUrl] = source.lastUpdateTime;
     }
 
+    // 檔案裡同一個網址有好幾筆：留更新時間最晚的（一樣晚的留後面那筆，同
+    // 寫進資料庫時後面蓋前面）。
+    final latest = <String, BookSource>{};
     for (final s in incoming) {
+      final kept = latest[s.bookSourceUrl];
+      if (kept == null || s.lastUpdateTime >= kept.lastUpdateTime) {
+        latest[s.bookSourceUrl] = s;
+      }
+    }
+
+    for (final s in latest.values) {
       final existingUpdateTime = existingByUrl[s.bookSourceUrl];
       if (existingUpdateTime == null) {
         newSources.add(s);
@@ -174,7 +181,6 @@ class SourceImportService {
       updatedSources: updatedSources,
       olderSources: olderSources,
       unchangedSources: unchangedSources,
-      unsupportedSources: unsupportedSources,
     );
   }
 
@@ -1375,15 +1381,6 @@ class SourceManagerProvider with ChangeNotifier {
 
   ParsedSourceImportResult parseSourcesDetailed(String jsonStr) =>
       _importService.parseSourcesDetailed(jsonStr);
-
-  /// 預覽匯入：分類為新增、更新、無變化
-  Future<ImportPreviewResult> previewImport(
-    List<BookSource> incoming, {
-    List<BookSource> unsupportedSources = const <BookSource>[],
-  }) => _importService.previewImport(
-    incoming,
-    unsupportedSources: unsupportedSources,
-  );
 
   /// 直接匯入書源列表（跳過預覽）
   Future<SourceImportCount> importSources(List<BookSource> sources) async {

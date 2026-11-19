@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -40,8 +41,9 @@ class SourceSync extends SyncKind {
   static Future<void> _saveEdited(BookSource source, String previousUrl) =>
       BookSourceService().saveEditedSource(source, previousUrl: previousUrl);
 
-  /// 這台自己量出來或自己記的：回應時間與換源排序的權重照這台的網路變，
-  /// 最後更新時間每次校驗都會改。不同步，套用雲端的書源時也保留這台的。
+  /// 這台自己量出來或自己記的：回應時間與換源排序的權重照這台的網路變。
+  /// 更新時間（規則這一版的時間）記在套用的這台：規則從另一台改過來、或是
+  /// 這台新加的，記成套用的時候（[apply]）。不同步，套用時其餘照這台的。
   static const Set<String> _localFields = {
     'respondTime',
     'weight',
@@ -104,6 +106,9 @@ class SourceSync extends SyncKind {
           'lastUpdateTime': existing.lastUpdateTime,
         },
       });
+      if (existing == null || rulesChanged(existing, source)) {
+        source.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
+      }
       final movedFrom = [
         for (final url in record.data['movedFrom'] as List? ?? const [])
           if (url is String && url != key) url,

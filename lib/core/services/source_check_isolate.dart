@@ -1074,7 +1074,10 @@ class SourceChecker {
       BookSourceKind.unsupported => null,
     };
     if (type == null) return;
-    _source.bookSourceType = type;
+    // 類型是規則的一部分：改了就是新的一版（匯到別台才認得出來）。
+    _source
+      ..bookSourceType = type
+      ..lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
     _log('  ≡ 正文看起來是${kind.sourceLabel}，改寫書源類型');
   }
 

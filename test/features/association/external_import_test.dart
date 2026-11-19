@@ -1,7 +1,13 @@
 import 'dart:io';
 
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/features/association/association_handler_service.dart';
 import 'package:night_reader/features/association/import_content.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -236,6 +242,46 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('分享的文字'), findsOneWidget);
       expect(find.textContaining('辨識為書源資料'), findsOneWidget);
+    });
+
+    testWidgets('分享的書源先開匯入預覽：這台的比檔案新時預設不覆蓋', (tester) async {
+      await GetIt.instance.reset();
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      registerDatabase(db);
+      addTearDown(() async {
+        await db.close();
+        await GetIt.instance.reset();
+      });
+      // 這台改過的那一版，比分享的檔案新。
+      await tester.runAsync(
+        () => GetIt.instance<BookSourceDao>().upsert(
+          BookSource(
+            bookSourceUrl: 'https://www.kalamanhua.com',
+            bookSourceName: '改過的',
+            bookSourceType: 2,
+            lastUpdateTime: 1792825494301 + 1000,
+          ),
+        ),
+      );
+      final context = await pumpHost(tester);
+
+      await tester.runAsync(
+        () => service.handleSharedMedia(context, [
+          SharedMediaFile(path: _comicSource, type: SharedMediaType.text),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('匯入書源'));
+      final older = find.text('換成檔案裡較舊的 1 個');
+      for (var i = 0; i < 40 && older.evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      expect(older, findsOneWidget);
+      expect(find.text('匯入'), findsOneWidget);
     });
 
     testWidgets('認不出的分享檔案說明不是夜讀能匯入的格式', (tester) async {

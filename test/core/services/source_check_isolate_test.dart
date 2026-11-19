@@ -1079,10 +1079,14 @@ void main() {
     test('a comic source whose chapters are prose becomes a novel', () async {
       final (_, checked) = await _check(
         _FakeBookSourceService(content: (_) async => prose),
-        source: _source(name: '漫畫小說網')..bookSourceType = 2,
+        source: _source(name: '漫畫小說網')
+          ..bookSourceType = 2
+          ..lastUpdateTime = 1000,
       );
 
       expect(checked.sourceKind, BookSourceKind.novel);
+      // 類型是規則的一部分：改了就是新的一版，匯到別台才認得出來。
+      expect(checked.lastUpdateTime, greaterThan(1000));
     });
 
     test('an unclear chapter keeps the type', () async {

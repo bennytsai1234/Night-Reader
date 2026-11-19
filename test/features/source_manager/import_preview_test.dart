@@ -61,4 +61,14 @@ void main() {
       'https://b.example',
     ]);
   });
+
+  test('a file with the same source twice keeps its latest', () async {
+    final preview = await service.previewImport([
+      incoming('https://a.example', 3000),
+      incoming('https://a.example', 1000),
+    ]);
+    expect(preview.updatedSources.map((s) => s.lastUpdateTime), [3000]);
+    expect(preview.olderSources, isEmpty);
+    expect(preview.total, 1);
+  });
 }
