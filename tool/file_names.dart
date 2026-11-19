@@ -47,6 +47,7 @@ const _reviewed = {
   'lib/features/source_login/source_login_form.dart': '登入表單的欄位與按鈕',
   'lib/features/source_manager/widgets/import_preview_sheet.dart':
       '主角是打開匯入預覽的函式',
+  'lib/shared/navigation/transition_poses.dart': '換頁時上下兩頁的樣子',
   'lib/shared/theme/app_tokens.dart': '設計常數',
   'lib/shared/theme/context_ext.dart': 'BuildContext 取配色的 extension',
   'lib/shared/widgets/popups/app_dialogs.dart': '提示框與動作表',

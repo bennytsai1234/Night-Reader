@@ -5,7 +5,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/shared/navigation/app_page_transition.dart';
+import 'package:night_reader/shared/navigation/app_transition_switch.dart';
 import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';
 
 import '../support/app_harness.dart';

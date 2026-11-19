@@ -16,6 +16,6 @@
 
 ## Consequences
 
-- 新增一種換頁動畫時，要同時寫開啟、返回與拖曳中的樣子（`_TopPose.follow`／`_UnderPose.follow`）。
+- 新增一種換頁動畫時，要同時寫開啟、返回與拖曳中的樣子（`lib/shared/navigation/transition_poses.dart` 的 `TopPose.follow`／`UnderPose.follow`）。
 - 除了平移，拖曳中頁面不一定跟著手指的位置走（例如縮放、上浮），手感由拖曳進度帶動。
 - 點分頁的舊頁是快照，換頁中舊頁不會更新，也不接受點擊。

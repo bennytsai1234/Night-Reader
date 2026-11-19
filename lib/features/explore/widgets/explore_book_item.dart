@@ -4,7 +4,7 @@ import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/features/explore/explore_book_details.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
-import 'package:night_reader/shared/navigation/app_page_transition.dart';
+import 'package:night_reader/shared/navigation/transition_origin.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';

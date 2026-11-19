@@ -3,7 +3,7 @@ import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
-import 'package:night_reader/shared/navigation/app_page_transition.dart';
+import 'package:night_reader/shared/navigation/transition_origin.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -21,10 +21,10 @@ class SearchResultItem extends StatefulWidget {
   final AggregatedSearchBook result;
   final bool isInBookshelf;
 
-  /// 要顯示的封面；沒給時用書本身的（見 [SearchProvider.coverOf]）。
+  /// 要顯示的封面；沒給時用書本身的（見 `SearchProvider.coverOf`）。
   final String? coverUrl;
 
-  /// 進書籍詳情之前呼叫（見 [SearchProvider.rememberOpenedCard]）。
+  /// 進書籍詳情之前呼叫（見 `SearchProvider.rememberOpenedCard`）。
   final VoidCallback? onOpen;
 
   const SearchResultItem({
