@@ -34,16 +34,16 @@
     - **對照表**（每個狀態機做完在 `docs/state-machines.md` 加一列、寫一節，開工前先寫「改前」，之後只剩 git）。找歷史 bug 用 `git log -G'bool _旗標名' -- 檔案` 找加旗標的提交，再打開 diff 確認。
     - **試點：背景工作的生命週期**：2026-11-20 做完（#458）。五件背景工作 7 處 30 個旗標收成共用的 `WorkPhase`、頁面那層的 `_RunStage`、校驗服務的 `_CheckPhase`；暫停回饋五件一致；查到並修掉 5 件 bug。前後對照與階段表在 `docs/state-machines.md`，之後的候選照那一節的格式。
     - **其他候選**（歷史待查，各自開工第一步查；查歷史用 `git log --follow`，檔案搬過家）：
-      - 有聲書播放器 `audiobook_player.dart`：`_playing`、`_loading`、`_buffering`、`_ended`、`_error`、`_wantPlay`，加 `_generation`（2026-11-20 開工，分支 refactor/sm-audiobook-player）
-      - 朗讀 `reader_tts_controller.dart`：靠 generation 判斷哪一次念還有效（2026-11-20 開工，分支 refactor/sm-tts）
-      - 書源管理 `source_manager_provider.dart`：`_isLoading`、`_loadOwnsLoading`、`_isBatchOperationInProgress`、`_mergingDuplicates`、`_syncReloadPending`（2026-11-20 開工，分支 refactor/sm-source-manager）
-      - 書籍詳情 `book_detail_provider.dart`：`_loginRequired`、`_isCacheStatusLoading`、`_isCheckingUpdate`、`_isChangingSource`、`_isUpdatingBookshelf`，旁邊已有 `BookDetailWorldState`（2026-11-20 開工，分支 refactor/sm-book-detail）
-      - 搜尋 `search_provider.dart`：`_isSearching`、`_retrying`；放到背景後的 `search_run.dart`、`background_search.dart` 各 6 個旗標（2026-11-18 才加，#437、#444 都在附近）；換源 `book_detail_change_source_provider.dart` 靠 `searchId` 判斷哪次搜尋還有效（2026-11-20 開工，分支 refactor/sm-search）
-      - 同步 `sync_service.dart`：`_again`、`_progressFirst`、`_fullPending`、`_cancelled`、`_authorizingGoogleDrive`（2026-11-20 開工，分支 refactor/sm-sync）
-      - 閱讀器正文捲動 `reader_text_view.dart`：`_dragging`、`_sawUserScroll`、`_rebuildQueued`、`_captureFramePending`、`_textWaitsForBreath`，旁邊已有 `PumpState`。
-      - 目錄面板 `reader_side_panel.dart`：`_built`、`_builtCovering`、`_open`、`_openedSinceClosed`、`_dragging`、`_dragAbandoned`。
-      - 分組清單的進場 `grouped_list.dart`：還在進場、進場播完、已換成內容（#455 留下的）。
-      - 路由換頁 `app_page_transition.dart`：手勢中、被蓋住停在半途、放開後收尾（#457 留下的）。
-      - 動畫類：紙 `loading_veil.dart`（`_sweep`、`_skeletonSweep`、`_usingBreath`、`_settling`）、進場 `launch_entrance.dart`（`_revealStarted`、`_breathScheduled`、`_breathSettled`、`_passThrough`）、骨架呼吸 `skeleton.dart`（幾個類別各有 `_breathing`、`_resting`、`_still`、`_allowed`、`_waiting`）、定格換場 `snapshot_sweep.dart`（已有 `_Phase`，看還剩哪些旗標）。
+      - 有聲書播放器 `audiobook_player.dart`：`_playing`、`_loading`、`_buffering`、`_ended`、`_error`、`_wantPlay`，加 `_generation`：2026-11-20 做完（#463），收成 `AudiobookPhase` 八個階段，查到並修掉 9 件
+      - 朗讀 `reader_tts_controller.dart`：靠 generation 判斷哪一次念還有效：2026-11-20 做完（#464），內部 `_TtsState`、畫面讀 `ReaderTtsPhase`，查到並修掉 4 件、合併前審查另 7 件
+      - 書源管理 `source_manager_provider.dart`：`_isLoading`、`_loadOwnsLoading`、`_isBatchOperationInProgress`、`_mergingDuplicates`、`_syncReloadPending`：2026-11-20 做完（#460），收成 `_ListWork`，併重複書源是有名字的動作，查到並修掉 6 件
+      - 書籍詳情 `book_detail_provider.dart`：`_loginRequired`、`_isCacheStatusLoading`、`_isCheckingUpdate`、`_isChangingSource`、`_isUpdatingBookshelf`，旁邊已有 `BookDetailWorldState`：2026-11-20 做完（#459），`_FetchIssue` 與三件操作共用的 `BookDetailAction`，查到並修掉 6 件
+      - 搜尋 `search_provider.dart`：`_isSearching`、`_retrying`；放到背景後的 `search_run.dart`、`background_search.dart` 各 6 個旗標（2026-11-18 才加，#437、#444 都在附近）；換源 `book_detail_change_source_provider.dart` 靠 `searchId` 判斷哪次搜尋還有效：2026-11-20 做完（#462），一次搜尋的 `_Phase`、頁面讀的 `SearchStage`，換源不換，查到並修掉 4 件、審查另 1 件
+      - 同步 `sync_service.dart`：`_again`、`_progressFirst`、`_fullPending`、`_cancelled`、`_authorizingGoogleDrive`：2026-11-20 做完（#461），收成 `SyncPhase` 與跑著的那一段 `_SyncRun`，查到並修掉 7 件
+      - 閱讀器正文捲動 `reader_text_view.dart`：`_dragging`、`_sawUserScroll`、`_rebuildQueued`、`_captureFramePending`、`_textWaitsForBreath`，旁邊已有 `PumpState`（2026-11-20 開工，分支 refactor/sm-reader-scroll，同一個對話接著做紙）。
+      - 目錄面板 `reader_side_panel.dart`：`_built`、`_builtCovering`、`_open`、`_openedSinceClosed`、`_dragging`、`_dragAbandoned`（2026-11-20 開工，分支 refactor/sm-side-panel）。
+      - 分組清單的進場 `grouped_list.dart`：還在進場、進場播完、已換成內容（#455 留下的；2026-11-20 開工，和骨架呼吸、定格換場、進場同一個對話依序做）。
+      - 路由換頁 `app_page_transition.dart`：手勢中、被蓋住停在半途、放開後收尾（#457 留下的；2026-11-20 開工，分支 refactor/sm-route-transition）。
+      - 動畫類：紙 `loading_veil.dart`（`_sweep`、`_skeletonSweep`、`_usingBreath`、`_settling`）、進場 `launch_entrance.dart`（`_revealStarted`、`_breathScheduled`、`_breathSettled`、`_passThrough`）、骨架呼吸 `skeleton.dart`（幾個類別各有 `_breathing`、`_resting`、`_still`、`_allowed`、`_waiting`）、定格換場 `snapshot_sweep.dart`（已有 `_Phase`，看還剩哪些旗標）。2026-11-20 開工：紙接在正文捲動後面；骨架呼吸、定格換場、分組清單進場、進場排在同一個對話依序做，一個一條分支。
     - **順序**：試點整個做完、對照寫出來再往下，不等使用者看；之後不碰同一批檔的候選可以開新對話並行（每個一條分支、一個 PR），`PLAN.md` 只由開工的那個對話改。純邏輯的在前，動畫類在後。
     - **範圍**：候選全部做（使用者 2026-11-19 定的），沒出過錯不是跳過的理由。只在讀程式後發現那幾個旗標會同時成立、不是一組互斥階段時跳過，先跟使用者說明。
