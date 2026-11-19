@@ -459,14 +459,14 @@ void main() {
       final provider = await open(updates: updates);
 
       final first = provider.checkForUpdates();
-      expect(provider.isCheckingUpdate, isTrue);
+      expect(provider.isRunning(BookDetailAction.checkUpdate), isTrue);
       final second = await provider.checkForUpdates();
       expect(second.success, isFalse);
       expect(second.message, '正在檢查更新');
 
       updates.gate!.complete();
       expect((await first).message, '發現 4 個新章節');
-      expect(provider.isCheckingUpdate, isFalse);
+      expect(provider.isRunning(BookDetailAction.checkUpdate), isFalse);
       expect(updates.checks, 1);
     });
 
@@ -479,7 +479,7 @@ void main() {
 
       unawaited(provider.setInBookshelf(true));
       await until(() => service.chapterListCalls == 2);
-      expect(provider.isUpdatingBookshelf, isTrue);
+      expect(provider.isRunning(BookDetailAction.updateBookshelf), isTrue);
       final second = await provider.setInBookshelf(false);
       expect(second.success, isFalse);
       expect(second.message, '正在更新書架，請稍候');
