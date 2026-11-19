@@ -13,6 +13,7 @@ import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/network/network_service.dart';
 import 'package:night_reader/core/source_check/source_check_isolate.dart';
+import 'package:night_reader/core/source_check/source_checker.dart';
 
 import '../../test_helper.dart';
 

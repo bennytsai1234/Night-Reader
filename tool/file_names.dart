@@ -31,6 +31,7 @@ const _reviewed = {
   'lib/core/models/source/book_source_rules.dart': '書源搜尋、詳情、目錄、正文各段規則',
   'lib/core/network/redirects.dart': '回應的轉址換算（Response 的 extension）',
   'lib/core/source/source_progress.dart': '主角是交回書源工作進度的函式',
+  'lib/core/source_check/source_check_verdict.dart': '主角是把校驗問題歸成健康分組的函式',
   'lib/features/about/privacy_pages.dart': '隱私說明與權限兩頁',
   'lib/features/bookshelf/widgets/bookshelf_book_tiles.dart': '書卡與它的各部分',
   'lib/features/comic_reader/comic_reader_menu.dart': '漫畫閱讀器選單的各部分',

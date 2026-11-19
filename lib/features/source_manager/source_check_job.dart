@@ -140,7 +140,7 @@ class PausedSourceCheck extends ChangeNotifier {
 }
 
 /// 照 [CheckSourceService.check] 校驗：測試換掉它。
-typedef SourceChecker = Future<void> Function(
+typedef SourceCheckRunner = Future<void> Function(
   List<String> urls, {
   required int doneBefore,
   required List<SourceCheckEntry> earlier,
@@ -200,7 +200,7 @@ class SourceCheckJob implements BackgroundJob {
   final int Function() _done;
   final int Function() _total;
   final VoidCallback _cancel;
-  final SourceChecker _check;
+  final SourceCheckRunner _check;
   final PausedSourceCheck _paused;
   final BackgroundWork _work;
   final NavigatorState? Function() _navigator;
