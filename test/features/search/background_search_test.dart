@@ -18,6 +18,7 @@ import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/core/background_work/reading_fetches.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/features/search/background_search.dart';
 import 'package:night_reader/features/search/models/search_scope.dart';
 import 'package:night_reader/features/search/search_provider.dart';
@@ -467,8 +468,12 @@ void main() {
     await settle();
     provider.pauseBackground();
     final run = background.current!;
-    await until(() => run.search.running == null);
-    expect(run.isPaused, isFalse, reason: '還在等結果檔寫完');
+    // 搜尋本身停下了（不再送書源），背景那件還在等結果檔寫完。
+    await run.search.running;
+    await settle();
+    expect(loader.cancelled, isNotEmpty);
+    expect(run.phase, WorkPhase.pausing, reason: '還在等結果檔寫完');
+    expect(run.isPaused, isFalse);
 
     provider.stopSearch();
     hold.complete();
