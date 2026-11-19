@@ -26,12 +26,13 @@ import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
-enum _QueueAction { pauseAll, resumeAll, clearCompleted }
+enum _QueueAction { pauseAll, resumeAll, retryFailed, clearCompleted }
 
 typedef _QueueShape = ({
   List<DownloadTask> tasks,
   bool paused,
   bool hasActive,
+  bool hasRetryable,
   bool hasCompleted,
 });
 
@@ -71,6 +72,7 @@ class DownloadManagerPage extends StatelessWidget {
         tasks: List<DownloadTask>.of(service.tasks),
         paused: service.isPaused,
         hasActive: service.tasks.any((task) => !task.isCompleted),
+        hasRetryable: service.tasks.any((task) => task.canRetry),
         hasCompleted: service.tasks.any((task) => task.isCompleted),
       ),
       // 任務會原地更新進度，清單只看身分與順序；進度由對應的列訂閱。
@@ -78,6 +80,7 @@ class DownloadManagerPage extends StatelessWidget {
           !listEquals(before.tasks, after.tasks) ||
           before.paused != after.paused ||
           before.hasActive != after.hasActive ||
+          before.hasRetryable != after.hasRetryable ||
           before.hasCompleted != after.hasCompleted,
       builder: (context, queue, _) => _buildPage(context, service, queue),
     );
@@ -96,9 +99,10 @@ class DownloadManagerPage extends StatelessWidget {
         title: '背景下載佇列',
         actions: [
           // 頁首右邊只有一顆，動作都收進「更多」（docs/design/components.md
-          // 「左右各一顆」）；兩項都不能按時整顆停用（ADR 0059）。
+          // 「左右各一顆」）；每一項都不能按時整顆停用（ADR 0059）。
           GlassMenuButton<_QueueAction>(
-            enabled: queue.hasActive || queue.hasCompleted,
+            enabled:
+                queue.hasActive || queue.hasRetryable || queue.hasCompleted,
             entriesBuilder: (_) => [
               GlassMenuItem(
                 value: service.isPaused
@@ -109,6 +113,12 @@ class DownloadManagerPage extends StatelessWidget {
                     ? Icons.play_arrow_rounded
                     : Icons.pause_rounded,
                 enabled: queue.hasActive,
+              ),
+              GlassMenuItem(
+                value: _QueueAction.retryFailed,
+                label: '重試失敗的',
+                icon: Icons.refresh_rounded,
+                enabled: queue.hasRetryable,
               ),
               GlassMenuItem(
                 value: _QueueAction.clearCompleted,
@@ -129,6 +139,10 @@ class DownloadManagerPage extends StatelessWidget {
                   }
                 case _QueueAction.resumeAll:
                   if (service.isPaused) service.togglePause();
+                case _QueueAction.retryFailed:
+                  for (final task in current.where((t) => t.canRetry)) {
+                    service.retryTask(task.bookUrl);
+                  }
                 case _QueueAction.clearCompleted:
                   for (final task in current.where((t) => t.isCompleted)) {
                     service.removeTask(task.bookUrl);
@@ -236,7 +250,7 @@ class DownloadManagerPage extends StatelessWidget {
       task.successCount,
       task.errorCount,
       task.status,
-      task.failureSummary,
+      task.failureSummary(unit: service.kindOf(task.bookUrl).unit),
     ),
     builder: (context, _) =>
         _buildTaskContent(context, service, task, index, taskCount),
@@ -259,10 +273,12 @@ class DownloadManagerPage extends StatelessWidget {
         : rawProgress;
     final active = task.isDownloading || task.isWaiting;
     // 下載中有章節失敗時照樣可以暫停；停下來之後才換成重試。
-    final canRetry = task.isFailed || (task.errorCount > 0 && !active);
+    final canRetry = task.canRetry;
     // 「暫停全部」時進行中的任務其實停著，單本的暫停／繼續交給頁首的恢復全部。
     final globallyPaused = service.isPaused && active;
-    final failureSummary = task.failureSummary;
+    final failureSummary = task.failureSummary(
+      unit: service.kindOf(task.bookUrl).unit,
+    );
 
     // 控制鈕一直在（ADR 0059）：全部暫停中、已完成時灰掉。
     final Widget control;
@@ -344,7 +360,7 @@ class DownloadManagerPage extends StatelessWidget {
           value: 'details',
           label: '查看失敗原因',
           icon: Icons.info_outline_rounded,
-          enabled: task.failureSummary != null,
+          enabled: task.failureSummary() != null,
         ),
         const GlassMenuDivider(),
         const GlassMenuItem(
@@ -461,8 +477,7 @@ class DownloadManagerPage extends StatelessWidget {
     if (task.isCompleted && task.errorCount == 0) {
       return '下載完成';
     }
-    final active = task.isDownloading || task.isWaiting;
-    if (task.isFailed || (task.errorCount > 0 && !active)) {
+    if (task.canRetry) {
       // 還沒有目錄（例如抓目錄就失敗）時總數是 0，不寫「0/0 章」。
       if (task.totalCount <= 0) return '下載失敗';
       final failed = task.errorCount > 0 ? '，${task.errorCount} $unit失敗' : '';
@@ -485,10 +500,8 @@ class DownloadManagerPage extends StatelessWidget {
     DownloadTask task, {
     required bool globallyPaused,
   }) {
-    final active = task.isDownloading || task.isWaiting;
-    if (task.isFailed || (task.errorCount > 0 && !active)) {
-      return context.danger;
-    }
+    // 失敗時這一行只寫進度，用一般字色；危險色只給下一行的原因。
+    if (task.canRetry) return AppChrome.of(context).sectionText;
     if (task.isPaused || globallyPaused) return context.warning;
     if (task.isCompleted) return context.success;
     return AppChrome.of(context).sectionText;

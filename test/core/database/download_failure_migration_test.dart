@@ -64,7 +64,7 @@ void main() {
       db = AppDatabase.forTesting(NativeDatabase(file));
       addTearDown(() => db.close());
       final reopened = (await DownloadDao(db).getAll()).single;
-      expect(reopened.failureSummary, '網路錯誤，第 3 章：連線逾時');
+      expect(reopened.failureSummary(), '第 3 章：連線逾時');
 
       reopened
         ..status = DownloadTask.statusWaiting

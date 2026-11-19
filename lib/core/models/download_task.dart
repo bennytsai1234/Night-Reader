@@ -52,19 +52,22 @@ class DownloadTask {
   bool get isFailed => status == statusFailed;
   bool get hasFailures => errorCount > 0 || isFailed;
 
-  /// 失敗的原因（例如「網路錯誤，第 3 章：連線逾時」）。狀態列已經寫了
-  /// 「下載失敗」，這裡不再重複；分不出類別的「下載失敗」也不寫。沒有記錄
-  /// 任何原因時為 null。
-  String? get failureSummary {
-    if (!hasFailures && (lastErrorMessage ?? '').isEmpty) return null;
-    final reason = lastErrorReason == '下載失敗' ? null : lastErrorReason;
-    final head = [
-      ?reason,
-      if (lastErrorChapterIndex != null) '第 ${lastErrorChapterIndex! + 1} 章',
-    ].join('，');
+  /// 可以重試：失敗了，或跑完但有章節失敗。下載中、排隊中的不行（那一輪
+  /// 還在跑，歸零計數會把失敗的章節當成完成）。
+  bool get canRetry =>
+      isFailed || (errorCount > 0 && !isDownloading && !isWaiting);
+
+  /// 下載佇列那一列的紅字：哪一章（[unit] 是這本書的單位：章、話、集）與
+  /// 原因，例如「第 3 章：連不上網站，檢查網路後重試或換源」
+  /// （`DownloadFailure`）。原因那句已經說了發生什麼，失敗類型
+  /// （[lastErrorReason]）只在「查看失敗原因」裡寫。沒有記錄原因時為 null。
+  String? failureSummary({String unit = '章'}) {
     final message = lastErrorMessage ?? '';
-    if (head.isEmpty) return message.isEmpty ? null : message;
-    return message.isEmpty ? head : '$head：$message';
+    if (message.isEmpty) return null;
+    return switch (lastErrorChapterIndex) {
+      final index? => '第 ${index + 1} $unit：$message',
+      null => message,
+    };
   }
 
   void setFailure({

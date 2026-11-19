@@ -246,8 +246,12 @@ void main() {
       (t) => t.bookUrl == book.bookUrl,
     );
     expect(stored.lastErrorChapterIndex, finished.lastErrorChapterIndex);
-    expect(stored.failureSummary, isNotNull);
-    expect(stored.failureSummary, finished.failureSummary);
+    expect(stored.failureSummary(), isNotNull);
+    expect(stored.failureSummary(), finished.failureSummary());
+    // 認不得的錯誤（這裡是沒初始化的網路服務）也要說清楚是誰出錯、能怎麼
+    // 做，不寫「發生未預期的錯誤」。
+    expect(finished.lastErrorMessage, isNot(contains('未預期')));
+    expect(finished.lastErrorMessage, contains('重試'));
   });
 
   group('the range of a task', () {

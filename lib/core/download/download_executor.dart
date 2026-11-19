@@ -13,7 +13,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
-import 'package:night_reader/core/exception/user_error.dart';
+import 'package:night_reader/core/download/download_failure.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -69,22 +69,18 @@ List<BookChapter>? chaptersInDownloadScope(
   ];
 }
 
+/// 抓一章的結果：失敗時帶著給讀者看的說法（[DownloadFailure]，只有字串，
+/// 送得回主 isolate）。
 class DownloadChapterResult {
-  const DownloadChapterResult._({required this.success, this.failureMessage});
+  const DownloadChapterResult._(this.failure);
 
-  final bool success;
-  final String? failureMessage;
+  const DownloadChapterResult.ready() : this._(null);
 
-  factory DownloadChapterResult.ready() {
-    return const DownloadChapterResult._(success: true);
-  }
+  const DownloadChapterResult.failed(DownloadFailure failure) : this._(failure);
 
-  factory DownloadChapterResult.failed(String message) {
-    return DownloadChapterResult._(
-      success: false,
-      failureMessage: message.isEmpty ? '下載失敗' : message,
-    );
-  }
+  final DownloadFailure? failure;
+
+  bool get success => failure == null;
 }
 
 /// 一個任務這次要抓的章節：照目前的目錄換算範圍，扣掉已經有正文的。
@@ -163,39 +159,37 @@ Future<DownloadPlan> _planDownload(
   CancelToken cancelToken,
 ) async {
   final book = await getIt<BookDao>().getByUrl(task.bookUrl);
-  if (book == null) {
-    throw Exception('書籍不存在');
-  }
+  if (book == null) throw DownloadFailure.bookRemoved;
   final source = book.isLocal
       ? null
       : await getIt<BookSourceDao>().getByUrl(book.origin);
-  if (!book.isLocal && source == null) {
-    throw Exception('書源不存在');
-  }
+  if (!book.isLocal && source == null) throw DownloadFailure.sourceDeleted;
   final chapterDao = getIt<ChapterDao>();
   var chapters = await chapterDao.getByBook(task.bookUrl);
   if (chapters.isEmpty) {
-    if (source == null) {
-      throw Exception('章節目錄不存在');
+    // 本地書的目錄在加入時就建好，沒有就是檔案讀不出章節。
+    if (source == null) throw DownloadFailure.sourceBroken(DownloadPart.toc);
+    try {
+      chapters = await BookSourceService().getChapterList(
+        source,
+        book,
+        cancelToken: cancelToken,
+      );
+    } on DioException catch (error) {
+      if (error.type == DioExceptionType.cancel) rethrow;
+      throw DownloadFailure.of(error, part: DownloadPart.toc);
+    } on Exception catch (error) {
+      throw DownloadFailure.of(error, part: DownloadPart.toc);
     }
-    chapters = await BookSourceService().getChapterList(
-      source,
-      book,
-      cancelToken: cancelToken,
-    );
     // 抓不到目錄就記為失敗，書架自動下載照重試規則隔一天再試，不會
     // 每次開 App 都打一次書源（ADR 0008）。
-    if (chapters.isEmpty) {
-      throw Exception('章節目錄為空');
-    }
+    if (chapters.isEmpty) throw DownloadFailure.sourceBroken(DownloadPart.toc);
     await chapterDao.insertChapters(chapters);
   }
   // 範圍用章節網址記，這時才對照目前的目錄換算（ADR 0008），排隊或
   // 暫停期間書源插章、刪章都不會選到別章。
   final scope = chaptersInDownloadScope(chapters, task);
-  if (scope == null) {
-    throw Exception('選的章節已不在目錄裡，請重新選擇範圍');
-  }
+  if (scope == null) throw DownloadFailure.rangeGone;
   final List<({int index, String url, String title})> missing;
   if (book.bookKind == BookSourceKind.audio) {
     // 有聲書一集一個音訊檔（ADR 0055）。
@@ -246,6 +240,8 @@ Future<DownloadPlan> _planDownload(
   );
 }
 
+/// 抓一章；失敗在這裡照錯誤種類換成給讀者看的說法（錯誤還保有型別），
+/// 只有取消照樣丟出。
 Future<DownloadChapterResult> _downloadChapter(
   int run,
   String chapterUrl,
@@ -253,16 +249,75 @@ Future<DownloadChapterResult> _downloadChapter(
   CancelToken cancelToken,
 ) async {
   final state = _downloadRuns[run];
-  if (state == null) return DownloadChapterResult.failed('下載已結束');
+  // 這一輪已經放掉：只有結束或退役時會這樣，主 isolate 那邊也已取消。
+  if (state == null) {
+    return const DownloadChapterResult.failed(DownloadFailure.appError);
+  }
+  final book = state.book;
+  final part = switch (book.bookKind) {
+    BookSourceKind.comic => DownloadPart.images,
+    BookSourceKind.audio => DownloadPart.audio,
+    _ => DownloadPart.content,
+  };
+  try {
+    return await _downloadChapterOf(
+      state,
+      chapterUrl,
+      maxAttempts,
+      cancelToken,
+    );
+  } on DioException catch (error) {
+    if (error.type == DioExceptionType.cancel) rethrow;
+    return DownloadChapterResult.failed(DownloadFailure.of(error, part: part));
+  } catch (error, stackTrace) {
+    if (cancelToken.cancelError case final cancelled?) throw cancelled;
+    final failure = DownloadFailure.of(error, part: part);
+    // 原始錯誤只進 App 日誌；認不得的連堆疊一起記，回報時查得到。
+    if (identical(failure, DownloadFailure.appError)) {
+      AppLog.e(
+        '下載 ${book.name} 的一章失敗: $error',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    } else {
+      AppLog.w('下載 ${book.name} 的一章失敗: $error');
+    }
+    return DownloadChapterResult.failed(failure);
+  }
+}
+
+Future<DownloadChapterResult> _downloadChapterOf(
+  ({Book book, BookSource? source, Map<String, BookChapter> chapters}) state,
+  String chapterUrl,
+  int maxAttempts,
+  CancelToken cancelToken,
+) async {
   final book = state.book;
   final source = state.source;
   final chapter = state.chapters[chapterUrl];
-  if (chapter == null) return DownloadChapterResult.failed('章節不存在');
+  if (chapter == null) {
+    return const DownloadChapterResult.failed(DownloadFailure.rangeGone);
+  }
+  if (!book.isLocal && source == null) {
+    return const DownloadChapterResult.failed(DownloadFailure.sourceDeleted);
+  }
   if (book.bookKind == BookSourceKind.comic) {
-    return _downloadComicChapter(book, source, chapter, cancelToken);
+    await ComicChapterDownload.download(
+      source!,
+      book,
+      chapter,
+      cancelToken: cancelToken,
+    );
+    return const DownloadChapterResult.ready();
   }
   if (book.bookKind == BookSourceKind.audio) {
-    return _downloadAudioChapter(book, source, chapter, cancelToken);
+    await AudioChapterDownload.download(
+      source!,
+      book,
+      chapter,
+      cancelToken: cancelToken,
+    );
+    return const DownloadChapterResult.ready();
   }
   final chapterDao = getIt<ChapterDao>();
   final store = ReaderChapterContentStore(
@@ -286,8 +341,10 @@ Future<DownloadChapterResult> _downloadChapter(
       cancelToken: cancelToken,
     );
     return complete
-        ? DownloadChapterResult.ready()
-        : DownloadChapterResult.failed('插圖抓不到');
+        ? const DownloadChapterResult.ready()
+        : const DownloadChapterResult.failed(
+            DownloadFailure.illustrationsMissing,
+          );
   }
   final result = await pipeline.prepare(
     chapterIndex: chapter.index,
@@ -298,66 +355,23 @@ Future<DownloadChapterResult> _downloadChapter(
     cancelToken: cancelToken,
   );
   if (!result.isReady) {
+    AppLog.w(
+      '下載 ${book.name} 的「${chapter.title}」失敗: '
+      '${result.failureCause ?? result.failureMessage}',
+    );
     return DownloadChapterResult.failed(
-      result.failureMessage ?? result.content,
+      DownloadFailure.of(
+        result.failureCause ?? DownloadFailure.appError,
+        part: DownloadPart.content,
+      ),
     );
   }
   // 正文存好了，但有圖連不上：這章照下載失敗的重試規則再補圖（ADR 0050）。
   return await pipeline.illustrationsSettled(result.content)
-      ? DownloadChapterResult.ready()
-      : DownloadChapterResult.failed('插圖抓不到');
-}
-
-/// 漫畫的一話：抓齊圖、打包成 CBZ（[ComicChapterDownload]）。
-Future<DownloadChapterResult> _downloadComicChapter(
-  Book book,
-  BookSource? source,
-  BookChapter chapter,
-  CancelToken cancelToken,
-) async {
-  if (source == null) return DownloadChapterResult.failed('書源不存在');
-  try {
-    await ComicChapterDownload.download(
-      source,
-      book,
-      chapter,
-      cancelToken: cancelToken,
-    );
-    return DownloadChapterResult.ready();
-  } on DioException catch (error) {
-    if (error.type == DioExceptionType.cancel) rethrow;
-    return DownloadChapterResult.failed(error.message ?? '網路錯誤');
-  } on Exception catch (error) {
-    return DownloadChapterResult.failed(error.toString());
-  } on StateError catch (error) {
-    return DownloadChapterResult.failed(error.message);
-  }
-}
-
-/// 有聲書的一集：整個音訊檔抓下來（[AudioChapterDownload]）。
-Future<DownloadChapterResult> _downloadAudioChapter(
-  Book book,
-  BookSource? source,
-  BookChapter chapter,
-  CancelToken cancelToken,
-) async {
-  if (source == null) return DownloadChapterResult.failed('書源不存在');
-  try {
-    await AudioChapterDownload.download(
-      source,
-      book,
-      chapter,
-      cancelToken: cancelToken,
-    );
-    return DownloadChapterResult.ready();
-  } on DioException catch (error) {
-    if (error.type == DioExceptionType.cancel) rethrow;
-    return DownloadChapterResult.failed(error.message ?? '網路錯誤');
-  } on Exception catch (error) {
-    return DownloadChapterResult.failed(error.toString());
-  } on StateError catch (error) {
-    return DownloadChapterResult.failed(error.message);
-  }
+      ? const DownloadChapterResult.ready()
+      : const DownloadChapterResult.failed(
+          DownloadFailure.illustrationsMissing,
+        );
 }
 
 /// [chapters] 裡已經下載好（CBZ 在）的漫畫章節網址。
@@ -374,45 +388,6 @@ Future<Set<String>> downloadedComicChapterUrls(
           false)
         chapter.url,
   };
-}
-
-String classifyDownloadFailureReason(String message) {
-  final text = message.toLowerCase();
-  if (text.contains('permission') ||
-      text.contains('denied') ||
-      message.contains('權限')) {
-    return '權限問題';
-  }
-  if (text.contains('no space') ||
-      text.contains('disk full') ||
-      message.contains('儲存空間不足') ||
-      message.contains('空間不足')) {
-    return '儲存空間不足';
-  }
-  if (message.contains('找不到書源') ||
-      message.contains('書源不存在') ||
-      message.contains('書源失效')) {
-    return '書源失效';
-  }
-  if (message.contains('內容為空') ||
-      message.contains('解析規則') ||
-      message.contains('正文解析')) {
-    return '正文解析失敗';
-  }
-  if (text.contains('404') ||
-      text.contains('not found') ||
-      message.contains('章節不存在')) {
-    return '章節不存在';
-  }
-  if (text.contains('socketexception') ||
-      text.contains('timeoutexception') ||
-      text.contains('timeout') ||
-      text.contains('connection') ||
-      text.contains('dioexception') ||
-      message.contains('網路')) {
-    return '網路錯誤';
-  }
-  return '下載失敗';
 }
 
 /// DownloadService 的任務執行邏輯擴展
@@ -496,8 +471,6 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
           // 這章還沒結束時就刪資料，這章之後又把正文寫回去。
           try {
             DownloadChapterResult result;
-            // 分類看原文（英文例外名稱也算數），畫面上的原因用白話。
-            String rawFailure;
             try {
               result = await downloadChapterInSourceIsolate(
                 bookUrl: task.bookUrl,
@@ -506,25 +479,26 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
                 maxAttempts: _maxRetries,
                 cancelToken: cancelToken,
               );
-              rawFailure = result.failureMessage ?? '';
             } catch (error) {
               // 退役取消的不是失敗：不記錯誤、不寫進度。
               if (cancelToken.isCancelled) return;
+              // 書源 isolate 自己接不住的（例如它掛了），只剩這裡判斷得到。
               AppLog.w('Download chapter failed ${chapter.title}: $error');
-              result = DownloadChapterResult.failed(userErrorReason(error));
-              rawFailure = error.toString();
+              result = DownloadChapterResult.failed(
+                DownloadFailure.of(error, part: DownloadPart.content),
+              );
             }
-            if (result.success) {
-              task.successCount++;
-              consecutiveFailures = 0;
-            } else {
+            if (result.failure case final failure?) {
               task.errorCount++;
               consecutiveFailures++;
               task.setFailure(
-                reason: classifyDownloadFailureReason(rawFailure),
-                message: result.failureMessage!,
+                reason: failure.reason,
+                message: failure.message,
                 chapterIndex: chapter.index,
               );
+            } else {
+              task.successCount++;
+              consecutiveFailures = 0;
             }
             task.currentChapterIndex = chapter.index;
             task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
@@ -567,10 +541,9 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       }
       if (!cancelToken.isCancelled &&
           task.status != DownloadTask.statusPaused) {
-        task.setFailure(
-          reason: classifyDownloadFailureReason(e.toString()),
-          message: userErrorReason(e),
-        );
+        // 規劃時（找書、找書源、抓目錄）的失敗在書源 isolate 已經判斷好。
+        final failure = DownloadFailure.of(e, part: DownloadPart.toc);
+        task.setFailure(reason: failure.reason, message: failure.message);
         task.status = DownloadTask.statusFailed;
         task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
         await downloadDao.updateProgress(
