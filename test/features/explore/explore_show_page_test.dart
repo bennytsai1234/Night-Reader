@@ -8,7 +8,7 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/services/bookshelf_state_tracker.dart';
+import 'package:night_reader/core/storage/bookshelf_state_tracker.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/explore/explore_book_details.dart';
 import 'package:night_reader/features/explore/explore_show_page.dart';

@@ -16,7 +16,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
-import 'package:night_reader/core/services/book_storage_service.dart';
+import 'package:night_reader/core/storage/book_storage_service.dart';
 import 'package:night_reader/core/sync/bookshelf_sync.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/replace_rule_sync.dart';

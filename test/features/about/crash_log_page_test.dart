@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/services/crash_handler.dart';
+import 'package:night_reader/core/diagnostics/crash_handler.dart';
 import 'package:night_reader/features/about/crash_log_page.dart';
 import 'package:night_reader/features/about/log_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';

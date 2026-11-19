@@ -3,7 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/services/app_permission_service.dart';
+import 'package:night_reader/core/platform/app_permission_service.dart';
 import 'package:night_reader/features/about/privacy_pages.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';

@@ -15,7 +15,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/reader_chapter_content_store.dart';
+import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';

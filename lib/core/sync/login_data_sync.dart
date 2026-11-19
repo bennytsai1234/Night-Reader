@@ -4,8 +4,8 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:night_reader/core/database/dao/cookie_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/network/interceptors/cloudflare_interceptor.dart';
-import 'package:night_reader/core/services/cookie_store.dart';
-import 'package:night_reader/core/services/login_data_backup.dart';
+import 'package:night_reader/core/network/cookie_store.dart';
+import 'package:night_reader/core/backup/login_data_backup.dart';
 
 import 'sync_kind.dart';
 import 'sync_records.dart';

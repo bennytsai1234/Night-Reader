@@ -8,7 +8,7 @@ import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/network/page_digest.dart';
 import 'package:night_reader/core/network/page_notes.dart';
-import 'package:night_reader/core/services/source_check_isolate.dart';
+import 'package:night_reader/core/source_check/source_check_isolate.dart';
 import 'package:night_reader/core/utils/public_suffix.dart';
 
 /// 網站檢查的結論：書源校驗沒過時，問題在網站那邊，還是在規則。

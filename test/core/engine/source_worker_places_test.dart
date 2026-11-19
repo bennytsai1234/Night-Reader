@@ -12,9 +12,9 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/network_service.dart';
-import 'package:night_reader/core/services/source_check_isolate.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/network/network_service.dart';
+import 'package:night_reader/core/source_check/source_check_isolate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../test_helper.dart';

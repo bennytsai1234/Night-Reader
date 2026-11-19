@@ -18,30 +18,30 @@
 
 ## 舊程式
 
-程式分成 20 段，用今天是一年的第幾天除以 20 取餘數，挑那一段（從 0 數），20 天輪完一圈；照「各方面看什麼」看。段的順序：書源 0–4、閱讀器 0–4、資料 0–4、介面 0–3、文件。表裡的「服務」指 `lib/core/services/` 裡的那幾個檔。
+程式分成 20 段，用今天是一年的第幾天除以 20 取餘數，挑那一段（從 0 數），20 天輪完一圈；照「各方面看什麼」看。段的順序：書源 0–4、閱讀器 0–4、資料 0–4、介面 0–3、文件。
 
 | 段 | 讀哪些 |
 |---|---|
 | 書源 0 | `lib/core/engine/js/`、`third_party/flutter_js/` |
 | 書源 1 | `lib/core/engine/parsers/`、`analyze_rule/` 與 `analyze_rule.dart`、`rule_analyzer/` 與 `rule_analyzer.dart`、`analyze_url.dart`、`explore_url_parser.dart`、`rule_data_fields.dart` |
-| 書源 2 | `lib/core/engine/web_book/`、`source_isolate/`、`lib/core/network/`；`lib/core/utils/` 的 `network_utils`、`source_progress`、`idna`、`public_suffix`（不看資料表 `idna_mapping_table`、`public_suffix_rules`）；服務 `http_client`、`network_service`、`rate_limiter`、`encoding_detect` |
-| 書源 3 | `lib/features/source_manager/`（`ai_repair/` 在書源 4）、`search/`、`explore/`、`lib/core/engine/book/`、`app_event_bus.dart`；服務 `book_source_service`、`check_source_service`、`source_check_isolate`、`source_check_diagnostics`、`source_check_js_worker_probe`、`source_debug_service`、`source_switch_service`、`source_switch_handoff`、`auto_source_switch`、`rule_big_data_service` |
-| 書源 4 | 登入、網頁驗證、AI 修書源與 AI 找書：`lib/features/source_login/`、`lib/core/ai_repair/`、`lib/core/ai_find/`、`lib/features/source_manager/ai_repair/`；服務 `source_login_session`、`source_interaction`、`cookie_store`、`login_data_backup`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service` |
+| 書源 2 | `lib/core/engine/web_book/`、`source_isolate/`、`lib/core/network/`（`cookie_store`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service` 在書源 4）；`lib/core/utils/` 的 `network_utils`、`source_progress`、`idna`、`public_suffix`、`encoding_detect`（不看資料表 `idna_mapping_table`、`public_suffix_rules`） |
+| 書源 3 | `lib/features/source_manager/`（`ai_repair/` 在書源 4）、`search/`、`explore/`、`lib/core/engine/book/`、`app_event_bus.dart`、`lib/core/source/`（`source_login_session`、`source_interaction` 在書源 4，`chapter_content_kind` 在閱讀器 3）、`source_check/`、`source_switch/`；`lib/core/services/source_check_js_worker_probe.dart` |
+| 書源 4 | 登入、網頁驗證、AI 修書源與 AI 找書：`lib/features/source_login/`、`lib/core/ai_repair/`、`lib/core/ai_find/`、`lib/features/source_manager/ai_repair/`；`lib/core/source/` 的 `source_login_session`、`source_interaction`；`lib/core/network/` 的 `cookie_store`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service`；`lib/core/backup/login_data_backup.dart` |
 | 閱讀器 0 | `lib/features/reader_v2/hybrid/` |
-| 閱讀器 1 | `reader_v2/features/`、`lib/features/bookmarks/`、`lib/core/engine/reader/`、`lib/core/services/system_playback/`；服務 `tts_speech_coordinator`、`sleep_timer`、`chinese_display`、`chinese_utils` |
+| 閱讀器 1 | `reader_v2/features/`、`lib/features/bookmarks/`、`lib/core/engine/reader/`、`lib/core/playback/`（`tts_service` 在資料 2）、`lib/core/chinese/` |
 | 閱讀器 2 | `reader_v2/screen/`、`viewport/` |
-| 閱讀器 3 | `reader_v2/chapter/`、`session/`、`layout/`、`use_cases/`；`lib/core/utils/` 的 `illustration_markers`、`html_formatter`、`string_utils`；服務 `chapter_content_preparation_pipeline`、`chapter_content_kind`、`book_toc_replacer` |
-| 閱讀器 4 | 漫畫與有聲書：`lib/features/comic_reader/`、`audiobook/`、`lib/core/comic/`；服務 `local_comic_service`、`comic_folder_picker`、`audio_chapter_download` |
-| 資料 0 | `lib/core/database/`（不看 `*.g.dart`）、`storage/`、`models/` |
-| 資料 1 | `lib/core/services/download/`、`lib/features/cache_manager/`；服務 `download_service`、`cache_manager`、`book_storage_service`、`book_chapter_files`、`reader_chapter_content_store`、`reader_chapter_content_storage`、`book_illustration_storage`、`book_cover_storage_service`、`book_update_service`、`bookshelf_state_tracker`、`books_in_use` |
-| 資料 2 | 備份、還原、匯出、本地書、更新：`lib/core/local_book/`；服務 `backup_service`、`restore_service`、`bookshelf_exchange_service`、`export_book_service`、`highlight_export`、`local_book_service`、`update_service`、`update_preferences`、`app_update_installer`、`app_version`、`tts_service` |
-| 資料 3 | `lib/main.dart`、`lib/app_providers.dart`、`lib/core/startup/`、`di/`、`config/`、`constant/`、`exception/`、`fonts/`、`lib/core/services/background_work/`；Android 那一半：`android/app/src/main/` 的 Kotlin 與 `AndroidManifest.xml`；`lib/core/utils/` 的 `encoder_utils`、`lru_map`；服務 `crash_handler`、`crash_trail`、`process_exits`、`app_log_service`、`app_permission_service`、`app_file_selection_service`、`event_bus`、`default_data`、`resource_service` |
+| 閱讀器 3 | `reader_v2/chapter/`、`session/`、`layout/`、`use_cases/`；`lib/core/utils/` 的 `illustration_markers`、`html_formatter`、`string_utils`；`lib/core/source/chapter_content_kind.dart`；`lib/core/storage/` 的 `chapter_content_preparation_pipeline`、`book_toc_replacer` |
+| 閱讀器 4 | 漫畫與有聲書：`lib/features/comic_reader/`、`audiobook/`、`lib/core/comic/`；`lib/core/download/audio_chapter_download.dart` |
+| 資料 0 | `lib/core/database/`（不看 `*.g.dart`）、`models/`；`lib/core/storage/` 的 `app_cache`、`app_storage_paths`、`reader_layout_cache`、`storage_metrics` |
+| 資料 1 | `lib/core/download/`（`audio_chapter_download` 在閱讀器 4）、`lib/features/cache_manager/`；`lib/core/utils/cache_manager.dart`；`lib/core/storage/` 的 `book_storage_service`、`book_chapter_files`、`reader_chapter_content_store`、`reader_chapter_content_storage`、`book_illustration_storage`、`book_cover_storage_service`、`bookshelf_state_tracker`、`books_in_use` |
+| 資料 2 | 備份、還原、匯出、本地書、更新：`lib/core/local_book/`、`backup/`（`login_data_backup` 在書源 4）、`app_update/`；`lib/core/playback/tts_service.dart` |
+| 資料 3 | `lib/main.dart`、`lib/app_providers.dart`、`lib/core/startup/`、`di/`、`config/`、`constant/`、`exception/`、`fonts/`、`background_work/`、`diagnostics/`、`platform/`；Android 那一半：`android/app/src/main/` 的 Kotlin 與 `AndroidManifest.xml`；`lib/core/utils/` 的 `encoder_utils`、`lru_map`；`lib/core/storage/resource_service.dart`；`lib/core/services/event_bus.dart` |
 | 資料 4 | 同步：`lib/core/sync/` |
 | 介面 0 | `lib/shared/widgets/` 裡的 `skeleton*`、`snapshot_sweep`、`launch_entrance` |
 | 介面 1 | `lib/shared/widgets/` 其餘、`lib/shared/navigation/`、`theme/`、`layout/` |
 | 介面 2 | `lib/features/bookshelf/`、`book_detail/`、`welcome/` |
 | 介面 3 | `lib/features/settings/`、`about/`、`association/`、`replace_rule/` |
-| 文件 | 全部文件；另外列出 `lib/features/`、`lib/core/` 底下的資料夾與 `lib/core/services/` 的檔，表上沒有的寫進報告「沒排進分段的程式」一節 |
+| 文件 | 全部文件；另外列出 `lib/features/`、`lib/core/` 底下的資料夾，與表上只列了部分檔案的資料夾（`lib/core/source/`、`storage/`、`utils/`）裡的檔，表上沒有的寫進報告「沒排進分段的程式」一節 |
 
 ## 各方面看什麼
 

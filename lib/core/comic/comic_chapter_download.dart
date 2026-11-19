@@ -14,7 +14,7 @@ import '../engine/web_book/illustration_fetcher.dart';
 import '../models/book.dart';
 import '../models/book_source.dart';
 import '../models/chapter.dart';
-import '../services/book_chapter_files.dart';
+import '../storage/book_chapter_files.dart';
 import '../utils/illustration_markers.dart';
 import 'comic_chapter_files.dart';
 

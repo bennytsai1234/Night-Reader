@@ -42,14 +42,14 @@
 
 ### 已經可行的部分
 
-- **JS 引擎**：QuickJS 走 FFI，書源校驗已經在背景 isolate 裡跑完整的搜尋、詳情、目錄、正文流程（`lib/core/services/source_check_isolate.dart`）。
+- **JS 引擎**：QuickJS 走 FFI，書源校驗已經在背景 isolate 裡跑完整的搜尋、詳情、目錄、正文流程（`lib/core/source_check/source_check_isolate.dart`）。
 - **網路**：`NetworkService().init(ephemeral: true)` 在背景 isolate 建立自己的 Dio（同檔 `:203`）。
 - **平台通道（Dart 往平台發訊息）**：背景 isolate 用 `BackgroundIsolateBinaryMessenger.ensureInitialized(rootIsolateToken)` 註冊後即可使用外掛，例如 `path_provider`、`shared_preferences`。Flutter 官方文件：「Plugins and channels can be used by any `Isolate`, but that `Isolate` has to be a root `Isolate` (the one created by Flutter) or registered as a background `Isolate` for a root `Isolate`.」（[Platform channels](https://docs.flutter.dev/platform-integration/platform-channels)）
 - **登入與互動驗證**：不支援（ADR 0013），引擎不會需要等使用者。
 
 ### 阻礙一：WebView 只能留在主 isolate
 
-書源的 `webView` 網址選項與 `java.webView` 用 `webview_flutter` 渲染網頁（`lib/core/engine/web_book/headless_webview_service.dart`、`lib/core/services/backstage_webview.dart`）。WebView 的頁面載入完成等事件是平台主動呼叫 Dart，而背景 isolate 不能接收平台發來的訊息。Flutter 3.47.0 的 `BackgroundIsolateBinaryMessenger.setMessageHandler` 直接丟出錯誤：「Background isolates do not support setMessageHandler(). Messages from the host platform always go to the root isolate.」（`packages/flutter/lib/src/services/_background_isolate_binary_messenger_io.dart:94-97`）。Flutter 的介紹文章也說反方向的通訊「have not been implemented or accepted yet」（[Introducing background isolate channels](https://flutter.dev/blog/introducing-background-isolate-channels)）。
+書源的 `webView` 網址選項與 `java.webView` 用 `webview_flutter` 渲染網頁（`lib/core/engine/web_book/headless_webview_service.dart`、`lib/core/network/backstage_webview.dart`）。WebView 的頁面載入完成等事件是平台主動呼叫 Dart，而背景 isolate 不能接收平台發來的訊息。Flutter 3.47.0 的 `BackgroundIsolateBinaryMessenger.setMessageHandler` 直接丟出錯誤：「Background isolates do not support setMessageHandler(). Messages from the host platform always go to the root isolate.」（`packages/flutter/lib/src/services/_background_isolate_binary_messenger_io.dart:94-97`）。Flutter 的介紹文章也說反方向的通訊「have not been implemented or accepted yet」（[Introducing background isolate channels](https://flutter.dev/blog/introducing-background-isolate-channels)）。
 
 做法：背景 isolate 遇到 WebView 需求時，透過 port 請主 isolate 渲染並回傳 HTML。這是唯一需要「背景 → 主」反向請求的地方。
 
@@ -70,7 +70,7 @@ drift 官方文件：
 
 ### 阻礙三：Cookie 只能有一個擁有者
 
-`NetworkService` 用 `PersistCookieJar` 寫 `.cookies` 目錄（`lib/core/services/network_service.dart:43-47`）；校驗 isolate 刻意改用記憶體 jar，避免多個 isolate 同時寫同一份檔案。主 isolate 還有書源以外的使用者：`WebViewDataService` 在 WebView 與 Cookie 之間同步、`UpdateService`／`AppUpdateInstaller` 下載 App 更新。
+`NetworkService` 用 `PersistCookieJar` 寫 `.cookies` 目錄（`lib/core/network/network_service.dart:43-47`）；校驗 isolate 刻意改用記憶體 jar，避免多個 isolate 同時寫同一份檔案。主 isolate 還有書源以外的使用者：`WebViewDataService` 在 WebView 與 Cookie 之間同步、`UpdateService`／`AppUpdateInstaller` 下載 App 更新。
 
 做法：書源相關的請求全部由書源 isolate 發出、由它擁有 Cookie 檔；主 isolate 的更新下載改用不帶持久 Cookie 的 Dio；WebView 渲染時需要的 Cookie 由書源 isolate 隨請求一起交給主 isolate，渲染後新增的 Cookie 再傳回。
 

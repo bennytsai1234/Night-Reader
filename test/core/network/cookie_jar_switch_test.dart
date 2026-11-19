@@ -7,8 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/js/extensions/js_blocking_tasks.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/http_client.dart';
-import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/core/network/http_client.dart';
+import 'package:night_reader/core/network/network_service.dart';
 
 import '../../test_helper.dart';
 

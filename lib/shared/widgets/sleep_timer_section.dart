@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
-import 'package:night_reader/core/services/sleep_timer.dart';
+import 'package:night_reader/core/playback/sleep_timer.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';

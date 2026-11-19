@@ -13,8 +13,8 @@ import 'package:night_reader/shared/widgets/glass.dart';
 
 import 'audiobook_player.dart';
 
-import 'package:night_reader/core/services/ui_language.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
 
 /// 離開播放器還在播時，書架、發現、我的在搜尋鈕上方浮的圓鈕
 /// （`docs/design/audiobook.md`「離開播放器還在播：圓鈕」）：封面縮圖、外圈

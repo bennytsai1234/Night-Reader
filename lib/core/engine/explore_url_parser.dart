@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/app_cache.dart';
 import 'package:night_reader/core/utils/encoder_utils.dart';
 

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:fast_gbk/fast_gbk.dart';
-import 'package:night_reader/core/services/encoding_detect.dart';
+import 'package:night_reader/core/utils/encoding_detect.dart';
 
 /// 規則 JS 裡文字與位元組互轉（`java.strToBytes`、`bytesToStr`、加解密的
 /// 字元集參數），照 Java 的 `String.getBytes(charset)`、`new String(bytes,

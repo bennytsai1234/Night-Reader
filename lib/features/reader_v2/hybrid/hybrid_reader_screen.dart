@@ -49,7 +49,7 @@ import 'view/hybrid_scroll_controller.dart';
 import 'view/hybrid_scroll_view.dart';
 import 'view/viewport_commands.dart';
 
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 class HybridReaderScreen extends StatefulWidget {
   const HybridReaderScreen({

@@ -6,8 +6,8 @@ import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/background_work/reading_fetches.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/background_work/reading_fetches.dart';
 
 import 'models/search_scope.dart';
 import 'search_model.dart';

@@ -7,7 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/network/source_tls.dart';
-import 'package:night_reader/core/services/encoding_detect.dart';
+import 'package:night_reader/core/utils/encoding_detect.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 
 import '../encode/charsets.dart';

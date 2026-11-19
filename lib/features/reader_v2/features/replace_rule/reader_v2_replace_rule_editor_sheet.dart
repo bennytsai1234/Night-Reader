@@ -11,7 +11,7 @@ import 'package:night_reader/features/replace_rule/widgets/replace_edit_test_pan
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 class ReaderV2ReplaceRuleEditorSheet extends StatefulWidget {
   const ReaderV2ReplaceRuleEditorSheet({

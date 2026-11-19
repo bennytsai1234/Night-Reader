@@ -4,9 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:pool/pool.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/book_update_service.dart';
-import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/download/book_update_service.dart';
+import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
 
 import 'bookshelf_provider_base.dart';
 

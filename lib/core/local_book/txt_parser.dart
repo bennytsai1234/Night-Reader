@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import '../services/encoding_detect.dart';
+import '../utils/encoding_detect.dart';
 
 /// TxtParser - 高性能 TXT 解析器
 /// 深度還原 Android model/localBook/TextFile.kt 的物理位移邏輯

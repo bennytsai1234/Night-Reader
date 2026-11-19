@@ -9,7 +9,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/services/tts_service.dart';
+import 'package:night_reader/core/playback/tts_service.dart';
 import 'package:night_reader/features/about/about_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';

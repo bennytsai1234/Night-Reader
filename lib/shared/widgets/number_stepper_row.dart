@@ -13,7 +13,7 @@ import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/popup_routes.dart';
 import 'package:night_reader/shared/widgets/press_ink.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 數值設定列：`標籤 [−] 數值 [+]`。
 ///

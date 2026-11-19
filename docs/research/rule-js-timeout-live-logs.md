@@ -10,7 +10,7 @@
 2. **JS 工具沒有部分成果。** `lib/core/ai_repair/repair_rule_tools.dart:63-95,210-247`：主 isolate 在 `worker.run(...).timeout` 到點時直接傳回「超過時間，沒做完」，在 `finally` 結束 worker。`_jsTask` 只有在整段 `evalJS` 返回後才從 `RequestLog.lines` 產生「# 這段程式送出的請求」，因此超時時請求紀錄也消失。
 3. **同步請求的回傳管道是「等網路工作結束後一次交回」。** `lib/core/engine/source_isolate/blocking_call.dart:28-51`：書源 isolate 在 `BlockingCall.run` 裡同步等 `Mailbox.take()`，拿到 `_Outcome` 才 `RequestLog.merge`。網路 isolate 的 `_perform` 收集 `RequestLog`，透過 `_Outcome` 一次帶回（`source_isolate.dart:751-773`）。就算第一筆網路請求已完成、紀錄已合併進書源 isolate，第二筆同步請求又停住時，主 isolate 仍看不到第一筆。
 4. **請求在送出當下就已有紀錄。** `lib/core/network/interceptors/app_interceptor.dart` 的 `onRequest` 呼叫 `recordRequestUrl`，`onResponse`／`onError` 呼叫 `recordResponse`；`RequestLog._add` 直接寫進 `lines`。因此網路 isolate 有能力在同步 JS 等回覆的同時，獨立通知主 isolate。
-5. **除錯紀錄另有一個排隊點。** `lib/core/services/source_debug_service.dart:20-53` 的 `StreamController<DebugLog>.broadcast()` 預設是非同步通知；試抓在 worker 裡聽 `logStream`。同步 JS 佔住 worker 時，佇列中的除錯事件也可能要等 JS 返回才被讀取。若要不等 JS 完成，報送入口要在 `log()` 當下同步呼叫，而不是只依賴 listener。
+5. **除錯紀錄另有一個排隊點。** `lib/core/source/source_debug_service.dart:20-53` 的 `StreamController<DebugLog>.broadcast()` 預設是非同步通知；試抓在 worker 裡聽 `logStream`。同步 JS 佔住 worker 時，佇列中的除錯事件也可能要等 JS 返回才被讀取。若要不等 JS 完成，報送入口要在 `log()` 當下同步呼叫，而不是只依賴 listener。
 6. **已經有能用的跨 isolate 單向通道。** `lib/core/engine/source_isolate/isolate_channel.dart:40,51-68` 的 `notify`／`onNotice` 能送不需等待的訊息；`SourceWorker._onWorkerNotice` 也已用它處理 `_Log`、`_Block` 等通知。需要新增「只屬於這次工作」的進度通知與回收邏輯，不需要把同步 JS 改成非同步。
 7. **不能用強制立即殺掉 isolate 當捷徑。** `SourceWorker.kill`（`source_isolate.dart:390-415`）刻意採用 `Isolate.beforeNextEvent`，避免 QuickJS 原生回呼期間被 `Isolate.immediate` 結束造成閃退。這個限制必須保留。
 

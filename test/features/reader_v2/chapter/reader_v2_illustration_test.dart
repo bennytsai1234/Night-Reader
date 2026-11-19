@@ -7,7 +7,7 @@ import 'package:night_reader/core/utils/illustration_markers.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
-import 'package:night_reader/core/services/book_illustration_storage.dart';
+import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';

@@ -6,8 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 
 /// 從書籍詳情補到的封面與字數；沒抓到的是空字串。

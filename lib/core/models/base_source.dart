@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:night_reader/core/models/source/source_login_ui.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/cache_manager.dart';
-import 'package:night_reader/core/services/cookie_store.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/utils/cache_manager.dart';
+import 'package:night_reader/core/network/cookie_store.dart';
 
 /// BaseSource - 資源來源基礎介面
 /// (原 Android data/entities/BaseSource.kt)

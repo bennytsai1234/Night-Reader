@@ -11,12 +11,12 @@ import 'views/source_edit_book_info.dart';
 import 'views/source_edit_toc.dart';
 import 'views/source_edit_content.dart';
 
-import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 編輯器分頁標籤，順序對應 [TabBarView] 的子頁。
 const List<String> _tabLabels = ['基礎', '搜尋', '發現', '詳情', '目錄', '正文'];

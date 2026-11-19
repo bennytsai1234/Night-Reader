@@ -17,7 +17,7 @@ import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
-import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/chinese/chinese_utils.dart';
 
 SearchBook _book(String name, {String author = '作者', int type = 0}) =>
     SearchBook(

@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
-import '../services/app_version.dart';
+import '../app_update/app_version.dart';
 import 'app_storage_paths.dart';
 
 /// 閱讀器排版快取在磁碟上的位置與清理。

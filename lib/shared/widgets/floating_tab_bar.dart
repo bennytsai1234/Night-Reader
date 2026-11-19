@@ -11,7 +11,7 @@ import '../theme/app_tokens.dart';
 import 'glass.dart';
 import 'launch_entrance.dart';
 
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 class FloatingTabItem {
   const FloatingTabItem({required this.icon, required this.label});

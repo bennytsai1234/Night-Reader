@@ -12,8 +12,8 @@ import 'package:xml/xml.dart';
 
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/local_book/txt_parser.dart';
-import 'package:night_reader/core/services/book_illustration_storage.dart';
-import 'package:night_reader/core/services/encoding_detect.dart';
+import 'package:night_reader/core/storage/book_illustration_storage.dart';
+import 'package:night_reader/core/utils/encoding_detect.dart';
 
 class EpubBookInfo {
   const EpubBookInfo({

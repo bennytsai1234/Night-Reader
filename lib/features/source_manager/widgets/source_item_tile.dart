@@ -3,7 +3,7 @@ import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
-import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -15,7 +15,7 @@ import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import '../source_manager_provider.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 編輯模式左側勾選圈佔用的寬度（圈 22 + 間距）。
 const double _kCheckSlotWidth = 22 + AppGrouped.iconGap;

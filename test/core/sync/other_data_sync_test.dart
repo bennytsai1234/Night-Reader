@@ -14,7 +14,7 @@ import 'package:night_reader/core/database/dao/cookie_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/cookie.dart';
-import 'package:night_reader/core/services/login_data_backup.dart';
+import 'package:night_reader/core/backup/login_data_backup.dart';
 import 'package:night_reader/core/sync/login_data_sync.dart';
 import 'package:night_reader/core/sync/read_stats_sync.dart';
 import 'package:night_reader/core/sync/settings_sync.dart';

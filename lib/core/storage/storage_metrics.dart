@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 
 class StorageMetrics {
   static Future<int> directorySize(Directory dir) async {

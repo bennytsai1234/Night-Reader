@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:night_reader/core/exception/user_error.dart';
-import 'package:night_reader/core/services/comic_folder_picker.dart';
+import 'package:night_reader/core/comic/comic_folder_picker.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/features/settings/sync_status_text.dart';
 import 'package:path/path.dart' as p;
@@ -14,7 +14,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
-import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
+import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
@@ -37,11 +37,11 @@ import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
-import 'package:night_reader/core/services/app_file_selection_service.dart';
+import 'package:night_reader/core/platform/app_file_selection_service.dart';
 import 'package:night_reader/shared/theme/app_haptics.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/launch_entrance.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
 
 enum _BookshelfBatchAction { checkUpdate, delete }
 

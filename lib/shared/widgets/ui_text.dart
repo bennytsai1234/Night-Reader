@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 與 Flutter Text 相容的介面文字：構造參數、const、Text.rich 及 Text 類型
 /// 比對全部保留，只在顯示時依介面語言轉換。書籍正文不要使用本元件。

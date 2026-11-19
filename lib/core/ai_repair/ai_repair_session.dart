@@ -10,11 +10,11 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
-import 'package:night_reader/core/services/check_source_service.dart';
-import 'package:night_reader/core/services/crash_trail.dart';
-import 'package:night_reader/core/services/source_check_isolate.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
+import 'package:night_reader/core/source_check/check_source_service.dart';
+import 'package:night_reader/core/diagnostics/crash_trail.dart';
+import 'package:night_reader/core/source_check/source_check_isolate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'agent_loop.dart';

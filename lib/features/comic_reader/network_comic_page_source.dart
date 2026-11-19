@@ -1,13 +1,13 @@
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:night_reader/core/services/background_work/reading_fetches.dart';
+import 'package:night_reader/core/background_work/reading_fetches.dart';
 import 'package:night_reader/core/comic/comic_chapter_download.dart';
 import 'package:night_reader/core/comic/comic_chapter_files.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
 
 import 'comic_page_source.dart';
 

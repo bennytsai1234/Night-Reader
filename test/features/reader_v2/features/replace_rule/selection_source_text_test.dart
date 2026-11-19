@@ -5,7 +5,7 @@ import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
-import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/selection_source_text.dart';

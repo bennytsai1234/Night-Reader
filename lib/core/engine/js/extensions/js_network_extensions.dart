@@ -10,8 +10,8 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/source_interaction.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/source/source_interaction.dart';
 import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 

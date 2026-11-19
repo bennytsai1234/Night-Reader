@@ -9,7 +9,7 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/core/network/network_service.dart';
 
 import '../../../test_helper.dart';
 

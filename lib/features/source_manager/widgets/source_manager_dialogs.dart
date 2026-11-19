@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -16,7 +16,7 @@ import '../source_debug_page.dart';
 import 'source_check_status_bar.dart' show sourceCheckPausedText;
 import '../source_manager_provider.dart';
 
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 class SourceManagerDialogs {
   /// 校驗詳情：底部面板上面是進度與狀態，下面是日誌；頁首右邊在校驗中或

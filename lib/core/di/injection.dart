@@ -5,7 +5,7 @@ import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../network/source_tls.dart';
-import '../services/network_service.dart';
+import '../network/network_service.dart';
 import '../database/app_database.dart';
 import '../database/dao/book_dao.dart';
 import '../database/dao/bookmark_dao.dart';
@@ -25,10 +25,10 @@ import '../database/dao/search_keyword_dao.dart';
 import '../database/dao/keyboard_assist_dao.dart';
 import '../database/dao/server_dao.dart';
 import '../database/dao/reader_chapter_content_dao.dart';
-import '../services/tts_service.dart';
-import '../services/check_source_service.dart';
-import '../services/app_version.dart';
-import '../services/crash_handler.dart';
+import '../playback/tts_service.dart';
+import '../source_check/check_source_service.dart';
+import '../app_update/app_version.dart';
+import '../diagnostics/crash_handler.dart';
 import '../engine/source_isolate/source_isolate.dart';
 
 final getIt = GetIt.instance;

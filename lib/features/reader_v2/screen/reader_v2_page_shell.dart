@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/popup_routes.dart';
 import 'package:intl/intl.dart';
 import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness_bar.dart';
@@ -16,7 +16,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_m
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_entrance.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
-import 'package:night_reader/core/services/sleep_timer.dart';
+import 'package:night_reader/core/playback/sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/progress/chapter_shares.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
@@ -31,7 +31,7 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:night_reader/shared/widgets/skeleton_text.dart';
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 閱讀頁面框架的垂直幾何：頁首、正文、頁尾各佔的高度。
 ///

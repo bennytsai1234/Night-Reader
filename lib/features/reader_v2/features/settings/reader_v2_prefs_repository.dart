@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/fonts/app_font.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';

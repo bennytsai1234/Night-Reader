@@ -14,12 +14,12 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/book_illustration_storage.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
-import 'package:night_reader/core/services/local_book_service.dart';
-import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
-import 'package:night_reader/core/services/reader_chapter_content_store.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/storage/book_illustration_storage.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
+import 'package:night_reader/core/local_book/local_book_service.dart';
+import 'package:night_reader/core/storage/reader_chapter_content_storage.dart';
+import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
 
 import 'package:night_reader/features/reader_v2/hybrid/progress/chapter_shares.dart';
 

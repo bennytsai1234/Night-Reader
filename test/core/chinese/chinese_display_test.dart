@@ -1,0 +1,55 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
+import 'package:night_reader/core/chinese/chinese_utils.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// 顯示時繁簡轉換的契約：閱讀設定一變，已顯示的書籍資訊就跟著重建；
+/// 轉換只作用在顯示，原字串不變。
+void main() {
+  setUpAll(() {
+    ChineseUtils.initializeFromDictionaryData([
+      for (final path in ChineseUtils.dictionaryAssetPaths)
+        File(path).readAsStringSync(),
+    ]);
+  });
+
+  setUp(() async {
+    // 從不轉換開始，才看得出切到簡轉繁時畫面跟著換。
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      PreferKey.readerChineseConvert: 0,
+    });
+    GetIt.instance.registerSingleton<SharedPreferences>(
+      await SharedPreferences.getInstance(),
+    );
+    ChineseDisplay.mode.value = 0;
+  });
+  tearDown(GetIt.instance.reset);
+
+  testWidgets('changing the reader setting re-renders shown book names', (
+    tester,
+  ) async {
+    const rawName = '斗罗大陆';
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => ChineseDisplayScope(child: child!),
+        home: Builder(builder: (context) => Text(context.zh(rawName))),
+      ),
+    );
+    expect(find.text(rawName), findsOneWidget);
+
+    final settings = ReaderV2SettingsController()..setChineseConvert(1);
+    await tester.pump();
+    expect(find.text('斗羅大陸'), findsOneWidget);
+
+    settings.setChineseConvert(0);
+    await tester.pump();
+    expect(find.text(rawName), findsOneWidget);
+    settings.dispose();
+  });
+}

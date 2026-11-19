@@ -8,9 +8,9 @@ import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/background_work/background_work.dart';
-import 'package:night_reader/core/services/background_work/paused_work_file.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/background_work/background_work.dart';
+import 'package:night_reader/core/background_work/paused_work_file.dart';
 import 'package:night_reader/shared/navigation/root_navigator.dart';
 
 import 'ai_repair_page.dart';

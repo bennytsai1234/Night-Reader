@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/cookie_store.dart';
-import 'package:night_reader/core/services/source_interaction.dart';
-import 'package:night_reader/core/services/webview_cloudflare_solver.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/network/cookie_store.dart';
+import 'package:night_reader/core/source/source_interaction.dart';
+import 'package:night_reader/core/network/webview_cloudflare_solver.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';

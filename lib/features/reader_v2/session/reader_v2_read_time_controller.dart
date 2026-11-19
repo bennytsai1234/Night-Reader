@@ -1,5 +1,5 @@
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 
 class ReaderV2ReadTimeController {
   ReaderV2ReadTimeController({

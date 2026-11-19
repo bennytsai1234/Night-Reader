@@ -12,7 +12,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/cache_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/core/sync/source_sync.dart';
 import 'package:night_reader/core/sync/sync_records.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';

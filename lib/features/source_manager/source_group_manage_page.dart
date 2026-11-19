@@ -17,7 +17,7 @@ import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
 import 'source_manager_provider.dart';
 
-import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 
 class SourceGroupManagePage extends StatelessWidget {
   const SourceGroupManagePage({super.key});

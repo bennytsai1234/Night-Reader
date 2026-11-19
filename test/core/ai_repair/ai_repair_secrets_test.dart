@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
-import 'package:night_reader/core/services/cookie_store.dart';
+import 'package:night_reader/core/network/cookie_store.dart';
 
 void main() {
   test('a secret is hidden in its JSON-escaped forms too', () {
