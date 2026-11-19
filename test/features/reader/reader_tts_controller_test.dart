@@ -773,6 +773,26 @@ void main() {
       await tts.stop();
     });
 
+    testWidgets('starting again right after ending counts down afresh', (
+      tester,
+    ) async {
+      await open({0: '甲。'});
+      await tts.sleepTimer.choose(SleepTimerOption.minutes15);
+      await tts.startFromVisibleLocation();
+      await elapse(tester, const Duration(minutes: 5));
+
+      final engineStopped = Completer<void>();
+      engine.stopGates.add(engineStopped);
+      final ending = tts.stop();
+      await tts.startFromVisibleLocation();
+      engineStopped.complete();
+      await ending;
+      await tester.pump();
+
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 15));
+      await tts.stop();
+    });
+
     testWidgets('a custom timer counts down its own minutes', (tester) async {
       await open({0: '唯一的一句。'});
       await tts.sleepTimer.setCustomMinutes(20);

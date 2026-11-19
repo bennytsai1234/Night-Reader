@@ -322,11 +322,12 @@ class ReaderTtsController extends ChangeNotifier
     notifyListeners();
   }
 
+  /// 結束：馬上收掉系統播放資訊與倒數，再等引擎停好。
   @override
   Future<void> stop() async {
     _state = const _Idle();
-    await _tts.stop();
     notifyListeners();
+    await _tts.stop();
   }
 
   @override
@@ -370,13 +371,14 @@ class ReaderTtsController extends ChangeNotifier
       active: phase != ReaderTtsPhase.idle,
       running: phase == ReaderTtsPhase.reading,
     );
-    _syncSystemPlayback(playing: phase == ReaderTtsPhase.reading);
+    // 定時的監聽者可能在上面同步改了階段，系統播放資訊照當下的。
+    _syncSystemPlayback();
     super.notifyListeners();
   }
 
   /// 正在念或暫停中：把正在念的章、這本書與做得到的按鈕交給系統播放資訊；
   /// 停了就收掉。
-  void _syncSystemPlayback({required bool playing}) {
+  void _syncSystemPlayback() {
     final chapterIndex = _chapterIndex;
     if (chapterIndex == null) {
       _playback.release(this);
@@ -392,7 +394,7 @@ class ReaderTtsController extends ChangeNotifier
         author: book.getRealAuthor(),
         coverSource: UnifiedCovers.coverOf(book),
       ),
-      playing: playing,
+      playing: isPlaying,
       controls: {
         if (chapterIndex > 0) PlaybackControl.skipToPrevious,
         if (chapterIndex + 1 < runtime.chapterCount) PlaybackControl.skipToNext,
