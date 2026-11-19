@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:audio_service_platform_interface/audio_service_platform_interface.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
+import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -988,6 +990,27 @@ void main() {
         PlaybackControl.stop,
       });
     });
+
+    test(
+      'a chapter still loading shows its title converted like the header',
+      () async {
+        ChineseUtils.initializeFromDictionaryData([
+          for (final path in ChineseUtils.dictionaryAssetPaths)
+            File(path).readAsStringSync(),
+        ]);
+        final mode = ChineseDisplay.mode.value;
+        ChineseDisplay.mode.value = 1;
+        addTearDown(() => ChineseDisplay.mode.value = mode);
+        final second = Completer<void>();
+        await open({0: '甲。', 1: '乙。'}, titles: {1: '斗罗大陆'}, gates: {1: second});
+        await tts.startFromVisibleLocation();
+
+        tts.onSkipToNext();
+        await pumpEventQueue();
+        expect(system.title, '斗羅大陸');
+        second.complete();
+      },
+    );
 
     test('a chapter without a title shows its number', () async {
       await open({0: '第一句。'});

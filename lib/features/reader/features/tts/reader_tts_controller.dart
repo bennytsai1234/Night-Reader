@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
@@ -418,10 +419,12 @@ class ReaderTtsController extends ChangeNotifier
     );
   }
 
+  /// 念過的章用正文的章名；還沒載入的用目錄的章名，照閱讀偏好轉換繁簡，
+  /// 和頁首一樣。
   String _chapterTitleOf(int chapterIndex) {
     for (final title in [
       _chapterTitles[chapterIndex],
-      runtime.chapterAt(chapterIndex)?.title,
+      ChineseDisplay.convert(runtime.chapterAt(chapterIndex)?.title ?? ''),
     ]) {
       final trimmed = title?.trim();
       if (trimmed != null && trimmed.isNotEmpty) return trimmed;
@@ -531,8 +534,9 @@ class ReaderTtsController extends ChangeNotifier
     _observedContentGeneration = contentGeneration;
 
     // 句段與高亮是某一版正文裡的 UTF-16 座標；正文換了就停下，晚到的載入
-    // 與念完跟著作廢，舊正文的座標一起丟掉。
+    // 與念完跟著作廢，舊正文的座標與章名一起丟掉。
     _state = const _Idle();
+    _chapterTitles.clear();
     unawaited(_tts.stop());
     notifyListeners();
   }
