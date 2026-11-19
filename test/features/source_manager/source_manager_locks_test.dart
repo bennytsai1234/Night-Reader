@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source/source_dedupe.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
@@ -217,10 +218,16 @@ void main() {
 
     await provider.deleteSourcesByUrls(['https://c.example']);
     expect(await dao.getByUrl('https://c.example'), isNotNull);
-    expect(await provider.importSources([_source('https://new.example')]), (
-      imported: 0,
-      merged: 0,
-    ));
+    // 預覽面板開著時才忙起來的：說書源管理在忙，不是「未匯入有效書源」。
+    Object? refused;
+    try {
+      await provider.importSources([_source('https://new.example')]);
+    } catch (error) {
+      refused = error;
+    }
+    expect(refused, isNotNull);
+    expect(userErrorReason(refused!), '書源管理正在改書源，等它做完再匯入');
+    expect(await dao.getByUrl('https://new.example'), isNull);
 
     merge.gate.complete();
     await reload;

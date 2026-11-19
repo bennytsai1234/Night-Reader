@@ -1426,9 +1426,11 @@ class SourceManagerProvider with ChangeNotifier {
   ParsedSourceImportResult parseSourcesDetailed(String jsonStr) =>
       _importService.parseSourcesDetailed(jsonStr);
 
-  /// 直接匯入書源列表（跳過預覽）
+  /// 直接匯入書源列表（跳過預覽）。清單忙著時丟出 [StateError]：選單在忙時
+  /// 灰掉，會走到這裡的是預覽面板開著時才忙起來的（例如背景工作開始校驗）。
   Future<SourceImportCount> importSources(List<BookSource> sources) async {
-    if (sources.isEmpty || isMutationBusy) return (imported: 0, merged: 0);
+    if (sources.isEmpty) return (imported: 0, merged: 0);
+    if (isMutationBusy) throw StateError('書源管理正在改書源，等它做完再匯入');
     _work = _ListWork.importing;
     notifyListeners();
     try {
