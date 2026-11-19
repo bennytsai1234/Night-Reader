@@ -36,14 +36,17 @@ import 'webdav_sync_store.dart';
 class SyncStatus {
   const SyncStatus({
     this.space = SyncSpace.none,
-    this.running = false,
+    this.phase = SyncPhase.idle,
     this.lastSyncAt,
     this.error,
     this.progress,
   });
 
   final SyncSpace space;
-  final bool running;
+
+  /// 讀者看到的同步階段。沒設同步空間時，就算一段同步跑著（什麼都不做）
+  /// 也是閒著。
+  final SyncPhase phase;
   final DateTime? lastSyncAt;
 
   /// 目前正在處理的資料及順序；不是傳輸百分比。
@@ -54,9 +57,12 @@ class SyncStatus {
 
   bool get enabled => space != SyncSpace.none;
 
+  /// 「同步中」：副標寫正在同步哪一種。
+  bool get running => phase != SyncPhase.idle;
+
   SyncStatus copyWith({
     SyncSpace? space,
-    bool? running,
+    SyncPhase? phase,
     DateTime? lastSyncAt,
     String? error,
     bool clearError = false,
@@ -64,7 +70,7 @@ class SyncStatus {
     bool clearProgress = false,
   }) => SyncStatus(
     space: space ?? this.space,
-    running: running ?? this.running,
+    phase: phase ?? this.phase,
     lastSyncAt: lastSyncAt ?? this.lastSyncAt,
     error: clearError ? null : error ?? this.error,
     progress: clearProgress ? null : progress ?? this.progress,
@@ -107,6 +113,29 @@ enum SyncPhase {
   stopping,
 }
 
+/// 一次全面同步（[SyncService.syncAll]）要的那一輪怎麼結束，給進度框收掉後
+/// 那一行提示。看的是那一輪自己，不看之後補跑的輪次。
+sealed class FullSyncResult {
+  const FullSyncResult();
+}
+
+/// 全部種類都同步完了（沒設定同步空間、沒有要做的也算）。
+final class FullSyncDone extends FullSyncResult {
+  const FullSyncDone();
+}
+
+/// 按了取消，在兩種資料之間停下；寫完的留著。
+final class FullSyncStopped extends FullSyncResult {
+  const FullSyncStopped();
+}
+
+/// 那一輪失敗：[message] 是給讀者看的原因。
+final class FullSyncFailed extends FullSyncResult {
+  const FullSyncFailed(this.message);
+
+  final String message;
+}
+
 /// 跑的途中又有人要的那一輪。
 enum _Next { none, progress, full }
 
@@ -125,11 +154,11 @@ class _SyncRun {
   /// 送；和這一輪、排著的下一輪同時成立。
   bool progressFirst = false;
 
-  /// 這一輪是全面同步時，等它做完的人（[SyncService.syncAll]）。
-  Completer<void>? fullWaiters;
+  /// 這一輪是全面同步時，等它結果的人（[SyncService.syncAll]）。
+  Completer<FullSyncResult>? fullWaiters;
 
-  /// 排著的全面同步，等它做完的人。
-  Completer<void>? nextFullWaiters;
+  /// 排著的全面同步，等它結果的人。
+  Completer<FullSyncResult>? nextFullWaiters;
 
   /// 整段做完時完成。
   late final Future<void> done;
@@ -381,13 +410,13 @@ class SyncService {
 
   /// 全面同步：書架、書源、替換規則、設定、登入資料……全部種類。使用者在
   /// 「備份與同步」按「立即全面同步」、或剛選好同步空間時呼叫。正在同步時
-  /// 不搶先，排在後面，那一輪做完就完成（之後補跑的輪次不等）。失敗記在 [status]、不丟出來；
-  /// 沒設定同步空間時什麼都不做。
-  Future<void> syncAll() {
+  /// 不搶先，排在後面，那一輪做完就傳回它怎麼結束（之後補跑的輪次不等）。
+  /// 失敗也記在 [status]、不丟出來；沒設定同步空間時什麼都不做。
+  Future<FullSyncResult> syncAll() {
     final run = _run;
     if (run == null) return _start(SyncPhase.full).fullWaiters!.future;
     run.next = _Next.full;
-    return (run.nextFullWaiters ??= Completer<void>()).future;
+    return (run.nextFullWaiters ??= Completer<FullSyncResult>()).future;
   }
 
   /// 取消全面同步：正在跑的那一輪目前這一種做完就停，已經寫完的種類留著，
@@ -395,12 +424,17 @@ class SyncService {
   void cancelSync() {
     final run = _run;
     if (run == null) return;
-    if (run.round == SyncPhase.full) run.round = SyncPhase.stopping;
+    if (run.round == SyncPhase.full) {
+      run.round = SyncPhase.stopping;
+      if (status.value.phase == SyncPhase.full) {
+        status.value = status.value.copyWith(phase: SyncPhase.stopping);
+      }
+    }
     // 排的時候可能也有人要過進度（退到背景、有聲書存好進度），分不出來就
     // 照要過算，不漏送。
     if (run.next == _Next.full) {
       run.next = _Next.progress;
-      run.nextFullWaiters?.complete();
+      run.nextFullWaiters?.complete(const FullSyncStopped());
       run.nextFullWaiters = null;
     }
   }
@@ -431,7 +465,7 @@ class SyncService {
 
   _SyncRun _start(SyncPhase round) {
     final run = _SyncRun(round);
-    if (round == SyncPhase.full) run.fullWaiters = Completer<void>();
+    if (round == SyncPhase.full) run.fullWaiters = Completer<FullSyncResult>();
     _run = run;
     run.done = _runRounds(run);
     return run;
@@ -445,8 +479,8 @@ class SyncService {
     try {
       while (true) {
         rounds++;
-        await _syncOnce(run);
-        run.fullWaiters?.complete();
+        final result = await _syncOnce(run);
+        run.fullWaiters?.complete(result);
         run.fullWaiters = null;
         switch (run.next) {
           case _Next.none:
@@ -465,8 +499,8 @@ class SyncService {
       }
     } finally {
       // 出錯跳出來的話，等著的人也放掉。
-      run.fullWaiters?.complete();
-      run.nextFullWaiters?.complete();
+      run.fullWaiters?.complete(const FullSyncFailed('同步失敗'));
+      run.nextFullWaiters?.complete(const FullSyncFailed('同步失敗'));
       _finishRun();
     }
   }
@@ -475,7 +509,10 @@ class SyncService {
   /// 完成」時又要求同步的，會開新的一段，不會拿到這一段的 future。
   void _finishRun() {
     _run = null;
-    status.value = status.value.copyWith(running: false, clearProgress: true);
+    status.value = status.value.copyWith(
+      phase: SyncPhase.idle,
+      clearProgress: true,
+    );
     // 沒設定同步空間、或沒走到閱讀進度就失敗了，開書也不再等。
     _progressDone();
   }
@@ -553,16 +590,17 @@ class SyncService {
     }
   }
 
-  /// 同步一輪：[run] 這一輪是全面同步時全部種類，否則只有閱讀進度。
-  Future<void> _syncOnce(_SyncRun run) async {
+  /// 同步一輪：[run] 這一輪是全面同步時全部種類，否則只有閱讀進度。傳回
+  /// 這一輪怎麼結束（只同步進度的那種沒人看）。
+  Future<FullSyncResult> _syncOnce(_SyncRun run) async {
     final full = run.round != SyncPhase.progress;
     final kindTimes = <String, int>{};
     try {
-      await _lock.synchronized(() async {
+      return await _lock.synchronized(() async {
         final store = await _store();
-        if (store == null) return;
+        if (store == null) return const FullSyncDone();
         status.value = status.value.copyWith(
-          running: true,
+          phase: run.round,
           clearProgress: true,
         );
         // 換了同步空間就作廢上次同步的紀錄，只同步進度時也要。
@@ -577,7 +615,7 @@ class SyncService {
             : _kinds(this).whereType<ProgressSync>().take(1).toList();
         for (final (index, kind) in kinds.indexed) {
           // 取消在種類之間停：寫到一半的那一種做完，已經寫完的留著。
-          if (run.round == SyncPhase.stopping) return;
+          if (run.round == SyncPhase.stopping) return const FullSyncStopped();
           if (appliedAfter[kind.name] == false) continue;
           appliedAfter[kind.name] = false;
           // 這一種讀這台資料的時候，要求優先送出的進度已經存好了。
@@ -620,16 +658,20 @@ class SyncService {
         }
         if (!full) {
           status.value = status.value.copyWith(clearError: true);
-          return;
+          return const FullSyncDone();
         }
-        // 「上次全面同步」只記全面同步：其他資料到這時才算同步過。
+        // 「上次全面同步」只記全面同步：其他資料到這時才算同步過。最後一種
+        // 做著時按了取消的，也是全部做完了。
         final now = _clock();
         await _settings.setLastSyncAt(now);
         status.value = status.value.copyWith(lastSyncAt: now, clearError: true);
+        return const FullSyncDone();
       });
     } catch (error, stackTrace) {
       AppLog.e('同步失敗', error: error, stackTrace: stackTrace);
-      status.value = status.value.copyWith(error: _messageOf(error));
+      final message = _messageOf(error);
+      status.value = status.value.copyWith(error: message);
+      return FullSyncFailed(message);
     } finally {
       if (kindTimes.values.any((ms) => ms >= 500)) {
         AppLog.i(
