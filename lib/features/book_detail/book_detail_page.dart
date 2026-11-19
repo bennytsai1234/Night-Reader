@@ -161,7 +161,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
               builder: (bodyContext) => Stack(
                 children: [
                   Positioned.fill(
-                    child: provider.loadErrorMessage != null
+                    child:
+                        provider.worldState == BookDetailWorldState.unavailable
                         ? _buildLoadError(bodyContext, provider)
                         : _buildContent(bodyContext, provider),
                   ),
@@ -475,7 +476,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     BuildContext context,
     BookDetailProvider provider,
   ) {
-    final failed = provider.loadErrorMessage != null;
+    final failed = provider.worldState == BookDetailWorldState.unavailable;
     final background = AppChrome.of(context).groupedBackground;
     GlassNavHeader header(Color background) =>
         _buildNavHeader(context, provider, background, failed: failed);
@@ -497,7 +498,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     Color background, {
     required bool failed,
   }) {
-    final actionsEnabled = !provider.isLoading && !failed;
+    final actionsEnabled = provider.hasReadyWorld;
     final onlineShelfBook = !provider.book.isLocal && provider.isInBookshelf;
     return GlassNavHeader(
       backgroundColor: background,
@@ -518,9 +519,13 @@ class _BookDetailPageState extends State<BookDetailPage> {
           entriesBuilder: (ctx) => [
             GlassMenuItem(
               value: _MenuAction.checkUpdate,
-              label: provider.isCheckingUpdate ? '正在檢查更新…' : '檢查更新',
+              label: provider.isRunning(BookDetailAction.checkUpdate)
+                  ? '正在檢查更新…'
+                  : '檢查更新',
               icon: Icons.update_rounded,
-              enabled: !provider.book.isLocal && !provider.isCheckingUpdate,
+              enabled:
+                  !provider.book.isLocal &&
+                  !provider.isRunning(BookDetailAction.checkUpdate),
             ),
             GlassMenuItem(
               value: _MenuAction.autoUpdate,
@@ -624,7 +629,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
   ) async {
     final messenger = ScaffoldMessenger.of(context);
     // 加入或移出還在進行時，不再跳出反向操作的確認框。
-    if (provider.isUpdatingBookshelf) return;
+    if (provider.isRunning(BookDetailAction.updateBookshelf)) return;
     if (provider.isInBookshelf) {
       final confirmed = await showAppConfirm(
         context: context,
