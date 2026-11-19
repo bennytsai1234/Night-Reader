@@ -273,7 +273,7 @@ class _RenderSkeletonAnchor extends RenderProxyBox {
 /// 就回到一開始的樣子。
 class SharedSkeletonBreath {
   SharedSkeletonBreath({required TickerProvider vsync})
-    : _clock = _BreathClock(vsync).._waiting = true;
+    : _clock = _BreathClock(vsync).._stage = const _Waiting();
 
   final _BreathClock _clock;
 
@@ -282,7 +282,7 @@ class SharedSkeletonBreath {
 
   /// 照 [depthAt] 畫：有人在用、正在呼吸或收住途中。還沒開始或已經收住
   /// 時整片最深。
-  bool get isBreathing => _users > 0 && !_clock._waiting && !_clock.still;
+  bool get isBreathing => _users > 0 && _clock._moving;
 
   /// 位置 [u]（0 畫面左緣、1 右緣）現在的深淺比例（[Skeleton.breathAt]）；
   /// 還沒開始、或收住途中已經呼到最深的位置是 1。
@@ -312,7 +312,7 @@ class SharedSkeletonBreath {
   /// 已經在呼吸時不做事。
   void begin() {
     final request = ++_requests;
-    if (_clock._restFrom != null && !_clock.still) {
+    if (_clock._stage is _Resting) {
       unawaited(
         _clock.rest().then((_) {
           if (request == _requests) _clock.begin();
@@ -379,9 +379,10 @@ class SkeletonRest {
   /// 收住登記著的骨架，全部停在最深時完成：每個位置把這一口呼完，還沒
   /// 輪到的位置呼完第一口，最多再一輪半（開 App 進場一輪是
   /// [LaunchEntranceMotion.breathCycle]）。
+  /// 還沒全部停好就 [release] 時跟著完成，不再回頭收住已經接著呼吸的骨架。
   Future<void> settle() async {
     _resting = true;
-    while (true) {
+    while (_resting) {
       final pending = [
         for (final clock in _clocks)
           if (!clock.still) clock.rest(),
@@ -391,7 +392,8 @@ class SkeletonRest {
     }
   }
 
-  /// 收住的骨架接著呼吸（換場播完後還留著的骨架）。
+  /// 收住的骨架接著呼吸（換場播完後還留著的骨架）；還在收住途中的，把這一
+  /// 口呼完、停在最深再從最深起（[_BreathClock.resume]）。
   void release() {
     _resting = false;
     for (final clock in _clocks) {
@@ -417,6 +419,44 @@ abstract interface class SkeletonPhase implements Listenable {
   Matrix4 toScreen(RenderObject box);
 }
 
+/// 呼吸現在在哪個階段（`docs/state-machines.md`「骨架呼吸」）。跟著共用
+/// 呼吸的骨架每一幀照抄來源的這個值，所以每個階段建好就不改。
+sealed class _BreathStage {
+  const _BreathStage();
+}
+
+/// 等開始：整片停在最深、計時器不走。共用的呼吸還沒 [SharedSkeletonBreath.begin]、
+/// 開 App 的骨架還沒到 [LaunchEntranceMotion.breathing]。
+final class _Waiting extends _BreathStage {
+  const _Waiting();
+}
+
+/// 呼吸：相位從計時器的第 [shift] 輪算起（[_BreathClock._phase]）；
+/// [fromDeepest] 時是從整片最深起的，每個位置照由左而右的先後輪到才變淺，
+/// 還沒輪到的停在最深。
+final class _Breathing extends _BreathStage {
+  const _Breathing(this.shift, {required this.fromDeepest});
+
+  final double shift;
+  final bool fromDeepest;
+}
+
+/// 收住中：照 [breathing] 的起法呼吸，從相位 [from] 開始收，每個位置等到
+/// 下一次最深就停在那裡。[thenBreathe] 時收住途中已經要接著呼吸了：停好
+/// 就從最深起，不停在收住了。
+final class _Resting extends _BreathStage {
+  const _Resting(this.breathing, this.from, {this.thenBreathe = false});
+
+  final _Breathing breathing;
+  final double from;
+  final bool thenBreathe;
+}
+
+/// 收住了：整片停在最深、計時器停。
+final class _Still extends _BreathStage {
+  const _Still();
+}
+
 /// 一個 [Skeleton] 的呼吸：從開始呼吸起經過了幾輪（不折回 0）。收住時
 /// （[rest]）每個位置等到下一次最深就停在那裡：呼吸曲線在最深處的變化是
 /// 零，停下來接得上，不是動到一半定住。
@@ -439,9 +479,9 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
   ///
   /// 用到它的只有由左而右呼吸的時候（[gradient] 不是 null），這時計時器每
   /// 一幀開頭都會走一格（[_tick]，在建畫面與畫圖之前），走一格就作廢；漸層
-  /// 的深淺換了（開始呼吸、收住、接著呼吸）也作廢。所以一幀裡第一個要用的
-  /// 形狀重算一次，同一幀其他形狀共用。不經過排程直接重畫（測試裡手動 paint）
-  /// 時沿用這一幀算好的，那時骨架沒動。
+  /// 的深淺換了（換了階段）也作廢。所以一幀裡第一個要用的形狀重算一次，同
+  /// 一幀其他形狀共用。不經過排程直接重畫（測試裡手動 paint）時沿用這一幀
+  /// 算好的，那時骨架沒動。
   final Matrix4 _anchorToScreen = Matrix4.identity();
   bool _anchorStale = true;
 
@@ -463,34 +503,45 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
   double _cycles = 0;
   double _base = 0;
 
-  /// 呼吸從第幾輪算起：收住後接著呼吸時（[resume]）從那一刻重新算，
-  /// [_restarted] 時還沒輪到的位置先停在最深。
-  double _shift = 0;
-  bool _restarted = false;
+  /// 現在在哪個階段。一般的骨架一建好就在呼吸，不從最深起。
+  _BreathStage _stage = const _Breathing(0, fromDeepest: false);
 
-  /// 呼吸了幾輪（[Skeleton.breathAt] 的相位）。
-  double get _phase => _cycles - _shift;
+  /// 正在呼吸或收住途中：計時器該走、深淺會變。
+  bool get _moving => _stage is _Breathing || _stage is _Resting;
 
-  /// 開始收住時的 [_phase]；null 是照常呼吸。
-  double? _restFrom;
+  /// 這一口呼吸的相位（[Skeleton.breathAt] 的 phase，不折回 0）。
+  double get _phase => switch (_stage) {
+    _Breathing(:final shift) ||
+    _Resting(breathing: _Breathing(:final shift)) => _cycles - shift,
+    _Waiting() || _Still() => _cycles,
+  };
+
+  /// 要求收住的人在等的（[rest]）；收住完、接著呼吸或回到等開始時完成。
+  /// 不放進 [_Resting]：跟著共用呼吸的骨架會照抄階段，不能連等待一起抄。
   Completer<void>? _rested;
 
   /// 收住後整個骨架都停在最深了（畫面外的位置也是），計時器停著。
-  bool get still => _still;
-  bool _still = false;
+  bool get still => _stage is _Still;
 
-  /// 可以呼吸（沒有要求減少動態）。不行時計時器停著，收住直接算停好。
+  /// 可以呼吸：一般的骨架是沒有要求減少動態，共用的呼吸是有人在用。不行
+  /// 時計時器停著，收住直接算停好。
   bool _allowed = false;
   set allowed(bool value) {
     _allowed = value;
     _syncShared();
     if (value) {
       _start();
-    } else {
-      _ticker.stop();
-      _cycles = _base = _shift = 0;
-      _restarted = false;
-      if (_restFrom != null) _settle();
+      return;
+    }
+    _ticker.stop();
+    _cycles = _base = 0;
+    switch (_stage) {
+      case _Breathing():
+        _stage = const _Breathing(0, fromDeepest: false);
+      case _Resting():
+        _settle();
+      case _Waiting() || _Still():
+        break;
     }
   }
 
@@ -498,7 +549,7 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
   /// 就沒有跳動可言，也不會等一個不會來的下一格；之後再出現時照樣停在
   /// 最深，等 [resume]。
   set visible(bool value) {
-    if (!value && _restFrom != null && !_still) _settle();
+    if (!value && _stage is _Resting) _settle();
     if (_visible == value) return;
     _visible = value;
     _syncShared();
@@ -508,14 +559,7 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
   bool _visible = true;
 
   void _start() {
-    if (!_allowed ||
-        _waiting ||
-        _still ||
-        _shared != null ||
-        _hold != null ||
-        _ticker.isActive) {
-      return;
-    }
+    if (!_allowed || !_moving || _shared != null || _ticker.isActive) return;
     _base = _cycles;
     _ticker.start();
   }
@@ -564,18 +608,14 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
     _shared = null;
   }
 
-  /// 照共用的那口呼吸的狀態畫（含收住與接著呼吸），[depthAt] 與 [gradient]
+  /// 照共用的那口呼吸的階段畫（含收住與接著呼吸），[depthAt] 與 [gradient]
   /// 算出來和它一樣。
   void _onShared() {
     // 新的一幀：骨架可能換了位置（換頁平移、捲動），同 [_tick]。
     _anchorStale = true;
     final source = _shared!._clock;
     _cycles = source._cycles;
-    _shift = source._shift;
-    _restFrom = source._restFrom;
-    _still = source._still;
-    _restarted = source._restarted;
-    _waiting = source._waiting;
+    _stage = source._stage;
     if (_visible) notifyListeners();
   }
 
@@ -583,12 +623,9 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
   /// （[LaunchEntranceMotion.breathCycle]），其他照 [Skeleton.breathCycle]。
   Duration _cycle = Skeleton.breathCycle;
 
-  /// 開 App 的骨架還沒開始呼吸（[holdUntil]）：整片停在最深、計時器不走。
+  /// 等開 App 的骨架開始呼吸的掛勾（[holdUntil]）；掛著時階段是等開始，
+  /// 或還沒開始就收住了。
   ValueListenable<bool>? _hold;
-
-  /// 共用的呼吸還沒開始（[SharedSkeletonBreath.begin]）：整片停在最深、
-  /// 計時器不走。
-  bool _waiting = false;
 
   /// 開 App 的骨架長出時與長完後停的那一下不呼吸、每個位置停在最深；
   /// [LaunchEntranceMotion.breathing] 才照由左而右的先後開始第一口氣，起法
@@ -596,22 +633,30 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
   /// 一口比之後快的氣，長完接到真正的呼吸時頓一下（使用者 2026-10-24 在
   /// 三種做法的逐格錄影上選的，ADR 0025）。進場結束後才建的骨架照一般的
   /// 節奏呼吸。
+  ///
+  /// 換到另一個進場時（同一個骨架被搬過去），原本在等的照新的那個：新的
+  /// 還沒到呼吸的時候就接著等，已經在呼吸或結束了就從最深起；正在呼吸或
+  /// 收住途中的停回最深、等新的那個（收住的等待跟著完成）。
   void holdUntil(LaunchEntranceMotion entrance) {
     _releaseHold();
-    if (entrance.isFinished) return;
-    _cycle = LaunchEntranceMotion.breathCycle;
-    if (entrance.breathing.value) return;
+    if (!entrance.isFinished) _cycle = LaunchEntranceMotion.breathCycle;
+    if (entrance.isFinished || entrance.breathing.value) {
+      if (_stage is _Waiting) _breatheFromDeepest();
+      return;
+    }
     _hold = entrance.breathing..addListener(_onBreathing);
-    _ticker.stop();
+    if (_moving) {
+      _endRest();
+      _stage = const _Waiting();
+      _ticker.stop();
+      notifyListeners();
+    }
   }
 
   void _onBreathing() {
     if (!_hold!.value) return;
     _releaseHold();
-    _shift = _cycles;
-    _restarted = true;
-    _start();
-    notifyListeners();
+    if (_stage is _Waiting) _breatheFromDeepest();
   }
 
   void _releaseHold() {
@@ -623,17 +668,28 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
     // 新的一幀：骨架可能換了位置（換頁平移、捲動），時間沒走也一樣。
     _anchorStale = true;
     _cycles = _base + elapsed.inMicroseconds / _cycle.inMicroseconds;
-    final from = _restFrom;
-    if (from != null && _phase - from >= _restLength(from)) _settle();
+    final stage = _stage;
+    if (stage is _Resting && _phase - stage.from >= _restLength(stage)) {
+      _settle();
+    }
     notifyListeners();
   }
 
   /// 收住呼吸，每個位置都停在最深時完成。計時器沒在走時（不呼吸、被
-  /// 藏起來）直接算停好。
+  /// 藏起來、還沒開始）直接算停好。
   Future<void> rest() {
-    _restFrom ??= _phase;
-    if (_still) return Future<void>.value();
-    if (!_ticker.isActive || _ticker.muted) {
+    switch (_stage) {
+      case _Still():
+        return Future<void>.value();
+      case _Breathing breathing:
+        _stage = _Resting(breathing, _phase);
+      case _Resting(:final breathing, :final from, thenBreathe: true):
+        // 又要收住：停好就停著，不接著呼吸。
+        _stage = _Resting(breathing, from);
+      case _Resting() || _Waiting():
+        break;
+    }
+    if (_stage is _Waiting || !_ticker.isActive || _ticker.muted) {
       _settle();
       return Future<void>.value();
     }
@@ -641,62 +697,78 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
   }
 
   /// 收住途中才出現的骨架：一出現就停在最深。
-  void restNow() {
-    _restFrom ??= _phase;
-    _settle();
-  }
+  void restNow() => _settle();
 
   /// 收住後接著呼吸：從整片最深重新開始，每個位置照由左而右的先後輪到
-  /// 才開始變淺，和一開始呼吸一樣接得上，不跳回原本的明暗。開 App 的進場
-  /// 播完才會接著呼吸，之後照一般的節奏。
+  /// 才開始變淺，和一開始呼吸一樣接得上，不跳回原本的明暗；開 App 還沒到
+  /// 呼吸的時候就回到等開始。收住途中時等這一口呼完、停在最深再起（同
+  /// [SharedSkeletonBreath.begin]）：已經停在最深的位置不跳回原本的明暗，
+  /// 要求收住的等待當下就完成。開 App 的進場播完才會接著呼吸，之後照一般
+  /// 的節奏。
   void resume() {
-    if (_restFrom == null) return;
-    _restFrom = null;
-    _finishRest();
-    _rested = null;
-    _cycle = Skeleton.breathCycle;
-    if (!_still) return;
-    _still = false;
-    _shift = _cycles;
-    _restarted = true;
-    _start();
-    notifyListeners();
+    switch (_stage) {
+      case _Resting(:final breathing, :final from):
+        _endRest();
+        _stage = _Resting(breathing, from, thenBreathe: true);
+      case _Still():
+        _endRest();
+        _breatheAgain();
+      case _Waiting() || _Breathing():
+        break;
+    }
   }
 
+  /// 停在最深：收住了；收住途中已經要接著呼吸的（[resume]）從最深起。
   void _settle() {
-    _still = true;
+    final again = switch (_stage) {
+      _Resting(thenBreathe: true) => true,
+      _ => false,
+    };
+    _stage = const _Still();
     _ticker.stop();
     _finishRest();
+    if (again) _breatheAgain();
   }
 
-  /// 不再呼吸、回到還沒開始的樣子（整片最深、等 [begin]，收住的狀態也
-  /// 清掉）：共用的呼吸沒人用時（[SharedSkeletonBreath.release]）。
+  /// 收住後接著呼吸，照一般的節奏（計時器這時停著，換節奏不跳）。
+  void _breatheAgain() {
+    _cycle = Skeleton.breathCycle;
+    if (_hold != null) {
+      _stage = const _Waiting();
+    } else {
+      _breatheFromDeepest();
+    }
+  }
+
+  /// 不再呼吸、回到等開始（整片最深、等 [begin]，收住的等待也結束）：共用
+  /// 的呼吸沒人用時（[SharedSkeletonBreath.release]）。
   void reset() {
     _allowed = false;
-    _waiting = true;
+    _stage = const _Waiting();
     _ticker.stop();
-    _cycles = _base = _shift = 0;
-    _restarted = false;
-    _restFrom = null;
-    _still = false;
-    _finishRest();
-    _rested = null;
+    _cycles = _base = 0;
+    _endRest();
     notifyListeners();
   }
 
   /// 從整片最深開始呼吸，每個位置照由左而右的先後輪到才變淺（同 [resume]）：
-  /// 還沒開始（[_waiting]）或已經收住時。
+  /// 等開始或已經收住時。
   void begin() {
-    if (!_waiting && !_still) return;
-    _waiting = false;
-    _restFrom = null;
-    _finishRest();
-    _rested = null;
-    _still = false;
-    _shift = _cycles;
-    _restarted = true;
+    if (_moving) return;
+    _endRest();
+    _breatheFromDeepest();
+  }
+
+  void _breatheFromDeepest() {
+    _stage = _Breathing(_cycles, fromDeepest: true);
     _start();
     notifyListeners();
+  }
+
+  /// 收住的等待結束，下一次 [rest] 另外等。
+  void _endRest() {
+    _finishRest();
+    _rested = null;
   }
 
   void _finishRest() {
@@ -704,23 +776,24 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
     if (rested != null && !rested.isCompleted) rested.complete();
   }
 
-  /// 從第 [from] 輪開始收住，位置 u（延遲 [lag]）再過幾輪停在最深：照常
-  /// 呼吸的位置在 (lag·u − from) mod 1 輪後最深；從整片最深重新開始
-  /// （[_restarted]）、還沒輪到的位置，要等它呼完第一口（lag·u + 1）才停，
-  /// 不能把它開始變淺的那一刻當成呼完（收住的計時器比呼吸的第一格早一點
-  /// 時，右邊會整段沒呼吸）。
-  double _stopAfter(double from, double u, double lag) {
+  /// 收住中的 [resting]，位置 u（延遲 [lag]）再過幾輪停在最深：照常呼吸的
+  /// 位置在 (lag·u − from) mod 1 輪後最深；從整片最深起的、還沒輪到的位置，
+  /// 要等它呼完第一口（lag·u + 1）才停，不能把它開始變淺的那一刻當成呼完
+  /// （收住的計時器比呼吸的第一格早一點時，右邊會整段沒呼吸）。
+  double _stopAfter(_Resting resting, double u, double lag) {
     final start = lag * u;
-    if (_restarted && from < start) return start + 1 - from;
+    final from = resting.from;
+    if (resting.breathing.fromDeepest && from < start) return start + 1 - from;
     return (start - from) % 1;
   }
 
-  /// 從第 [from] 輪開始收住，到每個位置都停在最深要再過幾輪（[_stopAfter]
-  /// 在 u 從 0 到 1 取最晚的）：最多一輪；還有位置沒輪到時最晚的是右緣，
-  /// 最多一輪半。
-  double _restLength(double from) {
-    if (_restarted && from < breath.lag) {
-      return _stopAfter(from, 1, breath.lag);
+  /// 收住中的 [resting]，到每個位置都停在最深要再過幾輪（[_stopAfter] 在 u
+  /// 從 0 到 1 取最晚的）：最多一輪；還有位置沒輪到時最晚的是右緣，最多
+  /// 一輪半。
+  double _restLength(_Resting resting) {
+    final from = resting.from;
+    if (resting.breathing.fromDeepest && from < breath.lag) {
+      return _stopAfter(resting, 1, breath.lag);
     }
     final first = -from % 1;
     final last = first + breath.lag;
@@ -728,17 +801,24 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
   }
 
   /// 位置 [u]（0 畫面左緣、1 右緣）現在的深淺比例（[Skeleton.breathAt]）；
-  /// 收住後已經呼到最深的位置停在 1，接著呼吸時還沒輪到的位置也是。
+  /// 等開始、收住了是 1，收住中已經呼到最深的位置、從最深起還沒輪到的位置
+  /// 也是。
   @override
   double depthAt(double u, SkeletonBreath breath) {
-    if (_hold != null || _waiting) return 1;
-    final phase = _phase;
-    final from = _restFrom;
-    if (from != null &&
-        (_still || phase - from >= _stopAfter(from, u, breath.lag))) {
-      return 1;
+    final _Breathing breathing;
+    switch (_stage) {
+      case _Waiting() || _Still():
+        return 1;
+      case _Resting resting:
+        if (_phase - resting.from >= _stopAfter(resting, u, breath.lag)) {
+          return 1;
+        }
+        breathing = resting.breathing;
+      case _Breathing stage:
+        breathing = stage;
     }
-    if (_restarted && phase < breath.lag * u) return 1;
+    final phase = _cycles - breathing.shift;
+    if (breathing.fromDeepest && phase < breath.lag * u) return 1;
     return _breathTable.at(phase, u, breath);
   }
 
@@ -746,31 +826,23 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
   /// （x = [viewWidth]），每 1/32 個畫面寬一個停點，顏色是 [color] 乘上那個
   /// 位置的深淺。同一個骨架每一幀每種顏色只建一道，底下每個形狀共用
   /// （[SkeletonBox] 這類形狀），呼吸每一幀的成本不跟著形狀數變多。整片一樣深時
-  /// （還沒開始呼吸、收住了、整片一起呼吸）回傳 null，用單色畫。
+  /// （等開始、收住了、整片一起呼吸）回傳 null，用單色畫。
   @override
   ui.Gradient? gradient(Color color, SkeletonBreath breath, double viewWidth) {
     // `viewWidth <= 0` 對 NaN 不成立，無限大也一起擋下（#203）。
-    if (_hold != null ||
-        _waiting ||
-        _still ||
-        breath.lag == 0 ||
-        !viewWidth.isFinite ||
-        viewWidth <= 0) {
+    if (!_moving || breath.lag == 0 || !viewWidth.isFinite || viewWidth <= 0) {
       return null;
     }
     // 深淺只看這幾個值（[depthAt]）；有一個變了，上一幀的漸層就不能用。
+    // 每個階段建好就不改，換了階段就是另一個物件。
     if (_cachedCycles != _cycles ||
-        _cachedShift != _shift ||
-        _cachedRestFrom != _restFrom ||
-        _cachedRestarted != _restarted ||
+        !identical(_cachedStage, _stage) ||
         _cachedBreath != breath ||
         _cachedWidth != viewWidth) {
       _gradients.clear();
       _anchorStale = true;
       _cachedCycles = _cycles;
-      _cachedShift = _shift;
-      _cachedRestFrom = _restFrom;
-      _cachedRestarted = _restarted;
+      _cachedStage = _stage;
       _cachedBreath = breath;
       _cachedWidth = viewWidth;
     }
@@ -806,9 +878,7 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
 
   final Map<Color, ui.Gradient> _gradients = {};
   double? _cachedCycles;
-  double? _cachedShift;
-  double? _cachedRestFrom;
-  bool? _cachedRestarted;
+  _BreathStage? _cachedStage;
   SkeletonBreath? _cachedBreath;
   double? _cachedWidth;
 
