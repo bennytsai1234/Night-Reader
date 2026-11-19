@@ -755,7 +755,7 @@ class GroupedRow extends StatelessWidget
     var right = width - AppGrouped.rowPadding;
     if (showChevron ?? (onTap != null && trailing == null)) {
       right -= _chevronSize;
-      parts.add((right, _glyphShape(_chevronSize)));
+      parts.add((right, groupedGlyphShape(_chevronSize)));
       right -= AppSpacing.sm;
     }
     if (trailing case final trailing?) {
@@ -1025,101 +1025,6 @@ class GroupedSwitch extends StatelessWidget {
   }
 }
 
-/// 列首、右側控件與組標題右側按鈕這類不撐滿的小元件的骨架，
-/// [GroupedItemShape.width] 是它佔的寬：圖示方塊、開關整塊，圖示是和字形
-/// 一樣大的方塊，定了大小的 [SizedBox] 照它的大小、裡面的圖示或色塊置中；
-/// 其他的元件實作 [GroupedSkeletonItem] 並給出寬度。
-GroupedItemShape groupedPartShape(Widget widget, BuildContext context) {
-  GroupedItemShape box(Size size, BorderRadius radius) => GroupedItemShape(
-    size.height,
-    width: size.width,
-    marks: [SkeletonShape(Offset.zero & size, radius: radius)],
-  );
-  switch (widget) {
-    case final GroupedSkeletonItem shaped:
-      final shape = shaped.skeletonShape(context, width: double.infinity);
-      if (shape.width != null) return shape;
-    case GroupedIconTile():
-      return box(
-        const Size.square(AppGrouped.iconTile),
-        BorderRadius.circular(AppGrouped.iconTileRadius),
-      );
-    case GroupedSwitch():
-      return box(
-        const Size(GroupedSwitch.trackWidth, GroupedSwitch.trackHeight),
-        AppRadius.pillShape,
-      );
-    case Icon(:final size):
-      return _glyphShape(size ?? IconTheme.of(context).size ?? 24);
-    case PasswordRevealButton():
-      return _glyphShape(PasswordRevealButton.iconSize);
-    case Text(:final data?, :final style, :final maxLines):
-      return GroupedItemShape.text(
-        context,
-        data,
-        style: style ?? const TextStyle(),
-        width: double.infinity,
-        maxLines: maxLines,
-      );
-    // 限寬的字（右側的狀態文字）照最寬的寬度排。
-    case ConstrainedBox(
-      :final constraints,
-      child: Text(:final data?, :final style, :final maxLines),
-    ):
-      return GroupedItemShape.text(
-        context,
-        data,
-        style: style ?? const TextStyle(),
-        width: constraints.maxWidth,
-        maxLines: maxLines,
-      );
-    case CircularProgressIndicator():
-      return box(
-        const Size.square(_spinnerSize),
-        BorderRadius.circular(_spinnerSize / 2),
-      );
-    case SizedBox(:final width?, :final height, :final child):
-      final inner = switch (child) {
-        null => null,
-        DecoratedBox(:final BoxDecoration decoration)
-            when decoration.color != null =>
-          box(
-            Size(width, height ?? 0),
-            decoration.shape == BoxShape.circle
-                ? BorderRadius.circular(math.min(width, height ?? 0) / 2)
-                : decoration.borderRadius?.resolve(
-                        Directionality.of(context),
-                      ) ??
-                      BorderRadius.zero,
-          ),
-        _ => groupedPartShape(child, context),
-      };
-      final size = Size(width, height ?? inner?.height ?? 0);
-      return GroupedItemShape(
-        size.height,
-        width: size.width,
-        marks: [
-          ...?inner?.marksAt(
-            Offset(
-              (size.width - inner.width!) / 2,
-              (size.height - inner.height) / 2,
-            ),
-          ),
-        ],
-      );
-    default:
-  }
-  assert(
-    false,
-    '${widget.runtimeType} 算不出骨架：讓它實作 GroupedSkeletonItem 並給出寬度'
-    '（ADR 0029）',
-  );
-  return const GroupedItemShape(0, width: 0);
-}
-
-/// [CircularProgressIndicator] 沒給大小時的直徑（Material 的最小尺寸）。
-const double _spinnerSize = 36;
-
 /// 輸入框右側的 [suffix]（[InputDecoration.suffixIcon]）佔的見方：至少
 /// [AppGrouped.rowMinHeight]，圖示按鈕照它的點擊範圍。輸入框至少有這麼高。
 double groupedInputSuffixExtent(Widget suffix) => switch (suffix) {
@@ -1173,19 +1078,6 @@ class PasswordRevealButton extends StatelessWidget {
     ),
   );
 }
-
-/// [Icon] 的骨架：字形撐滿 [size] 見方（[Icon] 的行高是 1），畫成和字條
-/// 一樣圓角的方塊。
-GroupedItemShape _glyphShape(double size) => GroupedItemShape(
-  size,
-  width: size,
-  marks: [
-    SkeletonShape(
-      Rect.fromLTWH(0, 0, size, size),
-      radius: BorderRadius.circular(size / 4),
-    ),
-  ],
-);
 
 /// 帶開關的列；點整列也會切換。
 class GroupedSwitchRow extends StatelessWidget
