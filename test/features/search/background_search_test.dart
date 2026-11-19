@@ -18,6 +18,7 @@ import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/core/background_work/reading_fetches.dart';
+import 'package:night_reader/core/background_work/work_phase.dart';
 import 'package:night_reader/features/search/background_search.dart';
 import 'package:night_reader/features/search/models/search_scope.dart';
 import 'package:night_reader/features/search/search_provider.dart';
@@ -65,6 +66,8 @@ class _GatedKeywordDao extends SearchKeywordDao {
 }
 
 class _Loader {
+  /// 這些書源不理會取消（網站卡住、規則跑不完），要測試回了才回。
+  final Set<String> ignoresCancel = {};
   final List<String> sent = [];
   final List<String> cancelled = [];
   final Map<String, Completer<List<SearchBook>>> _pending = {};
@@ -80,6 +83,7 @@ class _Loader {
     _pending[name] = completer;
     cancelToken?.whenCancel.then((error) {
       cancelled.add(name);
+      if (ignoresCancel.contains(name)) return;
       if (!completer.isCompleted) completer.completeError(error);
     });
     return completer.future;
@@ -270,7 +274,7 @@ void main() {
     expect(reopened.completedSources, 2);
     expect(reopened.totalSources, 3);
     expect(reopened.failedSources, 1);
-    expect(reopened.isBackgroundPaused, isTrue);
+    expect(reopened.stage, SearchStage.paused);
 
     await reopened.resumeBackground();
     await settle();
@@ -304,7 +308,7 @@ void main() {
     addTearDown(reopened.dispose);
     await settle();
     expect(names(reopened), hasLength(3));
-    expect(reopened.isBackgroundPaused, isFalse);
+    expect(reopened.stage, isNot(SearchStage.paused));
   });
 
   test('ending a background search keeps what it found', () async {
@@ -437,7 +441,7 @@ void main() {
     provider.stopSearch();
     await until(() => background.current!.isFinished);
     expect(background.current!.isFinished, isTrue);
-    expect(provider.isBackgroundPaused, isFalse);
+    expect(provider.stage, isNot(SearchStage.paused));
   });
 
   test('ending while the pause waits for the results file ends it', () async {
@@ -464,14 +468,55 @@ void main() {
     await settle();
     provider.pauseBackground();
     final run = background.current!;
-    await until(() => run.search.running == null);
-    expect(run.isPaused, isFalse, reason: '還在等結果檔寫完');
+    // 搜尋本身停下了（不再送書源），背景那件還在等結果檔寫完。
+    await run.search.running;
+    await settle();
+    expect(loader.cancelled, isNotEmpty);
+    expect(run.phase, WorkPhase.pausing, reason: '還在等結果檔寫完');
+    expect(run.isPaused, isFalse);
 
     provider.stopSearch();
     hold.complete();
     await until(() => !run.isRunning);
     expect(run.isFinished, isTrue, reason: '結束蓋過暫停');
     expect(run.isPaused, isFalse);
+  });
+
+  test('pausing after every source came back, while the results file is '
+      'still being written, does not pause it', () async {
+    final hold = Completer<void>();
+    var holding = false;
+    final background = BackgroundSearches(
+      work: work,
+      directory: () async {
+        if (holding) await hold.future;
+        return dir;
+      },
+      readingFetches: ReadingFetches(),
+    );
+    final loader = _Loader();
+    final provider = await page(background, loader);
+    addTearDown(provider.dispose);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.length == 3);
+    provider.moveToBackground();
+    await settle();
+    // 最後幾行卡在寫檔：搜尋本身已經搜完，背景那件還在收尾。
+    holding = true;
+    for (final name in ['甲', '乙', '丙']) {
+      loader.answer(name);
+    }
+    final run = background.current!;
+    await run.search.running;
+    await settle();
+    expect(provider.isSearching, isFalse);
+
+    provider.pauseBackground();
+    expect(run.phase, WorkPhase.running, reason: '搜完了，沒有東西可暫停');
+    expect(platform.shown.last.text, isNot('正在暫停…'));
+    hold.complete();
+    await until(() => !run.isRunning);
+    expect(run.isFinished, isTrue);
   });
 
   test('pausing keeps a source that has just come back', () async {
@@ -630,7 +675,7 @@ void main() {
     await until(() => loader.sent.length == 4);
     expect(loader.sent.last, '乙');
     expect(names(resumed), unorderedEquals(['甲書', '丙書']));
-    expect(resumed.showsMoveToBackground, isTrue);
+    expect(resumed.stage, SearchStage.searching);
   });
 
   Future<void> disable(String name) async {
@@ -704,6 +749,85 @@ void main() {
     expect(loader.cancelled, ['甲', '乙', '丙']);
     keywords.gate.complete();
     await until(() => loader.sent.length == 6);
+  });
+
+  test('ending a search while it saves its keyword sends nothing', () async {
+    final keywords = _GatedKeywordDao(db);
+    GetIt.instance
+      ..unregister<SearchKeywordDao>()
+      ..registerSingleton<SearchKeywordDao>(keywords);
+    final loader = _Loader();
+    final provider = await page(searches(), loader);
+    addTearDown(provider.dispose);
+    unawaited(provider.search('night'));
+    expect(provider.isSearching, isTrue);
+    provider.stopSearch();
+    expect(provider.isSearching, isFalse);
+    keywords.gate.complete();
+    await settle();
+    expect(loader.sent, isEmpty);
+    expect(provider.isSearching, isFalse);
+  });
+
+  test('retrying keeps the number of sources the whole search asked', () async {
+    final loader = _Loader();
+    final provider = await page(searches(), loader);
+    addTearDown(provider.dispose);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.length == 3);
+    loader
+      ..answer('甲')
+      ..fail('乙')
+      ..answer('丙');
+    await until(() => !provider.isSearching);
+    expect(provider.failedSources, 1);
+    expect(provider.searchedSourceCount, 3);
+
+    // 讀好重試得了的書源、引擎還沒開始（等繁簡字典）時就是搜尋中：不在這
+    // 段空檔先閃回結果工具列與頁首「搜尋」。
+    final seen = <bool>[];
+    void record() => seen.add(provider.isSearching);
+    provider.addListener(record);
+    unawaited(provider.retryFailedSources());
+    await until(() => loader.sent.length == 4);
+    provider.removeListener(record);
+    expect(seen, isNotEmpty);
+    expect(seen, everyElement(isTrue));
+    expect(provider.isSearching, isTrue);
+    expect(provider.searchedSourceCount, 3);
+    loader.fail('乙');
+    await until(() => !provider.isSearching);
+    expect(provider.failedSources, 1);
+    expect(provider.searchedSourceCount, 3);
+  });
+
+  test('a new search started while a retry has not come back counts its own '
+      'sources', () async {
+    final loader = _Loader();
+    final provider = await page(searches(), loader);
+    addTearDown(provider.dispose);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.length == 3);
+    loader
+      ..answer('甲')
+      ..fail('乙')
+      ..answer('丙');
+    await until(() => !provider.isSearching);
+    expect(provider.searchedSourceCount, 3);
+
+    // 重試的乙卡住、不理會取消，這時改搜甲一個書源。
+    loader.ignoresCancel.add('乙');
+    unawaited(provider.retryFailedSources());
+    await until(() => loader.sent.length == 4);
+    final source = (await GetIt.instance<BookSourceDao>().getByUrl(
+      'https://甲.example',
+    ))!;
+    unawaited(provider.searchInSource(source, 'other'));
+    await until(() => loader.sent.length == 5);
+    loader.fail('甲');
+    await until(() => !provider.isSearching);
+    expect(provider.failedSources, 1);
+    expect(provider.searchedSourceCount, 1);
   });
 
   test('a search whose failed sources were all disabled since leaves nothing '
@@ -853,7 +977,7 @@ void main() {
     final restarted = searches(loader2);
     await restarted.restore();
     final reopened = await page(restarted, loader2, resume: true);
-    expect(reopened.isBackgroundPaused, isTrue);
+    expect(reopened.stage, SearchStage.paused);
     expect(names(reopened), ['甲書']);
     await reopened.resumeBackground();
     await until(() => loader2.sent.length == 2);

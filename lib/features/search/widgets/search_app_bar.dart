@@ -83,7 +83,7 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
     final scopeDisplay = scope.display;
     final kind = provider.kind;
     // 放到背景後暫停中的也還沒搜完：照樣是「結束」（ADR 0070）。
-    final unfinished = provider.isSearching || provider.isBackgroundPaused;
+    final unfinished = provider.stage.unfinished;
 
     return GlassNavHeader(
       automaticallyImplyLeading: false,
