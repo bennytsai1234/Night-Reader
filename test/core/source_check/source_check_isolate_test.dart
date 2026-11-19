@@ -181,6 +181,16 @@ void main() {
     },
   );
 
+  // 更新時間是規則這一版的時間，校驗只標結果（同 Legado；匯入預覽靠它分新舊）。
+  test('a check keeps when the rules were changed', () async {
+    final (_, checked) = await _check(
+      _FakeBookSourceService(),
+      source: _source()..lastUpdateTime = 1000,
+    );
+
+    expect(checked.lastUpdateTime, 1000);
+  });
+
   test('an empty search marks search broken, still readable', () async {
     final (result, checked) = await _check(
       _FakeBookSourceService(search: () async => const <SearchBook>[]),
@@ -1069,10 +1079,14 @@ void main() {
     test('a comic source whose chapters are prose becomes a novel', () async {
       final (_, checked) = await _check(
         _FakeBookSourceService(content: (_) async => prose),
-        source: _source(name: '漫畫小說網')..bookSourceType = 2,
+        source: _source(name: '漫畫小說網')
+          ..bookSourceType = 2
+          ..lastUpdateTime = 1000,
       );
 
       expect(checked.sourceKind, BookSourceKind.novel);
+      // 類型是規則的一部分：改了就是新的一版，匯到別台才認得出來。
+      expect(checked.lastUpdateTime, greaterThan(1000));
     });
 
     test('an unclear chapter keeps the type', () async {

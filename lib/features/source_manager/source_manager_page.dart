@@ -970,35 +970,11 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     final p = context.read<SourceManagerProvider>();
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final parsed = await p.parseSourcesDetailedAsync(jsonStr);
-      if (!context.mounted) return;
-      if (parsed.allSources.isEmpty) {
-        messenger.showSnackBar(const SnackBar(content: UiText('未解析到有效書源')));
-        return;
-      }
-      final preview = await p.previewImport(
-        parsed.allSources,
-        unsupportedSources: parsed.unsupportedSources,
+      await importSourcesWithPreview(
+        context,
+        jsonStr,
+        importer: p.importSources,
       );
-      if (!context.mounted) return;
-      final confirmed = await showImportPreviewSheet(context, preview);
-      if (confirmed != null && confirmed.isNotEmpty) {
-        final count = await p.importSources(confirmed);
-        if (context.mounted) {
-          final unsupportedCount = confirmed
-              .where(
-                (source) => source.sourceKind == BookSourceKind.unsupported,
-              )
-              .length;
-          messenger.showSnackBar(
-            SnackBar(
-              content: UiText(
-                sourceImportMessage(count, unsupported: unsupportedCount),
-              ),
-            ),
-          );
-        }
-      }
     } catch (e) {
       if (context.mounted) {
         messenger.showSnackBar(

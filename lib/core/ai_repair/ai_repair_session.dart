@@ -1560,11 +1560,17 @@ Future<bool> restoreAiRepair(
   final json = await store.get(sourceUrl);
   if (json == null) return false;
   // 書源已經刪掉了（例如另一台同步刪的）：不還原，免得把它加回來。
-  if (await getIt<BookSourceDao>().getByUrl(sourceUrl) == null) {
+  final current = await getIt<BookSourceDao>().getByUrl(sourceUrl);
+  if (current == null) {
     await store.remove(sourceUrl);
     return false;
   }
+  // 換回改前的規則也是改了一版：記下時間，匯入預覽才認得這是新的一版；
+  // 規則和現在一樣就照現在的。
   final previous = BookSource.fromJson(json);
+  previous.lastUpdateTime = rulesChanged(current, previous)
+      ? DateTime.now().millisecondsSinceEpoch
+      : current.lastUpdateTime;
   await BookSourceService().saveEditedSource(
     previous,
     previousUrl: previous.bookSourceUrl == sourceUrl ? null : sourceUrl,

@@ -14,6 +14,7 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
+import 'package:night_reader/features/source_manager/widgets/import_preview_sheet.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 
@@ -98,13 +99,10 @@ mixin AssociationDialogHelper on AssociationBase {
       final String message;
       switch (kind) {
         case ImportContentKind.bookSource:
-          final parsed = await service.parseSourcesDetailedAsync(content);
-          final count = await service.importSources(parsed.allSources);
-          // 和書源管理的匯入同一套說法：夜讀不支援的書源會匯入但停用。
-          message = sourceImportMessage(
-            count,
-            unsupported: parsed.unsupportedSources.length,
-          );
+          // 和書源管理同一段：開匯入預覽，這台改過、比檔案新的預設不覆蓋。
+          if (!context.mounted) return;
+          await importSourcesWithPreview(context, content, service: service);
+          return;
         case ImportContentKind.bookshelf:
           final result = await BookshelfExchangeService().importFromText(
             content,

@@ -415,14 +415,14 @@ Map<String, dynamic> _withoutEmpty(Map<String, dynamic> json) {
 /// AI 改過的書源：規則照 AI 的，名稱與使用者自己的設定照原本的——名稱、
 /// 分組、排序、開關、權重與註解。網址只接受換開頭（[siteMovedUrl]）：網站
 /// 搬家、或只有 https、沒有 www 的那個開頭能用時。改完還是聚合源的，類型也
-/// 照原本的（ADR 0056）。
+/// 照原本的（ADR 0056）。規則真的改了才記新的更新時間（[rulesChanged]）。
 BookSource candidateFrom(BookSource original, Map<String, dynamic> json) {
   final base = BookSource.fromJson(original.toJson())..removeErrorComment();
   final candidate = BookSource.fromJson(json);
   if (candidate.isAggregateSource) {
     candidate.bookSourceType = original.bookSourceType;
   }
-  return candidate
+  candidate
     ..bookSourceUrl = siteMovedUrl(
       original.bookSourceUrl,
       json['bookSourceUrl'] as String?,
@@ -434,8 +434,11 @@ BookSource candidateFrom(BookSource original, Map<String, dynamic> json) {
     ..enabled = original.enabled
     ..enabledExplore = original.enabledExplore
     ..weight = original.weight
-    ..respondTime = original.respondTime
-    ..lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
+    ..respondTime = original.respondTime;
+  return candidate
+    ..lastUpdateTime = rulesChanged(original, candidate)
+        ? DateTime.now().millisecondsSinceEpoch
+        : original.lastUpdateTime;
 }
 
 /// 書源網址換開頭：[proposed] 的協定與主機（含連接埠）接上 [original] 開頭
@@ -447,6 +450,12 @@ String siteMovedUrl(String original, String? proposed) {
   if (from == null || to == null || from.toLowerCase() == to) return original;
   return '$to${original.trimLeft().substring(from.length)}';
 }
+
+/// 規則有沒有改：網址、類型、各段規則、名稱、分組與說明，不算校驗加的
+/// 狀態分組與錯誤註解，也不算排序、開關這類這台自己的設定（[sourceForAi]）。
+/// 書源的更新時間是規則這一版的時間（同 Legado），改了才記。
+bool rulesChanged(BookSource before, BookSource after) =>
+    changedParts(before, after).isNotEmpty;
 
 /// AI 改了哪幾類規則，例如「正文、目錄」；沒改是空字串。
 String changedParts(BookSource before, BookSource after) {
