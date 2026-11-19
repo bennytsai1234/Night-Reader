@@ -33,6 +33,6 @@ enum WorkPhase {
   /// 正在暫停或結束、還沒停好：通知不放按鈕。
   bool get settling => this == pausing || this == ending;
 
-  /// 做著（含正在暫停、正在結束）：佔著背景工作的位置。
+  /// 做著（含正在暫停、正在結束）。
   bool get active => this == running || settling;
 }

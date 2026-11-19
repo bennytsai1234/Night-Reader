@@ -367,10 +367,12 @@ class SourceRepairBatch extends ChangeNotifier {
         // 點進去看到的是已結束。
         _phase = WorkPhase.finished;
         stoppedStage = _startTask == null ? null : stage;
+        // 先定好整批的結果再結束那幾件修復：它們結束時會通知整批，聽的人
+        // 看到的已經是做完。
+        _closeUnfinished('已結束');
         for (final session in _sessions) {
           session.stop();
         }
-        _closeUnfinished('已結束');
         _notify();
     }
   }

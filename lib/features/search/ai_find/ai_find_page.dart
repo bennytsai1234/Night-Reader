@@ -558,11 +558,11 @@ class _AiFindPageState extends State<AiFindPage> {
         ],
       ),
       ?history,
-      GroupedSection(children: _controls(run, session)),
+      GroupedSection(children: _controls(run)),
     ];
   }
 
-  List<Widget> _controls(AiFindRun run, AiFindSession session) {
+  List<Widget> _controls(AiFindRun run) {
     final ending = run.phase == WorkPhase.ending;
     final end = GroupedRow(
       title: ending ? backgroundWorkEnding : '結束',
