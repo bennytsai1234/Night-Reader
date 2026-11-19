@@ -1,0 +1,230 @@
+import 'dart:async';
+
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/source/source_dedupe.dart';
+import 'package:night_reader/core/source_check/check_source_service.dart';
+import 'package:night_reader/features/source_manager/source_manager_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// 可以把讀清單卡住的 DAO。
+class _GatedDao extends BookSourceDao {
+  _GatedDao(super.db);
+
+  Completer<void>? gate;
+
+  @override
+  Future<List<BookSource>> getAllPart() async {
+    await gate?.future;
+    return super.getAllPart();
+  }
+}
+
+/// 寫進資料庫前卡住的匯入。
+class _GatedImport extends SourceImportService {
+  _GatedImport(BookSourceDao dao) : super(dao: dao);
+
+  final gate = Completer<void>();
+
+  @override
+  Future<SourceImportCount> importSources(List<BookSource> sources) async {
+    await gate.future;
+    return super.importSources(sources);
+  }
+}
+
+/// 卡住的併重複書源：[started] 在開始併時完成，[gate] 完成才真的併（重複的
+/// 那幾個直接刪掉）。
+class _GatedMerge {
+  _GatedMerge(this.dao);
+
+  final BookSourceDao dao;
+  var started = Completer<void>();
+  var gate = Completer<void>();
+  var calls = 0;
+
+  Future<int> call(List<BookSource> sources) async {
+    calls++;
+    if (!started.isCompleted) started.complete();
+    await gate.future;
+    return mergeDuplicateSources(
+      sources: sources,
+      idle: () => true,
+      merge: (from, into) async {
+        await dao.deleteByUrls(from);
+        return from;
+      },
+    );
+  }
+}
+
+BookSource _source(String url, {int order = 0}) => BookSource(
+  bookSourceUrl: url,
+  bookSourceName: url,
+  searchUrl: '/s?q={{key}}',
+  customOrder: order,
+);
+
+Future<void> _until(bool Function() done) async {
+  for (var i = 0; i < 400 && !done(); i++) {
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+  expect(done(), isTrue, reason: '等不到');
+}
+
+void main() {
+  late AppDatabase db;
+  late _GatedDao dao;
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await GetIt.instance.reset();
+    GetIt.instance.registerSingleton<SharedPreferences>(
+      await SharedPreferences.getInstance(),
+    );
+    db = AppDatabase.forTesting(NativeDatabase.memory());
+    dao = _GatedDao(db);
+    GetIt.instance.registerSingleton<BookSourceDao>(dao);
+    GetIt.instance.registerLazySingleton<CheckSourceService>(
+      CheckSourceService.new,
+    );
+    await dao.upsertAll([
+      _source('https://a.example', order: 0),
+      _source('https://b.example', order: 1),
+      _source('https://c.example', order: 2),
+    ]);
+  });
+
+  tearDown(() async {
+    await db.close();
+    await GetIt.instance.reset();
+  });
+
+  Future<SourceManagerProvider> loaded({
+    SourceImportService? importService,
+    Future<int> Function(List<BookSource> sources)? mergeDuplicates,
+  }) async {
+    final provider = SourceManagerProvider(
+      entrance: Future<void>.value(),
+      importService: importService,
+      mergeDuplicates: mergeDuplicates,
+    );
+    addTearDown(provider.dispose);
+    await _until(() => !provider.isLoading && provider.totalSourceCount > 0);
+    return provider;
+  }
+
+  test('an import keeps the list busy even when a background reload '
+      'finishes meanwhile', () async {
+    final importer = _GatedImport(dao);
+    final provider = await loaded(importService: importer);
+
+    final importing = provider.importSources([_source('https://new.example')]);
+    expect(provider.isLoading, isTrue);
+    expect(provider.isMutationBusy, isTrue);
+
+    // 校驗做完、同步套用這類背景重讀，在匯入寫進去之前讀完。
+    await provider.loadSources(showLoading: false);
+    expect(provider.isLoading, isTrue);
+    expect(provider.isMutationBusy, isTrue);
+
+    importer.gate.complete();
+    expect(await importing, (imported: 1, merged: 0));
+    expect(provider.isLoading, isFalse);
+    expect(provider.isMutationBusy, isFalse);
+    expect(provider.totalSourceCount, 4);
+  });
+
+  test('first open with duplicates stays loading until the merged list '
+      'is out', () async {
+    await dao.upsert(_source('https://a.example#copy', order: 3));
+    final merge = _GatedMerge(dao);
+    final provider = SourceManagerProvider(
+      entrance: Future<void>.value(),
+      mergeDuplicates: merge.call,
+    );
+    addTearDown(provider.dispose);
+
+    await merge.started.future;
+    expect(provider.isLoading, isTrue);
+    expect(provider.totalSourceCount, 0);
+
+    merge.gate.complete();
+    await _until(() => !provider.isLoading);
+    expect(provider.totalSourceCount, 3);
+    expect(provider.lastMergedDuplicates, 1);
+    expect(provider.isMutationBusy, isFalse);
+  });
+
+  test('a batch job keeps the list and every row locked through its reload, '
+      'then lets go', () async {
+    final provider = await loaded();
+    provider.toggleSelect('https://a.example');
+
+    dao.gate = Completer<void>();
+    final deleting = provider.deleteSelected();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(provider.isMutationBusy, isTrue);
+    expect(provider.isSourceLocked('https://b.example'), isTrue);
+    expect(provider.canReorder, isFalse);
+    // 還沒讀完：清單照舊，不畫骨架。
+    expect(provider.totalSourceCount, 3);
+
+    dao.gate!.complete();
+    await deleting;
+    expect(provider.totalSourceCount, 2);
+    expect(provider.isMutationBusy, isFalse);
+    expect(provider.isSourceLocked('https://b.example'), isFalse);
+    expect(provider.canReorder, isTrue);
+  });
+
+  test('a reload after the first load keeps the list and locks the list '
+      'actions; the rows look usable but changing one is refused', () async {
+    final provider = await loaded();
+
+    dao.gate = Completer<void>();
+    final reload = provider.loadSources();
+    expect(provider.isLoading, isTrue);
+    expect(provider.isMutationBusy, isTrue);
+    expect(provider.isSourceLocked('https://a.example'), isFalse);
+    expect(provider.totalSourceCount, 3);
+
+    final source = provider.allSources.first;
+    await provider.toggleEnabled(source);
+    expect((await dao.getByUrl(source.bookSourceUrl))!.enabled, isTrue);
+
+    dao.gate!.complete();
+    await reload;
+    expect(provider.isLoading, isFalse);
+    expect(provider.isMutationBusy, isFalse);
+  });
+
+  test('while a background reload merges duplicates, list actions are '
+      'refused and the rows look usable', () async {
+    final merge = _GatedMerge(dao);
+    final provider = await loaded(mergeDuplicates: merge.call);
+    await dao.upsert(_source('https://a.example#copy', order: 3));
+
+    final reload = provider.loadSources(showLoading: false);
+    await merge.started.future;
+    expect(provider.isLoading, isFalse);
+    expect(provider.isMutationBusy, isTrue);
+    expect(provider.isSourceLocked('https://b.example'), isFalse);
+
+    await provider.deleteSourcesByUrls(['https://c.example']);
+    expect(await dao.getByUrl('https://c.example'), isNotNull);
+    expect(await provider.importSources([_source('https://new.example')]), (
+      imported: 0,
+      merged: 0,
+    ));
+
+    merge.gate.complete();
+    await reload;
+    expect(provider.totalSourceCount, 3);
+    expect(provider.isMutationBusy, isFalse);
+  });
+}
