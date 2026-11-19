@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -579,8 +580,9 @@ class ReaderV2PageCoordinator {
       return null;
     }
     if (raw == null) return null;
-    // 讀到時面板常還在滑入，只切段落、不算整章的雜湊。
-    final paragraphs = ReaderV2Content.paragraphsOf(raw);
+    // 讀到時面板常還在滑入：整章切段落與段落修復在另一個 isolate 做，不算
+    // 整章的雜湊。
+    final paragraphs = await _sourceParagraphsInBackground(raw);
     if (paragraphs.isEmpty) return null;
     final shown = runtime.repository.cachedContent(location.chapterIndex);
     final index = shown == null
@@ -588,6 +590,10 @@ class ReaderV2PageCoordinator {
         : paragraphIndexAt(shown, location.charOffset);
     return paragraphs[index.clamp(0, paragraphs.length - 1)];
   }
+
+  /// 靜態函式建立的閉包只帶著 [raw] 進另一個 isolate，不帶這個協調器。
+  static Future<List<String>> _sourceParagraphsInBackground(String raw) =>
+      Isolate.run(() => ReaderV2Content.sourceParagraphsOf(raw));
 
   /// 音量鍵翻頁：音量下是下一頁、音量上是上一頁。
   Future<void> movePage({required bool forward}) => _movePage(forward: forward);

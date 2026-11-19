@@ -1,5 +1,7 @@
 import 'dart:isolate';
 
+import 'package:characters/characters.dart';
+
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_illustration.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
@@ -162,6 +164,30 @@ ChapterBlocks _processSync(_PreprocessRequest request) {
 
 List<String> _splitParagraph(String paragraph, int maxBlockChars) {
   if (paragraph.length <= maxBlockChars) return <String>[paragraph];
+
+  // Only split at full grapheme boundaries: an emoji with a ZWJ sequence or
+  // a letter with combining marks must stay in one layout transaction.
+  final boundaries = <int>[];
+  var offset = 0;
+  for (final grapheme in paragraph.characters) {
+    offset += grapheme.length;
+    boundaries.add(offset);
+  }
+
+  int snapToGraphemeEnd(int proposed) {
+    var low = 0;
+    var high = boundaries.length - 1;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      if (boundaries[middle] < proposed) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return boundaries[low];
+  }
+
   final chunks = <String>[];
   var start = 0;
   while (start < paragraph.length) {
@@ -169,26 +195,13 @@ List<String> _splitParagraph(String paragraph, int maxBlockChars) {
         .clamp(start + 1, paragraph.length)
         .toInt();
     if (end < paragraph.length) {
-      end =
-          _findSentenceBoundary(paragraph, start, end) ??
-          _safeUtf16Boundary(paragraph, end);
+      final sentenceEnd = _findSentenceBoundary(paragraph, start, end);
+      end = snapToGraphemeEnd(sentenceEnd ?? end);
     }
     chunks.add(paragraph.substring(start, end));
     start = end;
   }
   return chunks;
-}
-
-int _safeUtf16Boundary(String text, int boundary) {
-  if (boundary <= 0 || boundary >= text.length) return boundary;
-  final previous = text.codeUnitAt(boundary - 1);
-  final next = text.codeUnitAt(boundary);
-  final splitsSurrogatePair =
-      previous >= 0xD800 &&
-      previous <= 0xDBFF &&
-      next >= 0xDC00 &&
-      next <= 0xDFFF;
-  return splitsSurrogatePair ? boundary + 1 : boundary;
 }
 
 int? _findSentenceBoundary(String text, int start, int preferredEnd) {
