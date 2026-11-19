@@ -1722,13 +1722,17 @@ void main() {
       await pumpReader(tester);
       await settle(tester);
       final before = runtime.state.visibleLocation;
+      _savedProgress = null;
 
       await flingUp(tester);
       await settle(tester);
 
       final rest = runtime.state.visibleLocation;
       expect(scrollPosition(tester).isScrollingNotifier.value, isFalse);
-      expect(rest, isNot(before));
+      expect((
+        rest.chapterIndex,
+        rest.charOffset,
+      ), isNot((before.chapterIndex, before.charOffset)));
       expect(_savedProgress, (
         chapter: rest.chapterIndex,
         pos: rest.charOffset,
@@ -1831,6 +1835,14 @@ void main() {
       ),
     );
     await settle(tester);
+    expect(runtime.state.hasStableWorld, isTrue, reason: '開書做完');
+    expect(runtime.pendingLocation, isNull);
+    final position = scrollPosition(tester);
+    expect(
+      position.pixels - position.minScrollExtent,
+      greaterThan(0),
+      reason: '停在第 1 章裡、前一章接在上面',
+    );
     expect(runtime.state.visibleLocation.chapterIndex, 1);
   });
 

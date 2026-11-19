@@ -421,24 +421,23 @@ class _ReaderTextViewState extends State<ReaderTextView>
   /// 正文排好、要掀紙，照開 App 換場的順序（ADR 0035、0037 策略一、二）：
   /// 骨架的呼吸先收住（每個位置把這一口呼完、停在最深），畫面靜止後才在
   /// 整張蓋著的紙底下建好、畫出正文，畫完再停 [AppMotion.stillGap] 才掀紙；
-  /// 掀紙時骨架停在最深不再呼吸，掀紙的每一幀都不做重的工作。2026-11-05
-  /// 手機上開書，建正文那一幀主執行緒 12.9ms、第一次畫整頁字的繪製
-  /// 25.6ms；原本在呼吸途中把呼吸凍在當下的深淺來建正文，掀紙時再接著
-  /// 呼吸，看起來呼吸播到一半就頓住、和字一起出來（使用者 2026-11-07）。
+  /// 掀紙時骨架停在最深不再呼吸，掀紙的每一幀都不做重的工作。建正文那一幀
+  /// 很重（第一次畫整頁字），不能落在呼吸途中：把呼吸凍在半淺看起來就是
+  /// 呼吸播到一半頓住。
   ///
   /// 從排版中來時正文還沒建在紙底下（開書、跳章、重排後第一次排好）：收住
   /// 的這段期間正文先不建，重建也只畫紙；從在畫面上來時（蓋紙的操作結束、
   /// 掀回舊正文）正文本來就在。
   void _revealWhenStill() {
     final reveal = SkeletonReveal.of(context);
-    final awaiting = _AwaitingReveal(textBuilt: _stage is _Shown);
+    final awaiting = _AwaitingReveal(buildsText: _stage is _Shown);
     _stage = awaiting;
     bool current() => mounted && identical(_stage, awaiting);
     unawaited(() async {
       await _veil.settleBreath();
       if (!current()) return;
-      if (!awaiting.textBuilt) {
-        awaiting.textBuilt = true;
+      if (!awaiting.buildsText) {
+        awaiting.buildsText = true;
         _scheduleRebuild();
       }
       // 排好的重建在這一幀結束時才 setState，正文在下一幀才建好、畫出：
@@ -464,15 +463,16 @@ class _ReaderTextViewState extends State<ReaderTextView>
     if (awaiting is! _AwaitingReveal) return;
     awaiting.stillGap?.cancel();
     _stage = const _Shown();
-    if (!awaiting.textBuilt) _scheduleRebuild();
+    if (!awaiting.buildsText) _scheduleRebuild();
     _veil.resumeBreath();
   }
 
-  /// 換手指的捲動，排版預算跟著換。
+  /// 換手指的捲動；排版預算變了才寫。
   void _setFinger(_FingerScroll finger) {
     if (_finger == finger) return;
+    final before = _pumpState;
     _finger = finger;
-    _syncPumpState();
+    if (_pumpState != before) _syncPumpState();
   }
 
   /// 這次還原（[owner]）要的排版預算：還原進行中照它，不照手指。
@@ -489,10 +489,16 @@ class _ReaderTextViewState extends State<ReaderTextView>
     _syncPumpState();
   }
 
-  /// 排版每幀的預算（ADR 0018）只在這裡寫：進行中的還原要的，其他時候照
-  /// 手指。
-  void _syncPumpState() =>
-      _pipeline.onScrollStateChanged(_restoreBudget?.state ?? _finger.pump);
+  /// 排版每幀的預算（ADR 0018）：還原進行中而且還有效時照它要的，其他時候
+  /// 照手指。被取代的還原留下的紀錄不算（接手的那次可能還沒走到寫預算就
+  /// 失敗，紙掀回舊正文、手指接著拖）。
+  PumpState get _pumpState {
+    final budget = _restoreBudget;
+    return budget != null && budget.owner() ? budget.state : _finger.pump;
+  }
+
+  /// 排版每幀的預算只在這裡寫進排版管線。
+  void _syncPumpState() => _pipeline.onScrollStateChanged(_pumpState);
 
   static LayoutDiskCache? _diskCacheFor(ReaderTextView widget) {
     final bookUrl = widget.bookUrl;
@@ -542,6 +548,8 @@ class _ReaderTextViewState extends State<ReaderTextView>
     _runtimeLocationRevision += 1;
     _restoreRevision += 1;
     _setTextLaidOut(false);
+    // 舊世代的還原跟著作廢，它要的預算不留到新的排版管線。
+    _restoreBudget = null;
     _pipeline.dispose();
     _chapterRepo.invalidateLoaded(emitEvents: false);
     _documentIndex.reset(centerKey: _documentIndex.centerKey);
@@ -805,10 +813,11 @@ class _ReaderTextViewState extends State<ReaderTextView>
       // 原生 Scrollable 連單純的點擊也會發出零位移的拖動開始。
       final byFinger = notification.dragDetails != null;
       if (byFinger && _finger != _FingerScroll.dragging) {
+        // 先記成拖動：收掉選取、取消跳轉時同步通知的監聽者看到的就是手指在捲。
+        _setFinger(_FingerScroll.dragging);
         _touch.clear();
         _runtimeLocationRevision += 1;
         widget.runtime.cancelJumpForUserScroll();
-        _setFinger(_FingerScroll.dragging);
       } else if (!byFinger && _finger == _FingerScroll.dragging) {
         _setFinger(_FingerScroll.flinging);
       }
@@ -1520,7 +1529,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
         _viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
         final state = widget.runtime.state;
         // 排版中、等掀紙但正文還沒建：只畫紙。
-        if (_stage case _LayingOut() || _AwaitingReveal(textBuilt: false)) {
+        if (_stage case _LayingOut() || _AwaitingReveal(buildsText: false)) {
           return _buildLoading(state);
         }
         final controller = _scrollController ??= ReaderScrollController(
@@ -1660,10 +1669,11 @@ final class _LayingOut extends _TextStage {
 /// ._revealWhenStill]）。每一次等掀紙是一個新的物件，等待回來時看現在還是
 /// 不是它。
 final class _AwaitingReveal extends _TextStage {
-  _AwaitingReveal({required this.textBuilt});
+  _AwaitingReveal({required this.buildsText});
 
-  /// 正文已經建在紙底下。false 時骨架的呼吸還沒收住，正文先不建、只畫紙。
-  bool textBuilt;
+  /// 畫面在紙底下建正文（設成 true 時排一次重建，下一幀才建好）。false 時
+  /// 骨架的呼吸還沒收住，正文先不建、只畫紙。
+  bool buildsText;
 
   /// 正文建好、畫出之後再停 [AppMotion.stillGap] 的計時。
   Timer? stillGap;
