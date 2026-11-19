@@ -609,22 +609,121 @@ void main() {
       expect(previous.last, 0, reason: '右邊還沒輪到');
     });
 
-    testWidgets('releasing mid-rest carries on breathing without a jump', (
-      tester,
-    ) async {
-      // 進場的節奏（一輪 0.6 秒）換回一般節奏（1.6 秒）時，計時器照樣在走：
-      // 經過的輪數要從當下接著算，不能用新的一輪長度重算整段時間。
-      await setUpView(tester);
-      await tester.pumpWidget(host());
-      await grow(tester);
-      await tester.pump(const Duration(milliseconds: 300));
-      unawaited(motion.rest.settle());
+    for (final (label, restFrames) in [('early', 2), ('late', 26)]) {
+      testWidgets('releasing mid-rest ($label) finishes this breath at the '
+          'deepest, then breathes again from the deepest without a jump', (
+        tester,
+      ) async {
+        // 收住途中接著呼吸：已經停在最深的位置不跳回原本的明暗，進場的節奏
+        // （一輪 0.6 秒）換回一般節奏（1.6 秒）也不跳；要求收住的等待在
+        // 放開時就完成，之後不再回頭收住。
+        await setUpView(tester);
+        await tester.pumpWidget(host());
+        await grow(tester);
+        await tester.pump(const Duration(milliseconds: 300));
+        var rested = false;
+        unawaited(motion.rest.settle().then((_) => rested = true));
+        var previous = await sample(tester);
+        previous = await pumpSmoothly(tester, previous, restFrames);
+        final stopped = {
+          for (var i = 0; i < xs.length; i++)
+            if (previous[i] == 0) i,
+        };
+        if (label == 'late') {
+          expect(stopped, isNotEmpty, reason: '放開時已經有位置停在最深');
+        }
+        motion.rest.release();
+        await tester.pump(frame);
+        expect(rested, isTrue, reason: '放開就不再等收住');
+
+        var allDeep = -1;
+        var lightAgain = -1;
+        for (var i = 0; i < cycleFrames * 3 && lightAgain < 0; i++) {
+          final now = await sample(tester);
+          for (var j = 0; j < xs.length; j++) {
+            expect(
+              (now[j] - previous[j]).abs(),
+              lessThanOrEqualTo(maxStep),
+              reason: '第 $i 格 x=${xs[j]}',
+            );
+            if (allDeep < 0 && stopped.contains(j)) {
+              expect(now[j], 0, reason: '已經停住的 x=${xs[j]} 不跳回去');
+            }
+          }
+          if (allDeep < 0 && now.every((v) => v == 0)) allDeep = i;
+          if (allDeep >= 0 && now.first > 0) lightAgain = i;
+          previous = now;
+          await tester.pump(frame);
+        }
+        expect(allDeep, greaterThanOrEqualTo(0), reason: '先把這一口呼完');
+        expect(lightAgain, greaterThan(allDeep), reason: '再從最深接著呼吸');
+        await tester.pump(const Duration(seconds: 3));
+        expect(tester.hasRunningAnimations, isTrue, reason: '不再回頭收住');
+      });
+    }
+
+    testWidgets('a skeleton moved from a launch that has not breathed yet '
+        'into one that already breathes starts breathing', (tester) async {
+      tester.view.physicalSize = const Size(400, 200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final key = GlobalKey();
+      late LaunchEntranceMotion breathingLaunch;
+      SkeletonPhase? phase;
+      Widget skeleton() => Skeleton(
+        key: key,
+        child: Builder(
+          builder: (context) {
+            phase = Skeleton.phaseOf(context);
+            return const SkeletonBox(width: 400, height: 20);
+          },
+        ),
+      );
+      Widget app({required bool second, required bool moved}) => MaterialApp(
+        home: Column(
+          children: [
+            SizedBox(
+              height: 60,
+              child: LaunchEntrance(
+                child: Builder(
+                  builder: (context) {
+                    breathingLaunch = LaunchEntrance.maybeOf(context)!;
+                    return moved ? skeleton() : const SizedBox();
+                  },
+                ),
+              ),
+            ),
+            if (second)
+              SizedBox(
+                height: 60,
+                child: LaunchEntrance(
+                  child: moved ? const SizedBox() : skeleton(),
+                ),
+              ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(app(second: false, moved: false));
+      for (var i = 0; i < 200 && !breathingLaunch.breathing.value; i++) {
+        await tester.pump(frame);
+      }
+      expect(breathingLaunch.breathing.value, isTrue);
+
+      await tester.pumpWidget(app(second: true, moved: false));
       await tester.pump(frame);
-      await tester.pump(frame);
-      final before = await sample(tester);
-      motion.rest.release();
-      final after = await pumpSmoothly(tester, before, cycleFrames * 2);
-      expect(after.toSet(), hasLength(greaterThan(1)), reason: '照常呼吸');
+      expect(phase!.depthAt(0, SkeletonBreath.gentleSweep), 1, reason: '等它的進場');
+
+      await tester.pumpWidget(app(second: true, moved: true));
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(frame);
+      }
+      expect(
+        phase!.depthAt(0, SkeletonBreath.gentleSweep),
+        lessThan(1),
+        reason: '搬進已經在呼吸的進場，從最深起',
+      );
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 1));
     });
 
     testWidgets('a skeleton hidden mid-rest counts as rested instead of '

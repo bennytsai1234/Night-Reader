@@ -379,9 +379,10 @@ class SkeletonRest {
   /// 收住登記著的骨架，全部停在最深時完成：每個位置把這一口呼完，還沒
   /// 輪到的位置呼完第一口，最多再一輪半（開 App 進場一輪是
   /// [LaunchEntranceMotion.breathCycle]）。
+  /// 還沒全部停好就 [release] 時跟著完成，不再回頭收住已經接著呼吸的骨架。
   Future<void> settle() async {
     _resting = true;
-    while (true) {
+    while (_resting) {
       final pending = [
         for (final clock in _clocks)
           if (!clock.still) clock.rest(),
@@ -391,7 +392,8 @@ class SkeletonRest {
     }
   }
 
-  /// 收住的骨架接著呼吸（換場播完後還留著的骨架）。
+  /// 收住的骨架接著呼吸（換場播完後還留著的骨架）；還在收住途中的，把這一
+  /// 口呼完、停在最深再從最深起（[_BreathClock.resume]）。
   void release() {
     _resting = false;
     for (final clock in _clocks) {
@@ -440,12 +442,14 @@ final class _Breathing extends _BreathStage {
 }
 
 /// 收住中：照 [breathing] 的起法呼吸，從相位 [from] 開始收，每個位置等到
-/// 下一次最深就停在那裡。
+/// 下一次最深就停在那裡。[thenBreathe] 時收住途中已經要接著呼吸了：停好
+/// 就從最深起，不停在收住了。
 final class _Resting extends _BreathStage {
-  const _Resting(this.breathing, this.from);
+  const _Resting(this.breathing, this.from, {this.thenBreathe = false});
 
   final _Breathing breathing;
   final double from;
+  final bool thenBreathe;
 }
 
 /// 收住了：整片停在最深、計時器停。
@@ -619,18 +623,6 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
   /// （[LaunchEntranceMotion.breathCycle]），其他照 [Skeleton.breathCycle]。
   Duration _cycle = Skeleton.breathCycle;
 
-  /// 換一輪的長度。計時器在走時（收住途中接著呼吸）從當下的輪數接著算：
-  /// [_tick] 用這一輪的長度換算計時器啟動後的整段時間，不重新起算的話，
-  /// 進場的 0.6 秒換成 1.6 秒那一格，經過的輪數一下子少掉一大截，深淺跳一下。
-  void _setCycle(Duration cycle) {
-    if (cycle == _cycle) return;
-    _cycle = cycle;
-    if (!_ticker.isActive) return;
-    _ticker.stop();
-    _base = _cycles;
-    _ticker.start();
-  }
-
   /// 等開 App 的骨架開始呼吸的掛勾（[holdUntil]）；掛著時階段是等開始，
   /// 或還沒開始就收住了。
   ValueListenable<bool>? _hold;
@@ -641,15 +633,23 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
   /// 一口比之後快的氣，長完接到真正的呼吸時頓一下（使用者 2026-10-24 在
   /// 三種做法的逐格錄影上選的，ADR 0025）。進場結束後才建的骨架照一般的
   /// 節奏呼吸。
+  ///
+  /// 換到另一個進場時（同一個骨架被搬過去），原本在等的照新的那個：新的
+  /// 還沒到呼吸的時候就接著等，已經在呼吸或結束了就從最深起；正在呼吸或
+  /// 收住途中的停回最深、等新的那個（收住的等待跟著完成）。
   void holdUntil(LaunchEntranceMotion entrance) {
     _releaseHold();
-    if (entrance.isFinished) return;
-    _cycle = LaunchEntranceMotion.breathCycle;
-    if (entrance.breathing.value) return;
+    if (!entrance.isFinished) _cycle = LaunchEntranceMotion.breathCycle;
+    if (entrance.isFinished || entrance.breathing.value) {
+      if (_stage is _Waiting) _breatheFromDeepest();
+      return;
+    }
     _hold = entrance.breathing..addListener(_onBreathing);
-    if (_stage is _Breathing) {
+    if (_moving) {
+      _endRest();
       _stage = const _Waiting();
       _ticker.stop();
+      notifyListeners();
     }
   }
 
@@ -683,6 +683,9 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
         return Future<void>.value();
       case _Breathing breathing:
         _stage = _Resting(breathing, _phase);
+      case _Resting(:final breathing, :final from, thenBreathe: true):
+        // 又要收住：停好就停著，不接著呼吸。
+        _stage = _Resting(breathing, from);
       case _Resting() || _Waiting():
         break;
     }
@@ -698,31 +701,43 @@ class _BreathClock extends ChangeNotifier implements SkeletonPhase {
 
   /// 收住後接著呼吸：從整片最深重新開始，每個位置照由左而右的先後輪到
   /// 才開始變淺，和一開始呼吸一樣接得上，不跳回原本的明暗；開 App 還沒到
-  /// 呼吸的時候就回到等開始。收住途中時照原本的起法繼續呼吸。開 App 的
-  /// 進場播完才會接著呼吸，之後照一般的節奏。
+  /// 呼吸的時候就回到等開始。收住途中時等這一口呼完、停在最深再起（同
+  /// [SharedSkeletonBreath.begin]）：已經停在最深的位置不跳回原本的明暗，
+  /// 要求收住的等待當下就完成。開 App 的進場播完才會接著呼吸，之後照一般
+  /// 的節奏。
   void resume() {
     switch (_stage) {
-      case _Resting(:final breathing):
-        _stage = breathing;
+      case _Resting(:final breathing, :final from):
         _endRest();
-        _setCycle(Skeleton.breathCycle);
+        _stage = _Resting(breathing, from, thenBreathe: true);
       case _Still():
         _endRest();
-        _setCycle(Skeleton.breathCycle);
-        if (_hold != null) {
-          _stage = const _Waiting();
-        } else {
-          _breatheFromDeepest();
-        }
+        _breatheAgain();
       case _Waiting() || _Breathing():
         break;
     }
   }
 
+  /// 停在最深：收住了；收住途中已經要接著呼吸的（[resume]）從最深起。
   void _settle() {
+    final again = switch (_stage) {
+      _Resting(thenBreathe: true) => true,
+      _ => false,
+    };
     _stage = const _Still();
     _ticker.stop();
     _finishRest();
+    if (again) _breatheAgain();
+  }
+
+  /// 收住後接著呼吸，照一般的節奏（計時器這時停著，換節奏不跳）。
+  void _breatheAgain() {
+    _cycle = Skeleton.breathCycle;
+    if (_hold != null) {
+      _stage = const _Waiting();
+    } else {
+      _breatheFromDeepest();
+    }
   }
 
   /// 不再呼吸、回到等開始（整片最深、等 [begin]，收住的等待也結束）：共用
