@@ -113,21 +113,33 @@ void main() {
         isFalse,
       );
     });
-  });
 
-  test('touchedDiscovery: the discovery rules, or search rules it borrows', () {
-    expect(touchedDiscovery(_source(search: 'class.old'), _source()), isFalse);
-    expect(
-      touchedDiscovery(
-        _source(search: 'class.old', ownExplore: false),
-        _source(ownExplore: false),
-      ),
-      isTrue,
-    );
-    expect(
-      touchedDiscovery(_source(), _source()..ruleExplore!.name = 'b@text'),
-      isTrue,
-    );
+    test('a change to the discovery rules is not a fix while discovery '
+        'fails', () {
+      final changed = _source()..ruleExplore!.name = 'b@text';
+      expect(
+        usableFix(
+          _result(changed, broken: SourceHealthCategory.discoveryBroken),
+          _source(),
+          changed,
+          before: SourceHealthCategory.contentBroken,
+        ),
+        isFalse,
+      );
+    });
+
+    test('reading still broken is not a fix, even with discovery left '
+        'alone', () {
+      expect(
+        usableFix(
+          _result(candidate, broken: SourceHealthCategory.contentBroken),
+          original,
+          candidate,
+          before: SourceHealthCategory.contentBroken,
+        ),
+        isFalse,
+      );
+    });
   });
 
   test('discoveryNote tells the AI only when discovery borrows the changed '
@@ -144,6 +156,14 @@ void main() {
     );
     expect(discoveryNote(_result(changed), borrowing, changed), isNull);
     expect(discoveryNote(null, borrowing, changed), isNull);
+    expect(
+      discoveryNote(
+        _result(changed, broken: SourceHealthCategory.contentBroken),
+        borrowing,
+        changed,
+      ),
+      isNull,
+    );
     expect(
       discoveryNote(
         _result(_source(), broken: SourceHealthCategory.discoveryBroken),
