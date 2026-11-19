@@ -194,7 +194,7 @@ class LoadingVeilController {
   _BreathPlan _plan = const _BreatheWhenRested();
 
   /// 骨架長完：先停在最深 [restBeforeBreath]，正文還沒排好才開始呼吸；收住
-  /// 時不停也不呼吸。
+  /// 期間不排這個計時。
   void _waitThenBreathe() {
     if (_plan is _Held) return;
     _stopResting();
@@ -608,8 +608,9 @@ final class _BreatheWhenRested extends _BreathPlan {
   const _BreatheWhenRested();
 }
 
-/// 長完了，停在最深等 [LoadingVeilController.restBeforeBreath]；到了正文還沒
-/// 排好就開始呼吸。
+/// 骨架長完時排下的 [LoadingVeilController.restBeforeBreath] 計時：到了而且
+/// 骨架還是長完的就開始呼吸。停著的期間骨架也可能淡掉（換一頁骨架），這時
+/// 計時照走、到了不呼吸，下一次長完重新排。
 final class _Resting extends _BreathPlan {
   _Resting(this.timer);
 

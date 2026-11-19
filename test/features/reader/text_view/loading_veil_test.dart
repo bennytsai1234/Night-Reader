@@ -603,6 +603,14 @@ void main() {
       await finish(tester);
     });
 
+    /// 從現在起推到停完前一幀還靜止，停完就開始呼吸。
+    Future<void> expectWholeRest(WidgetTester tester) async {
+      await advance(tester, LoadingVeilController.restBeforeBreath - frame);
+      expect(tester.hasRunningAnimations, isFalse, reason: '還在停');
+      await advance(tester, frame * 3);
+      expect(tester.hasRunningAnimations, isTrue, reason: '停完正文還沒好，呼吸');
+    }
+
     testWidgets('resuming starts a whole rest again before breathing', (
       tester,
     ) async {
@@ -613,14 +621,7 @@ void main() {
 
       // 這次掀紙作廢：從現在起再停一整段才呼吸。
       veil.resumeBreath();
-      await advance(
-        tester,
-        LoadingVeilController.restBeforeBreath -
-            const Duration(milliseconds: 100),
-      );
-      expect(tester.hasRunningAnimations, isFalse, reason: '還在停');
-      await advance(tester, const Duration(milliseconds: 200));
-      expect(tester.hasRunningAnimations, isTrue, reason: '停完正文還沒好，呼吸');
+      await expectWholeRest(tester);
       await finish(tester);
     });
 
@@ -634,15 +635,12 @@ void main() {
       await tester.pump(frame);
       veil.resumeBreath();
 
-      await advance(tester, revealTime);
+      // 一幀一幀推到剛長完：從那一刻起停一整段。
+      for (var i = 0; i < 200 && veil.isSkeletonFading; i++) {
+        await tester.pump(frame);
+      }
       expect(veil.isSkeletonFading, isFalse);
-      expect(tester.hasRunningAnimations, isFalse, reason: '長完先停');
-      await advance(
-        tester,
-        LoadingVeilController.restBeforeBreath +
-            const Duration(milliseconds: 100),
-      );
-      expect(tester.hasRunningAnimations, isTrue);
+      await expectWholeRest(tester);
       await finish(tester);
     });
   });
@@ -655,26 +653,37 @@ void main() {
     await advance(tester, revealTime * 0.5);
     expect(veil.isSkeletonFading, isTrue);
 
-    // 第一行長條的左右兩端（同一行、同一種顏色）。
-    Future<(List<int>, List<int>)> ends() async {
+    /// 第一行長條左右兩端（同一行、同一種顏色）離紙底色多遠：越大越深。
+    Future<(int, int)> ends() async {
       final image = await pixels(tester);
-      List<int> at(int x) {
-        final width = veilKey.currentContext!.size!.width.round();
-        final i = (19 * width + x) * 4;
-        return image.sublist(i, i + 4);
+      final width = veilKey.currentContext!.size!.width.round();
+      List<int> at(int x, int y) {
+        final i = (y * width + x) * 4;
+        return image.sublist(i, i + 3);
       }
 
-      return (at(70), at(370));
+      // 紙上沒有長條的地方就是底色。
+      final paper = at(200, 400);
+      int depth(List<int> pixel) =>
+          [for (var c = 0; c < 3; c++) (pixel[c] - paper[c]).abs()]
+              .reduce((a, b) => a + b);
+      return (depth(at(70, 19)), depth(at(370, 19)));
     }
 
     final (growLeft, growRight) = await ends();
-    expect(growLeft, isNot(growRight), reason: '長出時由左而右，右端還淡');
+    expect(growLeft, greaterThan(growRight), reason: '長出時由左而右，左端先深');
 
     veil.hideSkeleton();
     await tester.pump(frame);
     await tester.pump(frame);
     final (fadeLeft, fadeRight) = await ends();
     expect(fadeLeft, fadeRight, reason: '淡掉時整頁一起淡');
+    expect(fadeLeft, greaterThan(0), reason: '淡掉途中還看得到');
+
+    await advance(tester, revealTime * 0.5);
+    final (laterLeft, laterRight) = await ends();
+    expect(laterLeft, laterRight);
+    expect(laterLeft, lessThan(fadeLeft), reason: '兩端一起往底色淡');
     await finish(tester);
   });
 }
