@@ -178,7 +178,8 @@ double _legacyTitleSpacing({
   required double lineHeight,
   required double paragraphSpacing,
 }) {
-  final lineExtent = fontSize * ReaderStyle.normalizeLineHeight(lineHeight);
+  final lineExtent =
+      fontSize * ReaderStylePreferences.normalizeLineHeight(lineHeight);
   if (!paragraphSpacing.isFinite || lineExtent <= 0) return 0.0;
   return paragraphSpacing * 8 / lineExtent;
 }

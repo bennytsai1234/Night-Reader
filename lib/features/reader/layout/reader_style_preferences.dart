@@ -1,11 +1,14 @@
 import 'reader_typography.dart';
 
-class ReaderStyle {
+/// 使用者在閱讀設定選的排版樣式，照選的值原樣帶著（含「左右對齊」開關）。
+/// 排版前照畫面寬度與量到的字格換算成 `ReaderLayoutStyle`：左右對齊在那時
+/// 攤進字距。
+class ReaderStylePreferences {
   static const double minReadableLineHeight = 1.2;
   static const double maxReadableLineHeight = 3.0;
   static const double defaultLineHeight = 1.5;
 
-  const ReaderStyle({
+  const ReaderStylePreferences({
     required this.fontSize,
     required this.lineHeight,
     required this.letterSpacing,
@@ -67,7 +70,7 @@ class ReaderStyle {
     return value.clamp(minReadableLineHeight, maxReadableLineHeight).toDouble();
   }
 
-  ReaderStyle copyWith({
+  ReaderStylePreferences copyWith({
     double? fontSize,
     double? lineHeight,
     double? letterSpacing,
@@ -86,7 +89,7 @@ class ReaderStyle {
     double? titleFontSize,
     double? titleSpacing,
   }) {
-    return ReaderStyle(
+    return ReaderStylePreferences(
       fontSize: fontSize ?? this.fontSize,
       lineHeight: lineHeight ?? this.lineHeight,
       letterSpacing: letterSpacing ?? this.letterSpacing,
@@ -109,7 +112,7 @@ class ReaderStyle {
 
   @override
   bool operator ==(Object other) {
-    return other is ReaderStyle &&
+    return other is ReaderStylePreferences &&
         other.fontSize == fontSize &&
         other.lineHeight == lineHeight &&
         other.letterSpacing == letterSpacing &&

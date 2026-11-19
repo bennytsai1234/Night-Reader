@@ -51,8 +51,10 @@ class ReaderSettingsController extends ChangeNotifier {
   /// 正文目前用的字族；選的字型還不能用時是 null（系統字型）。
   String? get readerFontFamily => _fonts.familyOf(readerFont);
 
-  static const double minReadableLineHeight = ReaderStyle.minReadableLineHeight;
-  static const double maxReadableLineHeight = ReaderStyle.maxReadableLineHeight;
+  static const double minReadableLineHeight =
+      ReaderStylePreferences.minReadableLineHeight;
+  static const double maxReadableLineHeight =
+      ReaderStylePreferences.maxReadableLineHeight;
   static const double minAutoPageSpeed = ReaderPrefsRepository.minAutoPageSpeed;
   static const double maxAutoPageSpeed = ReaderPrefsRepository.maxAutoPageSpeed;
   static const double minPagePadding = ReaderPrefsRepository.minPagePadding;
@@ -152,7 +154,9 @@ class ReaderSettingsController extends ChangeNotifier {
   void _initFromCache(ReaderPrefsSnapshot snapshot) {
     fontSize = snapshot.fontSize;
     titleFontSize = snapshot.titleFontSize;
-    lineHeight = ReaderStyle.normalizeLineHeight(snapshot.lineHeight);
+    lineHeight = ReaderStylePreferences.normalizeLineHeight(
+      snapshot.lineHeight,
+    );
     paragraphSpacing = snapshot.paragraphSpacing;
     chapterSpacing = snapshot.chapterSpacing;
     letterSpacing = snapshot.letterSpacing;
@@ -349,7 +353,7 @@ class ReaderSettingsController extends ChangeNotifier {
           .clamp(menuMinInset, AppGrouped.margin)
           .toDouble();
 
-  ReaderStyle readStyleFor(
+  ReaderStylePreferences readStyleFor(
     EdgeInsets mediaPadding, {
     required double viewportWidth,
     bool topInfoReservedExternally = false,
@@ -362,9 +366,9 @@ class ReaderSettingsController extends ChangeNotifier {
             : mediaPadding.top * kReaderContentTopSafeAreaFactor) +
         kReaderContentTopSpacing;
     final bottom = bottomInfoReservedExternally ? 0.0 : mediaPadding.bottom;
-    return ReaderStyle(
+    return ReaderStylePreferences(
       fontSize: fontSize,
-      lineHeight: ReaderStyle.normalizeLineHeight(lineHeight),
+      lineHeight: ReaderStylePreferences.normalizeLineHeight(lineHeight),
       letterSpacing: letterSpacing,
       paragraphSpacing: paragraphSpacing,
       chapterSpacing: chapterSpacing,
@@ -436,9 +440,9 @@ class ReaderSettingsController extends ChangeNotifier {
       changed |= _typography(
         ReaderSettings.lineHeight,
         this.lineHeight,
-        ReaderStyle.normalizeLineHeight(lineHeight),
+        ReaderStylePreferences.normalizeLineHeight(lineHeight),
         (value) => this.lineHeight = value,
-        restoreAs: ReaderStyle.normalizeLineHeight,
+        restoreAs: ReaderStylePreferences.normalizeLineHeight,
       );
     }
     if (paragraphSpacing != null) {

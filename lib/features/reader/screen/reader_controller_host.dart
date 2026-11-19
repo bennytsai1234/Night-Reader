@@ -202,7 +202,7 @@ class ReaderControllerHost {
     }
   }
 
-  ReaderRuntime ensureRuntime(Size size, ReaderStyle style) {
+  ReaderRuntime ensureRuntime(Size size, ReaderStylePreferences style) {
     _lastViewportSize = size;
     final existing = runtime;
     if (existing != null) return existing;
@@ -252,7 +252,7 @@ class ReaderControllerHost {
   void syncRuntimeConfiguration(
     ReaderRuntime runtime,
     Size size,
-    ReaderStyle style,
+    ReaderStylePreferences style,
   ) {
     _lastViewportSize = size;
     final spec = specFromStyle(size, style);
@@ -381,7 +381,7 @@ class ReaderControllerHost {
     );
   }
 
-  ReaderLayoutSpec specFromStyle(Size size, ReaderStyle style) {
+  ReaderLayoutSpec specFromStyle(Size size, ReaderStylePreferences style) {
     // cellWidth 只描述全形字 advance 的 typography metric。
     // ReaderLayoutSpec 可用它推導置中的內部 text frame，但不得用它
     // 裁切或重定義 viewport 擁有的實體 contentWidth。

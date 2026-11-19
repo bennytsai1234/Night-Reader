@@ -90,7 +90,7 @@ class ReaderTextView extends StatefulWidget {
   final ReaderRuntime runtime;
   final Color backgroundColor;
   final Color textColor;
-  final ReaderStyle style;
+  final ReaderStylePreferences style;
   final GestureTapUpCallback? onContentTapUp;
   final ReaderViewportController? viewportController;
   final ReaderTtsHighlight? ttsHighlight;

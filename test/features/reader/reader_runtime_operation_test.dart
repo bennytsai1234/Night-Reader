@@ -940,7 +940,7 @@ void main() {
 
     final runtime = host.ensureRuntime(
       const Size(220, 180),
-      const ReaderStyle(
+      const ReaderStylePreferences(
         fontSize: 18,
         lineHeight: 1.5,
         letterSpacing: 0,
@@ -1004,7 +1004,7 @@ void main() {
     });
     final runtime = host.ensureRuntime(
       const Size(220, 180),
-      const ReaderStyle(
+      const ReaderStylePreferences(
         fontSize: 18,
         lineHeight: 1.5,
         letterSpacing: 0,
@@ -1085,7 +1085,7 @@ void main() {
       });
 
       const size = Size(220, 180);
-      const initialStyle = ReaderStyle(
+      const initialStyle = ReaderStylePreferences(
         fontSize: 18,
         lineHeight: 1.5,
         letterSpacing: 0,
@@ -1215,7 +1215,7 @@ void main() {
       await host.settings.loadSettings();
 
       const size = Size(220, 180);
-      const style = ReaderStyle(
+      const style = ReaderStylePreferences(
         fontSize: 18,
         lineHeight: 1.5,
         letterSpacing: 0,

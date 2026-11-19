@@ -56,7 +56,7 @@ class _FakeSourceDao extends Fake implements BookSourceDao {}
 
 const Size _viewport = Size(400, 800);
 
-const ReaderStyle _style = ReaderStyle(
+const ReaderStylePreferences _style = ReaderStylePreferences(
   fontSize: 18,
   lineHeight: 1.5,
   letterSpacing: 0,
