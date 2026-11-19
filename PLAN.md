@@ -32,14 +32,14 @@
     - **量幀預算**：改到紙、骨架、進場、換場的照 `AGENTS.md`「驗證」量前後。
     - **哪些收成一個狀態**：只收互斥的階段。可能同時成立的照 #280（紙歸誰管）寫成有名字的動作——那次三件事會同時成立，沒有硬塞成一個值。使用者設定、建構時給的參數、判斷函式不算旗標。
     - **對照表**（每個狀態機做完在 `docs/state-machines.md` 加一列、寫一節，開工前先寫「改前」，之後只剩 git）。找歷史 bug 用 `git log -G'bool _旗標名' -- 檔案` 找加旗標的提交，再打開 diff 確認。
-    - **試點：背景工作的生命週期**（ADR 0058 的四件，分支 refactor/background-work-phase）：改前的旗標、已查到的 5 件歷史 bug 與初步狀態已寫在 `docs/state-machines.md`。四件的暫停回饋現在不一致（只有 AI 找書有「暫停中」），階段表自己判斷要不要一致、理由寫進表裡。
+    - **試點：背景工作的生命週期**：2026-11-20 做完（#458）。五件背景工作 7 處 30 個旗標收成共用的 `WorkPhase`、頁面那層的 `_RunStage`、校驗服務的 `_CheckPhase`；暫停回饋五件一致；查到並修掉 5 件 bug。前後對照與階段表在 `docs/state-machines.md`，之後的候選照那一節的格式。
     - **其他候選**（歷史待查，各自開工第一步查；查歷史用 `git log --follow`，檔案搬過家）：
-      - 有聲書播放器 `audiobook_player.dart`：`_playing`、`_loading`、`_buffering`、`_ended`、`_error`、`_wantPlay`，加 `_generation`。
-      - 朗讀 `reader_tts_controller.dart`：靠 generation 判斷哪一次念還有效。
-      - 書源管理 `source_manager_provider.dart`：`_isLoading`、`_loadOwnsLoading`、`_isBatchOperationInProgress`、`_mergingDuplicates`、`_syncReloadPending`。
-      - 書籍詳情 `book_detail_provider.dart`：`_loginRequired`、`_isCacheStatusLoading`、`_isCheckingUpdate`、`_isChangingSource`、`_isUpdatingBookshelf`，旁邊已有 `BookDetailWorldState`。
-      - 搜尋 `search_provider.dart`：`_isSearching`、`_retrying`；放到背景後的 `search_run.dart`、`background_search.dart` 各 6 個旗標（2026-11-18 才加，#437、#444 都在附近）；換源 `book_detail_change_source_provider.dart` 靠 `searchId` 判斷哪次搜尋還有效。
-      - 同步 `sync_service.dart`：`_again`、`_progressFirst`、`_fullPending`、`_cancelled`、`_authorizingGoogleDrive`。
+      - 有聲書播放器 `audiobook_player.dart`：`_playing`、`_loading`、`_buffering`、`_ended`、`_error`、`_wantPlay`，加 `_generation`（2026-11-20 開工，分支 refactor/sm-audiobook-player）
+      - 朗讀 `reader_tts_controller.dart`：靠 generation 判斷哪一次念還有效（2026-11-20 開工，分支 refactor/sm-tts）
+      - 書源管理 `source_manager_provider.dart`：`_isLoading`、`_loadOwnsLoading`、`_isBatchOperationInProgress`、`_mergingDuplicates`、`_syncReloadPending`（2026-11-20 開工，分支 refactor/sm-source-manager）
+      - 書籍詳情 `book_detail_provider.dart`：`_loginRequired`、`_isCacheStatusLoading`、`_isCheckingUpdate`、`_isChangingSource`、`_isUpdatingBookshelf`，旁邊已有 `BookDetailWorldState`（2026-11-20 開工，分支 refactor/sm-book-detail）
+      - 搜尋 `search_provider.dart`：`_isSearching`、`_retrying`；放到背景後的 `search_run.dart`、`background_search.dart` 各 6 個旗標（2026-11-18 才加，#437、#444 都在附近）；換源 `book_detail_change_source_provider.dart` 靠 `searchId` 判斷哪次搜尋還有效（2026-11-20 開工，分支 refactor/sm-search）
+      - 同步 `sync_service.dart`：`_again`、`_progressFirst`、`_fullPending`、`_cancelled`、`_authorizingGoogleDrive`（2026-11-20 開工，分支 refactor/sm-sync）
       - 閱讀器正文捲動 `reader_text_view.dart`：`_dragging`、`_sawUserScroll`、`_rebuildQueued`、`_captureFramePending`、`_textWaitsForBreath`，旁邊已有 `PumpState`。
       - 目錄面板 `reader_side_panel.dart`：`_built`、`_builtCovering`、`_open`、`_openedSinceClosed`、`_dragging`、`_dragAbandoned`。
       - 分組清單的進場 `grouped_list.dart`：還在進場、進場播完、已換成內容（#455 留下的）。
