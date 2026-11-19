@@ -239,8 +239,7 @@ class TTSService extends ChangeNotifier {
 
     _flutterTts.setErrorHandler((msg) {
       AppLog.e('TTSService: TTS error: $msg');
-      _isPlaying = false;
-      notifyListeners();
+      _reportFailure();
     });
 
     _flutterTts.setProgressHandler((
@@ -276,7 +275,10 @@ class TTSService extends ChangeNotifier {
     await _speechCoordinator.speak(
       prepare: () async {
         await init();
-        if (!_isInitialized) return false;
+        if (!_isInitialized) {
+          _reportFailure();
+          return false;
+        }
         if (!_notificationPermissionChecked) {
           _notificationPermissionChecked = true;
           await _permissionService.requestNotification();
@@ -291,7 +293,8 @@ class TTSService extends ChangeNotifier {
         currentWordEnd = -1;
         _isPlaying = true;
         notifyListeners();
-        await _flutterTts.speak(text);
+        // 引擎連著但不收這句時回 0（`third_party/flutter_tts`）。
+        if (await _flutterTts.speak(text) == 0) _reportFailure();
       },
     );
   }
@@ -533,6 +536,20 @@ class TTSService extends ChangeNotifier {
   Stream<void> get completions => _completions.stream;
   final StreamController<void> _completions =
       StreamController<void>.broadcast();
+
+  /// 念一段沒念出來時送出一次：引擎沒開好、不收這句、念的途中出錯。閱讀器
+  /// 的朗讀聽它停在這句，不一直停在「朗讀中」。
+  Stream<void> get failures => _failures.stream;
+  final StreamController<void> _failures = StreamController<void>.broadcast();
+
+  void _reportFailure() {
+    _isPlaying = false;
+    currentSpokenText = '';
+    currentWordStart = -1;
+    currentWordEnd = -1;
+    _failures.add(null);
+    notifyListeners();
+  }
 
   Future<void> _loadSystemVoiceOptions() async {
     final prefs = await SharedPreferences.getInstance();
