@@ -227,4 +227,31 @@ void main() {
     expect(provider.totalSourceCount, 3);
     expect(provider.isMutationBusy, isFalse);
   });
+
+  test('a reload that starts while duplicates merge waits for the merge '
+      'and shows the merged list', () async {
+    await dao.upsert(_source('https://a.example#copy', order: 3));
+    final merge = _GatedMerge(dao);
+    final provider = SourceManagerProvider(
+      entrance: Future<void>.value(),
+      mergeDuplicates: merge.call,
+    );
+    addTearDown(provider.dispose);
+    await merge.started.future;
+
+    // 校驗做完、同步套用這類背景重讀，正好在第一次讀清單併重複書源時開始。
+    final reload = provider.loadSources(showLoading: false);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(provider.isLoading, isTrue);
+
+    merge.gate.complete();
+    await reload;
+    await _until(() => !provider.isLoading);
+    expect(provider.totalSourceCount, 3);
+    expect(
+      provider.allSources.map((s) => s.bookSourceUrl),
+      isNot(contains('https://a.example#copy')),
+    );
+    expect(merge.calls, 1);
+  });
 }

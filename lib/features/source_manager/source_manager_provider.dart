@@ -698,7 +698,14 @@ class SourceManagerProvider with ChangeNotifier {
       // 重複書源每次讀清單都併（ADR 0062），書源管理自己在改書源時除外
       // （[_canMerge]）；校驗、修復這類批次工作在跑時由
       // [mergeDuplicateSources] 擋下，等它們做完重讀時再併。
-      if (_canMerge && duplicateSourceGroups(loadedSources).isNotEmpty) {
+      if (_merging case final running?) {
+        // 另一次讀清單正在併：等它併完再讀，不放出併之前的清單。併出錯由
+        // 那一次報。
+        await running.then<void>((_) {}, onError: (Object _) {});
+        if (_disposed || generation != _loadGeneration) return;
+        loadedSources = await _dao.getAllPart();
+        if (_disposed || generation != _loadGeneration) return;
+      } else if (_canMerge && duplicateSourceGroups(loadedSources).isNotEmpty) {
         final merging = _merging = _mergeDuplicates(loadedSources);
         final int merged;
         try {
