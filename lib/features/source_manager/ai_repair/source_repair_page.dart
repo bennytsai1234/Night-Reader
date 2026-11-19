@@ -190,7 +190,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
         ),
       ];
     }
-    final ending = _batch.isStopped || _run.isEnding;
+    final ending = _run.phase == WorkPhase.ending;
     final end = GroupedRow(
       title: ending ? backgroundWorkEnding : '結束',
       destructive: true,
@@ -211,7 +211,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
         end,
       ];
     }
-    final pausing = _batch.phase == WorkPhase.pausing;
+    final pausing = _run.phase == WorkPhase.pausing;
     return [
       GroupedRow(
         title: pausing ? backgroundWorkPausing : '暫停',

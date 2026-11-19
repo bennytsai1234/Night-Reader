@@ -86,9 +86,6 @@ class AiFindRun extends RepairRun {
   /// 最後存的那一輪開頭（[AiFindSession.restore] 讀的那份）。
   String? _progress;
 
-  /// 這次 [run] 是暫停好才回來的。
-  bool _pausedWork = false;
-
   static Future<void> _saveRecord(AiFindRecord record) =>
       getIt<AiFindDao>().upsert(record);
 
@@ -131,36 +128,24 @@ class AiFindRun extends RepairRun {
   bool get canPause => true;
 
   @override
-  bool get workPaused => _pausedWork;
+  WorkPhase get workPhase => _session.phase;
 
   @override
-  BackgroundWorkStatus get status {
-    if (_session.phase.settling) {
-      return BackgroundWorkStatus.settling(
-        'AI 找書',
-        pausing: _session.phase == WorkPhase.pausing,
-      );
-    }
-    return BackgroundWorkStatus(
-      title: 'AI 找書',
-      text: _session.now,
-      pausable: true,
-    );
-  }
+  BackgroundWorkStatus get runningStatus =>
+      BackgroundWorkStatus(title: 'AI 找書', text: _session.now, pausable: true);
 
   @override
-  Future<void> run() async {
-    _pausedWork = false;
+  Future<WorkPhase> run() async {
     await _session.start();
     if (_session.isPaused) {
-      _pausedWork = true;
       // 暫停好了：頁面顯示的換成存檔的樣子，和 App 重開後看到的一樣（做到
       // 一半的那一輪不留）。
       final progress = _progress;
       if (progress != null) _replace(_display(progress, _session.log));
-      return;
+      return WorkPhase.paused;
     }
     await _finishWith(_session.record);
+    return WorkPhase.finished;
   }
 
   /// 結束了：先讓存檔失效（按了結束的不會再活回來），再存成過去的找書。
