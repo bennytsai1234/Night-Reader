@@ -996,6 +996,36 @@ void main() {
       expect(engine.spoken, ['甲。', '丙。']);
     });
 
+    test('another player starting after pausing on a picked chapter keeps the '
+        'place to read on from', () async {
+      final second = Completer<void>();
+      await open({0: '甲。', 1: '乙。'}, gates: {1: second});
+      await tts.startFromVisibleLocation();
+      tts.onSkipToNext();
+      await pumpEventQueue();
+      tts.onPause();
+      await pumpEventQueue();
+
+      final other = _OtherOwner();
+      playback.show(
+        other,
+        item: const NowPlaying(
+          id: 'audio',
+          title: '第一集',
+          bookName: '有聲書',
+          author: '',
+        ),
+        playing: true,
+        controls: const {},
+      );
+      second.complete();
+      await pumpEventQueue();
+
+      await tts.toggle();
+      await pumpEventQueue();
+      expect(engine.spoken, ['甲。', '乙。']);
+    });
+
     test('pressing next twice quickly moves two chapters', () async {
       await open({0: '第一句。', 1: '第二句。', 2: '第三句。'});
       await tts.startFromVisibleLocation();

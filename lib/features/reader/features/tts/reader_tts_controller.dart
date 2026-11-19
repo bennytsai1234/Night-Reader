@@ -478,22 +478,21 @@ class ReaderTtsController extends ChangeNotifier
 
   /// 暫停（面板、定時鍵、定時到了、系統或耳機按了暫停、另一方開始播）：
   /// 停在目前這句，播放鍵從這句開頭接著念；要念的那一章還在載入時，停在要
-  /// 念的位置（按了上一章、下一章或自動換章是那一章開頭）。用停止而不是引擎的暫停：句與句之間引擎沒有
-  /// 在念，暫停不會生效，下一句照樣會開始。
+  /// 念的位置（按了上一章、下一章或自動換章是那一章開頭）。已經暫停就不動，
+  /// 停的位置不變。用停止而不是引擎的暫停：句與句之間引擎沒有在念，暫停不
+  /// 會生效，下一句照樣會開始。
   void _pause() {
     final paused = switch (_state) {
-      _Idle() => null,
+      _Idle() || _Paused() => null,
       final _Loading loading => _Paused(
         loading.location,
         highlight: loading.highlight,
       ),
-      _Paused(:final highlight?) => _Paused(
-        _sentenceStart(highlight),
-        highlight: highlight,
-      ),
-      _Paused() => null,
       final _Speaking speaking => _Paused(
-        _sentenceStart(speaking.segment),
+        ReaderLocation(
+          chapterIndex: speaking.segment.chapterIndex,
+          charOffset: speaking.segment.startCharOffset,
+        ),
         highlight: speaking.segment,
       ),
     };
@@ -502,12 +501,6 @@ class ReaderTtsController extends ChangeNotifier
     unawaited(_tts.stop());
     notifyListeners();
   }
-
-  static ReaderLocation _sentenceStart(ReaderTtsSegment segment) =>
-      ReaderLocation(
-        chapterIndex: segment.chapterIndex,
-        charOffset: segment.startCharOffset,
-      );
 
   void _handleRuntimeChanged() {
     final contentGeneration = runtime.state.contentGeneration;
