@@ -648,7 +648,11 @@ class _ReaderTextViewState extends State<ReaderTextView>
       _publishProgress();
       return true;
     } finally {
-      if (mounted && identical(pipeline, _pipeline)) {
+      // 被取代的還原不動預算：接手的那次還原已經寫了自己的（載入中），
+      // 照手指寫回會蓋掉它，紙下排版就不照載入中的上限（ADR 0018）。
+      if (mounted &&
+          identical(pipeline, _pipeline) &&
+          (isCurrent() || !_paper.restoring)) {
         pipeline.onScrollStateChanged(
           _dragging ? PumpState.dragging : PumpState.idle,
         );
