@@ -5,8 +5,9 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:drift/drift.dart' show ApplyInterceptor;
+import 'package:drift/isolate.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -35,16 +36,20 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/launch_entrance.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/main.dart';
@@ -53,7 +58,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/shared/widgets/skeleton_text.dart';
 
-import 'db_clock.dart';
 import 'screenshot.dart';
 
 const kBookUrl = 'https://www.example.com/book/1024/';
@@ -96,9 +100,21 @@ late AppDatabase _db;
 /// 每個測試都警告同一個資料庫類別開了好幾次，記憶體裡的資料庫也一直留著。
 AppDatabase? _openDb;
 
-/// 註冊 App 的所有服務，資料庫換成記憶體。放在每個 testWidgets 開頭。
-/// 每次查詢的時間記在 [dbWork]，量動畫時算進那一幀（`db_clock.dart`）。
-Future<void> setUpApp({Map<String, Object> prefs = const {}}) async {
+/// 這個測試的資料庫開在另一個 isolate（[setUpApp] 的 `databaseInIsolate`）。
+var _databaseInIsolate = false;
+
+/// 註冊 App 的所有服務，資料庫換成記憶體。放在每個 testWidgets 開頭，包在
+/// `tester.runAsync` 裡。
+///
+/// 量幀預算與錄動畫的測試給 [databaseInIsolate]：資料庫和 App 一樣開在另一個
+/// isolate（drift 的 `DriftIsolate`），SQL 不佔主執行緒，量到的只有送查詢、
+/// 收結果；回覆要等真實時間，量測本來就每幀讓出真實時間（`recordFrames` 的
+/// `realAsync`）。其他測試的資料庫在主執行緒、查詢當下就做完，不必等真實
+/// 時間，結果不隨電腦快慢變。
+Future<void> setUpApp({
+  Map<String, Object> prefs = const {},
+  bool databaseInIsolate = false,
+}) async {
   await getIt.reset();
   // 整個程式共用、存著 future 的東西，上一個測試留下的會在上一個測試的
   // zone 裡通知等的人，那個假時鐘已經沒人推動，這個測試開書就一直等不到
@@ -108,11 +124,15 @@ Future<void> setUpApp({Map<String, Object> prefs = const {}}) async {
   SharedPreferences.setMockInitialValues(_harnessPrefs(prefs));
   // 同步服務是整個程式共用的，記著上一個測試的偏好設定與執行狀態。
   SyncService.instance = SyncService();
-  dbWork.clear();
   await _openDb?.close();
-  _db = _openDb = AppDatabase.forTesting(
-    NativeDatabase.memory().interceptWith(DbClock()),
-  );
+  _databaseInIsolate = databaseInIsolate;
+  _db = _openDb = databaseInIsolate
+      // 只有這一個連線：關掉時 drift isolate 跟著結束，不留到下一個測試。
+      ? AppDatabase.connected(
+          await (await DriftIsolate.spawn(NativeDatabase.memory))
+              .connect(singleClientMode: true),
+        )
+      : AppDatabase.forTesting(NativeDatabase.memory());
   getIt
     ..registerSingleton<Logger>(Logger(level: Level.off))
     ..registerSingleton<AppDatabase>(_db)
@@ -391,10 +411,26 @@ Future<Uint8List> _encodeCover(int seed) async {
 /// 0.6 秒、至少停 0.8 秒、收住呼吸（最多 1.6 秒）、靜止時準備書架與拍圖、
 /// 換場 0.6 秒，換場播完前畫面不接點擊（ADR 0031）。收住、拍圖都要等某一格
 /// 畫完，一格一格推進（16ms）直到進場真的播完，不照固定的時間等。
-Future<void> pumpApp(WidgetTester tester) async {
+///
+/// 進場播完後 App 開始背景工作，其中書架補下載、接著檢查書架更新（書架標題
+/// 播流光）最久。資料庫在另一個 isolate 時（量幀的測試）它們要等真實時間，
+/// 等這兩件做完、流光掃完這一輪才交回，接下來的量測不和它們疊在一起；要量
+/// 開 App 後馬上操作的（例如同步還在跑時點書）給 [waitForBackgroundWork]
+/// false。資料庫在主執行緒時只再推 0.5 秒：同一個檔的第二項測試起，補下載
+/// 等的是上一項留下、綁在上一項假時鐘上的下載服務，檢查不會開始。
+Future<void> pumpApp(
+  WidgetTester tester, {
+  bool waitForBackgroundWork = true,
+}) async {
   await startApp(tester);
   LaunchEntranceMotion? entrance;
+  ValueNotifier<bool>? checking;
   var finished = false;
+  var checked = false;
+  void onChecking() {
+    if (!checking!.value) checked = true;
+  }
+
   for (var i = 0; i < 1000 && !finished; i++) {
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pump(const Duration(milliseconds: 16));
@@ -404,12 +440,30 @@ Future<void> pumpApp(WidgetTester tester) async {
     entrance = LaunchEntrance.maybeOf(shelf.first);
     if (entrance == null) break;
     unawaited(entrance.finished.then((_) => finished = true));
+    // 檢查從進場播完後才開始，這之前掛上就不會漏掉它結束的那一下。
+    checking = Provider.of<BookshelfProvider>(
+      shelf.first,
+      listen: false,
+    ).checkingShelf..addListener(onChecking);
   }
   // 推到上限還沒播完是進場卡住了（換場一直不來），不能當成開好了。
   if (entrance != null && !finished) {
     fail('開 App 的進場推進 1000 格（16 秒）仍沒播完');
   }
-  await settle(tester, const Duration(milliseconds: 500));
+  if (!_databaseInIsolate || !waitForBackgroundWork) {
+    checking?.removeListener(onChecking);
+    await settle(tester, const Duration(milliseconds: 500));
+    return;
+  }
+  if (checking != null && AppConfig.autoRefresh) {
+    for (var i = 0; i < 600 && !checked; i++) {
+      await settle(tester, const Duration(milliseconds: 50));
+    }
+    checking.removeListener(onChecking);
+    if (!checked) fail('開 App 後的書架檢查更新推進 30 秒仍沒做完');
+  }
+  await waitForDownloads(tester);
+  await settle(tester, AppMotion.sheen);
 }
 
 /// 掛上整個 App（同 `main.dart` 的 runApp）就交回，不等進場；要從開 App
@@ -425,7 +479,8 @@ Future<void> startApp(WidgetTester tester) async {
 }
 
 /// App 有常駐的計時器（時鐘、流光），`pumpAndSettle` 等不完；改成推進
-/// 一段固定時間。資料庫在真的 isolate 裡，讓出時間給它。
+/// 一段固定時間。每一步讓出真實時間給真的 isolate（內容轉換、書源，量幀
+/// 時還有資料庫）。
 Future<void> settle(
   WidgetTester tester, [
   Duration duration = const Duration(seconds: 2),
@@ -437,6 +492,23 @@ Future<void> settle(
   }
 }
 
+/// 資料庫在另一個 isolate 時，等下載排程停下。下載服務是整個程式共用的，
+/// 開 App 後排的書架自動下載（測試沒有網路，很快失敗）跑著時，排程每秒看
+/// 一次還有沒有任務，留著那個計時器測試就結束不了；任務要等真實時間才收得
+/// 到資料庫的回覆，只推假時間等不完。資料庫在主執行緒時任務在假時間裡就
+/// 做完，不用等。[pumpApp] 開好 App 時與拆掉 App 後（`tearDownApp`）呼叫。
+Future<void> waitForDownloads(WidgetTester tester) async {
+  if (!_databaseInIsolate) return;
+  final downloads = DownloadService();
+  for (var i = 0; i < 300 && downloads.isScheduling; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump(const Duration(seconds: 1));
+  }
+  if (downloads.isScheduling) fail('下載排程推進 300 秒仍沒停下');
+}
+
 /// 點書架上的書開閱讀器，等正文排好、載入的紙掀開。
 Future<void> openReader(WidgetTester tester, [String name = '夜雨聽書']) async {
   await tester.tap(find.text(name).first);
@@ -444,8 +516,9 @@ Future<void> openReader(WidgetTester tester, [String name = '夜雨聽書']) asy
   await waitForText(tester);
 }
 
-/// 等閱讀器的正文排好：載入的紙一直在元件樹裡，看它蓋著沒有。資料庫在真的
-/// isolate 裡，花多久不一定；連續幾次都掀開才算排好（換章、重排時會再蓋上）。
+/// 等閱讀器的正文排好：載入的紙一直在元件樹裡，看它蓋著沒有。正文轉換在
+/// 真的 isolate 裡，花多久不一定；連續幾次都掀開才算排好（換章、重排時會再
+/// 蓋上）。
 Future<void> waitForText(WidgetTester tester) async {
   bool covered() => find
       .byType(LoadingVeil)

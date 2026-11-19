@@ -42,7 +42,7 @@ void main() {
   testWidgets('pages behind the Me tab and search', (tester) async {
     setUpPhone(tester);
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(databaseInIsolate: true);
       await seedLibrary();
       await seedSiteSource();
       await installFakeSite();

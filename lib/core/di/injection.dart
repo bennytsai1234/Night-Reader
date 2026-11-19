@@ -75,8 +75,8 @@ Future<void> configureDependencies() async {
   // [SourceIsolate.enabled]）；不等它開好，第一個書源工作才會等。
   SourceIsolate.start();
 
-  // 朗讀引擎現在就開始開，和讀書架、載字典同時進行；開 App 的進場在底色
-  // 時等它開好（[TTSService.ready]）。
+  // 朗讀引擎現在就開始開，和讀書架、載字典同時進行。開 App 的進場在底色
+  // 時只等系統播放資訊的媒體工作階段（[SystemPlayback.ready]），不等引擎。
   unawaited(getIt<TTSService>().init());
 }
 

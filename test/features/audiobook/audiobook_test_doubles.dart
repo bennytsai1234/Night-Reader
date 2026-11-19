@@ -111,6 +111,24 @@ class FakeAudioSourceService extends BookSourceService {
   /// 這幾集的網址解析失敗。
   final Set<String> failing = {};
 
+  /// 資料庫裡沒有目錄時向書源抓目錄：要等外面放行，放行時給的目錄（null 是
+  /// 抓不到）。
+  Completer<List<BookChapter>?>? chapterList;
+
+  @override
+  Future<List<BookChapter>> getChapterList(
+    BookSource source,
+    Book book, {
+    int? chapterLimit,
+    int? pageConcurrency,
+    CancelToken? cancelToken,
+    bool requireComplete = false,
+  }) async {
+    final chapters = await chapterList?.future;
+    if (chapters == null) throw StateError('抓不到目錄');
+    return chapters;
+  }
+
   @override
   Future<AudioRequest> getAudioRequest(
     BookSource source,
@@ -216,4 +234,11 @@ class FakeSync extends Fake implements SyncService {
 
   @override
   void requestSyncProgressFirst() {}
+
+  /// 回到前景時抓到的、另一台較新的進度；記下有沒有被記成同步過。
+  PulledProgress? pulled;
+  int commits = 0;
+
+  @override
+  Future<PulledProgress?> pullProgress(String bookUrl) async => pulled;
 }

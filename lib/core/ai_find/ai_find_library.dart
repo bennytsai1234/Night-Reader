@@ -111,9 +111,10 @@ typedef AiFindShelfEntry = ({
   int? chapterTotal,
 });
 
-/// 正文與詳情給 AI 讀的純文字：插圖換成「（插圖）」、換行標籤換成換行、其他
-/// 標籤拿掉、空行合併。
+/// 正文與詳情給 AI 讀的純文字：插圖換成「（插圖）」、換行標籤與網站寫成字面
+/// 的 `\n`（反斜線加 n）換成換行、其他標籤拿掉、空行合併。
 String aiFindPlainText(String raw) => raw
+    .replaceAll(RegExp(r'\\r\\n|\\n'), '\n')
     .replaceAll(RegExp(r'<img\b[^>]*>', caseSensitive: false), '（插圖）')
     .replaceAll(RegExp(r'<br\s*/?>|</p>', caseSensitive: false), '\n')
     .replaceAll(RegExp(r'<[^>]+>'), '')

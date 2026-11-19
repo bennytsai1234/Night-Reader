@@ -133,58 +133,69 @@ class SourceCheckIsolateHandle {
 /// 網頁渲染、Cloudflare 檢查、Cookie 與資料庫都交給主 isolate。到了
 /// [timeout] 還沒做完就結束 worker，結果不再等它（[SourceWorker.kill]）。
 /// 逾時、取消或開不起來時結果是 null，呼叫端當成逾時或異常。
+///
+/// 立刻交回 handle：還沒真的結束的臨時 worker 太多時，worker 要等名額才開
+/// （[SourceWorker.maxTemporaryWorkers]），等的時候也能 abort；[timeout] 從
+/// worker 開好才算。
 Future<SourceCheckIsolateHandle> spawnSourceCheck(
   BookSource source,
   IsolateCheckConfig config,
   Duration timeout,
 ) async {
-  final SourceWorker worker;
-  try {
-    worker = await SourceWorker.spawn(
-      debugName: 'SourceCheck',
-      withDictionaries: false,
-    );
-  } catch (e, stack) {
-    AppLog.e('書源校驗 worker 開不起來: $e', error: e, stackTrace: stack);
-    return SourceCheckIsolateHandle(
-      result: Future<SourceCheckIsolateResult?>.value(null),
-      abort: () {},
-    );
-  }
-
   final completer = Completer<SourceCheckIsolateResult?>();
-  late final Timer timer;
+  final stop = CancelToken();
+  SourceWorker? worker;
+  Timer? timer;
 
   void finish(SourceCheckIsolateResult? result) {
     if (completer.isCompleted) return;
-    timer.cancel();
-    worker.kill(StateError('書源校驗已結束'));
+    timer?.cancel();
+    worker?.kill(StateError('書源校驗已結束'));
+    stop.cancel();
     completer.complete(result);
   }
 
-  timer = Timer(timeout, () => finish(null));
-  unawaited(
-    worker
-        .run(_checkTask(source.toJson(), config.toMap()))
-        .then(
-          (map) => finish(SourceCheckIsolateResult.fromMap(map)),
-          onError: (Object error, StackTrace stack) {
-            // 先把真實錯誤記成錯誤（App 日誌；App 沒有閃退，不寫崩潰日誌），
-            // 再以 null 收尾，避免被誤判為「整體校驗超時」；結束 worker 的那一次
-            // 不算。
-            if (!completer.isCompleted) {
-              AppLog.e(
-                '書源校驗失敗 [${source.bookSourceName}] '
-                '(${source.bookSourceUrl})',
-                error: error,
-                stackTrace: stack,
-              );
-            }
-            finish(null);
-          },
-        ),
-  );
+  Future<void> run() async {
+    try {
+      worker = await SourceWorker.spawn(
+        debugName: 'SourceCheck',
+        withDictionaries: false,
+        cancelToken: stop,
+      );
+    } catch (e, stack) {
+      if (!stop.isCancelled) {
+        AppLog.e('書源校驗 worker 開不起來: $e', error: e, stackTrace: stack);
+      }
+      finish(null);
+      return;
+    }
+    if (completer.isCompleted) {
+      worker!.kill(StateError('書源校驗已結束'));
+      return;
+    }
+    timer = Timer(timeout, () => finish(null));
+    try {
+      final map = await worker!.run(
+        _checkTask(source.toJson(), config.toMap()),
+      );
+      finish(SourceCheckIsolateResult.fromMap(map));
+    } catch (error, stack) {
+      // 先把真實錯誤記成錯誤（App 日誌；App 沒有閃退，不寫崩潰日誌），
+      // 再以 null 收尾，避免被誤判為「整體校驗超時」；結束 worker 的那一次
+      // 不算。
+      if (!completer.isCompleted) {
+        AppLog.e(
+          '書源校驗失敗 [${source.bookSourceName}] '
+          '(${source.bookSourceUrl})',
+          error: error,
+          stackTrace: stack,
+        );
+      }
+      finish(null);
+    }
+  }
 
+  unawaited(run());
   return SourceCheckIsolateHandle(
     result: completer.future,
     abort: () => finish(null),

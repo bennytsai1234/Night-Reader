@@ -5,6 +5,7 @@ import 'dart:ui' as ui show TextDirection;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/popup_routes.dart';
 import 'package:intl/intl.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
@@ -493,9 +494,8 @@ class ReaderV2PageShell extends StatelessWidget {
                             gap: brightnessSide,
                             // 比上下選單晚一點出發，三塊錯開。
                             delay: AppMotion.readerMenuStagger,
-                            child: Theme(
-                              data: ReaderV2MenuStyle.of(context)
-                                  .toSheetTheme(Theme.of(context)),
+                            child: DerivedTheme(
+                              derive: ReaderV2MenuStyle.menuThemeOf,
                               child: control,
                             ),
                           ),

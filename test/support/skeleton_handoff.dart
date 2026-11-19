@@ -293,7 +293,7 @@ List<double> _rectJson(Rect r) => [
 ];
 
 /// 點下去（[action]）之後一格一格推進（16ms），直到每一處換場都換完、再停
-/// [tailFrames] 格。資料庫在真的 isolate 裡，每格讓出一點真實時間。推了
+/// [tailFrames] 格。每格讓出一點真實時間給真的 isolate（正文轉換）。推了
 /// [maxFrames] 格還沒換完也停下來，還在骨架的地方會列進
 /// [SkeletonHandoffWatch.findings]。
 Future<SkeletonHandoffWatch> watchSkeletonHandoffs(

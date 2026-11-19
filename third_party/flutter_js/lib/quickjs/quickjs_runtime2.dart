@@ -24,8 +24,45 @@ typedef JsModuleHandler = String Function(String name);
 /// Handler to manage unhandled promise rejection.
 typedef JsHostPromiseRejectionHandler = void Function(dynamic reason);
 
+/// 跨 isolate 共用的停止旗標，放在原生記憶體：一個 isolate 舉起（[raise]），
+/// 另一個 isolate 裡正在跑的 QuickJS 在它下一次檢查（每跑一段指令一次）時
+/// 丟出不能被接住的錯誤、回到 Dart，連寫成無窮迴圈的 JS 也停得下來；之後
+/// 再 evaluate 直接失敗。裝到 runtime 上見 [QuickJsRuntime2.interruptFlag]。
+///
+/// 由建立它的 isolate 擁有；用它的 isolate 都結束之後才能 [free]，不然
+/// 那邊的 QuickJS 會讀到已經釋放的記憶體。
+final class JsInterruptFlag {
+  JsInterruptFlag() : _flag = calloc<Int32>();
+
+  /// 在另一個 isolate 指到同一個旗標（[address]）。
+  JsInterruptFlag.fromAddress(int address)
+      : _flag = Pointer<Int32>.fromAddress(address);
+
+  final Pointer<Int32> _flag;
+
+  /// 送到別的 isolate 用（[JsInterruptFlag.fromAddress]）。
+  int get address => _flag.address;
+
+  bool get raised => _flag.value != 0;
+
+  void raise() => _flag.value = 1;
+
+  void free() => calloc.free(_flag);
+
+  /// 這個平台的 JS 能不能中途停下：iOS 的 JavaScriptCore 與 Windows 測試用
+  /// 的 QuickJS 函式庫不行。
+  static bool get supported => !Platform.isIOS && jsInterruptSupported;
+}
+
 /// Quickjs engine for flutter.
 class QuickJsRuntime2 extends JavascriptRuntime {
+  /// 這個 isolate 之後建的 runtime 都裝上這個旗標（[JsInterruptFlag]）；
+  /// null 時不裝。
+  static JsInterruptFlag? interruptFlag;
+
+  /// 這個 runtime 建立時裝上的 [interruptFlag]。
+  JsInterruptFlag? _interrupt;
+
   Pointer<JSRuntime>? _rt;
   Pointer<JSContext>? _ctx;
 
@@ -130,6 +167,9 @@ class QuickJsRuntime2 extends JavascriptRuntime {
     if (stackSize > 0) jsSetMaxStackSize(rt, stackSize);
     final memoryLimit = this.memoryLimit ?? 0;
     if (memoryLimit > 0) jsSetMemoryLimit(rt, memoryLimit);
+    final interrupt = interruptFlag;
+    if (interrupt != null) jsSetInterruptFlag(rt, interrupt._flag);
+    _interrupt = interrupt;
     _rt = rt;
     _ctx = jsNewContext(rt);
   }
@@ -187,6 +227,11 @@ class QuickJsRuntime2 extends JavascriptRuntime {
     String? sourceUrl,
   }) {
     _ensureEngine();
+    // 已經要停了：不再開始跑，不然短的程式一段段都跑完才輪到檢查。
+    if (_interrupt?.raised ?? false) {
+      final interrupted = JSError('InternalError: interrupted', '');
+      return JsEvalResult(interrupted.toString(), interrupted, isError: true);
+    }
     final ctx = _ctx!;
     final jsval = jsEval(
       ctx,

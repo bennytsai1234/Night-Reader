@@ -509,14 +509,21 @@ void main() {
       await tts.stop();
     });
 
-    testWidgets('the timer key uses 30 minutes when the timer is off', (
+    // 使用者在朗讀面板關掉定時後按定時鍵，原本改成 30 分並記住，關掉的
+    // 設定每按一次就被蓋掉。
+    testWidgets('the timer key reads without a timer when the timer is off', (
       tester,
     ) async {
+      SharedPreferences.setMockInitialValues({PreferKey.ttsTimer: 0});
       await open({0: '唯一的一句。'});
+      await tts.loadSettings();
 
       await tts.toggleTimed();
-      expect(tts.sleepTimer.option, SleepTimerOption.minutes30);
-      expect(tts.sleepTimer.remaining, const Duration(minutes: 30));
+      expect(engine.spoken, ['唯一的一句。']);
+      expect(tts.sleepTimer.option, SleepTimerOption.off);
+      expect(tts.sleepTimer.remaining, isNull);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt(PreferKey.ttsTimer), 0);
       await tts.stop();
     });
 

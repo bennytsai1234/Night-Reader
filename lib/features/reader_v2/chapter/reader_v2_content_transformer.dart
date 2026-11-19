@@ -15,6 +15,7 @@ import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_deadline.dart';
 
+import 'page_leftovers.dart';
 import 'reader_v2_content.dart';
 import 'semantic_paragraph_formatter.dart';
 
@@ -897,7 +898,8 @@ class ReaderV2ContentTransformer {
     return paragraphs.join('\n');
   }
 
-  /// 去掉開頭重複的章名、重新分段、每行 trim 並套用替換規則；排版整理之前。
+  /// 去掉開頭重複的章名與分頁留下的頁碼（[removePageLeftovers]）、重新分段、
+  /// 每行 trim 並套用替換規則；排版整理之前。
   static String _applyRules({
     required String bookName,
     required String bookOrigin,
@@ -955,7 +957,10 @@ class ReaderV2ContentTransformer {
         }
       }
     }
-    content = '$leadingIllustrations$content';
+    content = removePageLeftovers(
+      '$leadingIllustrations$content',
+      chapterTitle: chapterTitle,
+    );
 
     if (reSegmentEnabled) {
       content = _reSegment(content);
