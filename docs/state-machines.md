@@ -15,7 +15,7 @@
 | 書籍詳情 | 5 個加上 `_loadErrorMessage`、`_sourceIssueMessage` 裡的哨兵字串（見下方） | 載入的 `BookDetailWorldState`；抓書源的結果 `_FetchIssue`（書源不能讀照書源算）；三件操作共用的 `BookDetailAction` | 「登入」掛在別的字旁；目錄已經有了還寫目錄失敗；載入失敗卻沒有錯誤訊息 | 1 件、另 2 件補漏的防重入（見下方） | 6 件（見下方） | #459 |
 | 同步 | `_running`、`_again`、`_fullPending`、`_cancelled`（另有 `_progressFirst`、`_authorizingGoogleDrive` 留成旗標） | `SyncPhase`（閒著、同步進度、全面同步、停下中）與排著的下一輪，收在跑著的那一段 `_SyncRun`；全面同步交回 `FullSyncResult` | 排著全面同步卻沒在跑；進度輪裡記著取消；閒著時還留著要插隊的進度；進度框收掉後那一行和那一輪的結果對不上 | 1 件（見下方） | 7 件（見下方） | #461 |
 | 搜尋 | 4 處共 15 個，頁面另拼 5 個組合（見下方） | 一次搜尋的 `_Phase`；頁面讀的 `SearchStage`；搜尋頁怎麼看著背景那件的 `_Attachment`；換源不換 | 存紀錄中又在重試；重試中的旗標留到下一次搜尋；接回等進場又算看著 | 4 件（見下方） | 4 件，另審查找到 1 件（見下方） | #462 |
-| 閱讀器目錄面板 | `_built`、`_builtCovering`、`_open`、`_openedSinceClosed`、`_dragging`、`_dragAbandoned` | （做到再寫） | （做到再寫） | 4 件（見下方） | （做到再寫） | （開了再寫） |
+| 閱讀器目錄面板 | `_built`、`_builtCovering`、`_open`、`_openedSinceClosed`、`_dragging`、`_dragAbandoned` | `_Phase`（收著、按在左緣、準備打開、打開、收起、拉著），收起與拉著帶這一趟打開過沒有 | 收著又被手指拖著；收著卻算打開中；準備打開卻沒有排好的滑出 | 4 件（見下方） | 3 件（見下方） | （開了再寫） |
 
 ## 各狀態機
 
