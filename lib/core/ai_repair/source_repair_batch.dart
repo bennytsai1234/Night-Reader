@@ -14,6 +14,7 @@ import 'package:night_reader/core/source_check/source_check_isolate.dart';
 import 'package:night_reader/core/utils/public_suffix.dart';
 
 import 'ai_repair_backups.dart';
+import 'ai_repair_defaults.dart';
 import 'ai_repair_apply.dart';
 import 'ai_repair_prompt.dart';
 import 'ai_repair_session.dart';
@@ -793,7 +794,7 @@ class SourceRepairBatch extends ChangeNotifier {
   static Future<SourceCheckIsolateResult?> _defaultCheck(
     BookSource source,
     CancelToken cancelToken,
-  ) => AiRepairSession.defaultCheck(source, cancelToken);
+  ) => AiRepairDefaults.check(source, cancelToken);
 
   static Future<void> _defaultSave(BookSource repaired, BookSource original) =>
       saveRepairedSource(repaired, original, backups: AiRepairBackups.instance);

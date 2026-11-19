@@ -4,20 +4,18 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
-import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/core/diagnostics/crash_trail.dart';
 import 'package:night_reader/core/source_check/source_check_isolate.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'agent_loop.dart';
 import 'ai_chat_client.dart';
 import 'ai_repair_apply.dart';
 import 'ai_repair_backups.dart';
+import 'ai_repair_defaults.dart';
 import 'ai_repair_log.dart';
 import 'ai_repair_prompt.dart';
 import 'ai_repair_secrets.dart';
@@ -163,12 +161,12 @@ class AiRepairSession extends ChangeNotifier {
          sourceUrl: source.bookSourceUrl,
          directory: logDirectory,
        ),
-       _check = check ?? defaultCheck,
-       _probe = probe ?? _defaultProbe,
-       _fetchPage = fetchPage ?? _defaultFetchPage,
-       _parsePage = parsePage ?? _defaultParsePage,
-       _runJs = runJs ?? _defaultRunJs,
-       _copy = copy ?? _defaultCopy,
+       _check = check ?? AiRepairDefaults.check,
+       _probe = probe ?? AiRepairDefaults.probe,
+       _fetchPage = fetchPage ?? AiRepairDefaults.fetchPage,
+       _parsePage = parsePage ?? AiRepairDefaults.parsePage,
+       _runJs = runJs ?? AiRepairDefaults.runJs,
+       _copy = copy ?? AiRepairDefaults.copy,
        _secretsOf = secrets ?? aiRepairSecretsOf,
        _backups = backups ?? AiRepairBackups.instance {
     _apply =
@@ -176,7 +174,7 @@ class AiRepairSession extends ChangeNotifier {
         (repaired, original) =>
             saveRepairedSource(repaired, original, backups: _backups);
     _onUsage = onUsage;
-    _ask = ask ?? (service == null ? null : _defaultAsk(service!));
+    _ask = ask ?? (service == null ? null : AiRepairDefaults.ask(service!));
   }
 
   void Function(AiUsage usage)? _onUsage;
@@ -879,94 +877,6 @@ class AiRepairSession extends ChangeNotifier {
     final parts = changedParts(before, after);
     return parts.isEmpty ? 'AI 沒改規則' : 'AI 改了$parts';
   }
-
-  // ── 預設的實作：真的校驗、試抓、問 AI、存檔 ──────────────────────────
-
-  static Future<SourceCheckConfig> _config() async =>
-      SourceCheckConfig.fromPreferences(await SharedPreferences.getInstance());
-
-  /// 照校驗設定校驗一次（在自己的 isolate 裡，ADR 0051）；逾時是 null。
-  static Future<SourceCheckIsolateResult?> defaultCheck(
-    BookSource source,
-    CancelToken cancelToken,
-  ) async {
-    final config = await _config();
-    final handle = await spawnSourceCheck(
-      source,
-      config.forIsolate,
-      config.sourceTimeoutDuration,
-    );
-    unawaited(cancelToken.whenCancel.then((_) => handle.abort()));
-    return handle.result;
-  }
-
-  static Future<SourceProbeReport> _defaultProbe(
-    BookSource source,
-    CancelToken cancelToken, {
-    String? start,
-  }) async {
-    final config = await _config();
-    return probeSource(
-      source,
-      keyword: start ?? source.getCheckKeyword(config.keyword),
-      timeout: config.sourceTimeoutDuration,
-      cancelToken: cancelToken,
-    );
-  }
-
-  static Future<AiPage> _defaultFetchPage(
-    BookSource source,
-    String url,
-    CancelToken cancelToken,
-  ) async {
-    final config = await _config();
-    return fetchPageForAi(
-      source,
-      url,
-      keyword: source.getCheckKeyword(config.keyword),
-      timeout: config.sourceTimeoutDuration,
-      cancelToken: cancelToken,
-    );
-  }
-
-  static Future<String> _defaultParsePage(
-    BookSource source,
-    String stage,
-    RepairPage page,
-    CancelToken cancelToken,
-  ) async => parseRepairPage(
-    source,
-    stage: stage,
-    body: page.body,
-    url: page.url,
-    timeout: (await _config()).sourceTimeoutDuration,
-    cancelToken: cancelToken,
-  );
-
-  static Future<String> _defaultRunJs(
-    BookSource source,
-    String code,
-    Map<int, String> pages,
-    CancelToken cancelToken,
-  ) async => runRepairJs(
-    source,
-    code: code,
-    pages: pages,
-    timeout: (await _config()).sourceTimeoutDuration,
-    cancelToken: cancelToken,
-  );
-
-  static AgentAsk _defaultAsk(AiService service) {
-    final client = AiChatClient(service);
-    return (messages, cancelToken) => client.complete(
-      messages,
-      tools: aiRepairTools,
-      cancelToken: cancelToken,
-    );
-  }
-
-  static Future<void> _defaultCopy(String text) =>
-      Clipboard.setData(ClipboardData(text: text));
 }
 
 /// AI 修一個書源這件事（[AgentTask]）：開場是書源、校驗結果與試抓，指令是
