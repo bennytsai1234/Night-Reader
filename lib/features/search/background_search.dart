@@ -457,6 +457,8 @@ class BackgroundSearchRun extends RepairRun implements SearchRecorder {
     if (_searchPhase != WorkPhase.running) return;
     _searchPhase = WorkPhase.pausing;
     search.halt();
+    // 搜尋本身停下時不通知（結果與進度都沒變）：頁面靠這裡換成「正在暫停…」。
+    notifyListeners();
   }
 
   @override

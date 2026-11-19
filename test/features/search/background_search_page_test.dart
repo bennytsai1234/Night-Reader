@@ -269,6 +269,21 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
     }
 
+    testWidgets('pausing says so at once and takes the action away', (
+      tester,
+    ) async {
+      await openInBackground(tester);
+      // 甲那一行卡在寫檔：暫停要等它寫完才算停好。
+      holding = true;
+      await answerFirst(tester);
+      await tester.tap(find.text('暫停'));
+      await tester.pump();
+      expect(find.text('正在暫停…'), findsOneWidget);
+      expect(find.byType(PlainTextAction), findsNothing);
+      expect(find.text('結束'), findsOneWidget);
+      await release(tester, find.text('已暫停 1/2'));
+    });
+
     testWidgets('ending a paused search', (tester) async {
       await openInBackground(tester);
       await answerFirst(tester);
