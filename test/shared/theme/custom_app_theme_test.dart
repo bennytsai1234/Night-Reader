@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 
 /// 同一組設定算出的主題要相等：App 根部每次重建都重算一次 `ThemeData`，
@@ -47,6 +48,33 @@ void main() {
     expect(build(glassStrength: GlassStrength.values.last), isNot(base));
     expect(build(accent: AppAccent.values.last), isNot(base));
     expect(build(pageTransition: AppPageTransition.paper), isNot(base));
+  });
+
+  test('介面文字的標點由標點字型畫，其餘字照介面字型', () {
+    void expectFonts(ThemeData theme, String fallback) {
+      final styles = <String, TextStyle?>{
+        'bodyMedium': theme.textTheme.bodyMedium,
+        'titleLarge': theme.textTheme.titleLarge,
+        'labelSmall': theme.textTheme.labelSmall,
+        'primary bodyMedium': theme.primaryTextTheme.bodyMedium,
+        'snackBar': theme.snackBarTheme.contentTextStyle,
+        'appBar': theme.appBarTheme.titleTextStyle,
+      };
+      for (final MapEntry(key: name, value: style) in styles.entries) {
+        expect(
+          style?.fontFamily,
+          AppTextStyles.punctuationFontFamily,
+          reason: name,
+        );
+        expect(style?.fontFamilyFallback, [fallback], reason: name);
+      }
+    }
+
+    expectFonts(build(), 'Roboto');
+    expectFonts(
+      buildAppTheme(AppStyle.paper, Brightness.light, fontFamily: 'TestKai'),
+      'TestKai',
+    );
   });
 
   test('換頁動畫的 builder 照值比較', () {

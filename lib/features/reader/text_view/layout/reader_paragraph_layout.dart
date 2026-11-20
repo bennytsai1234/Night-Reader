@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 import 'package:night_reader/features/reader/layout/reader_typography.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 
 final class ShapedGrapheme {
   const ShapedGrapheme({
@@ -298,7 +299,7 @@ final class ReaderParagraphLayout {
       fontSize: style.fontSize,
       height: style.lineHeight,
       strutStyle: ui.StrutStyle(
-        fontFamily: kReaderPunctFontFamily,
+        fontFamily: AppTextStyles.punctuationFontFamily,
         fontFamilyFallback: style.fontFamilyFallback,
         fontSize: style.fontSize,
         height: style.lineHeight,
@@ -336,7 +337,7 @@ final class ReaderParagraphLayout {
       height: style.lineHeight,
       letterSpacing: style.letterSpacing,
       fontWeight: style.bold ? ui.FontWeight.bold : ui.FontWeight.normal,
-      fontFamily: kReaderPunctFontFamily,
+      fontFamily: AppTextStyles.punctuationFontFamily,
       fontFamilyFallback: cjk
           ? style.cjkFontFamilyFallback
           : style.fontFamilyFallback,

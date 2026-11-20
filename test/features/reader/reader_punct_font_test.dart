@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/features/reader/layout/reader_typography.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 
 /// 內建標點字型 NightReaderPunct 的契約：字形置於臺灣排版的位置，
 /// 且與系統 Noto Sans CJK 混排時不改變字寬與行高。
@@ -15,11 +15,16 @@ void main() {
 
   test('pubspec registers both weights under the reader family name', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
-    expect(pubspec, contains('- family: $kReaderPunctFontFamily'));
+    expect(
+      pubspec,
+      contains('- family: ${AppTextStyles.punctuationFontFamily}'),
+    );
     for (final weight in ['Regular', 'Bold']) {
       expect(
         pubspec,
-        contains('assets/fonts/$kReaderPunctFontFamily-$weight.ttf'),
+        contains(
+          'assets/fonts/${AppTextStyles.punctuationFontFamily}-$weight.ttf',
+        ),
       );
     }
   });
@@ -27,12 +32,12 @@ void main() {
   for (final weight in ['Regular', 'Bold']) {
     group(weight, () {
       final font = _TrueTypeFont(
-        File('assets/fonts/$kReaderPunctFontFamily-$weight.ttf')
+        File('assets/fonts/${AppTextStyles.punctuationFontFamily}-$weight.ttf')
             .readAsBytesSync(),
       );
 
       test('family name matches the reader text style', () {
-        expect(font.familyName, kReaderPunctFontFamily);
+        expect(font.familyName, AppTextStyles.punctuationFontFamily);
       });
 
       test('covers only the reader punctuation set', () {
