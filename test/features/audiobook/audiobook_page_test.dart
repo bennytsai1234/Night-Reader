@@ -158,16 +158,14 @@ void main() {
   testWidgets('the header is measured in the interface font the title is '
       'drawn in', (tester) async {
     // 測試預設字型每個字都是一整格寬：照它量，這個書名要兩行；照介面字型
-    // （Roboto）畫只要一行，頁首應該只有封面高。
+    // （混合字寬的測試字型，英文字母半格）畫只要一行，頁首應該只有封面高。
     await tester.runAsync(() async {
-      final root = Platform.environment['FLUTTER_ROOT']!;
       final loader = FontLoader('NarrowUi')
         ..addFont(
           Future.value(
             ByteData.sublistView(
-              File(
-                '$root/bin/cache/artifacts/material_fonts/roboto-regular.ttf',
-              ).readAsBytesSync(),
+              File('test/fixtures/fonts/mixed_width_test.ttf')
+                  .readAsBytesSync(),
             ),
           ),
         );
