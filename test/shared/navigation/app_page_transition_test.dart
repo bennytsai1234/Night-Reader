@@ -63,6 +63,33 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  // 開 App 時 runApp 在第一幀之前就同步建好第一頁（第一次 attachRootWidget
+  // 當場建），這時沒有幀的時間戳。pumpWidget 都在幀裡建，碰不到這個時刻：
+  // 這裡掛上後在幀外直接建。
+  for (final transition in AppPageTransition.values) {
+    testWidgets('${transition.name}: the first page builds before the first '
+        'frame', (tester) async {
+      final binding = tester.binding;
+      binding.attachRootWidget(
+        binding.wrapWithDefaultView(
+          MaterialApp(
+            theme: buildAppTheme(
+              AppStyle.paper,
+              Brightness.light,
+              pageTransition: transition,
+            ),
+            home: const Scaffold(body: Center(child: Text('主頁'))),
+          ),
+        ),
+      );
+      expect(binding.schedulerPhase, SchedulerPhase.idle);
+      binding.buildOwner!.buildScope(binding.rootElement!);
+      expect(tester.takeException(), isNull);
+      await tester.pump();
+      expect(find.text('主頁'), findsOneWidget);
+    });
+  }
+
   testWidgets('sliding pages move by whole physical pixels and the screen '
       'reader boxes follow', (tester) async {
     // 不整除的像素密度：一個實體像素不是整數個邏輯像素。
