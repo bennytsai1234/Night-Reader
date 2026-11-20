@@ -45,9 +45,9 @@ class FloatingTabBarScope extends InheritedWidget {
 }
 
 /// 墊在浮動分頁列（或佔用它位置的編輯工具列）後方、由下往上的顏色漸隱帶，
-/// 與頁首下緣的漸隱對稱：從螢幕底緣到分頁島上緣再往上 [AppSpacing.sm]
-/// （分頁列自己的上內距）是實色，再往上 [AppGlass.tabBarFadeHeight] 漸隱成
-/// 透明。內容捲到分頁島之前就淡出，不會從島底下透出。只畫一段漸層，不模糊。
+/// 與頁首的漸隱對稱：從螢幕底緣到分頁島上緣再往上 [AppSpacing.sm]（分頁列自己的
+/// 上內距）與 [AppGlass.tabBarFadeHeight] 是一整段漸層（[EdgeFade.chrome]），
+/// 螢幕底緣實色、往上越來越淡，內容透到分頁島底下。只畫一段漸層，不模糊。
 ///
 /// 貼齊底部放在延伸到分頁列底下（`extendBody: true`）的內容上方；高度取
 /// `MediaQuery.paddingOf(context).bottom`，那段已含分頁列與系統手勢區。
@@ -65,8 +65,8 @@ class FloatingTabBarFade extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final solid = MediaQuery.paddingOf(context).bottom;
-    final height = solid + AppGlass.tabBarFadeHeight;
+    final height =
+        MediaQuery.paddingOf(context).bottom + AppGlass.tabBarFadeHeight;
     return IgnorePointer(
       child: SizedBox(
         height: height,
@@ -79,11 +79,10 @@ class FloatingTabBarFade extends StatelessWidget {
             // 跟分頁列一樣只滑動，不淡（ADR 0022）。
             return FractionalTranslation(
               translation: Offset(0, 1 - shown),
-              child: EdgeFade(
+              child: EdgeFade.chrome(
                 edge: AxisDirection.down,
                 height: height,
                 color: color,
-                solidFraction: solid / height,
               ),
             );
           },

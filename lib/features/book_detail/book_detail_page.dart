@@ -167,7 +167,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                         : _buildContent(bodyContext, provider),
                   ),
                   // 閱讀鈕後方墊一條漸隱帶，同主頁分頁列：簡介與目錄捲到
-                  // 膠囊之前就淡出，不會從它上下透出來。
+                  // 膠囊底下時越往螢幕底緣越淡。
                   Positioned(
                     left: 0,
                     right: 0,
