@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:night_reader/shared/shelf_trial.dart';
+import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
 import 'package:night_reader/app_providers.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/ai_find_dao.dart';
@@ -121,6 +122,9 @@ Future<void> setUpApp({
   ReaderContentTransformWorker.instance.stop();
   rootBundle.clear();
   SharedPreferences.setMockInitialValues(_harnessPrefs(prefs));
+  // 分頁列的樣子是整個程式共用的，照這個測試的偏好重讀，不帶著上一個
+  // 測試選的（App 在 main.dart 第一幀前讀）。
+  TabBarLook.restore(await SharedPreferences.getInstance());
   // 同步服務是整個程式共用的，記著上一個測試的偏好設定與執行狀態。
   SyncService.instance = SyncService();
   await _openDb?.close();
@@ -236,6 +240,7 @@ Future<void> resetPrefs(Map<String, Object> values) async {
     }
   }
   _startChineseDisplay(prefs);
+  TabBarLook.restore(prefs);
   ShelfTrial.restore(prefs);
 }
 

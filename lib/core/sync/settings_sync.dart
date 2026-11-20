@@ -32,6 +32,7 @@ class SettingsSync extends SyncKind {
     PreferKey.appAccent,
     PreferKey.glassStrength,
     PreferKey.pageTransition,
+    PreferKey.tabBarLook,
     PreferKey.uiFont,
     // 書架與搜尋
     'bookshelf_is_grid',

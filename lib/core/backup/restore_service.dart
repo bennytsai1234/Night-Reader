@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:archive/archive.dart';
+import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/storage/book_storage_service.dart';
@@ -120,7 +121,9 @@ class RestoreService {
           restoredAny = restoredAny || restored;
         } else if (fileName == 'config.json' &&
             decoded is Map<String, dynamic>) {
-          final restored = await _restorePreferences(decoded);
+          final restored = await _restorePreferences(
+            TabBarLook.migrateBackup(decoded),
+          );
           restoredAny = restoredAny || restored;
         }
       } catch (e) {

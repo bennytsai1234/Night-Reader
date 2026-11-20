@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/download/book_update_service.dart';
@@ -665,7 +666,7 @@ class BookshelfEditToolbar extends StatelessWidget {
     this.progressLabel,
   });
 
-  static const double height = AppGlass.tabBarHeight;
+  static double get height => TabBarLook.current.value.barHeight;
 
   final List<BookshelfToolbarAction> actions;
 
@@ -690,31 +691,43 @@ class BookshelfEditToolbar extends StatelessWidget {
               enabled: action.onPressed != null,
               child: PressScale(
                 onTap: action.onPressed,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      action.icon,
-                      size: 22,
-                      color: context.actionColor(
-                        action.destructive ? danger : scheme.onSurface,
-                        enabled: action.onPressed != null,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    DragOverflowText(
-                      child: UiText(
-                        action.label,
-                        maxLines: 1,
-                        style: AppTextStyles.uiXs.copyWith(
-                          color: context.actionColor(
-                            action.destructive ? danger : scheme.onSurface,
-                            enabled: action.onPressed != null,
+                // 系統字級很大時圖示加字會比工具列高，整組等比縮小放進去
+                // （同分頁列）；寬度先固定成這一格，字照樣能拖著看完。
+                child: LayoutBuilder(
+                  builder: (context, constraints) => FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: SizedBox(
+                      width: constraints.maxWidth,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            action.icon,
+                            size: 22,
+                            color: context.actionColor(
+                              action.destructive ? danger : scheme.onSurface,
+                              enabled: action.onPressed != null,
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 2),
+                          DragOverflowText(
+                            child: UiText(
+                              action.label,
+                              maxLines: 1,
+                              style: AppTextStyles.uiXs.copyWith(
+                                color: context.actionColor(
+                                  action.destructive
+                                      ? danger
+                                      : scheme.onSurface,
+                                  enabled: action.onPressed != null,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),

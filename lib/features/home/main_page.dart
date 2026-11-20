@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/shelf_trial.dart';
+import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -291,17 +291,24 @@ class _MainPageState extends State<MainPage>
             ),
             // 離開播放器還在播時，搜尋鈕上方的圓鈕（ADR 0055）。
             if (widget.destinations == null)
-              // 試用「分頁列置中」時搜尋鈕跟著移，圓鈕照樣疊在它正上方。
-              ValueListenableBuilder<bool>(
-                valueListenable: ShelfTrial.compactTabBar,
-                builder: (context, _, _) => Positioned(
-                  right: FloatingTabBar.searchRightOf(
+              // 分頁列的樣子改了（置中、搜尋鈕大小）時搜尋鈕跟著移，圓鈕照樣
+              // 疊在它正上方。
+              ValueListenableBuilder<TabBarLook>(
+                valueListenable: TabBarLook.current,
+                builder: (context, _, _) {
+                  final right = FloatingTabBar.searchRightOf(
                     context,
                     tabCount: _destinations.length,
-                  ),
-                  bottom: AudiobookMiniButton.bottomOf(context),
-                  child: AudiobookMiniButton(hidden: _tabBarHidden.value),
-                ),
+                  );
+                  return Positioned(
+                    right: right,
+                    bottom: AudiobookMiniButton.bottomOf(context),
+                    child: AudiobookMiniButton(
+                      hidden: _tabBarHidden.value,
+                      right: right,
+                    ),
+                  );
+                },
               ),
           ],
         ),

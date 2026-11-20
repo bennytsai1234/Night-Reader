@@ -24,6 +24,9 @@ class PreferKey {
 
   /// 換頁動畫（[AppPageTransition.name]）。
   static const String pageTransition = 'page_transition';
+
+  /// 主頁分頁列與搜尋鈕的樣子（[TabBarLook.name]）。
+  static const String tabBarLook = 'tab_bar_look';
   static const String userAgent = 'userAgent';
   static const String showUnread = 'showUnread';
   static const String bookGroupStyle = 'bookGroupStyle';
