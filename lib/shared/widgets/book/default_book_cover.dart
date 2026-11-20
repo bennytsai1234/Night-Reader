@@ -258,8 +258,9 @@ class _SkyPainter extends CustomPainter {
     }
   }
 
-  /// 星星：上半部，避開月亮附近，位置與亮度照書名（使用者 2026-11-20 要
-  /// 夜空的星星每本不同，雲則固定）。
+  /// 星星：上半部五顆，避開月亮附近，位置與亮度照書名（使用者 2026-11-20
+  /// 要夜空的星星每本不同，雲則固定）。抽到月亮旁邊的位置就重抽，最多抽
+  /// 十六次，每本都畫得出星星。
   static void _paintStars(
     Canvas canvas,
     Size size,
@@ -267,12 +268,14 @@ class _SkyPainter extends CustomPainter {
     Offset moon,
     double radius,
   ) {
-    for (var i = 0; i < 6; i++) {
+    var drawn = 0;
+    for (var tries = 0; tries < 16 && drawn < 5; tries++) {
       final star = Offset(
         random.nextDouble() * size.width,
         random.nextDouble() * size.height * 0.55,
       );
       if ((star - moon).distance < radius * 2) continue;
+      drawn++;
       canvas.drawCircle(
         star,
         size.width * (0.006 + random.nextDouble() * 0.01),
@@ -307,7 +310,8 @@ class _SkyPainter extends CustomPainter {
     }
   }
 
-  /// 漫畫：右上角一片網點，由角落往外由大到小，避開月亮（太陽）與暈。
+  /// 漫畫：右上角一片網點，由角落往外由大到小，避開月亮（太陽）本體與內圈
+  /// （1.7 倍半徑），外圍的光暈不避。
   static void _paintHalftone(
     Canvas canvas,
     Size size,
