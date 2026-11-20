@@ -205,8 +205,7 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
   }
 
   EdgeInsets _listPadding() => EdgeInsets.only(
-    top: AppSpacing.sm,
-    bottom: MediaQuery.paddingOf(context).bottom + AppSpacing.xl,
+    bottom: MediaQuery.paddingOf(context).bottom + AppGrouped.sectionGap,
   );
 
   Widget _buildGroupTab(ScrollController scrollController) {

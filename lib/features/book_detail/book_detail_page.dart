@@ -278,7 +278,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                 // 底部讓出浮動閱讀鈕（已含在 padding.bottom 裡）。
                 SliverPadding(
                   padding: EdgeInsets.only(
-                    bottom: padding.bottom + AppSpacing.md,
+                    bottom: padding.bottom + AppGrouped.sectionGap,
                   ),
                 ),
               ],

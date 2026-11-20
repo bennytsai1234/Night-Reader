@@ -968,8 +968,8 @@ class EdgeFade extends StatelessWidget {
   }
 }
 
-/// Telegram 式導航頁首：置中標題、兩側圓形玻璃按鈕、下緣漸隱，無實心底板與
-/// 分隔線。
+/// Telegram 式導航頁首：置中標題、兩側圓形玻璃按鈕，後面是實色加下緣淡出的
+/// 遮罩（ADR 0075），沒有分隔線。
 ///
 /// 作為 [Scaffold.appBar] 使用。頁面搭配 `extendBodyBehindAppBar: true` 時，
 /// 內容會捲到頁首底下並在下緣淡出；此時清單需讓出

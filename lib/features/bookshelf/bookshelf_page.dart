@@ -497,12 +497,20 @@ class _BookshelfPageState extends State<BookshelfPage>
         grid: provider.isGridView,
         bookCount: provider.lastBookCount,
         titles: provider.lastShelfTitles,
-        padding: ReadableWidth.cardInsetOf(context)
-            .copyWith(top: insets.top, bottom: insets.bottom + AppSpacing.md),
+        padding: ReadableWidth.cardInsetOf(context).copyWith(
+          top: insets.top,
+          bottom: insets.bottom + _bottomGap(provider.isGridView),
+        ),
       ),
       builder: (_) => _buildLoadedContent(provider, insets),
     );
   }
+
+  /// 捲到底時最後一本到底部的距離，和卡與卡之間的組間距一樣（ADR 0075）；
+  /// 分開的列表書卡每張自己帶下方 [AppSpacing.sm]，最後一張不再多算。
+  static double _bottomGap(bool grid) => grid || ShelfTrial.mergedList.value
+      ? AppGrouped.sectionGap
+      : AppGrouped.sectionGap - AppSpacing.sm;
 
   /// 書架內容已經換場出來過；之後書架變空（移出最後一本）不再退回骨架。
   bool _contentShown = false;
@@ -585,7 +593,7 @@ class _BookshelfPageState extends State<BookshelfPage>
       );
     }
     // 編輯工具列佔用分頁列的位置，清單底部讓出的高度不變。
-    final bottom = insets.bottom + AppSpacing.md;
+    final bottom = insets.bottom + _bottomGap(grid);
     // 下拉在背景檢查更新：不轉圈，檢查期間不會重複觸發；結果只在書卡角標
     // 上顯示 5 秒。
     return RefreshIndicator.noSpinner(

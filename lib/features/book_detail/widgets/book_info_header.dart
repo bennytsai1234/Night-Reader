@@ -51,7 +51,7 @@ class BookInfoHeader extends StatelessWidget {
 
   static const double coverWidth = 108;
   static const double coverHeight = 152;
-  static const double _topGap = AppSpacing.sm;
+  static const double _topGap = 0;
 
   /// 書名的上緣（從這一區頂端算起）；封面氛圍在這裡之前完全漸隱。
   static const double titleTop = _topGap + coverHeight + AppSpacing.lg;

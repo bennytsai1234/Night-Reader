@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/features/bookmarks/bookmarks_page.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:night_reader/features/source_manager/ai_repair/ai_repair_settings_page.dart';
@@ -52,10 +51,7 @@ class SettingsPage extends StatelessWidget {
         title: '我的',
         automaticallyImplyLeading: _impliesBack(context),
       ),
-      // 底部只留一點空白：入口一頁放得下、不用捲；預設多留的 40 會讓最後
-      // 一列明明看得到也還能捲一段。
       body: GroupedListView(
-        bottomPadding: AppSpacing.lg,
         children: [
           GroupedSection(
             children: [
