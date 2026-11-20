@@ -915,9 +915,9 @@ class EdgeFade extends StatelessWidget {
     this.color,
   }) : _chrome = false;
 
-  /// 頁首與分頁列後方：沒有實色段，整條一段漸層，從螢幕邊緣的實色照
-  /// (1 − t)² 淡到透明（t 是從邊緣起算的比例），內容透到頁首與分頁列底下
-  /// （docs/design/components.md「導航頁首」「主框架：浮動分頁列」）。
+  /// 頁首與分頁列後方：沒有實色段，整條一段漸層，從螢幕邊緣的實色等速淡到
+  /// 透明，內容透到頁首與分頁列底下（docs/design/components.md「導航頁首」
+  /// 「主框架：浮動分頁列」）。
   const EdgeFade.chrome({
     super.key,
     required this.edge,
@@ -930,8 +930,6 @@ class EdgeFade extends StatelessWidget {
   final double height;
   final Color? color;
   final bool _chrome;
-
-  static const List<double> _chromeStops = [0, 0.25, 0.5, 0.75, 1];
 
   @override
   Widget build(BuildContext context) {
@@ -948,10 +946,8 @@ class EdgeFade extends StatelessWidget {
             gradient: LinearGradient(
               begin: top ? Alignment.topCenter : Alignment.bottomCenter,
               end: top ? Alignment.bottomCenter : Alignment.topCenter,
-              colors: _chrome
-                  ? [for (final t in _chromeStops) at((1 - t) * (1 - t))]
-                  : [base, at(0.72), at(0)],
-              stops: _chrome ? _chromeStops : const [0, 0.45, 1],
+              colors: _chrome ? [base, at(0)] : [base, at(0.72), at(0)],
+              stops: _chrome ? const [0, 1] : const [0, 0.45, 1],
             ),
           ),
         ),
@@ -1071,8 +1067,9 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     final buttonInset = readable
         ? ReadableWidth.headerInsetOf(size)
         : AppGrouped.margin;
-    final solidHeight = topPadding + _toolbarHeight + bottomHeight;
-    final totalHeight = solidHeight + AppGlass.headerFadeHeight;
+    // 狀態列、工具列與附加列；漸隱帶再往下多 [AppGlass.headerFadeHeight]。
+    final barHeight = topPadding + _toolbarHeight + bottomHeight;
+    final totalHeight = barHeight + AppGlass.headerFadeHeight;
     final brightness = ThemeData.estimateBrightnessForColor(bg);
     // 開 App 的進場：標題與按鈕先是骨架，跟書架一起換成真的。
     // 左側位置的高度是撐滿工具列的；置中讓玻璃照按鈕自己的大小，不被拉高，

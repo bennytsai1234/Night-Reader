@@ -97,9 +97,9 @@ class _BookDetailPageState extends State<BookDetailPage> {
   /// 大頁首捲進玻璃頁首底下後，頁首標題淡入顯示書名。
   final ValueNotifier<bool> _titleCollapsed = ValueNotifier(false);
 
-  /// 有封面氛圍時，玻璃頁首在頁頂是透明的，讓氛圍鋪到頁首後面；往下捲
-  /// 到氛圍離開頁首時變回實色底（0 透明、1 實色）。
-  final ValueNotifier<double> _headerSolidity = ValueNotifier(0);
+  /// 有封面氛圍時，玻璃頁首的漸隱帶在頁頂是透明的，讓氛圍鋪到頁首後面；往下
+  /// 捲到氛圍離開頁首時恢復正常濃度（漸隱帶底色的不透明度，0 透明、1 正常）。
+  final ValueNotifier<double> _headerOpacity = ValueNotifier(0);
 
   /// 進場動畫播完時完成；詳情等它才開始載入（ADR 0018）。
   Future<void>? _entrance;
@@ -120,7 +120,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _titleCollapsed.dispose();
-    _headerSolidity.dispose();
+    _headerOpacity.dispose();
     _chapterListController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -130,7 +130,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     if (!_scrollController.hasClients) return;
     final offset = _scrollController.offset;
     _titleCollapsed.value = offset > BookInfoHeader.collapseOffset;
-    _headerSolidity.value = (offset / BookInfoHeader.titleTop).clamp(0.0, 1.0);
+    _headerOpacity.value = (offset / BookInfoHeader.titleTop).clamp(0.0, 1.0);
   }
 
   /// 玻璃頁首（狀態列＋工具列＋漸隱）佔用的高度。
@@ -199,7 +199,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     );
   }
 
-  /// 有沒有封面氛圍；沒有時頁首維持實色。
+  /// 有沒有封面氛圍；沒有時漸隱帶維持正常濃度。
   bool _hasAmbience(BookDetailProvider provider) =>
       BookCoverAmbience.supports(UnifiedCovers.coverOf(provider.book));
 
@@ -480,14 +480,14 @@ class _BookDetailPageState extends State<BookDetailPage> {
     final background = AppChrome.of(context).groupedBackground;
     GlassNavHeader header(Color background) =>
         _buildNavHeader(context, provider, background, failed: failed);
-    // 沒有封面氛圍時頁首維持實色；有的話跟著捲動由透明轉實色。
+    // 沒有封面氛圍時漸隱帶維持正常濃度；有的話跟著捲動由透明恢復。
     if (failed || !_hasAmbience(provider)) return header(background);
     return PreferredSize(
       preferredSize: header(background).preferredSize,
       child: ValueListenableBuilder<double>(
-        valueListenable: _headerSolidity,
-        builder: (context, solidity, _) =>
-            header(background.withValues(alpha: solidity)),
+        valueListenable: _headerOpacity,
+        builder: (context, opacity, _) =>
+            header(background.withValues(alpha: opacity)),
       ),
     );
   }
