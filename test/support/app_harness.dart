@@ -458,11 +458,17 @@ Future<void> pumpApp(
     return;
   }
   if (checking != null && AppConfig.autoRefresh) {
-    for (var i = 0; i < 600 && !checked; i++) {
-      await settle(tester, const Duration(milliseconds: 50));
+    // 照真實時間等：補下載與檢查都在等另一個 isolate 的資料庫回覆，每一步
+    // 只讓出零毫秒時，機器忙（別的測試同時在跑）就等不到，推再多假時間也一樣。
+    final waited = Stopwatch()..start();
+    while (!checked && waited.elapsed < const Duration(seconds: 30)) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
     }
     checking.removeListener(onChecking);
-    if (!checked) fail('開 App 後的書架檢查更新推進 30 秒仍沒做完');
+    if (!checked) fail('開 App 後的書架檢查更新等了 30 秒（真實時間）仍沒做完');
   }
   await waitForDownloads(tester);
   await settle(tester, AppMotion.sheen);
