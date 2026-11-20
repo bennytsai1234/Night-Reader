@@ -88,6 +88,13 @@ void main() {
     expect(skeletonTextLines(painter).single.right, 25);
   });
 
+  test('spaces before a hard line break do not count as an ellipsis', () {
+    PunctuationInk.setTableForTest(_style, _table);
+    final painter = _layout('你好」 \n第二行', maxWidth: 200, maxLines: 1);
+    expect(painter.didExceedMaxLines, isTrue);
+    expect(skeletonTextLines(painter).single.right, 25);
+  });
+
   test('each end mark uses its own span style and size', () {
     const big = TextStyle(fontSize: 20);
     PunctuationInk.setTableForTest(_style.merge(big), _table);

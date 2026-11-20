@@ -235,6 +235,18 @@ void main() {
   }
 
   for (final grid in [true, false]) {
+    testWidgets('${grid ? 'grid' : 'list'} line breaks in a title show as '
+        'spaces', (tester) async {
+      await pumpReal(
+        tester,
+        grid: grid,
+        names: ['上集」\n下集', for (var i = 1; i < 6; i++) '書$i'],
+      );
+      expect(find.text('上集」 下集'), findsOneWidget);
+    });
+  }
+
+  for (final grid in [true, false]) {
     testWidgets('${grid ? 'grid' : 'list'} long titles end with an ellipsis '
         'and do not drag', (tester) async {
       final long = names.last;

@@ -89,7 +89,7 @@ class BookshelfSkeleton extends StatelessWidget {
               alignment: Alignment.topLeft,
               child: index < titles.length
                   ? SkeletonText(
-                      context.zh(titles[index].name),
+                      bookshelfTitleText(context, titles[index].name),
                       style: BookshelfGridTile.titleStyle,
                       maxLines: 2,
                       ellipsis: true,
@@ -187,7 +187,7 @@ class _ListCardSkeleton extends StatelessWidget {
                 children: [
                   if (title case final title?) ...[
                     SkeletonText(
-                      context.zh(title.name),
+                      bookshelfTitleText(context, title.name),
                       style: BookshelfListCard.titleStyle,
                       maxLines: 1,
                       ellipsis: true,
