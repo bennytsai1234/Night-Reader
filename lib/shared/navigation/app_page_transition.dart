@@ -591,7 +591,9 @@ class _Trip {
   }
 
   double _pace(double time) {
-    final stamp = SchedulerBinding.instance.currentFrameTimeStamp;
+    // 用到才讀：只有一幀進行中才有時間戳，開 App 時第一頁在第一幀之前就
+    // 建了（runApp 當場建），那時沒在換頁、也沒有時間戳。
+    late final stamp = SchedulerBinding.instance.currentFrameTimeStamp;
     switch (_phase) {
       case _NoTrip() || _OnRouteClock() || _Following():
         return time;
