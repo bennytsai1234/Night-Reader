@@ -625,8 +625,15 @@ class _BookHeader extends StatelessWidget {
         AppGrouped.margin * 2 -
         coverWidth -
         AppSpacing.lg;
+    // 畫面上的書名在 Material 底下，字樣合併了主題內文的字族（標點字型、
+    // 介面字型）；量的時候也要合併，不然換行與畫面的不一樣。
     final title = TextPainter(
-      text: TextSpan(text: context.zh(book.name), style: _titleStyle),
+      text: TextSpan(
+        text: context.zh(book.name),
+        style:
+            Theme.of(context).textTheme.bodyMedium?.merge(_titleStyle) ??
+            _titleStyle,
+      ),
       textDirection: TextDirection.ltr,
       textScaler: scaler,
       maxLines: 2,

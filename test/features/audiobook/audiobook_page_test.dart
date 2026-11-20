@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/database/app_database.dart';
@@ -15,6 +17,7 @@ import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/features/audiobook/audiobook_page.dart';
 import 'package:night_reader/features/audiobook/audiobook_player.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -149,6 +152,71 @@ void main() {
     // 第 31 集（序號 30）在畫面上、點得到；開頭幾集已經捲出去。
     expect(find.text('第 31 集').hitTestable(), findsWidgets);
     expect(find.text('第 1 集').hitTestable(), findsNothing);
+    await close(tester);
+  });
+
+  testWidgets('the header is measured in the interface font the title is '
+      'drawn in', (tester) async {
+    // 測試預設字型每個字都是一整格寬：照它量，這個書名要兩行；照介面字型
+    // （Roboto）畫只要一行，頁首應該只有封面高。
+    await tester.runAsync(() async {
+      final root = Platform.environment['FLUTTER_ROOT']!;
+      final loader = FontLoader('NarrowUi')
+        ..addFont(
+          Future.value(
+            ByteData.sublistView(
+              File(
+                '$root/bin/cache/artifacts/material_fonts/roboto-regular.ttf',
+              ).readAsBytesSync(),
+            ),
+          ),
+        );
+      await loader.load();
+      final punct = FontLoader(AppTextStyles.punctuationFontFamily)
+        ..addFont(
+          Future.value(
+            ByteData.sublistView(
+              File('assets/fonts/NightReaderPunct-Regular.ttf')
+                  .readAsBytesSync(),
+            ),
+          ),
+        );
+      await punct.load();
+    });
+    final book = _book().copyWith(name: 'Night Over Rivers');
+    world = _World(AppDatabase.forTesting(NativeDatabase.memory()));
+    await tester.runAsync(() async {
+      await world.addSource();
+      await world.addBook(book);
+    });
+    tester.view
+      ..physicalSize = const Size(1179, 2556)
+      ..devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(
+          AppStyle.paper,
+          Brightness.light,
+          fontFamily: 'NarrowUi',
+        ),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(1.5)),
+          child: child!,
+        ),
+        home: AudiobookPage(book: book, player: world.player),
+      ),
+    );
+    await settle(tester);
+
+    final header = find
+        .ancestor(
+          of: find.byType(AspectRatio).first,
+          matching: find.byType(Container),
+        )
+        .first;
+    expect(tester.getSize(header).height, closeTo(72 * 7 / 5, 0.01));
     await close(tester);
   });
 
