@@ -274,15 +274,20 @@ class LaunchEntranceMotion {
   }
 
   /// 書架一開始就是內容（沒有骨架可換）：按鈕也直接到位。
+  /// 沒有定格換場，這一下就是整個換場：先記成換場中再通知頁首，聽通知
+  /// 的人讀到已經開始。
   void revealNow() {
     if (_reveal != _Reveal.none) return;
+    _reveal = _Reveal.playing;
     _revealed.value = true;
     _finish();
   }
 
+  /// 放開收住的骨架之後才算結束：放開時接著呼吸的骨架同步通知，聽的人
+  /// 讀到的 [isFinished] 和 [finished] 完成的時間一致。
   void _finish() {
-    _reveal = _Reveal.done;
     rest.release();
+    _reveal = _Reveal.done;
     if (!_finished.isCompleted) _finished.complete();
   }
 
@@ -490,19 +495,22 @@ class _LaunchSkeletonState extends State<LaunchSkeleton> {
   /// 開始出現，先取中央。
   double _u = 0.5;
 
-  /// 建立時在進場底下、進場還沒換成真的：照它畫骨架，直到換成真的。null
-  /// 是一直直接畫（不在進場底下，或建立時已經換成真的）。
   LaunchEntranceMotion? _motion;
+
+  /// 建立時進場已經換成真的（或不在進場底下）：一直直接畫。建立時定下的
+  /// 模式，之後不變；拍定格畫面時頁首暫時換成真的，這時才建的也一直直接畫，
+  /// 換回骨架後不跟著變回骨架。
+  bool _passThrough = true;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final motion = LaunchEntrance.maybeOf(context);
-    if (_motion == null && motion != null && !motion.revealed.value) {
+    if (_motion == null) {
       _motion = motion;
+      _passThrough = motion == null || motion.revealed.value;
     }
-    final drawing = _motion;
-    if (drawing == null || drawing.revealed.value) return;
+    if (_passThrough || _motion!.revealed.value) return;
     // 螢幕大小改變時（登記在這裡）重新量位置。
     MediaQuery.sizeOf(context);
     WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
@@ -520,7 +528,7 @@ class _LaunchSkeletonState extends State<LaunchSkeleton> {
   @override
   Widget build(BuildContext context) {
     final motion = _motion;
-    if (motion == null) return widget.child;
+    if (_passThrough || motion == null) return widget.child;
     final style = widget.textStyle;
     // 字的骨架是一條和字一樣高的長條，置中在那一行上。
     final barHeight = style == null
