@@ -99,19 +99,22 @@ class GroupedTextFieldRow extends StatelessWidget
       ),
       null => null,
     };
-    // 標籤只有上方內距，輸入框上下都有；右側的 [suffix] 把輸入框撐到至少
-    // 和它一樣高。
+    // 輸入框上下各有內距，右側的 [suffix] 把輸入框撐到至少和它一樣高。單行
+    // 的標籤與字置中在列裡；多行的靠上，標籤對齊第一行（上方內距）。
     final box = math.max(field.height + AppSpacing.md * 2, suffixWidth);
     final height = math.max(
       AppGrouped.rowMinHeight,
       math.max(box, AppSpacing.md + (label?.height ?? 0)),
     );
+    final single = _single;
+    double top(GroupedItemShape part) =>
+        single ? (height - part.height) / 2 : AppSpacing.md;
     return GroupedItemShape(
       height,
       marks: [
-        ...?label?.marksAt(const Offset(AppGrouped.rowPadding, AppSpacing.md)),
+        ...?label?.marksAt(Offset(AppGrouped.rowPadding, top(label))),
         ...field.marksAt(
-          Offset(AppGrouped.rowPadding + labelWidth, AppSpacing.md),
+          Offset(AppGrouped.rowPadding + labelWidth, top(field)),
         ),
         if (suffix case final suffix?)
           ...groupedInputSuffixShape(context, suffix, height: box).marksAt(
@@ -126,6 +129,9 @@ class GroupedTextFieldRow extends StatelessWidget
 
   /// 輸入框實際的最多行數（密碼只有一行）；骨架與 build 共用。
   int? get _maxLines => obscureText ? 1 : maxLines;
+
+  /// 只有一行的輸入框：標籤與字置中在列裡，列被右側按鈕撐高時也對著按鈕。
+  bool get _single => _maxLines == 1;
 
   TextStyle _textStyle(BuildContext context) => groupedInputStyle(
     context,
@@ -162,6 +168,8 @@ class GroupedTextFieldRow extends StatelessWidget
     );
     final effectiveStyle = _textStyle(context);
     final effectiveMaxLines = _maxLines;
+    final single = _single;
+    final verticalAlign = single ? TextAlignVertical.center : null;
     final field = validator == null
         ? TextField(
             controller: controller,
@@ -175,6 +183,7 @@ class GroupedTextFieldRow extends StatelessWidget
             autofocus: autofocus,
             obscureText: obscureText,
             style: effectiveStyle,
+            textAlignVertical: verticalAlign,
             decoration: decoration,
           )
         : TextFormField(
@@ -190,6 +199,7 @@ class GroupedTextFieldRow extends StatelessWidget
             autofocus: autofocus,
             obscureText: obscureText,
             style: effectiveStyle,
+            textAlignVertical: verticalAlign,
             decoration: decoration,
           );
     return ConstrainedBox(
@@ -199,10 +209,12 @@ class GroupedTextFieldRow extends StatelessWidget
         child: label == null
             ? field
             : Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: single
+                    ? CrossAxisAlignment.center
+                    : CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.only(top: AppSpacing.md),
+                    padding: EdgeInsets.only(top: single ? 0 : AppSpacing.md),
                     child: SizedBox(
                       width: labelWidth,
                       child: UiText(
