@@ -477,12 +477,24 @@ Future<void> startApp(WidgetTester tester) async {
   // 骨架照字的格子畫，每項測試也不留給下一項。
   PunctuationInk.resetForTest(measure: false);
   addTearDown(PunctuationInk.resetForTest);
-  await tester.pumpWidget(
-    MultiProvider(
-      providers: AppProviders.providers,
-      child: const NightReaderApp(),
-    ),
-  );
+  // 和 runApp 第一次掛上一樣，在第一幀之前當場建好整個 App，再畫第一幀：
+  // pumpWidget 都在幀裡建，建畫面時讀幀的時間戳這類只在幀裡才有的東西，
+  // 測試碰不到手機上開 App 的那一刻。其餘照 pumpWidget：同樣擋下沒等完的
+  // 測試操作、明確排第一幀。
+  final binding = tester.binding;
+  await TestAsyncUtils.guard<void>(() {
+    binding.attachRootWidget(
+      binding.wrapWithDefaultView(
+        MultiProvider(
+          providers: AppProviders.providers,
+          child: const NightReaderApp(),
+        ),
+      ),
+    );
+    binding.buildOwner!.buildScope(binding.rootElement!);
+    binding.scheduleFrame();
+    return binding.pump();
+  });
 }
 
 /// App 有常駐的計時器（時鐘、流光），`pumpAndSettle` 等不完；改成推進

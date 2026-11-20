@@ -456,7 +456,7 @@ class _AppTransitionState extends State<_AppTransition>
             background,
           );
         }
-        if (_route.offstage) {
+        if (_route.offstage && _inFrame()) {
           _top.offstage(SchedulerBinding.instance.currentFrameTimeStamp);
         }
         final origin = TransitionOrigin.of(_route);
@@ -548,6 +548,12 @@ final class _Stranded extends _Swipe {
 /// 第一次建立、返回時底下那頁重新排版），路由的時鐘照樣走，第二幀就直接跳到
 /// 那段時間之後的位置，看起來是點下去就掉幀。這裡讓第一、二幀都停在起點，
 /// 之後把剩下的時間照比例走完整段，最後一幀和路由同時到位（ADR 0018）。
+/// 有一幀正在進行：[SchedulerBinding.currentFrameTimeStamp] 只在這時有值。
+/// 幀外也會建畫面，例如開 App 時 runApp 在第一幀之前就當場建好第一頁；
+/// 正式版在幀外讀時間戳會拋錯，整頁換成錯誤畫面。
+bool _inFrame() =>
+    SchedulerBinding.instance.schedulerPhase != SchedulerPhase.idle;
+
 class _Trip {
   /// 這一趟走到哪個階段（`docs/state-machines.md`「路由換頁」）。
   _TripPhase _phase = const _NoTrip();
@@ -591,9 +597,13 @@ class _Trip {
   }
 
   double _pace(double time) {
-    final stamp = SchedulerBinding.instance.currentFrameTimeStamp;
+    // 用到才讀，幀外也不讀（[_inFrame]）。
+    late final stamp = SchedulerBinding.instance.currentFrameTimeStamp;
     switch (_phase) {
       case _NoTrip() || _OnRouteClock() || _Following():
+        return time;
+      // 幀外建：照路由的進度、不換階段，下一幀再對齊。
+      case _ when !_inFrame():
         return time;
       case _AtStart(:final closing, firstFrame: null, :final offstageFrame):
         if (time > 0) {

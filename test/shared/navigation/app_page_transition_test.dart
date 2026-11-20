@@ -63,6 +63,71 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  // 開 App 時 runApp 在第一幀之前就同步建好第一頁（第一次 attachRootWidget
+  // 當場建），這時沒有幀的時間戳。pumpWidget 都在幀裡建，碰不到這個時刻：
+  // 這裡掛上後在幀外直接建。
+  for (final transition in AppPageTransition.values) {
+    testWidgets('${transition.name}: the first page builds before the first '
+        'frame', (tester) async {
+      final binding = tester.binding;
+      binding.attachRootWidget(
+        binding.wrapWithDefaultView(
+          MaterialApp(
+            theme: buildAppTheme(
+              AppStyle.paper,
+              Brightness.light,
+              pageTransition: transition,
+            ),
+            home: const Scaffold(body: Center(child: Text('主頁'))),
+          ),
+        ),
+      );
+      expect(binding.schedulerPhase, SchedulerPhase.idle);
+      binding.buildOwner!.buildScope(binding.rootElement!);
+      expect(tester.takeException(), isNull);
+      await tester.pump();
+      expect(find.text('主頁'), findsOneWidget);
+    });
+  }
+
+  // 換頁途中也可能在幀外建（同上）：推入後下一幀之前新頁在 offstage、這一
+  // 趟停在起點，之後是記下第一幀、追上路由的那幾段。
+  for (final transition in AppPageTransition.values) {
+    testWidgets('${transition.name}: rebuilding outside a frame while a page '
+        'opens', (tester) async {
+      await pumpApp(tester, transition);
+      void rebuildOutsideFrame() {
+        void mark(Element element) {
+          element.markNeedsBuild();
+          element.visitChildren(mark);
+        }
+
+        final binding = tester.binding;
+        expect(binding.schedulerPhase, SchedulerPhase.idle);
+        binding.rootElement!.visitChildren(mark);
+        binding.buildOwner!.buildScope(binding.rootElement!);
+      }
+
+      unawaited(
+        Navigator.push(
+          home,
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(body: Center(child: Text('新頁'))),
+          ),
+        ),
+      );
+      rebuildOutsideFrame();
+      expect(tester.takeException(), isNull);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 16));
+      rebuildOutsideFrame();
+      expect(tester.takeException(), isNull);
+      await tester.pumpAndSettle();
+      expect(find.text('新頁'), findsOneWidget);
+    });
+  }
+
   testWidgets('sliding pages move by whole physical pixels and the screen '
       'reader boxes follow', (tester) async {
     // 不整除的像素密度：一個實體像素不是整數個邏輯像素。
