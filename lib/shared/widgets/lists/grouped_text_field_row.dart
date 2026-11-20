@@ -90,6 +90,38 @@ class GroupedTextFieldRow extends StatelessWidget
       maxLines: _maxLines,
       minLines: minLines,
     );
+    final layout = _layout(context, field.height);
+    final label = layout.label;
+    return GroupedItemShape(
+      layout.height,
+      marks: [
+        ...?label?.marksAt(Offset(AppGrouped.rowPadding, layout.labelTop)),
+        ...field.marksAt(
+          Offset(AppGrouped.rowPadding + labelWidth, layout.textTop),
+        ),
+        if (suffix case final suffix?)
+          ...groupedInputSuffixShape(
+            context,
+            suffix,
+            height: layout.box,
+          ).marksAt(
+            Offset(
+              AppGrouped.rowPadding + labelWidth + fieldWidth - suffixWidth,
+              layout.boxTop,
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 列的直向排法，骨架與 build 共用：輸入框（字加上下內距，右側的 [suffix]
+  /// 把它撐到至少和它一樣高）與標籤各自從哪裡開始。[fieldHeight] 是框裡字的
+  /// 那一塊（[groupedTextFieldShape]）。
+  ///
+  /// 單行的標籤與輸入框各自置中在列裡，列被按鈕或換行的標籤撐高時三者仍在
+  /// 同一條中線；錯誤訊息排在輸入框下面，不推動標籤。多行的靠上，標籤對齊
+  /// 第一行。
+  _RowLayout _layout(BuildContext context, double fieldHeight) {
     final label = switch (this.label) {
       final text? => GroupedItemShape.text(
         context,
@@ -99,31 +131,37 @@ class GroupedTextFieldRow extends StatelessWidget
       ),
       null => null,
     };
-    // 輸入框上下各有內距，右側的 [suffix] 把輸入框撐到至少和它一樣高。單行
-    // 的標籤與字置中在列裡；多行的靠上，標籤對齊第一行（上方內距）。
-    final box = math.max(field.height + AppSpacing.md * 2, suffixWidth);
+    final suffixHeight = switch (suffix) {
+      final suffix? => groupedInputSuffixExtent(suffix),
+      null => 0.0,
+    };
+    final box = math.max(fieldHeight + AppSpacing.md * 2, suffixHeight);
+    final labelHeight = label?.height ?? 0;
+    if (!_single) {
+      return _RowLayout(
+        height: math.max(
+          AppGrouped.rowMinHeight,
+          math.max(box, AppSpacing.md + labelHeight),
+        ),
+        label: label,
+        labelTop: AppSpacing.md,
+        box: box,
+        boxTop: 0,
+        textTop: AppSpacing.md,
+      );
+    }
     final height = math.max(
       AppGrouped.rowMinHeight,
-      math.max(box, AppSpacing.md + (label?.height ?? 0)),
+      math.max(box, label == null ? 0.0 : labelHeight + AppSpacing.md * 2),
     );
-    final single = _single;
-    double top(GroupedItemShape part) =>
-        single ? (height - part.height) / 2 : AppSpacing.md;
-    return GroupedItemShape(
-      height,
-      marks: [
-        ...?label?.marksAt(Offset(AppGrouped.rowPadding, top(label))),
-        ...field.marksAt(
-          Offset(AppGrouped.rowPadding + labelWidth, top(field)),
-        ),
-        if (suffix case final suffix?)
-          ...groupedInputSuffixShape(context, suffix, height: box).marksAt(
-            Offset(
-              AppGrouped.rowPadding + labelWidth + fieldWidth - suffixWidth,
-              0,
-            ),
-          ),
-      ],
+    final boxTop = (height - box) / 2;
+    return _RowLayout(
+      height: height,
+      label: label,
+      labelTop: (height - labelHeight) / 2,
+      box: box,
+      boxTop: boxTop,
+      textTop: boxTop + (box - fieldHeight) / 2,
     );
   }
 
@@ -168,8 +206,7 @@ class GroupedTextFieldRow extends StatelessWidget
     );
     final effectiveStyle = _textStyle(context);
     final effectiveMaxLines = _maxLines;
-    final single = _single;
-    final verticalAlign = single ? TextAlignVertical.center : null;
+    final verticalAlign = _single ? TextAlignVertical.center : null;
     final field = validator == null
         ? TextField(
             controller: controller,
@@ -202,33 +239,70 @@ class GroupedTextFieldRow extends StatelessWidget
             textAlignVertical: verticalAlign,
             decoration: decoration,
           );
+    // 單行框裡字的高度只看行高，不用等量到寬度（對話框會先問最小寬度）。
+    final layout = _layout(
+      context,
+      groupedTextFieldShape(
+        context,
+        style: effectiveStyle,
+        width: 0,
+        text: '',
+        maxLines: 1,
+      ).height,
+    );
     return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: AppGrouped.rowMinHeight),
+      constraints: BoxConstraints(minHeight: layout.height),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppGrouped.rowPadding),
-        child: label == null
-            ? field
-            : Row(
-                crossAxisAlignment: single
-                    ? CrossAxisAlignment.center
-                    : CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: EdgeInsets.only(top: single ? 0 : AppSpacing.md),
-                    child: SizedBox(
-                      width: labelWidth,
-                      child: UiText(
-                        label!,
-                        style: _labelStyle.copyWith(color: scheme.onSurface),
-                      ),
-                    ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (label case final label?)
+              Padding(
+                padding: EdgeInsets.only(top: layout.labelTop),
+                child: SizedBox(
+                  width: labelWidth,
+                  child: UiText(
+                    label,
+                    style: _labelStyle.copyWith(color: scheme.onSurface),
                   ),
-                  Expanded(child: field),
-                ],
+                ),
               ),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(top: layout.boxTop),
+                child: field,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+/// [GroupedTextFieldRow] 的直向排法（[GroupedTextFieldRow._layout]）。
+class _RowLayout {
+  const _RowLayout({
+    required this.height,
+    required this.label,
+    required this.labelTop,
+    required this.box,
+    required this.boxTop,
+    required this.textTop,
+  });
+
+  /// 沒有錯誤訊息時的列高。
+  final double height;
+  final GroupedItemShape? label;
+  final double labelTop;
+
+  /// 輸入框（含上下內距與右側按鈕）的高度與上緣。
+  final double box;
+  final double boxTop;
+
+  /// 框裡字的上緣。
+  final double textTop;
 }
 
 /// [TextField] 實際用的字樣：先合併 Material 的輸入字體再套 [style]；骨架

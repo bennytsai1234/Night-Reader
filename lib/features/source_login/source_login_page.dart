@@ -579,7 +579,8 @@ class _SourceLoginPageState extends State<SourceLoginPage>
         index++;
       }
       final run = rows.sublist(start, index);
-      final gap = items.isEmpty ? AppSpacing.xs : AppSpacing.xl;
+      // 第一段從清單給的位置開始（[GroupedListView.topOf]），之後每段隔 20。
+      final gap = items.isEmpty ? 0.0 : AppSpacing.xl;
       items.add(
         field
             ? GroupedSection(
@@ -694,7 +695,6 @@ class _FormSkeletonState extends State<_FormSkeleton> {
         widget.items ??
         <Widget>[
           GroupedSection(
-            topGap: AppSpacing.xs,
             children: [
               SourceLoginField(row: _field, controller: _empty),
               SourceLoginField(row: _field, controller: _empty),
@@ -708,15 +708,16 @@ class _FormSkeletonState extends State<_FormSkeleton> {
             ),
           ),
         ];
-    final top = MediaQuery.paddingOf(context).top;
-    // 和換上的表單（[GroupedListView]）一樣收在平板的內容欄裡。
+    // 和換上的表單（[GroupedListView]）同一個起點與第一組間距，一樣收在
+    // 平板的內容欄裡。
+    final top = GroupedListView.topOf(context);
     final inset = ReadableWidth.insetOf(context);
     return LayoutBuilder(
       builder: (context, constraints) => Padding(
         padding: inset,
         child: GroupedListSkeleton(
           shapes: [
-            for (final item in items)
+            for (final item in GroupedListView.itemsOf(items))
               GroupedItemShape.of(
                 item,
                 context: context,
