@@ -12,6 +12,7 @@ import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import '../book_detail_provider.dart';
 
 import 'package:night_reader/core/chinese/chinese_display.dart';
+import 'package:night_reader/shared/widgets/glass/header_scroll_fade.dart';
 import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
@@ -55,8 +56,9 @@ class BookInfoHeader extends StatelessWidget {
   /// 書名的上緣（從這一區頂端算起）；封面氛圍在這裡之前完全漸隱。
   static const double titleTop = _topGap + coverHeight + AppSpacing.lg;
 
-  /// 書名第一行捲進頁首底下時的捲動位移；超過後頁首標題淡入。
-  static const double collapseOffset = titleTop + 24;
+  /// 書名捲進頁首、照 [HeaderScrollFade] 完全淡掉時的捲動位移；超過後頁首標題
+  /// 淡入。
+  static const double collapseOffset = titleTop + HeaderScrollFade.distance;
 
   @override
   Widget build(BuildContext context) {
@@ -87,13 +89,16 @@ class BookInfoHeader extends StatelessWidget {
         const SizedBox(height: AppSpacing.lg),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
-          child: DragOverflowText(
-            child: UiText(
-              context.zh(book.name),
-              translate: false,
-              textAlign: TextAlign.center,
-              maxLines: 3,
-              style: AppTextStyles.titleXl.copyWith(color: scheme.onSurface),
+          // 捲進頁首前淡掉，頁首標題在它完全透明時才接手（[collapseOffset]）。
+          child: HeaderScrollFade(
+            child: DragOverflowText(
+              child: UiText(
+                context.zh(book.name),
+                translate: false,
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                style: AppTextStyles.titleXl.copyWith(color: scheme.onSurface),
+              ),
             ),
           ),
         ),

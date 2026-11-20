@@ -392,7 +392,7 @@ void main() {
   });
 
   testWidgets(
-    'a cover only held in memory has no ambience and a solid header',
+    'a cover only held in memory has no ambience and a full-strength header fade',
     (tester) async {
       await pumpDetail(tester, bookWith(coverUrl: 'memory://cover'));
 
