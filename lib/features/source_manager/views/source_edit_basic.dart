@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/constant/source_type.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 
@@ -28,7 +27,6 @@ class SourceEditBasic extends StatelessWidget {
     return GroupedListView(
       children: [
         GroupedSection(
-          topGap: AppSpacing.sm,
           header: '基本資訊',
           children: [
             _field(controllers['name']!, '書源名稱', '例如: 筆趣閣'),

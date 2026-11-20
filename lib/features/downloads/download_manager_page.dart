@@ -219,7 +219,9 @@ class DownloadManagerPage extends StatelessWidget {
   Widget _buildQueueSummary() => _Subscribed<_QueueSummary>(
     select: _queueSummary,
     builder: (context, summary) => GroupedSection(
-      topGap: AppSpacing.sm,
+      // 清單的第一組：包在訂閱裡，清單換不到它的上方間距，這裡照清單第一組
+      // 給 0（[GroupedListView]）。
+      topGap: 0,
       footer: '最近任務更新：${_formatTimestamp(summary.latestUpdate)}',
       children: [
         GroupedContent(
