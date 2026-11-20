@@ -133,22 +133,14 @@ class _AppTransitionState extends State<_AppTransition>
   final _Trip _top = _Trip();
   final _Trip _under = _Trip();
 
-  /// 這一頁最近一次在 offstage 的那一幀（推入的第一幀，見 [_Trip]）。
-  Duration? _offstageFrame;
-
   late final HorizontalDragGestureRecognizer _drag;
 
-  /// 手指放開後把頁面送完（或彈回）的那一段；進度直接寫回路由。
+  /// 手指放開後把頁面送完（或彈回）的那一段（[_Settling]）；進度直接寫回
+  /// 路由。
   late final AnimationController _finish;
-  double _finishFrom = 1;
-  double _finishTo = 1;
 
-  /// 正在由這一頁處理的返回手勢。
-  bool _tracking = false;
-
-  /// 手勢途中有新頁蓋上來，路由停在半途（不是最上層時 [ModalRoute] 不讓
-  /// 手勢改它的進度）；蓋上來的頁關掉後要把這一頁補回整頁。
-  bool _stranded = false;
+  /// 這一頁的返回手勢走到哪個階段（`docs/state-machines.md`「路由換頁」）。
+  _Swipe _swipe = const _Idle();
 
   /// 系統預測返回：觸控速度與重新取樣的進度。
   final PredictiveBackTracker _back = PredictiveBackTracker();
@@ -193,7 +185,34 @@ class _AppTransitionState extends State<_AppTransition>
       oldWidget.secondaryAnimation.removeStatusListener(_onCoveredStatus);
       _listen(widget.secondaryAnimation, _onCoveredStatus);
     }
+    // 上面推入或關掉一頁（[ModalRoute.didChangeNext]、[ModalRoute.didPopNext]）
+    // 時路由會重建到這裡。收尾中被蓋住時從這裡停下（整頁一下就蓋住時，收尾
+    // 的計時器跟著這一頁不在畫面上就停了，等不到下一格）；對話框這類不帶動
+    // 底下頁面的路由關掉時，沒有 [_onCoveredStatus] 的那一下，從這裡補回。
+    // 建構中不能通知 Navigator，等這一幀畫完。
+    final swipe = _swipe;
+    if ((swipe is _Settling && !_route.isCurrent) ||
+        (swipe is _Stranded && _uncovered)) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _onRouteChanged();
+      });
+    }
   }
+
+  void _onRouteChanged() {
+    switch (_swipe) {
+      case final _Settling swipe when !_route.isCurrent:
+        _finish.stop();
+        _settle(swipe);
+      case _Stranded():
+        _restoreIfUncovered();
+      case _:
+    }
+  }
+
+  /// 這一頁在最上層，上面也沒有頁在換。
+  bool get _uncovered =>
+      _route.isCurrent && widget.secondaryAnimation.isDismissed;
 
   void _listen(Animation<double> animation, AnimationStatusListener listener) {
     listener(animation.status);
@@ -202,16 +221,24 @@ class _AppTransitionState extends State<_AppTransition>
 
   void _onCoveredStatus(AnimationStatus status) {
     _under.update(status);
-    if (status.isDismissed && _stranded) _restore();
+    if (status.isDismissed) _restoreIfUncovered();
   }
 
-  // 用公開的手勢入口把路由送回整頁：開始一次手勢、立刻取消，路由自己播完。
-  void _restore() {
-    _stranded = false;
-    if (!_route.isCurrent || _progress >= 1) return;
-    _route
-      ..handleStartBackGesture(progress: _progress)
-      ..handleCancelBackGesture();
+  // 停在半途時，回到最上層、上面也沒有頁在換，就從停著的地方回到整頁：
+  // 用公開的手勢入口再開始一次手勢，照路由開啟的速度等速收回整頁，和這一頁
+  // 自己的收尾一樣由這裡結束手勢（途中被移除時也是）。
+  void _restoreIfUncovered() {
+    if (_swipe is! _Stranded || !_uncovered) return;
+    if (_progress >= 1) {
+      _swipe = const _Idle();
+      return;
+    }
+    _route.handleStartBackGesture(progress: _progress);
+    _runFinish(
+      to: 1,
+      duration: _route.transitionDuration * (1 - _progress),
+      curve: Curves.linear,
+    );
   }
 
   @override
@@ -222,7 +249,7 @@ class _AppTransitionState extends State<_AppTransition>
     _drag.dispose();
     _finish.dispose();
     _backTicker.dispose();
-    if (_tracking) {
+    if (_swipe is _Dragging || _swipe is _Settling) {
       // 手勢途中頁面被程式關掉。卸載時整棵樹鎖著，通知 Navigator 會讓其他
       // 頁面重建，要等這一格畫完。
       final navigator = widget.route.navigator;
@@ -240,7 +267,7 @@ class _AppTransitionState extends State<_AppTransition>
   double get _width => context.size?.width ?? 1;
 
   bool get _canStart =>
-      !_tracking && _route.isCurrent && _route.popGestureEnabled;
+      _swipe is _Idle && _route.isCurrent && _route.popGestureEnabled;
 
   // ---------- 左緣右滑 ----------
 
@@ -254,14 +281,14 @@ class _AppTransitionState extends State<_AppTransition>
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
-    if (!_tracking || _finish.isAnimating) return;
+    if (_swipe is! _Dragging) return;
     _route.handleUpdateBackGestureProgress(
       progress: (_progress - details.primaryDelta! / _width).clamp(0.0, 1.0),
     );
   }
 
   void _onDragEnd(DragEndDetails details) {
-    if (!_tracking || _finish.isAnimating) return;
+    if (_swipe is! _Dragging) return;
     final velocity = details.velocity.pixelsPerSecond.dx;
     final dismissed = 1 - _progress;
     if (BackSwipe.goesBack(dismissed: dismissed, velocity: velocity)) {
@@ -272,7 +299,7 @@ class _AppTransitionState extends State<_AppTransition>
   }
 
   void _onDragCancel() {
-    if (_tracking && !_finish.isAnimating) _cancel();
+    if (_swipe is _Dragging) _cancel();
   }
 
   // ---------- Android 系統的預測返回 ----------
@@ -291,12 +318,12 @@ class _AppTransitionState extends State<_AppTransition>
 
   @override
   void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
-    if (!_tracking || _finish.isAnimating) return;
+    if (_swipe is! _Dragging) return;
     _back.record(backEvent, MediaQuery.devicePixelRatioOf(context));
   }
 
   void _onBackTick(Duration _) {
-    if (!_route.isCurrent || _finish.isAnimating) return;
+    if (!_route.isCurrent || _swipe is! _Dragging) return;
     final progress = _back.progress;
     if (progress != null) {
       _route.handleUpdateBackGestureProgress(progress: 1 - progress);
@@ -306,14 +333,12 @@ class _AppTransitionState extends State<_AppTransition>
   // 返回與否由系統決定；這裡只照 Telegram 的時長送完或彈回。
   @override
   void handleCommitBackGesture() {
-    if (_tracking && !_finish.isAnimating) {
-      _completeWith(_back.pixelsPerSecond);
-    }
+    if (_swipe is _Dragging) _completeWith(_back.pixelsPerSecond);
   }
 
   @override
   void handleCancelBackGesture() {
-    if (_tracking && !_finish.isAnimating) _cancel();
+    if (_swipe is _Dragging) _cancel();
   }
 
   // ---------- 共用 ----------
@@ -321,7 +346,7 @@ class _AppTransitionState extends State<_AppTransition>
   double get _progress => widget.animation.value;
 
   void _begin() {
-    _tracking = true;
+    _swipe = const _Dragging();
     _back.clear();
     _route.handleStartBackGesture(progress: _progress);
   }
@@ -336,33 +361,58 @@ class _AppTransitionState extends State<_AppTransition>
 
   void _cancel() => _runFinish(to: 1, duration: BackSwipe.cancelDuration);
 
-  void _runFinish({required double to, required Duration duration}) {
-    if (_backTicker.isActive) _backTicker.stop();
+  void _runFinish({
+    required double to,
+    required Duration duration,
+    Curve curve = BackSwipe.curve,
+  }) {
+    _backTicker.stop();
     _back.clear();
-    _finishFrom = _progress;
-    _finishTo = to;
+    final swipe = _Settling(from: _progress, to: to, curve: curve);
+    _swipe = swipe;
+    // 已經被蓋住（例如推入新頁時 Navigator 取消了正在拖的手指）：路由不讓
+    // 手勢改進度，直接停在半途。
+    if (!_route.isCurrent) {
+      _settle(swipe);
+      return;
+    }
     _finish
       ..duration = duration
       ..forward(from: 0);
   }
 
   void _onFinishTick() {
-    if (!_route.isCurrent) return;
+    final swipe = _swipe;
+    if (swipe is! _Settling) return;
+    // 收尾途中有頁蓋上來：路由不讓手勢改進度，蓋上來的頁推完後這一頁不在
+    // 畫面上、計時器也跟著停；等它關掉再接著收，被蓋住時放開的返回就會在
+    // 那時才返回。現在就停在半途。
+    if (!_route.isCurrent) {
+      _finish.stop();
+      _settle(swipe);
+      return;
+    }
     _route.handleUpdateBackGestureProgress(
       progress: lerpDouble(
-        _finishFrom,
-        _finishTo,
-        BackSwipe.curve.transform(_finish.value),
+        swipe.from,
+        swipe.to,
+        swipe.curve.transform(_finish.value),
       )!,
     );
   }
 
   void _onFinishStatus(AnimationStatus status) {
-    if (status != AnimationStatus.completed) return;
-    _tracking = false;
+    final swipe = _swipe;
+    if (status == AnimationStatus.completed && swipe is _Settling) {
+      _settle(swipe);
+    }
+  }
+
+  // 收完時有頁蓋在上面，路由不讓手勢改進度，停在半途等補回整頁。
+  void _settle(_Settling swipe) {
     _back.clear();
-    _stranded = !_route.isCurrent;
-    if (_finishTo == 0) {
+    _swipe = _route.isCurrent ? const _Idle() : const _Stranded();
+    if (swipe.goesBack) {
       _route.handleCommitBackGesture();
     } else {
       _route.handleCancelBackGesture();
@@ -392,22 +442,25 @@ class _AppTransitionState extends State<_AppTransition>
         child: widget.child,
       ),
       builder: (context, child) {
-        // 手勢是整個 Navigator 的狀態，上下兩頁同時切到跟手的樣子。
+        // 手勢是整個 Navigator 的狀態，上下兩頁同時切到跟手的樣子；被手勢
+        // 拖過的那一趟，手勢結束後也照跟手的樣子走完（[_Following]）。
         final gesturing = _route.popGestureInProgress;
+        final topFollows = _top.follows(gesturing: gesturing);
+        final underFollows = _under.follows(gesturing: gesturing);
         final size = MediaQuery.sizeOf(context);
         final background = Theme.of(context).scaffoldBackgroundColor;
         // 關閉動畫時照樣包同一串元件、停在整頁，手勢開始時頁面不會被搬動。
-        if (still && !gesturing) {
+        if (still && !topFollows && !underFollows) {
           return const UnderPose().wrap(
             const TopPose().wrap(child!, size),
             background,
           );
         }
         if (_route.offstage) {
-          _offstageFrame = SchedulerBinding.instance.currentFrameTimeStamp;
+          _top.offstage(SchedulerBinding.instance.currentFrameTimeStamp);
         }
         final origin = TransitionOrigin.of(_route);
-        final top = gesturing
+        final top = topFollows
             ? TopPose.follow(
                 widget.transition,
                 widget.animation.value,
@@ -416,11 +469,11 @@ class _AppTransitionState extends State<_AppTransition>
               )
             : TopPose.of(
                 widget.transition,
-                trip: _top.of(widget.animation, offstageFrame: _offstageFrame),
+                trip: _top.of(widget.animation),
                 size: size,
                 origin: origin,
               );
-        final under = gesturing
+        final under = underFollows
             ? UnderPose.follow(
                 widget.transition,
                 widget.secondaryAnimation.value,
@@ -451,6 +504,43 @@ class _AppTransitionState extends State<_AppTransition>
   }
 }
 
+/// 這一頁的返回手勢走到哪個階段；放開後的收尾與被蓋住的停留都只屬於
+/// 這一頁，被蓋住本身（[ModalRoute.isCurrent]）會和跟手、收尾同時成立，在
+/// 進出階段時讀。
+sealed class _Swipe {
+  const _Swipe();
+}
+
+/// 沒在拖：頁面照路由的換頁動畫；在最上層、開完了、可以返回時，左緣與
+/// 系統的返回手勢可以開始。
+final class _Idle extends _Swipe {
+  const _Idle();
+}
+
+/// 跟著左緣右滑或系統的預測返回走；系統手勢由 `_backTicker` 每一格補進度。
+final class _Dragging extends _Swipe {
+  const _Dragging();
+}
+
+/// 放開後照 [BackSwipe] 的時長從 [from] 送到 [to]：0 是返回，1 是彈回；
+/// 停在半途後補回整頁也是這一段（等速）。途中再拖、系統再送都不接手；途中
+/// 有頁蓋上來就停在半途（[_Stranded]）。
+final class _Settling extends _Swipe {
+  const _Settling({required this.from, required this.to, required this.curve});
+
+  final double from;
+  final double to;
+  final Curve curve;
+
+  bool get goesBack => to == 0;
+}
+
+/// 收完時有新頁蓋在上面：不是最上層時 [ModalRoute] 不讓手勢改進度，路由
+/// 停在半途；回到最上層、上面沒有頁在換時補回整頁。
+final class _Stranded extends _Swipe {
+  const _Stranded();
+}
+
 /// 一趟轉場（開啟或返回）走到哪：[of] 回傳的 `time` 為這一趟的時間比例
 /// 0→1。中途反向時沿用原本那一趟（跟 [CurvedAnimation] 一樣），畫面不跳。
 ///
@@ -459,67 +549,134 @@ class _AppTransitionState extends State<_AppTransition>
 /// 那段時間之後的位置，看起來是點下去就掉幀。這裡讓第一、二幀都停在起點，
 /// 之後把剩下的時間照比例走完整段，最後一幀和路由同時到位（ADR 0018）。
 class _Trip {
-  AnimationStatus? _direction;
-
-  /// 這一趟第一幀的時間戳；null 是還沒畫到。
-  Duration? _firstFrame;
-
-  /// 第二幀時這一趟已經走掉的時間比例，之後照它把剩下的時間拉回整段。
-  double? _resume;
-
-  /// 這一趟從頭開始，照上面的方式起步；中途接手的（拖曳返回放開後、半途
-  /// 反向）照路由的時間走。
-  bool _paced = false;
+  /// 這一趟走到哪個階段（`docs/state-machines.md`「路由換頁」）。
+  _TripPhase _phase = const _NoTrip();
 
   void update(AnimationStatus status) {
-    if (status.isAnimating) {
-      if (_direction == null) {
-        _direction = status;
-        _firstFrame = null;
-        _resume = null;
-        _paced = true;
-      }
-    } else {
-      _direction = null;
-      _paced = false;
+    switch (_phase) {
+      case _ when !status.isAnimating:
+        _phase = const _NoTrip();
+      // 推入的第一幀新頁在 offstage（Hero 量位置），路由的動畫暫時是「已播
+      // 完」，這一趟從下一幀才看得到；照底下那頁同樣的方式從 offstage 那一幀
+      // 起算，兩頁才會同步。
+      case _NoTrip(:final offstageFrame):
+        _phase = _AtStart(
+          closing: status == AnimationStatus.reverse,
+          offstageFrame: offstageFrame,
+        );
+      case _Moving() || _Following():
     }
   }
 
-  /// [offstageFrame] 是這一頁最近一次在 offstage 的那一幀（只有剛推入的
-  /// 新頁有）。
-  ({bool closing, double time}) of(
-    Animation<double> animation, {
-    Duration? offstageFrame,
-  }) {
-    final closing = (_direction ?? animation.status) == AnimationStatus.reverse;
+  /// 這一頁在 offstage 的那一幀（推入的第一幀）；下一趟從這一幀起算。
+  void offstage(Duration frame) {
+    if (_phase is _NoTrip) _phase = _NoTrip(offstageFrame: frame);
+  }
+
+  /// 這一幀照跟手的樣子畫：Navigator 在手勢中，或這一趟被手勢拖過。手勢
+  /// 會改路由的進度，被拖過的路由手勢結束時常停在半途（被別的頁蓋住、或
+  /// 系統取消），這一趟剩下的部分換成換頁動畫的樣子會跳一下。
+  bool follows({required bool gesturing}) {
+    if (gesturing && _phase is _Moving) _phase = const _Following();
+    return gesturing || _phase is _Following;
+  }
+
+  TripTime of(Animation<double> animation) {
+    final closing = switch (_phase) {
+      _NoTrip() || _Following() => animation.status == AnimationStatus.reverse,
+      _Moving(:final closing) => closing,
+    };
     final time = closing ? 1 - animation.value : animation.value;
-    return (closing: closing, time: _pace(time, offstageFrame));
+    return (closing: closing, time: _pace(time));
   }
 
-  double _pace(double time, Duration? offstageFrame) {
-    if (!_paced) return time;
+  double _pace(double time) {
     final stamp = SchedulerBinding.instance.currentFrameTimeStamp;
-    final first = _firstFrame;
-    if (first == null) {
-      if (time > 0) {
-        // 推入的第一幀新頁在 offstage（Hero 量位置），路由的動畫暫時是
-        // 「已播完」，這一趟從第二幀才看得到；照底下那頁同樣的方式從這一幀
-        // 起算，兩頁才會同步。
-        if (offstageFrame != null && offstageFrame != stamp) {
-          _firstFrame = offstageFrame;
-          _resume = time;
-          return 0;
-        }
-        // 不是從起點開始的一趟不調整。
-        _paced = false;
+    switch (_phase) {
+      case _NoTrip() || _OnRouteClock() || _Following():
         return time;
-      }
-      _firstFrame = stamp;
-      return 0;
+      case _AtStart(:final closing, firstFrame: null, :final offstageFrame):
+        if (time > 0) {
+          if (offstageFrame != null && offstageFrame != stamp) {
+            _phase = _CatchingUp(
+              closing: closing,
+              firstFrame: offstageFrame,
+              resume: time,
+            );
+            return 0;
+          }
+          // 不是從起點開始的一趟不調整。
+          _phase = _OnRouteClock(closing: closing);
+          return time;
+        }
+        _phase = _AtStart(closing: closing, firstFrame: stamp);
+        return 0;
+      case _AtStart(:final closing, :final firstFrame?):
+        if (stamp == firstFrame) return 0;
+        _phase = _CatchingUp(
+          closing: closing,
+          firstFrame: firstFrame,
+          resume: time,
+        );
+        return _pace(time);
+      case _CatchingUp(:final firstFrame, :final resume):
+        if (stamp == firstFrame) return 0;
+        if (resume >= 1) return time;
+        return ((time - resume) / (1 - resume)).clamp(0.0, 1.0);
     }
-    if (stamp == first) return 0;
-    final resume = _resume ??= time;
-    if (resume >= 1) return time;
-    return ((time - resume) / (1 - resume)).clamp(0.0, 1.0);
   }
+}
+
+/// 一趟換頁走到哪個階段。
+sealed class _TripPhase {
+  const _TripPhase();
+}
+
+/// 路由沒在換頁：照路由的進度。[offstageFrame] 是這一幀新頁在 offstage
+/// （推入的第一幀），下一趟從它起算。
+final class _NoTrip extends _TripPhase {
+  const _NoTrip({this.offstageFrame});
+
+  final Duration? offstageFrame;
+}
+
+/// 路由正在換頁；[closing] 是這一趟一開始的方向，中途反向也沿用。
+sealed class _Moving extends _TripPhase {
+  const _Moving({required this.closing});
+
+  final bool closing;
+}
+
+/// 從頭開始的一趟停在起點：[firstFrame] 是第一幀的時間戳（null 是還沒
+/// 畫到），那一幀花掉的時間不算。推入時第一幀在 offstage（[offstageFrame]），
+/// 看得到的第一幀已經走了一段，就從 offstage 那一幀起算。
+final class _AtStart extends _Moving {
+  const _AtStart({required super.closing, this.firstFrame, this.offstageFrame});
+
+  final Duration? firstFrame;
+  final Duration? offstageFrame;
+}
+
+/// 第二幀起照剩下的時間走完整段：[resume] 是那時這一趟已經走掉的時間比例，
+/// 和路由同時到位。
+final class _CatchingUp extends _Moving {
+  const _CatchingUp({
+    required super.closing,
+    required this.firstFrame,
+    required this.resume,
+  });
+
+  final Duration firstFrame;
+  final double resume;
+}
+
+/// 不是從起點開始的一趟（中途接手）：照路由的時間。
+final class _OnRouteClock extends _Moving {
+  const _OnRouteClock({required super.closing});
+}
+
+/// 這一趟有一幀是跟著手勢畫的：剩下的部分也照跟手的樣子、和路由的進度成
+/// 正比，路由停下才結束。
+final class _Following extends _TripPhase {
+  const _Following();
 }
