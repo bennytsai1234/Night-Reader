@@ -114,6 +114,32 @@ void main() {
     });
   });
 
+  testWidgets(
+    'books sharing a cover that cannot be had each get their own night sky',
+    (tester) async {
+      await tester.runAsync(() async {
+        // 書源沒封面時常共用同一張預設圖的網址，那張載不到時每本照自己的書名畫。
+        const url = 'https://x.test/nocover.jpg';
+        final art = artwork();
+        final rain = await fileOf(art.resolve(url, '夜雨'));
+        final dawn = await fileOf(art.resolve(url, '天明'));
+        // 兩本同時在換、網址還沒試過也一樣，網址只抓一次。
+        const blank = 'https://x.test/blank.jpg';
+        final both = await Future.wait([
+          fileOf(art.resolve(blank, '星河')),
+          fileOf(art.resolve(blank, '晚鐘')),
+        ]);
+
+        expect(dawn.path, isNot(rain.path));
+        expect(dawn.path, (await fileOf(art.resolve(null, '天明'))).path);
+        expect(both[0].path, isNot(both[1].path));
+        expect(art.resolved(url, '夜雨'), rain.uri);
+        expect(art.resolved(url, '天明'), dawn.uri);
+        expect(downloads, [url, blank]);
+      });
+    },
+  );
+
   testWidgets('a cover from the web comes from the cover cache', (
     tester,
   ) async {

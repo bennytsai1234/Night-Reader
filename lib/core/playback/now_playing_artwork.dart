@@ -38,11 +38,15 @@ class NowPlayingArtwork {
   static const int defaultCoverWidth = 360;
   static const int defaultCoverHeight = 504;
 
-  /// 這次開 App 換過的封面；同一本書換章時直接用，不再找一次檔案。載不到
-  /// 的網路封面也記著用預設封面，不每次換章都重抓；連預設封面都寫不出來時
-  /// 不記，下次再試。
-  final Map<String, Future<Uri>> _resolving = {};
+  /// 這次開 App 換過的封面；同一本書換章時直接用，不再找一次檔案。封面的
+  /// 圖檔照網址記，預設封面照類別與書名記；連預設封面都寫不出來時不記，
+  /// 下次再試。
+  final Map<String, Future<Uri?>> _resolving = {};
   final Map<String, Uri> _resolved = {};
+
+  /// 這次開 App 載不到或不是圖的封面，不每次換章都重抓。書源沒封面時常
+  /// 共用同一張預設圖的網址，所以這裡只記網址，預設封面照每本的書名畫。
+  final Set<String> _unavailable = {};
 
   /// 網路封面和書架的封面（`CachedNetworkImageProvider`）用同一個磁碟快取：
   /// 看過的封面不再下載。
@@ -59,7 +63,12 @@ class NowPlayingArtwork {
     String? coverSource,
     String bookName, {
     BookSourceKind kind = BookSourceKind.novel,
-  }) => _resolved[_keyOf(coverSource, bookName, kind)];
+  }) {
+    final source = _usableSource(coverSource);
+    return source != null
+        ? _resolved[_coverKey(source)]
+        : _resolved[_defaultKey(bookName, kind)];
+  }
 
   /// 書的封面檔案。[coverSource] 是 null、空的或載不到時，是 [bookName] 的
   /// 預設封面，照 [kind] 畫那一類的變體。
@@ -67,14 +76,38 @@ class NowPlayingArtwork {
     String? coverSource,
     String bookName, {
     BookSourceKind kind = BookSourceKind.novel,
-  }) {
-    final key = _keyOf(coverSource, bookName, kind);
+  }) async {
+    final source = _usableSource(coverSource);
+    if (source != null) {
+      final cover = await _once(_coverKey(source), () => _coverUri(source));
+      if (cover != null) return cover;
+    }
+    final fallback = await _once(
+      _defaultKey(bookName, kind),
+      () async => (await _defaultCover(bookName, kind)).uri,
+    );
+    return fallback!;
+  }
+
+  /// 有內容、這次開 App 還沒判定載不到的封面來源；其他是 null。
+  String? _usableSource(String? coverSource) {
+    final source = coverSource?.trim() ?? '';
+    return source.isEmpty || _unavailable.contains(source) ? null : source;
+  }
+
+  static String _coverKey(String source) => 'cover\u0000$source';
+
+  static String _defaultKey(String bookName, BookSourceKind kind) =>
+      'default\u0000${kind.name}\u0000$bookName';
+
+  /// 同一個 [key] 同時只換一次，換到的記下來；[work] 出錯時不記，下次再試。
+  Future<Uri?> _once(String key, Future<Uri?> Function() work) {
     final done = _resolved[key];
-    if (done != null) return Future<Uri>.value(done);
+    if (done != null) return Future<Uri?>.value(done);
     return _resolving.putIfAbsent(key, () async {
       try {
-        final uri = await _resolve(coverSource, bookName, kind);
-        _resolved[key] = uri;
+        final uri = await work();
+        if (uri != null) _resolved[key] = uri;
         return uri;
       } finally {
         unawaited(_resolving.remove(key));
@@ -82,33 +115,16 @@ class NowPlayingArtwork {
     });
   }
 
-  /// 載不到的封面換成那一類的預設封面，所以有封面時也要分類別記。
-  static String _keyOf(
-    String? coverSource,
-    String bookName,
-    BookSourceKind kind,
-  ) {
-    final source = coverSource?.trim() ?? '';
-    return source.isEmpty
-        ? 'default\u0000${kind.name}\u0000$bookName'
-        : 'cover\u0000${kind.name}\u0000$source';
-  }
-
-  Future<Uri> _resolve(
-    String? coverSource,
-    String bookName,
-    BookSourceKind kind,
-  ) async {
-    final source = coverSource?.trim() ?? '';
-    if (source.isNotEmpty) {
-      try {
-        final file = await _coverFile(source);
-        if (file != null && await _isImage(file)) return file.uri;
-      } catch (error) {
-        AppLog.d('NowPlayingArtwork: cover unavailable, use default: $error');
-      }
+  /// [source] 換成解得開的圖檔；載不到或不是圖時記進 [_unavailable]，是 null。
+  Future<Uri?> _coverUri(String source) async {
+    try {
+      final file = await _coverFile(source);
+      if (file != null && await _isImage(file)) return file.uri;
+    } catch (error) {
+      AppLog.d('NowPlayingArtwork: cover unavailable, use default: $error');
     }
-    return (await _defaultCover(bookName, kind)).uri;
+    _unavailable.add(source);
+    return null;
   }
 
   Future<File?> _coverFile(String source) async {
@@ -155,7 +171,8 @@ class NowPlayingArtwork {
     final file = File(
       p.join(
         (await _directory()).path,
-        'night_sky_${kind.name}_${_hash(bookName)}.png',
+        // 預設封面 2026-11-19 換成月亮與山固定的天空，檔名跟著換，舊圖不再沿用。
+        'night_sky_v2_${kind.name}_${_hash(bookName)}.png',
       ),
     );
     if (await file.exists() && await file.length() > 0) return file;

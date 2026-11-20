@@ -53,6 +53,7 @@ import 'features/source_manager/source_check_job.dart';
 import 'shared/widgets/skeleton/skeleton_text.dart';
 import 'shared/navigation/root_navigator.dart';
 
+import 'package:night_reader/shared/shelf_trial.dart';
 import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 
 Future<bool> runBackgroundTask<T>({
@@ -168,6 +169,8 @@ Future<void> _startApp() async {
     _restoreWebViewUserAgent(getIt<SharedPreferences>());
     // 開 App 的骨架照上次量的標點位置畫長條。
     PunctuationInk.restore(getIt<SharedPreferences>());
+    // 試用開關（DESIGN.md 設計原則 6）：分頁列第一幀就照它畫。
+    ShelfTrial.restore(getIt<SharedPreferences>());
 
     runApp(
       MultiProvider(

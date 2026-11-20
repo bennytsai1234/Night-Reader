@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/shelf_trial.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 
 import '../../layout/readable_width.dart';
@@ -149,6 +150,39 @@ class FloatingTabBar extends StatefulWidget {
         .copyWith(bottom: systemBottom + AppGlass.tabBarBottomGap);
   }
 
+  /// 分頁列的寬度：和卡片左右切齊、扣掉右側搜尋鈕。試用「分頁列置中」時
+  /// 每個分頁 72 寬，放不下（很窄的分割視窗）就照切齊時的寬度（DESIGN.md
+  /// 設計原則 6）。
+  static double barWidthOf(
+    BuildContext context, {
+    required int count,
+    required bool search,
+  }) {
+    final inset = ReadableWidth.cardInsetOf(context);
+    final searchWidth = search ? AppGlass.tabBarHeight + AppGlass.tabBarGap : 0;
+    final full = math.max(
+      0.0,
+      MediaQuery.sizeOf(context).width - inset.left - inset.right - searchWidth,
+    );
+    if (!ShelfTrial.compactTabBar.value) return full;
+    return math.min(
+      full,
+      ShelfTrial.compactTabWidth * count + AppGlass.tabInnerInset * 2,
+    );
+  }
+
+  /// 搜尋鈕右緣離螢幕右邊多遠（收聽圓鈕疊在它正上方）。
+  static double searchRightOf(BuildContext context, {required int tabCount}) {
+    final side = ReadableWidth.cardInsetOf(context).right;
+    if (!ShelfTrial.compactTabBar.value) return side;
+    final group =
+        barWidthOf(context, count: tabCount, search: true) +
+        AppGlass.tabBarGap +
+        AppGlass.tabBarHeight;
+    final width = MediaQuery.sizeOf(context).width;
+    return math.max(side, (width - group) / 2);
+  }
+
   @override
   State<FloatingTabBar> createState() => _FloatingTabBarState();
 }
@@ -165,6 +199,20 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
   /// 要等主頁重建才跟上，拿它判斷有沒有跨格會漏掉跨過去又拖回來的那一下。
   int? _dragSelected;
 
+  @override
+  void initState() {
+    super.initState();
+    ShelfTrial.compactTabBar.addListener(_onTrialChanged);
+  }
+
+  @override
+  void dispose() {
+    ShelfTrial.compactTabBar.removeListener(_onTrialChanged);
+    super.dispose();
+  }
+
+  void _onTrialChanged() => setState(() {});
+
   double _pagePosition() {
     final controller = widget.controller;
     if (controller != null &&
@@ -178,13 +226,13 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
-    final width = MediaQuery.sizeOf(context).width;
-    final searchWidth = widget.onSearch == null
-        ? 0.0
-        : AppGlass.tabBarHeight + AppGlass.tabBarGap;
     // 分頁列加搜尋鈕的左右和清單的卡片切齊（平板上收在內容欄裡）。
     final side = ReadableWidth.cardInsetOf(context).left;
-    final barWidth = math.max(0.0, width - side * 2 - searchWidth);
+    final barWidth = FloatingTabBar.barWidthOf(
+      context,
+      count: widget.items.length,
+      search: widget.onSearch != null,
+    );
 
     final bar = Padding(
       padding: EdgeInsets.fromLTRB(
@@ -221,7 +269,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
                       shape: BoxShape.circle,
                       child: Icon(
                         Icons.search_rounded,
-                        size: 26,
+                        size: 24,
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
@@ -443,19 +491,24 @@ class _TabGlyph extends StatelessWidget {
   final Color color;
 
   @override
-  Widget build(BuildContext context) => Column(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      Icon(icon, size: 24, color: color),
-      const SizedBox(height: 2),
-      UiText(
-        label,
-        maxLines: 1,
-        style: AppTextStyles.micro.copyWith(
-          color: color,
-          fontWeight: FontWeight.w600,
+  // 系統字級很大時（例如 200%）圖示加字會比 44 高，整組等比縮小放進去，
+  // 不裁字。
+  Widget build(BuildContext context) => FittedBox(
+    fit: BoxFit.scaleDown,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 22, color: color),
+        const SizedBox(height: 2),
+        UiText(
+          label,
+          maxLines: 1,
+          style: AppTextStyles.micro.copyWith(
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-      ),
-    ],
+      ],
+    ),
   );
 }
