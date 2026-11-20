@@ -90,6 +90,44 @@ void main() {
     });
   }
 
+  // 換頁途中也可能在幀外建（同上）：推入後下一幀之前新頁在 offstage、這一
+  // 趟停在起點，之後是記下第一幀、追上路由的那幾段。
+  for (final transition in AppPageTransition.values) {
+    testWidgets('${transition.name}: rebuilding outside a frame while a page '
+        'opens', (tester) async {
+      await pumpApp(tester, transition);
+      void rebuildOutsideFrame() {
+        void mark(Element element) {
+          element.markNeedsBuild();
+          element.visitChildren(mark);
+        }
+
+        final binding = tester.binding;
+        expect(binding.schedulerPhase, SchedulerPhase.idle);
+        binding.rootElement!.visitChildren(mark);
+        binding.buildOwner!.buildScope(binding.rootElement!);
+      }
+
+      unawaited(
+        Navigator.push(
+          home,
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(body: Center(child: Text('新頁'))),
+          ),
+        ),
+      );
+      rebuildOutsideFrame();
+      expect(tester.takeException(), isNull);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 16));
+      rebuildOutsideFrame();
+      expect(tester.takeException(), isNull);
+      await tester.pumpAndSettle();
+      expect(find.text('新頁'), findsOneWidget);
+    });
+  }
+
   testWidgets('sliding pages move by whole physical pixels and the screen '
       'reader boxes follow', (tester) async {
     // 不整除的像素密度：一個實體像素不是整數個邏輯像素。
