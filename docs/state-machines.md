@@ -20,7 +20,7 @@
 | 閱讀器目錄面板 | `_built`、`_builtCovering`、`_open`、`_openedSinceClosed`、`_dragging`、`_dragAbandoned` | `_Phase`（收著、按在左緣、準備打開、打開、收起、拉著），收起與拉著帶這一趟打開過沒有 | 收著又被手指拖著；收著卻算打開中；準備打開卻沒有排好的滑出 | 4 件（見下方） | 3 件，審查另 3 件（見下方） | #467 |
 | 定格換場 | `_Phase` 加上 `_session`、`_settle`、`_hold`、`_progress.isAnimating` 拼出的三段（見下方） | `_Stage` 七段：沒在換場、拍「之前」、蓋著「之前」拍「之後」、拍好、換上「之前」、停一下、換場中；這一輪的圖、等待與參數收在 `_Round` | 沒有這一輪卻在拍；兩張圖拍好了卻沒有這一輪；停一下的計時器在換場中還掛著 | 1 件（見下方） | 1 件，另審查找到 1 件換結構弄出的（見下方） | #469 |
 | 紙 | `_settling`、`_breathTimer`、`_skeletonSweep`（`_sweep`、`_usingBreath` 留著） | `_BreathPlan`（照常、停著等、收住）；骨架由左而右照動畫方向算 | 收住了還排著呼吸的計時；骨架在淡掉卻還記著由左而右 | 0 件 | 0 件 | 待開 |
-| 分組清單的進場 | `_entering`（`bool?`）、`_entranceFinished`、`_revealed` | `_EntranceStage`：直接畫、還在進場、進場播完、已換成內容 | 不在進場卻算進場播完；換成內容了卻還在進場 | 沒有（見下方） | 沒有 | （待補） |
+| 分組清單的進場 | `_entering`（`bool?`）、`_entranceFinished`、`_revealed` | `_EntranceStage`：直接畫、還在進場、進場播完、已換成內容 | 不在進場卻算進場播完；換成內容了卻還在進場 | 沒有（見下方） | 沒有 | #473 |
 
 ## 各狀態機
 
