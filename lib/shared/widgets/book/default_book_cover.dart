@@ -194,14 +194,15 @@ class _SkyPainter extends CustomPainter {
       Paint()..color = light,
     );
 
+    // 漫畫的網點畫在雲與星星底下，碰到時被雲蓋住，不在雲上多一層亮點。
+    if (kind == BookSourceKind.comic) {
+      _paintHalftone(canvas, size, center, radius, day: day);
+    }
+
     if (day) {
       _paintClouds(canvas, size);
     } else {
       _paintStars(canvas, size);
-    }
-
-    if (kind == BookSourceKind.comic) {
-      _paintHalftone(canvas, size, center, radius, day: day);
     }
 
     // 遠山兩層，後面的淡、前面的深，每本書同一個輪廓；有聲書前面那層換成
