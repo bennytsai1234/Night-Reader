@@ -31,6 +31,7 @@ import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
+import 'package:night_reader/shared/widgets/glass/header_scroll_fade.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:night_reader/shared/widgets/lists/number_stepper_row.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
@@ -678,13 +679,16 @@ class _BookHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                DragOverflowText(
-                  child: UiText(
-                    context.zh(book.name),
-                    translate: false,
-                    maxLines: 2,
-                    style: AppTextStyles.titleMd.copyWith(
-                      color: scheme.onSurface,
+                // 頁首一直顯示書名：這一份捲進頁首前淡掉，不疊在一起。
+                HeaderScrollFade(
+                  child: DragOverflowText(
+                    child: UiText(
+                      context.zh(book.name),
+                      translate: false,
+                      maxLines: 2,
+                      style: AppTextStyles.titleMd.copyWith(
+                        color: scheme.onSurface,
+                      ),
                     ),
                   ),
                 ),
