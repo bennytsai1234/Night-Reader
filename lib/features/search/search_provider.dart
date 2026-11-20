@@ -318,7 +318,13 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     }
     _backgroundSearches.work.addListener(_slotChanged);
     _backgroundSearches.runs.addListener(_slotChanged);
-    if (_keywordDao.latestByTime case final history?) {
+    // 兩段都讀過才照它們畫：只有紀錄時，找書讀到後會插在上面把紀錄推下去，
+    // 紀錄是空的還會先畫「沒有紀錄」的空頁。
+    if ((_aiFindDao.latestNewestFirst, _keywordDao.latestByTime) case (
+      final finds?,
+      final history?,
+    )) {
+      _pastFinds = finds;
       _history = List.of(history);
       _historyLoaded = true;
     }
@@ -374,8 +380,10 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     await _bookshelfTracker.initialize(onChanged: notifyListeners);
     await _loadGroups();
     // 先讀過去的找書再讀紀錄：紀錄讀完才決定畫不畫空頁，兩段一起出現。
-    _pastFinds = await _aiFindDao.getNewestFirst();
-    await loadHistory();
+    final finds = await _aiFindDao.getNewestFirst();
+    final findsChanged = !_sameFinds(finds, _pastFinds);
+    _pastFinds = finds;
+    _setHistory(await _keywordDao.getByTime(), findsChanged: findsChanged);
     if (_disposed) return;
     aiFindRuns.addListener(_onFindRunsChanged);
   }
@@ -922,12 +930,15 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   // 搜尋歷史管理
   // ═══════════════════════════════════════════
 
-  /// 開 App 進場播完時讀一次搜尋紀錄：資料層記著最近一次讀到的
-  /// （[SearchKeywordDao.latestByTime]），搜尋頁推入的第一幀就照它畫。原本推入
-  /// 時畫「開始搜尋你想看的書吧」，進場播完才讀、一幀換成紀錄：2026-11-05
-  /// 手機上那一幀主執行緒 25.7ms，畫面上整區突然換掉。
+  /// 開 App 進場播完時讀一次過去的找書與搜尋紀錄：資料層記著最近一次讀到的
+  /// （[AiFindDao.latestNewestFirst]、[SearchKeywordDao.latestByTime]），搜尋頁
+  /// 推入的第一幀就照它畫。原本推入時畫「開始搜尋你想看的書吧」，進場播完才
+  /// 讀、一幀換成紀錄：2026-11-05 手機上那一幀主執行緒 25.7ms，畫面上整區突然
+  /// 換掉；只預讀紀錄時，過去的找書約半秒後才插在上面（2026-11-19 回報）。
   static Future<void> prefetchHistory() async {
     try {
+      final finds = getIt<AiFindDao>();
+      if (finds.latestNewestFirst == null) await finds.getNewestFirst();
       final dao = getIt<SearchKeywordDao>();
       if (dao.latestByTime == null) await dao.getByTime();
     } catch (error, stackTrace) {
@@ -939,7 +950,15 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   bool get historyLoaded => _historyLoaded;
   bool _historyLoaded = false;
 
-  void _setHistory(List<SearchKeyword> history) {
+  static bool _sameFinds(List<AiFindRecord> a, List<AiFindRecord> b) =>
+      a.length == b.length &&
+      [
+        for (var i = 0; i < a.length; i++)
+          a[i].id == b[i].id && a[i].description == b[i].description,
+      ].every((same) => same);
+
+  /// [findsChanged]：同一次讀的過去的找書和推入時畫的不同，紀錄沒變也要重建。
+  void _setHistory(List<SearchKeyword> history, {bool findsChanged = false}) {
     // 搜尋頁關了才讀完（送出搜尋後馬上放到背景、返回）。
     if (_disposed) return;
     final unchanged =
@@ -952,7 +971,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _history = history;
     _historyLoaded = true;
     // 和推入時畫的一樣就不重建。
-    if (!unchanged) notifyListeners();
+    if (!unchanged || findsChanged) notifyListeners();
   }
 
   Future<void> loadHistory() async {
