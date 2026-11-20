@@ -172,8 +172,8 @@ class NowPlayingArtwork {
     final file = File(
       p.join(
         (await _directory()).path,
-        // 預設封面的畫法改了檔名就換版本，舊圖不再沿用（v3：雲與星星固定）。
-        'night_sky_v3_${kind.name}_${_hash(bookName)}.png',
+        // 預設封面的畫法改了檔名就換版本，舊圖不再沿用（v4：星星照書名）。
+        'night_sky_v4_${kind.name}_${_hash(bookName)}.png',
       ),
     );
     if (await file.exists() && await file.length() > 0) return file;

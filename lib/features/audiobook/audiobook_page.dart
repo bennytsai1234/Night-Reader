@@ -655,7 +655,7 @@ class _BookHeader extends StatelessWidget {
             child: AspectRatio(
               aspectRatio: 5 / 7,
               // 沒有封面或載不到時畫有聲書的預設封面；書名用畫面上顯示的
-              // （繁簡轉換後），天空顏色與音量條才和書架、書籍詳情的同一本一樣。
+              // （繁簡轉換後），天空顏色、星星與音量條才和書架、書籍詳情的同一本一樣。
               child: switch (UnifiedCovers.coverOf(book)) {
                 final cover? when cover.trim().isNotEmpty => BookCoverWidget(
                   coverUrl: cover,

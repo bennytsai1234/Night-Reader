@@ -28,7 +28,8 @@ class BookCoverAmbience extends StatelessWidget {
   /// 詳情頁封面畫的網址；null 或空白時是預設封面。
   final String? coverUrl;
 
-  /// 預設封面用書名找書在書架上的位置（決定天空顏色）與有聲書的音量條。
+  /// 預設封面用書名找書在書架上的位置（決定天空顏色），也決定星星與有聲書
+  /// 的音量條。
   final String bookName;
 
   /// 書的類別，預設封面畫哪一種變體。

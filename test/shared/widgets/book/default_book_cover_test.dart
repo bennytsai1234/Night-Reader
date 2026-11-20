@@ -49,30 +49,50 @@ void main() {
     expect(await pixelsOf(tester, BookSourceKind.unsupported), novel);
   });
 
-  testWidgets('不在書架上的兩本小說畫同一片天：雲、星星不照書名放', (tester) async {
-    for (final brightness in Brightness.values) {
-      expect(
-        await pixelsOf(
-          tester,
-          BookSourceKind.novel,
-          bookName: '星河彼岸',
-          brightness: brightness,
-        ),
-        await pixelsOf(
-          tester,
-          BookSourceKind.novel,
-          bookName: '夜雨聽書',
-          brightness: brightness,
-        ),
-        reason: '$brightness',
-      );
-    }
+  testWidgets('不在書架上的兩本小說：白天同一片天（雲固定），夜空星星照書名', (tester) async {
+    Future<Uint8List> of(String name, Brightness brightness) => pixelsOf(
+      tester,
+      BookSourceKind.novel,
+      bookName: name,
+      brightness: brightness,
+    );
+    expect(
+      await of('星河彼岸', Brightness.light),
+      await of('夜雨聽書', Brightness.light),
+    );
+    expect(
+      await of('星河彼岸', Brightness.dark),
+      isNot(await of('夜雨聽書', Brightness.dark)),
+    );
   });
 
   testWidgets('有聲書的音量條照書名', (tester) async {
+    // 白天的天空、太陽與雲每本一樣，兩張圖不同只會是音量條。
     expect(
-      await pixelsOf(tester, BookSourceKind.audio, bookName: '星河彼岸'),
-      isNot(await pixelsOf(tester, BookSourceKind.audio, bookName: '夜雨聽書')),
+      await pixelsOf(
+        tester,
+        BookSourceKind.audio,
+        bookName: '星河彼岸',
+        brightness: Brightness.light,
+      ),
+      isNot(
+        await pixelsOf(
+          tester,
+          BookSourceKind.audio,
+          bookName: '夜雨聽書',
+          brightness: Brightness.light,
+        ),
+      ),
+    );
+  });
+
+  testWidgets('夜空每本都有星星：抽到月亮旁邊的位置會重抽', (tester) async {
+    // 這兩個書名原本抽到的六個位置都落在月亮旁邊，畫成同一片沒有星星的夜空。
+    expect(
+      await pixelsOf(tester, BookSourceKind.novel, bookName: '夜讀第1001卷'),
+      isNot(
+        await pixelsOf(tester, BookSourceKind.novel, bookName: '夜讀第14355卷'),
+      ),
     );
   });
 
