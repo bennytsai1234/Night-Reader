@@ -22,6 +22,7 @@
 | 紙 | `_settling`、`_breathTimer`、`_skeletonSweep`（`_sweep`、`_usingBreath` 留著） | `_BreathPlan`（照常、停著等、收住）；骨架由左而右照動畫方向算 | 收住了還排著呼吸的計時；骨架在淡掉卻還記著由左而右 | 0 件 | 0 件 | 待開 |
 | 分組清單的進場 | `_entering`（`bool?`）、`_entranceFinished`、`_revealed` | `_EntranceStage`：直接畫、還在進場、進場播完、已換成內容 | 不在進場卻算進場播完；換成內容了卻還在進場 | 沒有（見下方） | 沒有 | #473 |
 | 路由換頁 | 返回手勢 `_tracking`、`_stranded`、`_finish.isAnimating`、`_backTicker.isActive`；一趟換頁 `_direction`、`_paced`、`_firstFrame`、`_resume`（見下方） | 返回手勢 `_Swipe`（沒在拖、跟手、收尾、被蓋住停在半途）；一趟換頁 `_TripPhase`（沒在換頁、停在起點、追上、照路由的時間、跟手） | 收尾中又開始拖；被蓋住了還在收尾；被手勢拖過的一趟中途換成換頁動畫的樣子 | 1 件（見下方） | 3 件，合併前審查另 2 件（見下方） | #472 |
+| 進場 | `_breathScheduled`、`_breathSettled`、`_revealStarted`（另有幾個 `Completer`、`_breathing` 通知與 `LaunchSkeleton._passThrough` 留著，見下方） | 兩條線：骨架的 `_Timeline`（底色、長出、長完、呼吸、收住中、收住了）與書架換成內容的 `_Reveal`（還沒、等收住、換場中、結束） | 長完了卻還能要求呼吸前準備；收住了卻還沒長完；換場結束了卻還沒開始 | 2 件（見下方） | 沒有，另審查找到 3 處換結構弄出的（見下方） | #474 |
 
 ## 各狀態機
 
@@ -1116,3 +1117,75 @@ Codex 審查逐入口對照新舊，沒有找到行為改變；找到的三處�
 | `_offstageFrame` 留在頁面上、從不清 | 記在 `_NoTrip.offstageFrame`，下一趟開始時接手 |
 
 `_backTicker`（系統手勢逐格補進度）照舊在跟手時跑、收尾時停，沒有另外的旗標。讀者看得到的差別只有上面五件：不再跳、對話框關掉後回到整頁、被蓋住時不自己返回、補回途中被移除後換頁照常。手勢途中推入的那頁現在照跟手的樣子推完（進度和時間成正比），改前是放開時跳一下、換成換頁動畫的曲線；兩種都只在程式剛好在手勢途中推入頁面時看得到，維持現在的做法，不另外做候選。
+
+### 進場
+
+`lib/shared/widgets/skeleton/launch_entrance.dart`（ADR 0025、0031、0035）：開 App 第一幀之後、到書架骨架完整換成內容為止。`LaunchEntranceMotion` 記進場走到哪，書架的骨架切換（`SkeletonSwitcher`）、頁首與分頁列的 `LaunchSkeleton`、骨架呼吸（`Skeleton`）讀它。
+
+**改前**（2026-11-20，`beta` `4057c8ff`）：
+
+| 欄位 | 意思 | 誰設 |
+|---|---|---|
+| `_controller`（長出的動畫） | 骨架長出的進度 | 準備工作做完、停 idle 後開始 |
+| `_breathScheduled` | 長完那一格畫完了：之後才到的書架照呼吸收住後準備 | 長完那一格畫完；減少動態時一開始就設 |
+| `_preparationStart`、`_preparationDone`（`Completer`） | 書架要在呼吸前準備、準備做完 | 書架要求、長完那一格畫完時開始、書架做完或放棄 |
+| `_breathing`（`ValueNotifier<bool>`） | 開始呼吸了，骨架聽它 | 長完停過 idle |
+| `_pauseOver`（`Completer`） | 呼吸停過一口，可以收住 | 開始呼吸後 `pause` |
+| `_breathSettling`、`_breathSettled` | 收住的那一次、收住完、畫面靜止了 | 書架要換場或要在收住後準備時 |
+| `_revealStarted` | 書架第一次換成內容已經開始 | `reveal` 或 `revealNow` |
+| `_finished`（`Completer`） | 整段進場結束 | 換場播完或 `revealNow` |
+| `LaunchSkeleton._passThrough` | 建立時進場已經換成真的（或不在進場底下），一直直接畫 | 第一次 `didChangeDependencies` |
+
+骨架走到哪靠 `_controller` 的狀態、`_breathScheduled`、`_breathing.value`、`_pauseOver`、`_breathSettled` 依序拼；書架換到哪靠 `_revealStarted` 與 `_finished`。兩條線同時在走：書架可以在骨架長出時就要換場（等收住），也可以在骨架呼吸時才拿到資料。
+
+**歷史上因此出錯的**（`git log -G'_revealStarted|_breathScheduled|_breathSettled|_passThrough|_preparationStart|_pauseOver'` 找到 #80、#108、#116、#126、#141，打開 diff 看）：
+
+- #141 審查：系統要求減少動態、書架資料晚到時，進場永遠停在骨架。原因是減少動態的那一支沒把 `_breathScheduled` 設起來，書架照「長完前」要求呼吸前準備，等一個不會來的開始。
+- #141 審查：拍定格畫面拍到一半（頁首暫時換成真的）時重新載入，頁首與分頁列停在真的樣子。原因是 `_revealed` 換過、沒換回，`capture` 結束時沒看。
+
+查過不算：#126 審查「準備工作拋錯時永遠停在底色」是例外沒接住；「長完到呼吸的 0.1 秒從長完通知就開始算」是時間點，和旗標無關。
+
+**階段表**（讀者看到的，照 ADR 0025、0031、0035 與 `docs/design/motion.md`「開 App」）。骨架這一條：
+
+| 階段 | 讀者看到什麼 | 可以走到 | 現在一樣嗎 |
+|---|---|---|---|
+| 底色 | 第一幀只畫底色，和系統啟動畫面一樣；等開 App 的準備工作、清記憶體、停 idle | 長出；呼吸（減少動態：骨架直接到位） | 一樣 |
+| 長出 | 整個畫面照骨架換場的方式由左而右長出骨架 0.6 秒，不呼吸、長到最深；書架資料在這時到的，最早在長完的通知時要求呼吸前準備 | 長完（長完那一格畫完） | 一樣 |
+| 長完 | 骨架靜止在最深；書架資料已經到了就在底下建好、等封面、拍好兩張定格畫面，清記憶體，再停 idle | 呼吸 | 一樣 |
+| 呼吸 | 由左而右呼吸一口（0.6 秒一輪），呼吸時底下不做事 | 收住中（停滿半輪，而且書架要換場或要在收住後準備） | 一樣 |
+| 收住中 | 每個位置把這一口呼完、停在最深 | 收住了（最後一個位置停好的那一格畫完） | 一樣 |
+| 收住了 | 骨架靜止在最深；書架在這時才準備的話在靜止的畫面上建、拍圖 | （不再換） | 一樣 |
+
+書架換成內容這一條：
+
+| 階段 | 讀者看到什麼 | 可以走到 | 現在一樣嗎 |
+|---|---|---|---|
+| 還沒 | 頁首按鈕、標題、分頁列與書架都是骨架；呼吸前拍定格畫面的那幾格，底下的書架、頁首與分頁列暫時換成真的，螢幕上蓋著「之前」那張圖，看起來還是骨架 | 等收住（書架要換場）；換場中（書架一開始就是內容：按鈕直接到位，這一下就是換場） | 一樣 |
+| 等收住 | 同上，骨架照上一張表走 | 換場中（骨架收住了） | 一樣 |
+| 換場中 | 從開始處理定格換場起：呼吸前拍好的，換上「之前」那張就開始；還沒拍的（書架晚到）這時才拍、清記憶體、停 idle；整個主頁面照兩張圖由左而右換過去 0.6 秒（`SnapshotSweep`）。減少動態時直接換好 | 結束（播完、按下、畫面大小變了；放開收住的骨架之後才算） | 一樣 |
+| 結束 | 真的畫面；背景工作從這之後才開始；之後才建的骨架照一般的節奏呼吸 | （不再換；書架之後重新載入只換書架） | 一樣 |
+
+**不收進階段的**：
+
+- `_preparationStart`、`_preparationDone`：書架要求的「呼吸前準備」是另一件事，和長出、長完同時成立（書架在長出時要求，長完那一格畫完才開始），是等待用的 `Completer`。`preparing` 照它們算。
+- `_pauseOver`：呼吸停滿半輪，和呼吸同時成立（呼吸中的一個時間點），是收住要等的 `Completer`。
+- `_breathing`：骨架呼吸聽的通知，照骨架那一條的階段換，不另外記。
+- `_finished`：給 `finished` 等的 `Completer`，照書架那一條結束時完成。
+- `_revealed`：頁首與分頁列換成真的，拍定格畫面時會暫時換成真的再換回，和兩條線都不是同一件事。
+- `_disposed`：放掉了，任何階段都可能。
+- 書架骨架切換（`SkeletonSwitcher`）的 `_resting`、`_snapshotting`、`_reveal`：`_resting` 是它這一次等呼吸前準備或收住的 `Future`，`_snapshotting` 是它交給進場的定格換場（同一次進場共用的那一個，每一輪拍圖與播放由定格換場自己記），`_reveal` 是這一輪等封面，等完後留著給已經建好的內容用。等待回來比它是不是同一個；三個會同時成立（書架早到、等過封面、拍好圖之後等收住時都在）。它們等的階段就是上面兩張表，不另外收成一個狀態。
+- `LaunchSkeleton._passThrough`：建立時定下要不要畫骨架，之後不變；拍定格畫面時頁首暫時換成真的，這時才建的也一直直接畫。不是階段。
+
+**查過、沒修的**：減少動態、而且書架的骨架切換建立時就已經是內容時，`revealNow` 在建畫面途中把已經建好的頁首換成真的，除錯版報「建畫面途中要求重建」（改前改後都有，Codex 審查重現）。正式版是不是同一輪就重建沒有驗證；要避開得讓頁首第一次建就讀到對的樣子，或把通知延到下一格（頁首會多一格骨架）。開 App 時書架的資料讀取還沒回來，第一幀的骨架切換一定還在載入，碰不到，留著。
+
+**改後**：
+
+| 改前 | 改後 |
+|---|---|
+| `_controller` 的狀態、`_breathScheduled`、`_breathing.value`、`_breathSettled` 依序拼 | `_Timeline`：底色、長出、長完、呼吸、收住中、收住了；`requestPreparation` 看是不是還沒長完，`breathSettled` 看是不是收住了 |
+| `_revealStarted` 與 `_finished.isCompleted` | `_Reveal`：還沒、等收住、換場中、結束；`revealStarted`、`isFinished` 照它 |
+| 減少動態、長完停過 idle 各自設 `_breathScheduled` 與 `_breathing` | 都經過 `_breathe()`，換到呼吸並通知骨架 |
+
+對外的 `LaunchEntranceMotion`（`revealStarted`、`breathSettled`、`preparing`、`isFinished`、`requestPreparation`、`capture`、`reveal`、`revealNow`）不變；讀者看到的都一樣。
+
+換結構時自己弄出、合併前修掉的（Codex 審查找到）：拿掉 `LaunchSkeleton._passThrough` 改看 `_motion` 時，拍定格畫面途中才建、之後被搬到別處重掛的按鈕會變回骨架、按不到，`_passThrough` 留回去；`revealNow` 通知頁首時還讀到「還沒換」，`_finish` 放開骨架時已經讀到「結束」，兩處都改回改前的先後。
