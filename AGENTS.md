@@ -56,6 +56,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - **新 worktree 的 sqlite3**：公司網路會改掉 sqlite3 套件下載的 `sqlite3.dll`，雜湊核對不過就建不起來。從主資料夾開 worktree 時，`.githooks/post-checkout` 會把主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-*\` 裡核對過的最新一份複製過去；建置仍報 sqlite3 雜湊不符時，手動複製同一個檔到 worktree 的同一個位置。
 - 碰到這些情況先讀對應的文件：
   - 判斷掉幀是誰造成的、某件工作佔不佔主執行緒：`docs/agents/main-thread.md`
+  - 幾個旗標互相牽動、要改成狀態機：`docs/state-machines.md`「做法」，做完在那裡加一列
   - 連手機、拿崩潰日誌或書源、在手機上量效能：`docs/agents/phone.md`
   - 重拍網站畫面或短片、改 README 卡片：`docs/agents/website.md`
   - 用真的書源實跑 AI 修復、回報實跑結果：`docs/agents/ai-repair-runs.md`
