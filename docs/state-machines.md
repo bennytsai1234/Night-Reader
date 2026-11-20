@@ -22,7 +22,7 @@
 | 紙 | `_settling`、`_breathTimer`、`_skeletonSweep`（`_sweep`、`_usingBreath` 留著） | `_BreathPlan`（照常、停著等、收住）；骨架由左而右照動畫方向算 | 收住了還排著呼吸的計時；骨架在淡掉卻還記著由左而右 | 0 件 | 0 件 | 待開 |
 | 分組清單的進場 | `_entering`（`bool?`）、`_entranceFinished`、`_revealed` | `_EntranceStage`：直接畫、還在進場、進場播完、已換成內容 | 不在進場卻算進場播完；換成內容了卻還在進場 | 沒有（見下方） | 沒有 | #473 |
 | 路由換頁 | 返回手勢 `_tracking`、`_stranded`、`_finish.isAnimating`、`_backTicker.isActive`；一趟換頁 `_direction`、`_paced`、`_firstFrame`、`_resume`（見下方） | 返回手勢 `_Swipe`（沒在拖、跟手、收尾、被蓋住停在半途）；一趟換頁 `_TripPhase`（沒在換頁、停在起點、追上、照路由的時間、跟手） | 收尾中又開始拖；被蓋住了還在收尾；被手勢拖過的一趟中途換成換頁動畫的樣子 | 1 件（見下方） | 3 件，合併前審查另 2 件（見下方） | #472 |
-| 進場 | `_breathScheduled`、`_breathSettled`、`_revealStarted`（另有幾個 `Completer`、`_breathing` 通知與 `LaunchSkeleton._passThrough` 留著，見下方） | 兩條線：骨架的 `_Timeline`（底色、長出、長完、呼吸、收住中、收住了）與書架換成內容的 `_Reveal`（還沒、等收住、換場中、結束） | 長完了卻還能要求呼吸前準備；收住了卻還沒長完；換場結束了卻還沒開始 | 2 件（見下方） | 沒有 | （待補） |
+| 進場 | `_breathScheduled`、`_breathSettled`、`_revealStarted`（另有幾個 `Completer`、`_breathing` 通知與 `LaunchSkeleton._passThrough` 留著，見下方） | 兩條線：骨架的 `_Timeline`（底色、長出、長完、呼吸、收住中、收住了）與書架換成內容的 `_Reveal`（還沒、等收住、換場中、結束） | 長完了卻還能要求呼吸前準備；收住了卻還沒長完；換場結束了卻還沒開始 | 2 件（見下方） | 沒有，另審查找到 3 處換結構弄出的（見下方） | #474 |
 
 ## 各狀態機
 
