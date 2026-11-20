@@ -290,7 +290,7 @@ void _runPostLaunchTasks() {
   unawaited(_cleanupLegacyCustomFontArtifacts());
   unawaited(_pruneStoredBooks());
   unawaited(PunctuationInk.onLaunchSettled());
-  // 進搜尋頁的第一幀就畫得出搜尋紀錄。
+  // 進搜尋頁的第一幀就畫得出過去的找書與搜尋紀錄。
   unawaited(SearchProvider.prefetchHistory());
   // 上次被收掉的背景工作：收掉留下的通知，暫停的工作讀回來（ADR 0058）。
   BackgroundWork.instance.clearLeftover();
