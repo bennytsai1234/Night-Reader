@@ -9,7 +9,13 @@ import '../../theme/app_tokens.dart';
 import '../text/ui_text.dart';
 import 'swipe_actions.dart';
 
-/// Telegram 式分組清單的一組：上方組標題、圓角卡片、下方附註。
+/// 分組清單的一組：圓角卡片，可在上方帶一行段落標題。
+///
+/// 卡片外不放小字（ADR 0076）：只給一組卡片取名的標籤不寫；本身是資料的
+/// （書名、版本號、結果分類）放進卡片當第一列（[GroupedRow.heading]）；
+/// 說明收成一列（`GroupedHelpRow`），點了開面板；動作是卡片的最後一列。
+/// [header] 只給說明文件（隱私說明、權限）的段落標題用，夾在兩張卡中間，
+/// 上下空白一樣。
 ///
 /// 列與列之間自動插入髮絲分隔線；有任一列（[GroupedRowLike]，可包在
 /// [SwipeActions]、[KeyedSubtree] 或單子元件的外框內）帶列首圖示時，分隔線
@@ -18,25 +24,14 @@ class GroupedSection extends StatelessWidget {
   const GroupedSection({
     super.key,
     this.header,
-    this.headerTrailing,
-    this.footer,
     required this.children,
     this.separatorIndent,
     this.margin,
     this.topGap = AppGrouped.sectionGap,
-    this.translateHeader = true,
   });
 
+  /// 說明文件的段落標題（只在隱私說明、權限這類點進去讀的文件頁用）。
   final String? header;
-
-  /// 組標題是書名這類資料時給 false，不跟介面語言轉換（ADR 0066）。
-  final bool translateHeader;
-
-  /// 組標題右側的動作（例如「全部清除」）。
-  final Widget? headerTrailing;
-
-  /// 卡片下方的附註，只放狀態或數值（例如最近更新時間），不放功能說明（ADR 0009）。
-  final String? footer;
   final List<Widget> children;
 
   /// 覆寫分隔線左縮排（列首不是 [GroupedIconTile] 寬度時使用）。
@@ -55,33 +50,25 @@ class GroupedSection extends StatelessWidget {
           ? AppGrouped.separatorIndentWithIcon
           : AppGrouped.rowPadding);
 
-  /// 同一組換上 [children] 與 [headerTrailing]（進場把列與組標題右側的按鈕
-  /// 各包一層排隊時用），其他設定照舊。包了一層的列看不出有沒有列首圖示，
-  /// 分隔線縮排先照原本的列算好。
-  GroupedSection withRows(List<Widget> children, {Widget? headerTrailing}) =>
-      GroupedSection(
-        key: key,
-        header: header,
-        headerTrailing: headerTrailing,
-        footer: footer,
-        separatorIndent: _indent,
-        margin: margin,
-        topGap: topGap,
-        translateHeader: translateHeader,
-        children: children,
-      );
+  /// 同一組換上 [children]（進場把列各包一層排隊時用），其他設定照舊。包了
+  /// 一層的列看不出有沒有列首圖示，分隔線縮排先照原本的列算好。
+  GroupedSection withRows(List<Widget> children) => GroupedSection(
+    key: key,
+    header: header,
+    separatorIndent: _indent,
+    margin: margin,
+    topGap: topGap,
+    children: children,
+  );
 
   /// 同一組換上 [gap] 當上方間距：清單把第一組換成 0，頁首到第一組的距離
   /// 只由清單給（[GroupedListView.topOf]）。
   GroupedSection withTopGap(double gap) => GroupedSection(
     key: key,
     header: header,
-    headerTrailing: headerTrailing,
-    footer: footer,
     separatorIndent: separatorIndent,
     margin: margin,
     topGap: gap,
-    translateHeader: translateHeader,
     children: children,
   );
 
@@ -103,28 +90,19 @@ class GroupedSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (header != null || headerTrailing != null)
+          // 段落標題夾在兩張卡中間，上下一樣：上面是這一組的 [topGap]，
+          // 下面同一段。
+          if (header case final header?)
             Padding(
               padding: effectiveMargin.add(
                 const EdgeInsets.fromLTRB(
                   AppGrouped.rowPadding,
                   0,
                   AppGrouped.rowPadding,
-                  AppSpacing.sm,
+                  AppGrouped.sectionGap,
                 ),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: GroupedSectionHeader(
-                      header ?? '',
-                      translate: translateHeader,
-                    ),
-                  ),
-                  ?headerTrailing,
-                ],
-              ),
+              child: GroupedSectionHeader(header),
             ),
           Padding(
             padding: effectiveMargin,
@@ -140,21 +118,6 @@ class GroupedSection extends StatelessWidget {
               ),
             ),
           ),
-          if (footer case final footer?)
-            Padding(
-              padding: effectiveMargin.add(
-                const EdgeInsets.fromLTRB(
-                  AppGrouped.rowPadding,
-                  AppSpacing.sm,
-                  AppGrouped.rowPadding,
-                  0,
-                ),
-              ),
-              child: UiText(
-                footer,
-                style: AppTextStyles.bodySm.copyWith(color: chrome.sectionText),
-              ),
-            ),
         ],
       ),
     );
@@ -249,14 +212,11 @@ bool groupedRowHasLeading(Widget widget) => switch (widget) {
   _ => false,
 };
 
-/// 組標題文字；也可單獨用在非卡片內容（例如格狀選項）上方。
+/// 說明文件的段落標題文字（[GroupedSection.header]）。
 class GroupedSectionHeader extends StatelessWidget {
-  const GroupedSectionHeader(this.text, {super.key, this.translate = true});
+  const GroupedSectionHeader(this.text, {super.key});
 
   final String text;
-
-  /// 組標題是書名這類資料時給 false，不跟介面語言轉換（ADR 0066）。
-  final bool translate;
 
   /// 組標題的字樣；骨架照同一份字樣量組標題的高度。
   static TextStyle textStyle(BuildContext context) =>
@@ -269,7 +229,7 @@ class GroupedSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       header: true,
-      child: UiText(text, translate: translate, style: textStyle(context)),
+      child: UiText(text, style: textStyle(context)),
     );
   }
 }

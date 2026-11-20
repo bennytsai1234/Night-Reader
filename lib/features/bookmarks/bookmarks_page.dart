@@ -344,11 +344,14 @@ class _BookmarksPageState extends State<BookmarksPage> {
         children: [
           for (final group in _groups(_items, _bookmarkEntry))
             GroupedSection(
-              translateHeader: false,
-              header: context.zh(
-                BookSourceKind.splitRecordName(group.first.bookName).name,
-              ),
               children: [
+                GroupedRow(
+                  title: context.zh(
+                    BookSourceKind.splitRecordName(group.first.bookName).name,
+                  ),
+                  heading: true,
+                  translateTitle: false,
+                ),
                 for (final bookmark in group)
                   SwipeActions(
                     key: ValueKey(bookmark.id),
@@ -397,11 +400,14 @@ class _BookmarksPageState extends State<BookmarksPage> {
         children: [
           for (final group in _groups(_highlights, _highlightEntry))
             GroupedSection(
-              translateHeader: false,
-              header: context.zh(
-                BookSourceKind.splitRecordName(group.first.bookName).name,
-              ),
               children: [
+                GroupedRow(
+                  title: context.zh(
+                    BookSourceKind.splitRecordName(group.first.bookName).name,
+                  ),
+                  heading: true,
+                  translateTitle: false,
+                ),
                 for (final highlight in group)
                   SwipeActions(
                     key: ValueKey(highlight.id),

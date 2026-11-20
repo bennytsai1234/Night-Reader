@@ -240,6 +240,6 @@ void main() {
       ),
     );
     expect(find.text(converted), findsNothing);
-    expect(find.text('替换结果'), findsOneWidget, reason: '組標題照介面語言');
+    expect(find.text('测试原文'), findsOneWidget, reason: '欄位名照介面語言');
   });
 }

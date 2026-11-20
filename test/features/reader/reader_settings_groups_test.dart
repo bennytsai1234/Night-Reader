@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_style.dart';
@@ -106,23 +107,26 @@ void main() {
     expect(notifications, 1);
   });
 
-  testWidgets('reset button is disabled at defaults and restores values', (
+  testWidgets('the reset row is greyed at defaults and restores values', (
     tester,
   ) async {
     final settings = await pumpSection(tester);
-    TextButton resetButton() =>
-        tester.widget<TextButton>(find.widgetWithText(TextButton, '恢復預設'));
-    expect(resetButton().onPressed, isNull);
+    // 「恢復預設」是卡片最後一列（ADR 0076）。
+    GroupedRow resetRow() =>
+        tester.widget<GroupedRow>(find.widgetWithText(GroupedRow, '恢復預設'));
+    expect(resetRow().enabled, isFalse);
 
     await tester.tap(find.byIcon(Icons.add_rounded).first);
     await tester.pump();
-    expect(resetButton().onPressed, isNotNull);
+    expect(resetRow().enabled, isTrue);
 
-    // 延遲提交尚未觸發前重設，待提交的步進必須被丟棄。
-    await tester.tap(find.widgetWithText(TextButton, '恢復預設'));
+    // 延遲提交尚未觸發前重設，待提交的步進必須被丟棄。卡片最後一列可能在
+    // 畫面外，先捲進來。
+    await tester.ensureVisible(find.widgetWithText(GroupedRow, '恢復預設'));
+    await tester.tap(find.widgetWithText(GroupedRow, '恢復預設'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(settings.fontSize, ReaderPrefsSnapshot.defaults().fontSize);
-    expect(resetButton().onPressed, isNull);
+    expect(resetRow().enabled, isFalse);
   });
 
   test('menu sheet theme follows menu palette colors', () {

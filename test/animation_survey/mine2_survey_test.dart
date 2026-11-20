@@ -51,22 +51,17 @@ Future<void> _tapInList(WidgetTester tester, String text) =>
 Future<void> _tapTop(WidgetTester tester, String text) =>
     tester.tap(find.text(text).last);
 
-/// 按某個分組標題（排版、版面、點擊區域）右上角的「恢復預設」。清單是懶建的，
-/// 標題捲到看得到，按鈕在它所屬的那一組裡找，不靠全畫面第幾個。
-Future<void> _tapResetOf(WidgetTester tester, String header) async {
-  await _show(tester, _listText(header));
-  final section = find.ancestor(
-    of: _listText(header),
-    matching: find.byType(GroupedSection),
+/// 按某張卡片最後一列的「恢復預設」（ADR 0076）：用卡片裡的 [anchor]（某一列
+/// 的字或九宮格）找到那張卡片。清單是懶建的，先把那一列捲到看得到，再把
+/// 卡片最後一列捲進來按，不靠全畫面第幾個。
+Future<void> _tapResetOf(WidgetTester tester, Finder anchor) async {
+  await _show(tester, anchor);
+  final reset = find.descendant(
+    of: find.ancestor(of: anchor, matching: find.byType(GroupedSection)).first,
+    matching: find.widgetWithText(GroupedRow, '恢復預設'),
   );
-  await tester.tap(
-    find
-        .descendant(
-          of: section,
-          matching: find.widgetWithText(TextButton, '恢復預設'),
-        )
-        .first,
-  );
+  await _show(tester, reset);
+  await tester.tap(reset.first);
 }
 
 Finder _listText(String text) =>
@@ -139,13 +134,13 @@ void main() {
         await step('段距：加', () => _tapPlus(tester, '段距'));
         await step('章節間距：加', () => _tapPlus(tester, '章節間距'));
         await step('首行縮排：加', () => _tapPlus(tester, '首行縮排'));
-        await step('排版：恢復預設', () => _tapResetOf(tester, '排版'));
+        await step('排版：恢復預設', () => _tapResetOf(tester, _listText('字號')));
         await step('每行字數：加', () => _tapPlus(tester, '每行字數'));
         await step('左右對齊：切換', () => _tapInList(tester, '左右對齊'));
         await step('上邊距：加', () => _tapPlus(tester, '上邊距'));
         await step('下邊距：加', () => _tapPlus(tester, '下邊距'));
         await step('頁尾位置：加', () => _tapPlus(tester, '頁尾位置'));
-        await step('版面：恢復預設', () => _tapResetOf(tester, '版面'));
+        await step('版面：恢復預設', () => _tapResetOf(tester, _listText('每行字數')));
         await step('隱藏系統狀態列：切換', () => _tapInList(tester, '隱藏系統狀態列'));
         // 頁首左側：九種資訊項目各選一次，最後選回不顯示。
         for (final item in const [
@@ -181,7 +176,10 @@ void main() {
             () => _tapTop(tester, action),
           );
         }
-        await step('點擊區域：恢復預設', () => _tapResetOf(tester, '點擊區域'));
+        await step(
+          '點擊區域：恢復預設',
+          () => _tapResetOf(tester, find.byType(GridView).last),
+        );
         await step('音量鍵翻頁：切換', () => _tapInList(tester, '音量鍵翻頁'));
         await step('返回我的（離開閱讀偏好）', () => goBack(tester));
 

@@ -24,7 +24,6 @@ class SourceEditSearch extends StatelessWidget {
           ],
         ),
         GroupedSection(
-          header: '搜尋結果',
           children: [
             RuleTextField(
               controller: controllers['ruleSearchBookList']!,

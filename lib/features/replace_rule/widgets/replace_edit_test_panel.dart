@@ -31,9 +31,9 @@ class ReplaceEditTestPanel extends StatelessWidget {
       children: [
         GroupedSection(
           margin: margin,
-          header: '規則除錯',
           children: [
             GroupedTextFieldRow(
+              label: '測試原文',
               controller: testInputCtrl,
               maxLines: 3,
               style: AppTextStyles.bodySm.copyWith(
@@ -46,7 +46,6 @@ class ReplaceEditTestPanel extends StatelessWidget {
         GroupedSection(
           margin: margin,
           topGap: AppSpacing.lg,
-          header: '替換結果',
           children: [
             GroupedContent(
               // 結果是規則跑出來的字，照原文（ADR 0066）。

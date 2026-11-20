@@ -9,7 +9,6 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
-import 'package:night_reader/shared/widgets/skeleton/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/popups/popup_routes.dart';
 import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 
@@ -384,39 +383,6 @@ class SheetHeader extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// 閱讀器面板內的區塊標題，字階與色彩同分組清單的組標題。
-class SheetSection extends StatelessWidget implements GroupedSkeletonItem {
-  final String title;
-  const SheetSection({super.key, required this.title});
-
-  static const EdgeInsets _padding = EdgeInsets.only(
-    top: AppSpacing.xl,
-    bottom: AppSpacing.sm,
-  );
-
-  @override
-  GroupedItemShape skeletonShape(
-    BuildContext context, {
-    required double width,
-  }) => GroupedItemShape.text(
-    context,
-    title,
-    style: GroupedSectionHeader.textStyle(context),
-    width: width,
-  ).padded(_padding);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: _padding,
-      child: Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: GroupedSectionHeader(title),
       ),
     );
   }

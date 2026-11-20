@@ -42,8 +42,9 @@ class BookDetailSkeleton extends StatelessWidget {
   static final TextStyle _subtitleStyle = AppTextStyles.bodySm.copyWith(
     height: 1.3,
   );
-  static final TextStyle _headerStyle = AppTextStyles.uiSm.copyWith(
-    fontWeight: FontWeight.w400,
+  static final TextStyle _headerStyle = AppTextStyles.bodyBase.copyWith(
+    fontWeight: FontWeight.w600,
+    height: 1.3,
   );
   static final TextStyle _introStyle = AppTextStyles.bodyBase.copyWith(
     height: 1.6,
@@ -62,25 +63,12 @@ class BookDetailSkeleton extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _details(context),
-          // 同 BookInfoIntro：組標題「簡介」與一段正文。
+          // 同 BookInfoIntro：一張卡片裡一段簡介。
           Padding(
             padding: const EdgeInsets.only(top: AppGrouped.sectionGap),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppGrouped.margin + AppGrouped.rowPadding,
-                    0,
-                    AppGrouped.margin + AppGrouped.rowPadding,
-                    AppSpacing.sm,
-                  ),
-                  child: Align(
-                    alignment: Alignment.bottomLeft,
-                    heightFactor: 1,
-                    child: _TextBar('簡介', style: _headerStyle),
-                  ),
-                ),
                 GroupedSection(
                   topGap: 0,
                   children: [
@@ -102,22 +90,22 @@ class BookDetailSkeleton extends StatelessWidget {
               ],
             ),
           ),
-          // 同 BookInfoTocBar：組標題寫章數，右側三顆小圓鈕。
+          // 同 BookInfoTocBar：粗字寫章數，右側三顆小圓鈕，上下一樣。
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppGrouped.margin + AppGrouped.rowPadding,
-              AppGrouped.sectionGap - AppSpacing.md,
+              AppGrouped.sectionGap,
               AppGrouped.margin,
-              AppSpacing.sm,
+              AppGrouped.sectionGap,
             ),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
                   child: Align(
-                    alignment: Alignment.bottomLeft,
+                    alignment: Alignment.centerLeft,
                     heightFactor: 1,
-                    child: _TextBar(
+                    // 和目錄列一樣，字大時照可用寬度換行。
+                    child: SkeletonText(
                       '目錄（共 ${total > 0 ? total : '000'} 章）',
                       style: _headerStyle,
                     ),

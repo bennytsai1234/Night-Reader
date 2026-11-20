@@ -1167,7 +1167,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
                     ),
                     GroupedSection(
                       margin: EdgeInsets.zero,
-                      header: '來源',
                       children: [
                         field('封面', c),
                         field('來源名稱', sourceName),
@@ -1176,9 +1175,9 @@ class _BookDetailPageState extends State<BookDetailPage> {
                     ),
                     GroupedSection(
                       margin: EdgeInsets.zero,
-                      header: '簡介',
                       children: [
                         GroupedTextFieldRow(
+                          label: '簡介',
                           controller: i,
                           minLines: 3,
                           maxLines: 8,

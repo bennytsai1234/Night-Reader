@@ -276,11 +276,11 @@ class _ReaderReplaceRuleSheetState extends State<ReaderReplaceRuleSheet> {
         ),
         GroupedSection(
           margin: EdgeInsets.zero,
-          header: '即時測試',
           children: [
             // 固定三行高，長的原文在框內捲動：原文是面板打開後才讀到、填進
             // 來的，框的高度不能跟著它變（骨架第一幀就照三行畫）。
             GroupedTextFieldRow(
+              label: '測試原文',
               controller: _testController,
               minLines: 3,
               maxLines: 3,
@@ -320,7 +320,6 @@ class _ReaderReplaceRuleSheetState extends State<ReaderReplaceRuleSheet> {
           GroupedSection(
             margin: EdgeInsets.zero,
             topGap: AppSpacing.lg,
-            header: '測試結果',
             children: [
               GroupedContent(
                 child: UiText(

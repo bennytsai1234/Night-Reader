@@ -185,7 +185,6 @@ void main() {
 
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 16));
-    expect(find.text('過去的找書'), findsOneWidget);
     expect(find.text('想看很刺激的'), findsOneWidget);
     final keywordTop = tester.getTopLeft(find.text('夜雨')).dy;
 

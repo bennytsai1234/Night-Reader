@@ -276,9 +276,6 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
           body: GroupedListView(
             children: [
               GroupedSection(
-                footer:
-                    '送到 ${Uri.tryParse(service.baseUrl)?.host ?? service.baseUrl}'
-                    ' · ${service.model}',
                 children: [
                   for (final stage in repairStages)
                     GroupedRow(
@@ -301,6 +298,14 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
                   GroupedRow(
                     title: 'AI 用量',
                     value: _tokens(_batch.tokensUsed),
+                    showChevron: false,
+                  ),
+                  GroupedRow(
+                    title: '送到',
+                    value:
+                        '${Uri.tryParse(service.baseUrl)?.host ?? service.baseUrl}'
+                        ' · ${service.model}',
+                    translateValue: false,
                     showChevron: false,
                   ),
                 ],
@@ -418,8 +423,8 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
         ),
       if (working.isNotEmpty)
         GroupedSection(
-          header: '正在修 · ${working.length}',
           children: [
+            GroupedRow(title: '正在修 · ${working.length}', heading: true),
             for (final item in working)
               GroupedRow(
                 leading: aiRepairStepIcon(context, AiRepairStepState.running),
@@ -433,8 +438,10 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
         ),
       if (fixed.isNotEmpty)
         GroupedSection(
-          header: '修好了 · ${fixed.length}',
-          children: [for (final item in fixed) _itemRow(item)],
+          children: [
+            GroupedRow(title: '修好了 · ${fixed.length}', heading: true),
+            for (final item in fixed) _itemRow(item),
+          ],
         ),
       if (gone.isNotEmpty && goneLeft.isEmpty)
         GroupedSection(
@@ -444,9 +451,13 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
         )
       else if (goneLeft.isNotEmpty)
         GroupedSection(
-          header: '網站不在了 · ${goneLeft.length}',
-          footer: '已標「網站失效」',
           children: [
+            GroupedRow(
+              title: '網站不在了 · ${goneLeft.length}',
+              heading: true,
+              subtitle: '已標「網站失效」',
+              maxSubtitleLines: 2,
+            ),
             for (final item in goneLeft) _itemRow(item),
             if (gone.length > goneLeft.length)
               GroupedRow(
@@ -474,9 +485,13 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
         )
       else if (unstableLeft.isNotEmpty)
         GroupedSection(
-          header: '網站不穩定 · ${unstableLeft.length}',
-          footer: '已判定無法修復，列為可移除',
           children: [
+            GroupedRow(
+              title: '網站不穩定 · ${unstableLeft.length}',
+              heading: true,
+              subtitle: '已判定無法修復，列為可移除',
+              maxSubtitleLines: 2,
+            ),
             for (final item in unstableLeft) _itemRow(item),
             if (unstable.length > unstableLeft.length)
               GroupedRow(
@@ -496,18 +511,24 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
         ),
       if (notFixed.isNotEmpty)
         GroupedSection(
-          header: '沒修好 · ${notFixed.length}',
-          children: [for (final item in notFixed) _itemRow(item)],
+          children: [
+            GroupedRow(title: '沒修好 · ${notFixed.length}', heading: true),
+            for (final item in notFixed) _itemRow(item),
+          ],
         ),
       if (skipped.isNotEmpty)
         GroupedSection(
-          header: '不用修',
-          children: [for (final item in skipped) _nameRow(item)],
+          children: [
+            GroupedRow(title: '不用修', heading: true),
+            for (final item in skipped) _nameRow(item),
+          ],
         ),
       if (unfixable.isNotEmpty)
         GroupedSection(
-          header: 'AI 之前修不好',
-          children: [for (final item in unfixable) _nameRow(item)],
+          children: [
+            GroupedRow(title: 'AI 之前修不好', heading: true),
+            for (final item in unfixable) _nameRow(item),
+          ],
         ),
       if (rest.isNotEmpty)
         GroupedSection(

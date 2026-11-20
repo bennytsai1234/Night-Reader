@@ -165,7 +165,6 @@ class DownloadManagerPage extends StatelessWidget {
                 children: [
                   _buildQueueSummary(),
                   GroupedSection(
-                    header: '任務',
                     children: [
                       for (var index = 0; index < tasks.length; index++)
                         _buildTaskTile(
@@ -222,7 +221,6 @@ class DownloadManagerPage extends StatelessWidget {
       // 清單的第一組：包在訂閱裡，清單換不到它的上方間距，這裡照清單第一組
       // 給 0（[GroupedListView]）。
       topGap: 0,
-      footer: '最近任務更新：${_formatTimestamp(summary.latestUpdate)}',
       children: [
         GroupedContent(
           child: _SummaryStats([
@@ -231,6 +229,11 @@ class DownloadManagerPage extends StatelessWidget {
             ('暫停', summary.paused),
             ('失敗', summary.failed),
           ]),
+        ),
+        GroupedRow(
+          title: '最近任務更新',
+          value: _formatTimestamp(summary.latestUpdate),
+          translateValue: false,
         ),
       ],
     ),

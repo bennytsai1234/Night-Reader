@@ -86,7 +86,9 @@ void main() {
     expect(find.textContaining('輪'), findsNothing);
     expect(find.text('經過'), findsNothing, reason: '還沒有做完的步');
     expect(find.text('結束'), findsOneWidget);
-    expect(find.text('送到 ai.example · m'), findsOneWidget);
+    // 送到哪個服務是卡片裡的一列（ADR 0076）。
+    expect(find.text('送到'), findsOneWidget);
+    expect(find.text('ai.example · m'), findsOneWidget);
 
     reply.complete(
       fakeAiReply(

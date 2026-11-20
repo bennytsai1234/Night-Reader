@@ -12,7 +12,7 @@ import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import '../../../support/skeleton_match.dart';
 
 /// 各種一般的列：列首圖示、數值、箭頭、副標、開關、勾選、步進、自由
-/// 內容、組標題與附註。
+/// 內容、卡片第一列的粗字資料、說明列與說明文件的段落標題。
 List<Widget> _sections() => [
   GroupedSection(
     header: '一般',
@@ -28,15 +28,20 @@ List<Widget> _sections() => [
       GroupedCheckRow(title: '沒勾選', selected: false, onTap: () {}),
     ],
   ),
-  // 組標題右側的字（更新紀錄的發布日期）照字的寬度靠右，標題用剩下的寬。
+  // 卡片第一列的粗字資料（更新紀錄的版本號與發布日期）。
   GroupedSection(
-    header: 'v1.0.0（目前版本）',
-    headerTrailing: const Text('2026-10-23'),
-    children: [GroupedRow(title: '內容')],
+    children: [
+      GroupedRow(title: 'v1.0.0（目前版本）', heading: true, value: '2026-10-23'),
+      GroupedRow(title: '內容'),
+      const GroupedHelpRow(
+        title: '說明回答的問題',
+        sections: [
+          (heading: null, items: ['一列一件事']),
+        ],
+      ),
+    ],
   ),
   GroupedSection(
-    header: '其他',
-    footer: '附註會照字排在卡片下面',
     children: [
       GroupedRow(title: '帶副標的列，標題長一點看會不會換行', subtitle: '副標文字', onTap: () {}),
       GroupedContent(

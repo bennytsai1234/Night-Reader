@@ -469,7 +469,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
           AppStateView(
             icon: Icons.source_outlined,
             title: '尚未加入書源',
-            description: '匯入書源後，即可搜尋與探索內容。',
             primaryAction: AppStateAction(
               label: '從網址匯入',
               icon: Icons.link,
@@ -489,7 +488,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         AppStateView(
           icon: Icons.search_off,
           title: '找不到符合條件的書源',
-          description: '清除搜尋與篩選條件後再試一次。',
           primaryAction: AppStateAction(
             label: '清除搜尋與篩選',
             icon: Icons.clear,
@@ -518,11 +516,19 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       return CoverRevealSlot(
         key: ValueKey(list[i].bookSourceUrl),
         placeholderBuilder: (context) => SizedBox(
-          height: SourceListSkeleton.rowHeightFor(
-            context,
-            list[i],
-            progress: p.checkService.progressOf(list[i].bookSourceUrl),
-          ),
+          height:
+              SourceListSkeleton.rowHeightFor(
+                context,
+                list[i],
+                progress: p.checkService.progressOf(list[i].bookSourceUrl),
+              ) +
+              (!canReorder && startsHostGroup(i)
+                  ? SourceItemTile.hostHeaderHeight(
+                      context,
+                      hostLabels[i],
+                      first: i == 0,
+                    )
+                  : 0),
         ),
         child: _buildItem(
           p,
@@ -930,7 +936,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                 if (p.allGroups.isNotEmpty)
                   GroupedSection(
                     margin: EdgeInsets.zero,
-                    header: '現有分組',
                     children: [
                       for (final g in p.allGroups)
                         GroupedCheckRow(

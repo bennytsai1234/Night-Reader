@@ -65,7 +65,6 @@ class _TtsSettingsPageState extends State<TtsSettingsPage> {
           return GroupedListView(
             children: [
               GroupedSection(
-                header: '朗讀參數',
                 children: [
                   _stepper(
                     NumberStepperRow(
@@ -95,7 +94,6 @@ class _TtsSettingsPageState extends State<TtsSettingsPage> {
                 ],
               ),
               GroupedSection(
-                header: '系統語音',
                 children: [
                   GroupedRow(
                     title: '語音引擎',

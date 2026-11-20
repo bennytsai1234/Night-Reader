@@ -11,13 +11,36 @@ import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 
-/// 會送出什麼：設定頁的說明，與 `PRIVACY.md`、App 的「隱私說明」同一件事
+/// 「會送出什麼」面板：與 `PRIVACY.md`、App 的「隱私說明」同一件事
 /// （ADR 0054、0060），修書源與找書各一段。
-const String aiRepairPrivacyNote =
-    '按「AI 修復」或「修復異常書源」時，書源、校驗結果與抓到的網頁會送到這個服務；'
-    '登入資料、Cookie 的值與書源變數不送。\n'
-    '按「AI 找書」時，你寫的描述、書架與閱讀紀錄的書名與進度、書源給的分類與'
-    '簡介開頭，和搜尋、詳情、正文的結果會送到這個服務。';
+const List<HelpSection> aiSentSections = [
+  (
+    heading: '按「AI 修復」或「修復異常書源」時送出',
+    items: [
+      '書源的 JSON（不含校驗加的標記）',
+      '一次書源校驗的結果',
+      '試抓的除錯紀錄與抓到了哪些網頁（網址與大小）',
+      'AI 要求再試抓、看網頁、讀一段、找字、試解析或跑程式時，那一次的結果',
+      '試抓的網頁可能含網站上的個人化內容（例如登入後才看得到的書單）',
+    ],
+  ),
+  (
+    heading: '修書源時不送',
+    items: ['登入資料（登入表單填的內容、登入標頭）', 'Cookie 的值（只列名稱）', '書源變數'],
+  ),
+  (
+    heading: '按「AI 找書」再按「開始找書」時送出',
+    items: [
+      '你寫的描述、選的深度與「不想看的」清單',
+      'AI 要求搜尋、看詳情、讀章節、看發現頁或書架時，那一次的結果',
+      '書架與閱讀紀錄的書名、作者、類別、讀了多久與讀到哪一章（含讀過、已移出書架的書）',
+      '書源給的分類與簡介開頭（自己改寫的簡介不送）',
+      '查作品的各地譯名時，作品名稱送到中文維基百科',
+    ],
+  ),
+  (heading: '找書時不送', items: ['書源的登入資料、Cookie 的值與書源變數']),
+  (heading: null, items: ['送出的內容由那個服務依它自己的政策處理，夜讀不經手']),
+];
 
 /// 「找書的模型」選單裡「同修書源」那一項的值（空字串是自己輸入）。
 const String _sameAsRepair = '\u0000same';
@@ -305,7 +328,6 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
         ready: _loaded,
         children: [
           GroupedSection(
-            footer: aiRepairPrivacyNote,
             children: [
               Builder(
                 builder: (rowContext) => GroupedRow(
@@ -377,6 +399,11 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
                   onTap: () => unawaited(_pickConcurrency(rowContext)),
                 ),
               ),
+            ],
+          ),
+          GroupedSection(
+            children: [
+              GroupedHelpRow(title: '會送出什麼', sections: aiSentSections),
             ],
           ),
           GroupedSection(

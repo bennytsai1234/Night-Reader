@@ -14,6 +14,7 @@ import '../skeleton/grouped_list_skeleton.dart';
 import '../skeleton/skeleton.dart';
 import 'grouped_section.dart';
 
+export 'grouped_help_row.dart';
 export 'grouped_row.dart';
 export 'grouped_section.dart';
 export 'grouped_text_field_row.dart';
@@ -350,14 +351,7 @@ class _GroupedListSlot extends StatelessWidget {
         child: item,
       );
     }
-    return item.withRows(
-      _rows(item.children, rows),
-      // 組標題右側的按鈕（「恢復預設」）也排隊，不和卡片外框擠在同一格。
-      headerTrailing: switch (item.headerTrailing) {
-        final trailing? => CoverRevealSlot(wait: visible > 0, child: trailing),
-        null => null,
-      },
-    );
+    return item.withRows(_rows(item.children, rows));
   }
 
   List<Widget> _rows(List<Widget> children, List<double> heights) {

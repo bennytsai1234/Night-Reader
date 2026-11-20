@@ -32,7 +32,6 @@ class ReplaceEditOptions extends StatelessWidget {
   Widget build(BuildContext context) {
     return GroupedSection(
       margin: margin,
-      header: '選項',
       children: [
         GroupedSwitchRow(
           title: '啟用規則',

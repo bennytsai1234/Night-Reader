@@ -79,14 +79,12 @@ class ReaderTtsPanel extends StatelessWidget {
             ),
             GroupedSection(
               margin: EdgeInsets.zero,
-              header: '定時',
               children: [
                 GroupedContent(child: SleepTimerSection(timer: tts.sleepTimer)),
               ],
             ),
             GroupedSection(
               margin: EdgeInsets.zero,
-              header: '朗讀參數',
               children: [
                 _stepperRow(
                   NumberStepperRow(
@@ -107,7 +105,6 @@ class ReaderTtsPanel extends StatelessWidget {
             ),
             GroupedSection(
               margin: EdgeInsets.zero,
-              header: '朗讀高亮',
               children: [
                 GroupedContent(child: _HighlightSection(settings: settings)),
               ],

@@ -15,7 +15,6 @@ import 'package:night_reader/features/reader/features/settings/reader_settings_c
 import 'package:night_reader/features/reader/layout/reader_layout_constants.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/lists/app_font_picker_row.dart';
 import 'package:night_reader/shared/widgets/glass/glass_segmented.dart';
@@ -128,15 +127,6 @@ class ReaderSettingsGroups {
     final full = !compact;
     return GroupedSection(
       margin: margin,
-      header: '排版',
-      headerTrailing: full
-          ? _Watch<bool>(
-              listenable: Listenable.merge([_typography, settings]),
-              select: () => _typographyIsDefault,
-              builder: (context, isDefault) =>
-                  _ResetButton(onPressed: isDefault ? null : _resetTypography),
-            )
-          : null,
       children: [
         _StagedStepper(
           edits: _typography,
@@ -249,6 +239,13 @@ class ReaderSettingsGroups {
             on: '置中',
           ),
         ],
+        if (full)
+          _Watch<bool>(
+            listenable: Listenable.merge([_typography, settings]),
+            select: () => _typographyIsDefault,
+            builder: (context, isDefault) =>
+                _ResetRow(onPressed: isDefault ? null : _resetTypography),
+          ),
       ],
     );
   }
@@ -317,19 +314,12 @@ class ReaderSettingsGroups {
     final horizontal = _lineCharsStepper();
     if (compact) {
       return [
-        GroupedSection(margin: margin, header: '版面', children: [horizontal]),
+        GroupedSection(margin: margin, children: [horizontal]),
       ];
     }
     return [
       GroupedSection(
         margin: margin,
-        header: '版面',
-        headerTrailing: _Watch<bool>(
-          listenable: Listenable.merge([_padding, settings]),
-          select: () => settings.isPageLayoutDefault && !_padding.hasPending,
-          builder: (context, isDefault) =>
-              _ResetButton(onPressed: isDefault ? null : _resetPageLayout),
-        ),
         children: [
           horizontal,
           _Watch<bool>(
@@ -373,6 +363,12 @@ class ReaderSettingsGroups {
                 ),
               ),
             ),
+          _Watch<bool>(
+            listenable: Listenable.merge([_padding, settings]),
+            select: () => settings.isPageLayoutDefault && !_padding.hasPending,
+            builder: (context, isDefault) =>
+                _ResetRow(onPressed: isDefault ? null : _resetPageLayout),
+          ),
         ],
       ),
       GroupedSection(
@@ -403,7 +399,6 @@ class ReaderSettingsGroups {
       ),
       GroupedSection(
         margin: margin,
-        header: '頁首與頁尾',
         children: [
           for (final (label, footer, right) in const [
             ('頁首左側', false, false),
@@ -491,7 +486,6 @@ class ReaderSettingsGroups {
   /// 點擊、音量鍵與選單翻頁：上一屏留幾行在畫面上、捲過一屏的快慢。
   GroupedSection pageTurn() => GroupedSection(
     margin: margin,
-    header: '翻頁',
     children: [
       _StepperRow(
         _Watch<int>(
@@ -533,7 +527,6 @@ class ReaderSettingsGroups {
   /// （平台不能調閱讀器自己的亮度，亮度條不出現，也就沒有加暗段）。
   GroupedSection screen({required bool maxDim}) => GroupedSection(
     margin: margin,
-    header: '螢幕',
     children: [
       _Watch<bool>(
         listenable: settings,
@@ -585,7 +578,6 @@ class ReaderSettingsGroups {
   /// 自動翻頁速度。
   GroupedSection autoPage() => GroupedSection(
     margin: margin,
-    header: '自動翻頁',
     children: [
       _StepperRow(
         _Watch<double>(
@@ -609,7 +601,6 @@ class ReaderSettingsGroups {
   /// 繁簡轉換。
   GroupedSection chineseConvert() => GroupedSection(
     margin: margin,
-    header: '繁簡轉換',
     children: [
       GroupedContent(
         child: _Watch<int>(
@@ -632,7 +623,6 @@ class ReaderSettingsGroups {
   /// 顯示插圖（ADR 0050），預設關。
   GroupedSection illustrations() => GroupedSection(
     margin: margin,
-    header: '插圖',
     children: [
       _Watch<bool>(
         listenable: settings,
@@ -657,14 +647,6 @@ class ReaderSettingsGroups {
   /// 九宮格點擊區域。
   GroupedSection clickActions() => GroupedSection(
     margin: margin,
-    header: '點擊區域',
-    headerTrailing: _Watch<bool>(
-      listenable: settings,
-      select: () => _clickActionsAreDefault,
-      builder: (context, isDefault) => _ResetButton(
-        onPressed: isDefault ? null : settings.resetClickActions,
-      ),
-    ),
     children: [
       GroupedContent(
         padding: const EdgeInsets.all(AppSpacing.md),
@@ -676,6 +658,12 @@ class ReaderSettingsGroups {
             onChanged: settings.setClickAction,
           ),
         ),
+      ),
+      _Watch<bool>(
+        listenable: settings,
+        select: () => _clickActionsAreDefault,
+        builder: (context, isDefault) =>
+            _ResetRow(onPressed: isDefault ? null : settings.resetClickActions),
       ),
     ],
   );
@@ -709,7 +697,6 @@ class ReaderSettingsGroups {
   /// 朗讀時畫面跟著念到的句子捲動。
   GroupedSection tts() => GroupedSection(
     margin: margin,
-    header: '朗讀',
     children: [
       _Watch<bool>(
         listenable: settings,
@@ -1017,45 +1004,29 @@ class _WatchState<T> extends State<_Watch<T>> {
   Widget build(BuildContext context) => widget.builder(context, _value);
 }
 
-/// 組標題右側的「恢復預設」。
-class _ResetButton extends StatelessWidget implements GroupedSkeletonItem {
-  const _ResetButton({required this.onPressed});
+/// 卡片最後一列的「恢復預設」（ADR 0076）；已經是預設值時灰掉。
+class _ResetRow extends StatelessWidget implements GroupedSkeletonItem {
+  const _ResetRow({required this.onPressed});
 
   final VoidCallback? onPressed;
 
-  static const String _label = '恢復預設';
-  static const EdgeInsets _padding = EdgeInsets.symmetric(
-    horizontal: AppSpacing.xs,
+  GroupedRow get _row => GroupedRow(
+    title: '恢復預設',
+    accent: true,
+    showChevron: false,
+    enabled: onPressed != null,
+    onTap: onPressed,
   );
 
-  /// 按鈕沒有底色，骨架只畫字；字樣同按鈕的 labelLarge。
   @override
   GroupedItemShape skeletonShape(
     BuildContext context, {
     required double width,
-  }) => GroupedItemShape.text(
-    context,
-    _label,
-    style: Theme.of(context).textTheme.labelLarge!,
-    width: double.infinity,
-  ).padded(_padding);
+  }) => _row.skeletonShape(context, width: width);
 
   @override
-  Widget build(BuildContext context) {
-    return TextButton(
-      onPressed: onPressed,
-      style: TextButton.styleFrom(
-        visualDensity: VisualDensity.compact,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: _padding,
-        minimumSize: Size.zero,
-        disabledForegroundColor: context.disabledForeground,
-        // 字級沿用預設的 labelLarge（主題裡就是 uiSm），自己帶 textStyle
-        // 會蓋掉主題的字族。
-      ),
-      child: const UiText(_label),
-    );
-  }
+  Widget build(BuildContext context) =>
+      Semantics(button: true, enabled: onPressed != null, child: _row);
 }
 
 /// 卡片內「左側標籤、右側控件」的一列。

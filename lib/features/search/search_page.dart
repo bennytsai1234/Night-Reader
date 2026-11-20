@@ -875,7 +875,6 @@ class _SearchViewState extends State<SearchView> {
                                 // 屏蔽詞記在手機上、每次搜尋都套用，「清除」
                                 // 不清它：清的是這次搜尋的篩選。
                                 GroupedSection(
-                                  footer: '用逗號或空白分開',
                                   children: [
                                     GroupedTextFieldRow(
                                       label: '屏蔽詞',
@@ -887,12 +886,10 @@ class _SearchViewState extends State<SearchView> {
                                 ),
                                 if (sources.isEmpty)
                                   const GroupedSection(
-                                    header: '書源',
                                     children: [GroupedRow(title: '目前沒有可篩選的書源')],
                                   )
                                 else
                                   GroupedSection(
-                                    header: '書源',
                                     children: [
                                       for (final source in sources)
                                         Semantics(
@@ -1269,14 +1266,26 @@ class _RelevanceTierHeader extends StatelessWidget {
   static const _labels = ['完全相符', '部分相符', '其他結果'];
 
   @override
+  // 相關度分段是資料，用粗字（ADR 0076）；和上一段隔一段組間距，下面
+  // 加上書卡自己的上內距也差不多是一段。
   Widget build(BuildContext context) => Padding(
     padding: EdgeInsets.fromLTRB(
+      AppGrouped.margin + AppGrouped.rowPadding,
+      first ? 0 : AppGrouped.sectionGap,
       AppGrouped.margin,
-      first ? AppSpacing.sm : AppSpacing.xl,
-      AppGrouped.margin,
-      0,
+      AppSpacing.xs,
     ),
-    child: GroupedSectionHeader(_labels[tier]),
+    child: Semantics(
+      header: true,
+      child: UiText(
+        _labels[tier],
+        style: AppTextStyles.bodyBase.copyWith(
+          fontWeight: FontWeight.w600,
+          height: 1.3,
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
+      ),
+    ),
   );
 }
 

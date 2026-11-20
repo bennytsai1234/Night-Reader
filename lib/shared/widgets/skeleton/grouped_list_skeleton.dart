@@ -5,7 +5,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../theme/app_text_styles.dart';
 import '../../theme/app_tokens.dart';
 import '../text/drag_overflow_text.dart';
 import '../lists/grouped_list.dart';
@@ -303,7 +302,7 @@ class GroupedItemShape {
         as Widget;
   }
 
-  /// 組標題、卡片裡的每一列（列與列之間一條髮絲線）與附註，和
+  /// 段落標題與卡片裡的每一列（列與列之間一條髮絲線），和
   /// [GroupedSection.build] 排的一樣。
   static GroupedItemShape _section(
     GroupedSection section,
@@ -319,34 +318,15 @@ class GroupedItemShape {
     final marks = <SkeletonShape>[];
 
     var top = section.topGap;
-    if (section.header != null || section.headerTrailing != null) {
-      // 組標題與右側按鈕在同一列、對齊下緣。
-      final textLeft = left + AppGrouped.rowPadding;
-      final textRight = right - AppGrouped.rowPadding;
-      // 右側照它本身的寬度排，標題用剩下的寬度。
-      final trailing = switch (section.headerTrailing) {
-        final widget? => groupedPartShape(widget, context),
-        null => null,
-      };
-      final trailingWidth = trailing?.width ?? 0;
+    if (section.header case final text?) {
       final header = GroupedItemShape.text(
         context,
-        section.header ?? '',
+        text,
         style: GroupedSectionHeader.textStyle(context),
-        width: textRight - textLeft - trailingWidth,
+        width: right - left - AppGrouped.rowPadding * 2,
       );
-      final line = math.max(header.height, trailing?.height ?? 0);
-      marks.addAll(
-        header.marksAt(Offset(textLeft, top + line - header.height)),
-      );
-      if (trailing != null) {
-        marks.addAll(
-          trailing.marksAt(
-            Offset(textRight - trailingWidth, top + line - trailing.height),
-          ),
-        );
-      }
-      top += line + AppSpacing.sm;
+      marks.addAll(header.marksAt(Offset(left + AppGrouped.rowPadding, top)));
+      top += header.height + AppGrouped.sectionGap;
     }
     final cardTop = top;
     final rowHeights = <double>[];
@@ -363,17 +343,6 @@ class GroupedItemShape {
       top += row.height;
     }
     final card = Rect.fromLTRB(left, cardTop, right, top);
-    if (section.footer case final text? when top < until) {
-      top += AppSpacing.sm;
-      final footer = GroupedItemShape.text(
-        context,
-        text,
-        style: AppTextStyles.bodySm,
-        width: right - left - AppGrouped.rowPadding * 2,
-      );
-      marks.addAll(footer.marksAt(Offset(left + AppGrouped.rowPadding, top)));
-      top += footer.height;
-    }
     return GroupedItemShape(
       top,
       card: card,

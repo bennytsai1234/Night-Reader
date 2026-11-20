@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
-import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 
 import '../book_detail_provider.dart';
 
@@ -51,20 +52,28 @@ class BookInfoTocBar extends StatelessWidget {
       ),
     );
 
+    // 章數是資料，用粗字（ADR 0076）；夾在簡介卡與目錄卡中間，上下一樣。
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(
         AppGrouped.margin + AppGrouped.rowPadding,
-        AppGrouped.sectionGap - AppSpacing.md,
+        AppGrouped.sectionGap,
         AppGrouped.margin,
-        AppSpacing.sm,
+        AppGrouped.sectionGap,
       ),
       sliver: SliverToBoxAdapter(
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(
-              child: GroupedSectionHeader(
-                isSearching ? '搜尋結果（$count/$total 章）' : '目錄（共 $total 章）',
+              child: Semantics(
+                header: true,
+                child: UiText(
+                  isSearching ? '搜尋結果（$count/$total 章）' : '目錄（共 $total 章）',
+                  style: AppTextStyles.bodyBase.copyWith(
+                    fontWeight: FontWeight.w600,
+                    height: 1.3,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
               ),
             ),
             button(

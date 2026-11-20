@@ -317,7 +317,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
         final service = _session.service;
         final sentTo = service == null
             ? null
-            : '送到 ${Uri.tryParse(service.baseUrl)?.host ?? service.baseUrl}'
+            : '${Uri.tryParse(service.baseUrl)?.host ?? service.baseUrl}'
                   ' · ${service.model}';
         return PopScope(
           canPop: !widget.owned || !_session.isRunning,
@@ -373,7 +373,6 @@ class _AiRepairPageState extends State<AiRepairPage> {
               children: [
                 if (!_clipboard || job.steps.isNotEmpty) ...[
                   GroupedSection(
-                    footer: sentTo,
                     children: [
                       ..._stageRows(context, job),
                       if (run?.isPaused ?? false)
@@ -385,6 +384,13 @@ class _AiRepairPageState extends State<AiRepairPage> {
                           ),
                           title: '已暫停',
                           subtitle: '按「繼續」從頭重修這個書源',
+                          showChevron: false,
+                        ),
+                      if (sentTo != null)
+                        GroupedRow(
+                          title: '送到',
+                          value: sentTo,
+                          translateValue: false,
                           showChevron: false,
                         ),
                     ],
@@ -513,8 +519,11 @@ class _AiRepairPageState extends State<AiRepairPage> {
     final repaired = outcome == AiRepairOutcome.repaired;
     final explanation = job.explanation ?? (repaired ? '校驗通過，已套用。' : '書源沒有改。');
     return GroupedSection(
-      header: repaired ? (job.restored ? '已還原成改前的版本' : '修好了') : '沒修好，書源沒有改',
       children: [
+        GroupedRow(
+          title: repaired ? (job.restored ? '已還原成改前的版本' : '修好了') : '沒修好，書源沒有改',
+          heading: true,
+        ),
         GroupedContent(
           child: UiText(
             explanation,

@@ -127,9 +127,6 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
         ready: _loaded,
         children: [
           GroupedSection(
-            footer: _googleAvailable
-                ? '每台手機選同一個空間（同一個 Google 帳號，或同一個 WebDAV）才會同步。'
-                : '每台手機選同一個 WebDAV 才會同步。',
             children: [
               if (_googleAvailable)
                 GroupedCheckRow(
@@ -150,6 +147,21 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
                 selected: _space == SyncSpace.webdav,
                 enabled: !_connecting,
                 onTap: _connecting ? null : () => unawaited(_openWebDav()),
+              ),
+              GroupedHelpRow(
+                title: '怎麼讓兩台同步',
+                sections: [
+                  (
+                    heading: null,
+                    items: _googleAvailable
+                        ? [
+                            '每台手機選同一個空間',
+                            'Google 雲端硬碟：登入同一個 Google 帳號',
+                            'WebDAV：填同一個網址與帳號',
+                          ]
+                        : ['每台手機選同一個 WebDAV：填同一個網址與帳號'],
+                  ),
+                ],
               ),
             ],
           ),

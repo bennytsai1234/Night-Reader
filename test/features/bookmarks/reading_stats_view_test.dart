@@ -140,7 +140,9 @@ void main() {
     );
     await pumpPage(tester);
 
-    expect(find.text('累積閱讀時間'), findsOneWidget);
+    // 只有一組時不標「閱讀」「收聽」（卡片外不放小字，ADR 0076）。
+    expect(find.text('長夜將盡'), findsOneWidget);
+    expect(find.text('閱讀'), findsNothing);
     expect(find.text('收聽'), findsNothing);
   });
 

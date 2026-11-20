@@ -110,12 +110,12 @@ Future<List<BookSource>?> showImportPreviewSheet(
             .where((s) => s.sourceKind == BookSourceKind.unsupported)
             .length;
         final nothing = incoming.isEmpty;
-        // 卡片下方的附註只放數量：跳過的與選了、以停用狀態匯入的。
-        final footer = [
+        // 跳過的與選了、以停用狀態匯入的數量，放在卡片最後幾列。
+        final counts = [
           if (p.unchangedSources.isNotEmpty)
             '無變化 ${p.unchangedSources.length} 個，跳過',
           if (unsupported > 0) '夜讀不支援的（影視、文件）$unsupported 個，以停用狀態匯入',
-        ].join('\n');
+        ];
         return AppBottomSheet(
           title: '匯入 ${p.total} 個書源',
           trailing: GlassTextButton(
@@ -129,7 +129,6 @@ Future<List<BookSource>?> showImportPreviewSheet(
             GroupedSection(
               margin: EdgeInsets.zero,
               topGap: AppSpacing.md,
-              footer: footer.isEmpty ? null : footer,
               children: [
                 if (nothing)
                   const GroupedRow(title: '沒有需要匯入的變更', showChevron: false),
@@ -151,12 +150,17 @@ Future<List<BookSource>?> showImportPreviewSheet(
                     value: importOlder,
                     onChanged: (v) => setState(() => importOlder = v),
                   ),
+                for (final count in counts)
+                  GroupedRow(
+                    title: count,
+                    showChevron: false,
+                    maxTitleLines: 2,
+                  ),
               ],
             ),
             if (comicCount > 0 || audioCount > 0)
               GroupedSection(
                 margin: EdgeInsets.zero,
-                header: '書源類型',
                 children: [
                   if (comicCount > 0)
                     GroupedSwitchRow(

@@ -39,11 +39,9 @@ class AppearanceSettingsPage extends StatelessWidget {
       body: GroupedListView(
         children: [
           GroupedSection(
-            header: '淺色風格',
             children: [_styleGrid(context, themeSettings, Brightness.light)],
           ),
           GroupedSection(
-            header: '深色風格',
             children: [
               _styleGrid(context, themeSettings, Brightness.dark),
               _pureBlackRow(context, themeSettings),
@@ -71,7 +69,6 @@ class AppearanceSettingsPage extends StatelessWidget {
             ],
           ),
           GroupedSection(
-            header: '深淺',
             children: [
               for (final (mode, label) in const [
                 (ThemeMode.system, '跟隨系統'),
@@ -89,7 +86,6 @@ class AppearanceSettingsPage extends StatelessWidget {
             ],
           ),
           GroupedSection(
-            header: '玻璃效果',
             children: [
               GroupedContent(
                 child: GlassSegmented<GlassStrength>(

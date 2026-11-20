@@ -433,12 +433,24 @@ class _AiFindPageState extends State<AiFindPage> {
     );
   }
 
+  /// 這次送到哪個服務、哪個模型（卡片裡「送到」那一列的值）。
   String? get _sentTo {
     final label = _run?.session.serviceLabel;
-    if (label != null && label.isNotEmpty) return '送到 $label';
+    if (label != null && label.isNotEmpty) return label;
     final service = _service;
-    return service == null ? null : '送到 ${aiFindServiceLabel(service)}';
+    return service == null ? null : aiFindServiceLabel(service);
   }
+
+  /// 卡片裡的一列「送到」；還沒設好服務時不出現。
+  Widget? get _sentToRow => switch (_sentTo) {
+    final label? => GroupedRow(
+      title: '送到',
+      value: label,
+      translateValue: false,
+      showChevron: false,
+    ),
+    null => null,
+  };
 
   List<Widget> _draft(BuildContext context) => [
     GroupedSection(
@@ -453,8 +465,6 @@ class _AiFindPageState extends State<AiFindPage> {
       ],
     ),
     GroupedSection(
-      header: '深度',
-      footer: _depth.explanation,
       children: [
         GroupedContent(
           child: GlassSegmented<AiFindDepth>(
@@ -465,6 +475,13 @@ class _AiFindPageState extends State<AiFindPage> {
             selected: _depth,
             onChanged: (depth) => setState(() => _depth = depth),
           ),
+        ),
+        GroupedHelpRow(
+          title: '深度的差別',
+          sections: [
+            for (final depth in AiFindDepth.values)
+              (heading: depth.label, items: depth.points),
+          ],
         ),
       ],
     ),
@@ -483,8 +500,8 @@ class _AiFindPageState extends State<AiFindPage> {
       ],
     ),
     GroupedSection(
-      footer: _sentTo,
       children: [
+        ?_sentToRow,
         GroupedRow(
           title: '開始找書',
           accent: true,
@@ -519,7 +536,6 @@ class _AiFindPageState extends State<AiFindPage> {
     );
     return [
       GroupedSection(
-        footer: _sentTo,
         children: [
           GroupedRow(
             // 使用者自己寫的描述照原文（ADR 0066）。
@@ -555,6 +571,7 @@ class _AiFindPageState extends State<AiFindPage> {
             value: aiFindTokens(session.tokens),
             showChevron: false,
           ),
+          ?_sentToRow,
         ],
       ),
       ?history,
@@ -620,8 +637,8 @@ class _AiFindPageState extends State<AiFindPage> {
       ),
       if (record.outcome != AiFindOutcome.found)
         GroupedSection(
-          header: '沒有找完',
           children: [
+            const GroupedRow(title: '沒有找完', heading: true),
             GroupedRow(
               title: record.outcome == AiFindOutcome.stopped
                   ? '已結束'
@@ -636,15 +653,14 @@ class _AiFindPageState extends State<AiFindPage> {
       else ...[
         if (record.picks.isNotEmpty)
           GroupedSection(
-            header: '推薦 · ${record.picks.length}',
             children: [
+              GroupedRow(title: '推薦 · ${record.picks.length}', heading: true),
               for (final pick in record.picks)
                 _AiFindPickRow(pick: pick, bookPage: widget.bookPage),
             ],
           ),
         if (record.summary.trim().isNotEmpty)
           GroupedSection(
-            header: 'AI 的說明',
             children: [
               GroupedContent(
                 child: UiText(
