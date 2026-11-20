@@ -29,7 +29,8 @@ export 'grouped_text_field_row.dart';
 ///
 /// 掛上時頁面還在進場（推入的頁面），先只畫骨架（[GroupedListSkeleton]，
 /// 整個畫面一個元件），換頁的第一格不建任何一列；進場播完的下一格才在骨架
-/// 底下一格建一組（[CoverRevealSlot]），都建好再照骨架換場換成內容
+/// 底下建：組標題與卡片外框先建，畫面裡的列一格一列（[CoverRevealSlot]），
+/// 都建好再照骨架換場換成內容
 /// （ADR 0029）。不是在進場中掛上的（分頁、已經在畫面上的頁面）直接建內容。
 class GroupedListView extends StatelessWidget {
   const GroupedListView({
@@ -148,31 +149,42 @@ class GroupedSheetContent extends StatelessWidget {
   );
 }
 
-class _GroupedEntranceState extends State<_GroupedEntrance> {
-  /// 掛上時所在的頁面還在進場；之後一直走骨架這條路（換掉會讓內容重建）。
-  bool? _entering;
+/// 分組清單的進場在哪一段（`docs/state-machines.md`「分組清單的進場」）。
+enum _EntranceStage {
+  /// 不是在進場中掛上的：直接畫內容。
+  direct,
 
-  /// 進場播完的下一格才允許換場；若資料仍未就緒，骨架繼續顯示。
-  bool _entranceFinished = false;
+  /// 掛上時所在的頁面還在進場：只畫骨架，不建任何一列。
+  entering,
+
+  /// 進場播完的下一格起：資料好了就在骨架底下建好、換場；沒好骨架照舊。
+  entered,
+
+  /// 骨架換成內容了：骨架用不到，樣子不再照寬度、字級重算。
+  revealed,
+}
+
+class _GroupedEntranceState extends State<_GroupedEntrance> {
+  /// 第一次 [didChangeDependencies] 定下；走過骨架這條路的之後一直走它
+  /// （換掉會讓內容重建）。
+  _EntranceStage? _stage;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_entering != null) return;
+    if (_stage != null) return;
     final route = pageRouteOf(context);
-    final entering = _entering =
+    final entering =
         route != null &&
         (route.offstage || !(route.animation?.isCompleted ?? true));
+    _stage = entering ? _EntranceStage.entering : _EntranceStage.direct;
     if (!entering) return;
     TransitionSettled.entered(context).then((_) async {
       // 進場最後一格之後再開始建內容，不和換頁擠在同一格。
       await SchedulerBinding.instance.endOfFrame;
-      if (mounted) setState(() => _entranceFinished = true);
+      if (mounted) setState(() => _stage = _EntranceStage.entered);
     });
   }
-
-  /// 換成內容的那一刻；之後骨架用不到，樣子不再重算。
-  bool _revealed = false;
 
   /// 上一次算好的樣子，以及算的時候的寬度、字級與項目。
   List<GroupedItemShape>? _cached;
@@ -190,7 +202,7 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
     final cached = _cached;
     if (cached != null) {
       final (cachedWidth, cachedBottom, cachedScale, cachedItems) = _cachedFor!;
-      final same = _revealed
+      final same = _stage == _EntranceStage.revealed
           ? cached.length == items.length
           : cachedWidth == width &&
                 cachedBottom == bottom &&
@@ -223,7 +235,8 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
   Widget build(BuildContext context) {
     final chrome = AppChrome.of(context);
     final background = widget.background;
-    if (_entering != true) {
+    final stage = _stage!;
+    if (stage == _EntranceStage.direct) {
       return ColoredBox(
         color: background,
         child: widget.builder(context, widget.items),
@@ -260,10 +273,11 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
           color: background,
           child: SkeletonSwitcher(
             fit: widget.fit,
-            loading: !_entranceFinished || !widget.ready,
+            loading: stage == _EntranceStage.entering || !widget.ready,
             waitForCovers: CoverWait.brief,
             backdrop: background,
-            onRevealed: () => _revealed = true,
+            // 不重建：換成內容的這一格已經畫好，骨架的樣子下次才用得到。
+            onRevealed: () => _stage = _EntranceStage.revealed,
             skeleton: skeleton,
             builder: (context) => widget.builder(context, [
               for (final (i, item) in widget.items.indexed)
