@@ -11,7 +11,8 @@
 ## 測試
 
 - **Linux（雲端 session）跑要字型的測試**（`test/screens`、`test/frame_budget`、`test/polish`）：先 `apt-get install fonts-noto-cjk`。一般測試（含打開真的閱讀器的）用測試預設字型，CI 只在跑細節檢查的那一台裝中文字型。雲端機器比 Windows 那台慢約一倍，frame budget 的數字只能同一台交錯比；幀預算量不到手機上的繪製（raster）成本（其中建字貼圖用 `test/support/glyph_atlas.dart` 量），書源解析在主執行緒，「幀前」數字比手機上重。
-- **測試字型每個字一樣寬**，量不出英數字補半格；用 `test/fixtures/fonts/mixed_width_test.ttf`（以 `FontLoader(kReaderPunctFontFamily)` 載入，範例在 `test/features/reader/text_view/half_cell_layout_test.dart`）。
+- **測試字型每個字一樣寬**，量不出英數字補半格；用 `test/fixtures/fonts/mixed_width_test.ttf`（以 `FontLoader(AppTextStyles.punctuationFontFamily)` 載入，範例在 `test/features/reader/text_view/half_cell_layout_test.dart`）。
+- **介面字樣的字族清單第一個是標點字型**（`buildAppTheme`）：測試沒載入它時，後面的介面字型也不會用到，整串照測試預設字型排。要測介面字型的寬度時，標點字型（`assets/fonts/NightReaderPunct-Regular.ttf`）也一起載入，範例在 `test/features/audiobook/audiobook_page_test.dart`。
 - **`download_service_test` 的「`_dio` 尚未初始化」日誌**不是警告：測試沒準備網路層，只檢查排隊與範圍。
 - **CI 全套測試每個測試檔各自一個入口**：每個檔有自己的 isolate，靜態狀態不互相帶。2026-11-18 試過把一份裡的檔包進 3 個入口檔省編譯（每檔一個 `group`，自訂 binding 的檔單獨跑）：還有十幾個檔被前面的檔干擾（GetIt 重複註冊、快取住別的檔的 App 資料夾、前一個檔留下的背景工作），兩份各卡在 10 分鐘逾時；跑完的兩份測試步驟 106→89、151→65 秒，只量一次。只拿掉 `dart_test.yaml` 標 skip 的整檔（38 個）時，四份測試步驟總和 556→547 秒，等於沒變。要再試，先讓每個測試檔在 `tearDownAll` 收乾淨自己動過的全域狀態。
 
