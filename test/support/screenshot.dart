@@ -28,6 +28,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader/layout/reader_typography.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 
 /// 截圖輸出的資料夾。
 final Directory screenshotDir = Directory(
@@ -59,7 +60,7 @@ Future<void> loadScreenshotFonts() async {
   for (final family in kReaderFontFamilyFallback) {
     await _loadFont(family, existing);
   }
-  await _loadFont(kReaderPunctFontFamily, [
+  await _loadFont(AppTextStyles.punctuationFontFamily, [
     'assets/fonts/NightReaderPunct-Regular.ttf',
     'assets/fonts/NightReaderPunct-Bold.ttf',
   ]);

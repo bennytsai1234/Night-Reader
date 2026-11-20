@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 import 'package:night_reader/features/reader/text_view/layout/reader_paragraph_layout.dart';
 import 'package:night_reader/features/reader/text_view/layout/visual_line_layout_engine.dart';
-import 'package:night_reader/features/reader/layout/reader_typography.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 
 /// 英數字段補到半格、emoji 佔一格、行高固定。
 ///
@@ -87,7 +87,7 @@ void main() {
   setUpAll(() async {
     final bytes = File('test/fixtures/fonts/mixed_width_test.ttf')
         .readAsBytesSync();
-    final loader = FontLoader(kReaderPunctFontFamily)
+    final loader = FontLoader(AppTextStyles.punctuationFontFamily)
       ..addFont(Future<ByteData>.value(ByteData.sublistView(bytes)));
     await loader.load();
   });

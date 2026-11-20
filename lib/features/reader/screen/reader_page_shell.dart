@@ -887,7 +887,7 @@ class _InfoRow extends StatelessWidget {
             fontSize: shell.infoFontSize,
             color: infoColor,
             fontWeight: FontWeight.w400,
-            fontFamily: kReaderPunctFontFamily,
+            fontFamily: AppTextStyles.punctuationFontFamily,
             fontFamilyFallback: readerFontFallback(shell.fontFamily),
             locale: kReaderTextLocale,
           ),

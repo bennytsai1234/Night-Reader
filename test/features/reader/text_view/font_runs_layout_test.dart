@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 import 'package:night_reader/features/reader/text_view/layout/reader_paragraph_layout.dart';
 import 'package:night_reader/features/reader/layout/reader_typography.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 
 /// 選了下載的字型（ADR 0045）：系統字型自己就有漢字時，漢字還是畫成下載的
 /// 字型，英數字照舊系統字型。
@@ -63,7 +64,7 @@ void main() {
     await _load('sans-serif', pair[0]);
     await _load(_downloaded, pair[1]);
     await _load(
-      kReaderPunctFontFamily,
+      AppTextStyles.punctuationFontFamily,
       'assets/fonts/NightReaderPunct-Regular.ttf',
     );
   });

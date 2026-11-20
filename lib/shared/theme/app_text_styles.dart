@@ -4,6 +4,16 @@ import 'package:flutter/material.dart';
 class AppTextStyles {
   AppTextStyles._();
 
+  /// 正文與資訊列的標點字型（`assets/fonts/NightReaderPunct-*.ttf`，由同目錄
+  /// `generate_punct_font.py` 從 Noto Sans CJK TC 產生）。
+  ///
+  /// 只收「，。、；：！？」的繁中置中字形、改為教育部位置的「」『』
+  /// （直筆外緣貼字格中線，各佔四分之一格），以及置中的刪節號「…」與拉滿
+  /// 整格的破折號「—」（系統回退會落到 Roboto 的西文窄字形）。放在字型清單首位，標點不受
+  /// 手機系統字型的語系與廠商設定影響；其餘字元交給正文的回退字族與平台
+  /// 回退，與未指定字型時相同。
+  static const String punctuationFontFamily = 'NightReaderPunct';
+
   static const TextStyle display = TextStyle(
     fontSize: 88,
     height: 1.15,
