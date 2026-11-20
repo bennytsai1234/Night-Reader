@@ -74,13 +74,30 @@ enum TabBarLook {
   /// 從偏好設定讀回來（開 App 時、同步套用了另一台的設定時）。
   static void restore(SharedPreferences prefs) {
     if (prefs.getBool(_trialKey) case final trial?) {
-      if (trial && prefs.getString(PreferKey.tabBarLook) == null) {
-        prefs.setString(PreferKey.tabBarLook, centered.name);
+      if (prefs.getString(PreferKey.tabBarLook) == null) {
+        prefs.setString(PreferKey.tabBarLook, _ofTrial(trial: trial).name);
       }
       prefs.remove(_trialKey);
     }
     current.value = fromStorage(prefs.getString(PreferKey.tabBarLook));
   }
+
+  /// 還原的備份裡的偏好設定：只有 2026-11-20 前的試用開關、沒有這個設定時，
+  /// 照備份當時的開關換成對應的樣子（開著是置中、關著是撐滿），不讓手機上
+  /// 現在選的蓋過備份；試用的鍵不寫回去。
+  static Map<String, dynamic> migrateBackup(Map<String, dynamic> values) {
+    final trial = values[_trialKey];
+    if (trial is! bool) return values;
+    return {
+      for (final entry in values.entries)
+        if (entry.key != _trialKey) entry.key: entry.value,
+      PreferKey.tabBarLook:
+          values[PreferKey.tabBarLook] ?? _ofTrial(trial: trial).name,
+    };
+  }
+
+  static TabBarLook _ofTrial({required bool trial}) =>
+      trial ? centered : defaultLook;
 
   static TabBarLook fromStorage(String? name) =>
       values.firstWhere((look) => look.name == name, orElse: () => defaultLook);

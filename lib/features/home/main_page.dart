@@ -295,14 +295,20 @@ class _MainPageState extends State<MainPage>
               // 疊在它正上方。
               ValueListenableBuilder<TabBarLook>(
                 valueListenable: TabBarLook.current,
-                builder: (context, _, _) => Positioned(
-                  right: FloatingTabBar.searchRightOf(
+                builder: (context, _, _) {
+                  final right = FloatingTabBar.searchRightOf(
                     context,
                     tabCount: _destinations.length,
-                  ),
-                  bottom: AudiobookMiniButton.bottomOf(context),
-                  child: AudiobookMiniButton(hidden: _tabBarHidden.value),
-                ),
+                  );
+                  return Positioned(
+                    right: right,
+                    bottom: AudiobookMiniButton.bottomOf(context),
+                    child: AudiobookMiniButton(
+                      hidden: _tabBarHidden.value,
+                      right: right,
+                    ),
+                  );
+                },
               ),
           ],
         ),

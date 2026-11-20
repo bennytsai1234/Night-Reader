@@ -149,6 +149,21 @@ class FloatingTabBar extends StatefulWidget {
         .copyWith(bottom: systemBottom + AppGlass.tabBarBottomGap);
   }
 
+  /// 分頁列整列（分頁列與搜尋鈕）上方留的空白：頁面的底部內距是這一段
+  /// 加整列高度、底下的距離與系統區。
+  static const double topInset = AppSpacing.sm;
+
+  /// 取代分頁列、和它一樣高的工具列（書架多選）放的位置：照 [slotOf]，
+  /// 底下再加整列比分頁列高出的一半（搜尋鈕比分頁列大時兩者垂直置中），
+  /// 工具列才和被取代的分頁列在同一個位置。
+  static EdgeInsets toolbarSlotOf(BuildContext context) {
+    final look = TabBarLook.current.value;
+    final slot = slotOf(context);
+    return slot.copyWith(
+      bottom: slot.bottom + (look.rowHeight - look.barHeight) / 2,
+    );
+  }
+
   /// 分頁列的寬度：和卡片左右切齊、扣掉右側搜尋鈕。選了置中的樣子
   /// （[TabBarLook.isCentered]）時每個分頁 [TabBarLook.centeredTabWidth] 寬，
   /// 放不下（很窄的分割視窗）就照切齊時的寬度。
@@ -239,7 +254,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
     final bar = Padding(
       padding: EdgeInsets.fromLTRB(
         side,
-        AppSpacing.sm,
+        FloatingTabBar.topInset,
         side,
         bottom + AppGlass.tabBarBottomGap,
       ),

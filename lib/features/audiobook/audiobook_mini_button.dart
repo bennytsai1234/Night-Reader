@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';
 import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
@@ -28,7 +29,12 @@ import 'package:night_reader/core/chinese/chinese_display.dart';
 /// [AppMotion.stillGap]，再滑進來：第一次畫封面與玻璃的成本落在靜止的
 /// 畫面上（ADR 0037 靜止時準備）。播放器停了就收起。
 class AudiobookMiniButton extends StatefulWidget {
-  const AudiobookMiniButton({super.key, this.player, this.hidden = false});
+  const AudiobookMiniButton({
+    super.key,
+    this.player,
+    this.hidden = false,
+    this.right = AppGrouped.margin,
+  });
 
   /// 測試換成自己的播放器；平常是 [AudiobookPlayer.instance]。
   final AudiobookPlayer? player;
@@ -36,18 +42,21 @@ class AudiobookMiniButton extends StatefulWidget {
   /// 分頁列收起時（整頁編輯）跟著沉下。
   final bool hidden;
 
+  /// 圓鈕右緣離螢幕右邊多遠（和疊在主頁上的位置一樣）：滑出時要多移這一段
+  /// 才整個離開畫面（平板、分頁列置中時搜尋鈕離右邊很遠）。
+  final double right;
+
   /// 圓鈕的直徑，和搜尋鈕一樣大。
   static double get size => TabBarLook.current.value.searchSize;
 
   /// 和下面的搜尋鈕之間的距離。
   static const double gap = AppSpacing.md;
 
-  /// 疊在主頁上時離螢幕底緣的距離：搜尋鈕上緣再空 [gap]。
+  /// 疊在主頁內容上時離內容底緣的距離：搜尋鈕上緣再空 [gap]。[context] 在
+  /// 主頁的 [Scaffold] 內容裡，它的底部內距是分頁列整列（含上方的
+  /// [FloatingTabBar.topInset]、底下的距離與系統區）；搜尋鈕和整列一樣高。
   static double bottomOf(BuildContext context) =>
-      MediaQuery.viewPaddingOf(context).bottom +
-      AppGlass.tabBarBottomGap +
-      TabBarLook.current.value.rowHeight +
-      gap;
+      MediaQuery.paddingOf(context).bottom - FloatingTabBar.topInset + gap;
 
   @override
   State<AudiobookMiniButton> createState() => _AudiobookMiniButtonState();
@@ -162,7 +171,7 @@ class _AudiobookMiniButtonState extends State<AudiobookMiniButton>
           child: GlassSlide(
             shown: shown,
             edge: AxisDirection.right,
-            gap: MediaQuery.paddingOf(context).right + AppSpacing.lg,
+            gap: widget.right,
             child: child!,
           ),
         );

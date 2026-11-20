@@ -122,6 +122,9 @@ Future<void> setUpApp({
   ReaderContentTransformWorker.instance.stop();
   rootBundle.clear();
   SharedPreferences.setMockInitialValues(_harnessPrefs(prefs));
+  // 分頁列的樣子是整個程式共用的，照這個測試的偏好重讀，不帶著上一個
+  // 測試選的（App 在 main.dart 第一幀前讀）。
+  TabBarLook.restore(await SharedPreferences.getInstance());
   // 同步服務是整個程式共用的，記著上一個測試的偏好設定與執行狀態。
   SyncService.instance = SyncService();
   await _openDb?.close();

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/features/audiobook/audiobook_mini_button.dart';
+import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
@@ -82,6 +84,111 @@ void main() {
     final context = tester.element(find.byType(FloatingTabBar));
     expect(FloatingTabBar.searchRightOf(context, tabCount: 3), 16);
     expect(300 - searchRect(tester).right, moreOrLessEquals(16));
+  });
+
+  /// 主頁的樣子：分頁列在底部，內容區（[Scaffold] 延伸到分頁列底下）裡
+  /// 照收聽圓鈕與書架多選工具列的定位各放一塊，系統區 24。
+  Future<void> pumpHome(WidgetTester tester, {double textScale = 1}) async {
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1;
+    tester.view.padding = const FakeViewPadding(bottom: 24);
+    tester.view.viewPadding = const FakeViewPadding(bottom: 24);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: MediaQuery.withClampedTextScaling(
+          minScaleFactor: textScale,
+          maxScaleFactor: textScale,
+          child: Scaffold(
+            extendBody: true,
+            body: Builder(
+              builder: (context) {
+                final slot = FloatingTabBar.toolbarSlotOf(context);
+                return Stack(
+                  children: [
+                    Positioned(
+                      right: 16,
+                      bottom: AudiobookMiniButton.bottomOf(context),
+                      child: SizedBox.square(
+                        key: const ValueKey('mini'),
+                        dimension: AudiobookMiniButton.size,
+                      ),
+                    ),
+                    Positioned(
+                      left: slot.left,
+                      right: slot.right,
+                      bottom: slot.bottom,
+                      child: BookshelfEditToolbar(
+                        actions: [
+                          for (final label in ['全選', '移動', '刪除'])
+                            BookshelfToolbarAction(
+                              icon: Icons.check_rounded,
+                              label: label,
+                              onPressed: () {},
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+            bottomNavigationBar: FloatingTabBar(
+              currentIndex: 0,
+              onTap: (_) {},
+              onSearch: () {},
+              items: const [
+                FloatingTabItem(icon: Icons.book_outlined, label: '書架'),
+                FloatingTabItem(icon: Icons.explore_outlined, label: '發現'),
+                FloatingTabItem(icon: Icons.person_outline, label: '我的'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  for (final look in TabBarLook.values) {
+    testWidgets('${look.label}：手機底部有系統區時，收聽圓鈕疊在搜尋鈕上方空 10，'
+        '多選工具列和分頁列在同一個位置', (tester) async {
+      TabBarLook.current.value = look;
+      await pumpHome(tester);
+      final mini = tester.getRect(find.byKey(const ValueKey('mini')));
+      expect(
+        searchRect(tester).top - mini.bottom,
+        moreOrLessEquals(AudiobookMiniButton.gap),
+      );
+      final toolbar = tester.getRect(find.byType(BookshelfEditToolbar));
+      // 分頁列與搜尋鈕垂直置中在同一列：工具列對準搜尋鈕的中線就是對準分頁列。
+      expect(toolbar.height, look.barHeight);
+      expect(toolbar.center.dy, moreOrLessEquals(searchRect(tester).center.dy));
+    });
+
+    testWidgets('${look.label}：系統字級 200% 時多選工具列的圖示與字縮小放進去，不溢出', (tester) async {
+      TabBarLook.current.value = look;
+      await pumpHome(tester, textScale: 2);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  test('還原舊備份：只有試用開關時換成對應的樣子，有新設定時照新設定', () {
+    expect(TabBarLook.migrateBackup({'trial_compact_tab_bar': true, 'x': 1}), {
+      PreferKey.tabBarLook: TabBarLook.centered.name,
+      'x': 1,
+    });
+    expect(TabBarLook.migrateBackup({'trial_compact_tab_bar': false}), {
+      PreferKey.tabBarLook: TabBarLook.full.name,
+    });
+    expect(
+      TabBarLook.migrateBackup({
+        'trial_compact_tab_bar': true,
+        PreferKey.tabBarLook: TabBarLook.tall.name,
+      }),
+      {PreferKey.tabBarLook: TabBarLook.tall.name},
+    );
+    expect(TabBarLook.migrateBackup({'x': 1}), {'x': 1});
   });
 
   group('從偏好設定讀', () {

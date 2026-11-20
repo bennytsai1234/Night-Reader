@@ -218,7 +218,7 @@ class _BookshelfPageState extends State<BookshelfPage>
         appBar: _buildHeader(provider),
         body: Builder(
           builder: (context) {
-            final slot = FloatingTabBar.slotOf(context);
+            final slot = FloatingTabBar.toolbarSlotOf(context);
             return Stack(
               children: [
                 Positioned.fill(child: _buildContent(context, provider)),
