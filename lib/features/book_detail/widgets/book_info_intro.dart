@@ -64,7 +64,6 @@ class BookInfoIntro extends StatelessWidget {
     // 使用者改過的簡介（customIntro）優先，書源更新不會蓋掉。
     final intro = book.getShownIntro();
     return GroupedSection(
-      header: '簡介',
       children: [
         GroupedContent(
           child: UiText(

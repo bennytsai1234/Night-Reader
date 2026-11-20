@@ -12,7 +12,7 @@
 | [0036](0036-three-rules-for-smooth-animation.md) | 動畫流不流暢的三條標準：點下去那一幀可以重、預留停頓可以跑重工作、動畫中每一幀在 8.3ms 內（電腦 4.2ms）；使用者在手機上感覺得到才修 |
 | [0037](0037-smoothness-strategy-per-scene.md) | 每種場景用定好的流暢策略（靜止時準備、只播不做事、等靜止再放、每幀限量、只平移裁切）；掉幀是畫面在變時超過上限 |
 | [0022](0022-glass-moves-content-fades.md) | 一個元件的進出場只做一件事：玻璃只動、內容只淡，最後一幀等於靜止 |
-| [0009](0009-no-explanatory-copy-in-ui.md) | 介面不放解釋性文案 |
+| [0009](0009-no-explanatory-copy-in-ui.md) | 介面不放解釋性文案（卡片外的小字與說明的位置見 0076） |
 | [0030](0030-settings-hierarchy-and-option-inventory.md) | 設定的分級規則與全部選項的去留 |
 | [0059](0059-menus-show-every-item.md) | 選單與頁首的項目一律畫出，不能用的灰掉、不寫原因；設定頁依賴開關的子設定照舊隱藏 |
 
@@ -53,6 +53,7 @@
 | [0045](0045-fonts-downloaded-on-pick.md) | 正文與介面字型可選（系統、思源宋體、霞鶩文楷），選了才下載、核對 SHA-256；英數字照舊用系統字型 |
 | [0074](0074-tab-bar-look-is-a-setting.md) | 主頁分頁列與搜尋鈕的樣子是外觀設定：撐滿、置中、置中加大搜尋鈕、撐滿加高四選一（使用者點名要選） |
 | [0075](0075-one-spacing-symmetric-and-header-mask.md) | 間距上下一樣、一頁一種間距（14）；頁首遮罩是實色加 14 淡出，頁首固定不藏 |
+| [0076](0076-no-small-text-outside-cards.md) | 卡片外不放小字：標籤拿掉、資料放進卡片第一列粗字、說明收成一列開面板、動作是卡片最後一列 |
 
 ## 書源與下載
 

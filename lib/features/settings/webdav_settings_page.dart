@@ -111,7 +111,6 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
         ready: _loaded,
         children: [
           GroupedSection(
-            footer: '堅果雲要用「第三方應用管理」產生的應用密碼，不是登入密碼。',
             children: [
               GroupedTextFieldRow(
                 label: '網址',
@@ -137,6 +136,15 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                   revealed: _revealed,
                   onPressed: () => setState(() => _revealed = !_revealed),
                 ),
+              ),
+              const GroupedHelpRow(
+                title: '密碼要填什麼',
+                sections: [
+                  (
+                    heading: '堅果雲',
+                    items: ['填應用密碼，不是登入密碼', '應用密碼在堅果雲網頁版的「第三方應用管理」產生'],
+                  ),
+                ],
               ),
             ],
           ),

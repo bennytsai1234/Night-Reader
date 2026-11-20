@@ -31,6 +31,7 @@ class GroupedRow extends StatelessWidget
     this.showChevron,
     this.destructive = false,
     this.accent = false,
+    this.heading = false,
     this.enabled = true,
     this.maxSubtitleLines = 2,
     this.maxTitleLines,
@@ -40,6 +41,11 @@ class GroupedRow extends StatelessWidget
   });
 
   final String title;
+
+  /// 卡片第一列的粗字標題：本身是資料、標出這一組是哪一本書、哪一版、哪一類
+  /// 結果的那一行（書名、版本號與日期、「修好了 · 3」），右側 [value] 放
+  /// 跟著它的數值（ADR 0076）。
+  final bool heading;
 
   /// 標題、副標、右側數值是書或使用者的資料（書名、章名、書源名稱、自己寫的
   /// 字）時給 false：不跟介面語言轉換，書的資料照閱讀偏好的繁簡轉換（ADR 0066）。
@@ -97,6 +103,12 @@ class GroupedRow extends StatelessWidget
       ],
     );
   }
+
+  FontWeight get _titleWeight => heading
+      ? FontWeight.w600
+      : accent
+      ? FontWeight.w500
+      : FontWeight.w400;
 
   static final TextStyle _textStyle = AppTextStyles.bodyBase.copyWith(
     height: 1.3,
@@ -156,9 +168,7 @@ class GroupedRow extends StatelessWidget
     final title = GroupedItemShape.text(
       context,
       this.title,
-      style: _textStyle.copyWith(
-        fontWeight: accent ? FontWeight.w500 : FontWeight.w400,
-      ),
+      style: _textStyle.copyWith(fontWeight: _titleWeight),
       width: right - textLeft,
       maxLines: maxTitleLines,
     );
@@ -250,9 +260,7 @@ class GroupedRow extends StatelessWidget
                             maxLines: maxTitleLines,
                             style: _textStyle.copyWith(
                               color: titleColor,
-                              fontWeight: accent
-                                  ? FontWeight.w500
-                                  : FontWeight.w400,
+                              fontWeight: _titleWeight,
                             ),
                           ),
                         ),

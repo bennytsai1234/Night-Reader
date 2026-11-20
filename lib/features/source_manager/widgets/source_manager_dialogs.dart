@@ -54,7 +54,6 @@ class SourceManagerDialogs {
               GroupedSection(
                 margin: EdgeInsets.zero,
                 topGap: AppSpacing.md,
-                footer: service.config.summary,
                 children: [
                   GroupedRow(
                     title: service.isChecking
@@ -69,11 +68,16 @@ class SourceManagerDialogs {
                         : service.statusMsg,
                     showChevron: false,
                   ),
+                  GroupedRow(
+                    title: '校驗設定',
+                    subtitle: service.config.summary,
+                    maxSubtitleLines: 3,
+                    showChevron: false,
+                  ),
                 ],
               ),
               GroupedSection(
                 margin: EdgeInsets.zero,
-                header: '日誌',
                 children: [
                   SizedBox(
                     height: MediaQuery.sizeOf(sheetContext).height * 0.45,
@@ -258,8 +262,6 @@ class SourceManagerDialogs {
                 ),
                 GroupedSection(
                   margin: EdgeInsets.zero,
-                  header: '校驗項目',
-                  footer: summary,
                   children: [
                     // 搜尋與發現至少留一個。
                     GroupedSwitchRow(
@@ -310,6 +312,12 @@ class SourceManagerDialogs {
                         onChanged: (value) =>
                             setState(() => checkContent = value),
                       ),
+                    GroupedRow(
+                      title: '這次會校驗',
+                      subtitle: summary,
+                      maxSubtitleLines: 3,
+                      showChevron: false,
+                    ),
                   ],
                 ),
               ],
@@ -484,11 +492,10 @@ Future<Set<SourceTag>?> pickSourceTagsToDelete(
             onPressed: count == 0 ? null : confirm,
           ),
           children: [
-            for (final (title, rows) in sections)
+            for (final (_, rows) in sections)
               if (rows.isNotEmpty)
                 GroupedSection(
                   margin: EdgeInsets.zero,
-                  header: title,
                   children: [
                     for (final row in rows)
                       GroupedCheckRow(

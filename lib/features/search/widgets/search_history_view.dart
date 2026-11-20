@@ -14,8 +14,6 @@ import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import '../ai_find/ai_find_page.dart';
 import '../search_provider.dart';
 
-import 'package:night_reader/shared/widgets/glass/glass.dart';
-
 /// SearchHistoryView - 搜尋歷史顯示元件
 /// (對標 Legado SearchActivity 的輸入輔助區域 + HistoryKeyAdapter)
 ///
@@ -60,7 +58,6 @@ class SearchHistoryView extends StatelessWidget {
         ...leading,
         if (provider.pastFinds.isNotEmpty)
           GroupedSection(
-            header: '過去的找書',
             separatorIndent: _separatorIndent,
             children: [
               for (final find in provider.pastFinds)
@@ -87,12 +84,6 @@ class SearchHistoryView extends StatelessWidget {
           ),
         if (provider.historyKeywords.isNotEmpty)
           GroupedSection(
-            header: '搜尋歷史',
-            headerTrailing: PlainTextAction(
-              label: '清除',
-              small: true,
-              onPressed: () => _confirmClearHistory(context),
-            ),
             separatorIndent: _separatorIndent,
             children: [
               for (final keyword in provider.historyKeywords)
@@ -111,6 +102,12 @@ class SearchHistoryView extends StatelessWidget {
                   },
                   onLongPress: () => _confirmDeleteKeyword(context, keyword),
                 ),
+              GroupedRow(
+                title: '清除搜尋紀錄',
+                accent: true,
+                showChevron: false,
+                onTap: () => _confirmClearHistory(context),
+              ),
             ],
           )
         // 還在讀紀錄時不畫「沒有紀錄」的空頁（開 App 後還沒讀到就點進來）。

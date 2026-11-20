@@ -31,9 +31,14 @@ void main() {
                         body: GroupedListView(
                           children: [
                             GroupedSection(
-                              translateHeader: false,
-                              header: '書名',
-                              children: [GroupedRow(title: '書籤')],
+                              children: [
+                                GroupedRow(
+                                  title: '書名',
+                                  heading: true,
+                                  translateTitle: false,
+                                ),
+                                GroupedRow(title: '書籤'),
+                              ],
                             ),
                           ],
                         ),

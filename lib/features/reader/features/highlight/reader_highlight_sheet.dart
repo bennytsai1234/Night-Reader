@@ -100,7 +100,6 @@ class _ReaderHighlightSheetState extends State<ReaderHighlightSheet> {
             ],
           ),
           GroupedSection(
-            header: '顏色',
             children: [
               HighlightColorRow(
                 selected: _highlight.color,
@@ -109,7 +108,6 @@ class _ReaderHighlightSheetState extends State<ReaderHighlightSheet> {
             ],
           ),
           GroupedSection(
-            header: '樣子',
             children: [
               for (final style in HighlightStyle.values)
                 GroupedRow(
@@ -126,9 +124,9 @@ class _ReaderHighlightSheetState extends State<ReaderHighlightSheet> {
             ],
           ),
           GroupedSection(
-            header: '備忘',
             children: [
               GroupedTextFieldRow(
+                label: '備忘',
                 controller: _note,
                 minLines: 2,
                 maxLines: 6,

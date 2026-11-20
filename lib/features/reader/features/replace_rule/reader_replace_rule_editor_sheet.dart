@@ -221,7 +221,6 @@ class _ReaderReplaceRuleEditorSheetState
               ),
               GroupedSection(
                 margin: EdgeInsets.zero,
-                header: '進階範圍設定',
                 children: [
                   GroupedTextFieldRow(
                     controller: _scopeCtrl,

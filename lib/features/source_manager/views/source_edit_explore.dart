@@ -24,7 +24,6 @@ class SourceEditExplore extends StatelessWidget {
           ],
         ),
         GroupedSection(
-          header: '發現結果',
           children: [
             RuleTextField(
               controller: controllers['ruleExploreBookList']!,

@@ -49,9 +49,9 @@ class ReplaceEditForm extends StatelessWidget {
         ),
         GroupedSection(
           margin: margin,
-          header: '替換正則內容 *',
           children: [
             GroupedTextFieldRow(
+              label: '替換正則內容 *',
               controller: patternCtrl,
               maxLines: 3,
               style: mono,
@@ -62,9 +62,9 @@ class ReplaceEditForm extends StatelessWidget {
         ),
         GroupedSection(
           margin: margin,
-          header: '替換為內容',
           children: [
             GroupedTextFieldRow(
+              label: '替換為內容',
               controller: replacementCtrl,
               maxLines: 3,
               style: mono,

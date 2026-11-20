@@ -10,7 +10,6 @@ import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:night_reader/shared/widgets/skeleton/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
@@ -64,7 +63,6 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
       title: '外觀與排版',
       maxHeightFactor: 0.6,
       children: [
-        const SheetSection(title: '風格'),
         const _ReaderStyleSelector(),
         // 面板只放邊讀邊會調的幾項；其他排版、版面、頁首頁尾在閱讀偏好頁。
         _groups.typography(compact: true),

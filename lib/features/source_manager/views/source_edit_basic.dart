@@ -27,7 +27,6 @@ class SourceEditBasic extends StatelessWidget {
     return GroupedListView(
       children: [
         GroupedSection(
-          header: '基本資訊',
           children: [
             _field(controllers['name']!, '書源名稱', '例如: 筆趣閣'),
             _field(controllers['url']!, '書源網址', '例如: https://example.com'),
@@ -43,18 +42,18 @@ class SourceEditBasic extends StatelessWidget {
           ],
         ),
         GroupedSection(
-          header: '備註',
           children: [
             GroupedTextFieldRow(
+              label: '備註',
               controller: controllers['comment']!,
               maxLines: 3,
             ),
           ],
         ),
         GroupedSection(
-          header: '自定義 Header',
           children: [
             GroupedTextFieldRow(
+              label: '自定義 Header',
               controller: controllers['header']!,
               hintText: 'JSON 格式',
               maxLines: 3,
@@ -63,7 +62,6 @@ class SourceEditBasic extends StatelessWidget {
         ),
         // 同 Legado 的「登錄 URL」「登錄 UI」「登錄檢查 JS」（ADR 0038）。
         GroupedSection(
-          header: '登入',
           children: [
             GroupedTextFieldRow(
               controller: controllers['loginUrl']!,

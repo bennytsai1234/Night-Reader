@@ -7,16 +7,16 @@ import 'package:night_reader/core/models/source/book_source_logic.dart';
 
 /// AI 找書的深度（ADR 0060）：交出時每本書要做到哪裡才收。
 enum AiFindDepth {
-  quick('快速', '從搜尋結果的書名、字數與簡介開頭挑，不必每本都點開看。'),
-  normal('一般', '每本都去看詳情（簡介、分類、字數）再推薦。'),
-  deep('深入', '每本都去看詳情，小說再讀第一章與最後一章，看是不是太監，讀不到的寫明原因；漫畫、有聲書照一般。');
+  quick('快速', ['從搜尋結果的書名、字數與簡介開頭挑', '不必每本都點開看']),
+  normal('一般', ['每本都去看詳情（簡介、分類、字數）再推薦']),
+  deep('深入', ['每本都去看詳情', '小說再讀第一章與最後一章，看是不是太監', '讀不到的寫明原因', '漫畫、有聲書照一般']);
 
-  const AiFindDepth(this.label, this.explanation);
+  const AiFindDepth(this.label, this.points);
   final String label;
 
-  /// 開始前的頁面上，深度切換下面那一行：這個深度每本書查到哪裡才推薦。
-  /// 和提示詞的「深度決定每本要查到哪裡才收」、交出時的檢查同一套。
-  final String explanation;
+  /// 開始前的頁面上「深度的差別」面板裡這個深度的幾列：每本書查到哪裡才
+  /// 推薦。和提示詞的「深度決定每本要查到哪裡才收」、交出時的檢查同一套。
+  final List<String> points;
 
   static AiFindDepth fromName(String? name) =>
       values.asNameMap()[name] ?? AiFindDepth.normal;

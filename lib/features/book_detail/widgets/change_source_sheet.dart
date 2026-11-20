@@ -136,22 +136,31 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
               ),
             ),
           ),
+          // 搜尋狀態與來源數是資料，用粗字（ADR 0076）；夾在目前來源卡與
+          // 清單中間，上下一樣。
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppGrouped.margin + AppGrouped.rowPadding,
-              AppSpacing.sm,
+              AppGrouped.sectionGap,
               AppGrouped.margin + AppGrouped.rowPadding,
-              AppSpacing.sm,
+              AppGrouped.sectionGap,
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: GroupedSectionHeader(
-                    _isSwitchingSource ? '正在切換來源…' : provider.status,
+            child: DefaultTextStyle.merge(
+              style: AppTextStyles.bodyBase.copyWith(
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: UiText(
+                      _isSwitchingSource ? '正在切換來源…' : provider.status,
+                    ),
                   ),
-                ),
-                if (count > 0) GroupedSectionHeader('共 $count 個來源'),
-              ],
+                  if (count > 0) UiText('共 $count 個來源'),
+                ],
+              ),
             ),
           ),
           Expanded(

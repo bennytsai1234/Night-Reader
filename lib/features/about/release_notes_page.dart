@@ -115,14 +115,9 @@ class _ReleaseNotesPageState extends State<ReleaseNotesPage> {
   /// 載入中骨架照的一段版本：和 [_buildRelease] 同樣的標題、日期與 [lines]
   /// 行說明（最後一行短一些）。只給骨架量形狀，不會顯示出來。
   Widget _buildPlaceholder(BuildContext context, {required int lines}) {
-    final chrome = AppChrome.of(context);
     return GroupedSection(
-      header: 'v0.0.0',
-      headerTrailing: UiText(
-        '0000-00-00',
-        style: AppTextStyles.uiSm.copyWith(color: chrome.sectionText),
-      ),
       children: [
+        const GroupedRow(title: 'v0.0.0', heading: true, value: '0000-00-00'),
         GroupedContent(
           // 每行字數不同、最後一行短，像一段條列；都短於手機的一行寬，不會
           // 自己換行。
@@ -146,16 +141,15 @@ class _ReleaseNotesPageState extends State<ReleaseNotesPage> {
     final notes = releaseNotesForDisplay(note.body);
     final publishedAt = note.publishedAt;
     return GroupedSection(
-      header: note.isCurrent
-          ? 'v${note.versionName}（目前版本）'
-          : 'v${note.versionName}',
-      headerTrailing: publishedAt == null
-          ? null
-          : UiText(
-              _dateFormat.format(publishedAt),
-              style: AppTextStyles.uiSm.copyWith(color: chrome.sectionText),
-            ),
       children: [
+        GroupedRow(
+          title: note.isCurrent
+              ? 'v${note.versionName}（目前版本）'
+              : 'v${note.versionName}',
+          heading: true,
+          value: publishedAt == null ? null : _dateFormat.format(publishedAt),
+          translateValue: false,
+        ),
         GroupedContent(
           child: UiText(
             notes.isEmpty ? '這個版本沒有附更新說明。' : notes,

@@ -11,13 +11,16 @@ import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 
-/// 會送出什麼：設定頁的說明，與 `PRIVACY.md`、App 的「隱私說明」同一件事
+/// 「會送出什麼」面板：與 `PRIVACY.md`、App 的「隱私說明」同一件事
 /// （ADR 0054、0060），修書源與找書各一段。
-const String aiRepairPrivacyNote =
-    '按「AI 修復」或「修復異常書源」時，書源、校驗結果與抓到的網頁會送到這個服務；'
-    '登入資料、Cookie 的值與書源變數不送。\n'
-    '按「AI 找書」時，你寫的描述、書架與閱讀紀錄的書名與進度、書源給的分類與'
-    '簡介開頭，和搜尋、詳情、正文的結果會送到這個服務。';
+const List<HelpSection> aiSentSections = [
+  (heading: '按「AI 修復」或「修復異常書源」時送出', items: ['書源', '校驗結果', '抓到的網頁']),
+  (heading: '修書源時不送', items: ['登入資料', 'Cookie 的值', '書源變數']),
+  (
+    heading: '按「AI 找書」時送出',
+    items: ['你寫的描述', '書架與閱讀紀錄的書名與進度', '書源給的分類與簡介開頭', '搜尋、詳情、正文的結果'],
+  ),
+];
 
 /// 「找書的模型」選單裡「同修書源」那一項的值（空字串是自己輸入）。
 const String _sameAsRepair = '\u0000same';
@@ -305,7 +308,6 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
         ready: _loaded,
         children: [
           GroupedSection(
-            footer: aiRepairPrivacyNote,
             children: [
               Builder(
                 builder: (rowContext) => GroupedRow(
@@ -377,6 +379,11 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
                   onTap: () => unawaited(_pickConcurrency(rowContext)),
                 ),
               ),
+            ],
+          ),
+          GroupedSection(
+            children: [
+              GroupedHelpRow(title: '會送出什麼', sections: aiSentSections),
             ],
           ),
           GroupedSection(

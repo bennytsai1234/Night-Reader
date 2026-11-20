@@ -220,7 +220,6 @@ class _AboutPageState extends State<AboutPage> {
         children: [
           _AppLogo(package: _package),
           GroupedSection(
-            header: '開源與法律',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(
@@ -278,7 +277,6 @@ class _AboutPageState extends State<AboutPage> {
             ],
           ),
           GroupedSection(
-            header: '系統工具',
             children: [
               // 「檢查更新」在「我的」第一層（ADR 0030）。
               GroupedRow(

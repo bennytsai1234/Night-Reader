@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:night_reader/core/ai_find/ai_find_avoid.dart';
 import 'package:night_reader/core/ai_find/ai_find_library.dart';
 import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
@@ -245,7 +246,8 @@ void main() {
             },
       ),
     );
-    expect(find.text('送到 ai.example · m'), findsOneWidget);
+    // 送到哪個服務是卡片裡的一列（ADR 0076）。
+    expect(find.widgetWithText(GroupedRow, 'ai.example · m'), findsOneWidget);
     await tester.tap(find.text('開始找書'));
     await tester.pumpAndSettle();
     expect(started, isNull, reason: '沒打字時按不了');
@@ -339,18 +341,19 @@ void main() {
     await settle(tester, () => written);
   });
 
-  testWidgets('under the depth switch, a line says how far the chosen depth '
-      'checks each book', (tester) async {
+  testWidgets('under the depth switch, a row opens a panel saying how far '
+      'each depth checks a book', (tester) async {
     await show(tester, AiFindPage(prefs: await prefs()));
-    expect(find.text('每本都去看詳情（簡介、分類、字數）再推薦。'), findsOneWidget);
+    // 說明不放在畫面上（ADR 0076）。
+    expect(find.text('每本都去看詳情（簡介、分類、字數）再推薦'), findsNothing);
 
-    await tester.tap(find.text('深入'));
+    await tester.tap(find.text('深度的差別'));
     await tester.pumpAndSettle();
-    expect(
-      find.text('每本都去看詳情，小說再讀第一章與最後一章，看是不是太監，讀不到的寫明原因；漫畫、有聲書照一般。'),
-      findsOneWidget,
-    );
-    expect(find.text('每本都去看詳情（簡介、分類、字數）再推薦。'), findsNothing);
+    for (final depth in AiFindDepth.values) {
+      for (final point in depth.points) {
+        expect(find.text(point), findsWidgets);
+      }
+    }
   });
 
   testWidgets('the book count and the avoid list: the rows sum them up, the '

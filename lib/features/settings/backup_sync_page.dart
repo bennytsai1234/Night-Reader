@@ -86,8 +86,6 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
         ready: _loaded,
         children: [
           GroupedSection(
-            header: '同步',
-            footer: '閱讀進度自動同步，其他按下面的按鈕才同步',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(
@@ -133,11 +131,23 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
                     ? () => unawaited(runLocalBookSync(context, _sync))
                     : null,
               ),
+              const GroupedHelpRow(
+                title: '什麼時候同步',
+                sections: [
+                  (
+                    heading: '同步',
+                    items: [
+                      '閱讀進度自動同步',
+                      '其他資料按「立即全面同步」才同步',
+                      '本地書的原檔按「同步本地書」才同步',
+                    ],
+                  ),
+                  (heading: '備份', items: ['備份檔含登入資料']),
+                ],
+              ),
             ],
           ),
           GroupedSection(
-            header: '備份',
-            footer: '含登入資料',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(

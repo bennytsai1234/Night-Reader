@@ -250,18 +250,19 @@ class _ReadingStatsViewState extends State<ReadingStatsView> {
             // 2026-11-09 在候選圖上選，ADR 0055）；沒聽過有聲書時照舊一組。
             if (listened.isEmpty)
               GroupedSection(
-                header: '累積閱讀時間',
                 children: [for (final record in read) _row(context, record)],
               )
             else ...[
               if (read.isNotEmpty)
                 GroupedSection(
-                  header: '閱讀',
-                  children: [for (final record in read) _row(context, record)],
+                  children: [
+                    const GroupedRow(title: '閱讀', heading: true),
+                    for (final record in read) _row(context, record),
+                  ],
                 ),
               GroupedSection(
-                header: '收聽',
                 children: [
+                  const GroupedRow(title: '收聽', heading: true),
                   for (final record in listened) _row(context, record),
                 ],
               ),

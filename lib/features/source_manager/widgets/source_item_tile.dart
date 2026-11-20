@@ -207,7 +207,7 @@ class SourceItemTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
       child: ClipRRect(
         borderRadius: BorderRadius.vertical(
-          top: firstInGroup ? corner : Radius.zero,
+          top: firstInGroup && !showHostHeader ? corner : Radius.zero,
           bottom: showSeparator ? Radius.zero : corner,
         ),
         child: swipe,
@@ -215,19 +215,40 @@ class SourceItemTile extends StatelessWidget {
     );
 
     if (!showHostHeader) return tile;
+    // 照網站分組時，網址是這張卡的第一列（粗字，ADR 0076）；第一組接在
+    // 清單頂端，之後每組和上一組隔一段組間距。
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
+        ColoredBox(
           color: chrome.groupedBackground,
-          padding: const EdgeInsets.fromLTRB(
-            AppGrouped.margin,
-            AppSpacing.xl,
-            AppGrouped.margin,
-            AppSpacing.sm,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppGrouped.margin,
+              index == 0 ? 0 : AppGrouped.sectionGap,
+              AppGrouped.margin,
+              0,
+            ),
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: corner),
+              child: Material(
+                color: chrome.groupedSurface,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    GroupedRow(
+                      title: hostLabel,
+                      heading: true,
+                      translateTitle: false,
+                      showChevron: false,
+                    ),
+                    const InsetSeparator(indent: AppGrouped.rowPadding),
+                  ],
+                ),
+              ),
+            ),
           ),
-          child: GroupedSectionHeader(hostLabel),
         ),
         tile,
       ],

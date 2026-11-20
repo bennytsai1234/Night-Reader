@@ -930,7 +930,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                 if (p.allGroups.isNotEmpty)
                   GroupedSection(
                     margin: EdgeInsets.zero,
-                    header: '現有分組',
                     children: [
                       for (final g in p.allGroups)
                         GroupedCheckRow(
