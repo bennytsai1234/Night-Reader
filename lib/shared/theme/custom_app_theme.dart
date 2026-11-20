@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 
@@ -64,6 +65,7 @@ ThemeData buildAppTheme(
             : AppPalette.ink700,
       );
 
+  final fonts = _uiFonts(fontFamily);
   final textTheme = ThemeData(brightness: brightness).textTheme
       .copyWith(
         titleLarge: AppTextStyles.titleLg,
@@ -76,12 +78,8 @@ ThemeData buildAppTheme(
         labelMedium: AppTextStyles.labelSm,
         labelSmall: AppTextStyles.labelXs,
       )
-      .apply(
-        bodyColor: colors.text,
-        displayColor: colors.text,
-        // 介面字型（ADR 0045）；null 是系統字型。
-        fontFamily: fontFamily,
-      );
+      .merge(fonts)
+      .apply(bodyColor: colors.text, displayColor: colors.text);
 
   final chrome = AppChrome.derive(
     brightness: brightness,
@@ -99,7 +97,6 @@ ThemeData buildAppTheme(
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
-    fontFamily: fontFamily,
     colorScheme: scheme,
     scaffoldBackgroundColor: colors.background,
     // 骨架的樣子與換場不給選，`SkeletonLook.of`、`SkeletonReveal.of` 沒有
@@ -123,10 +120,9 @@ ThemeData buildAppTheme(
       backgroundColor: chrome.toastBackground,
       actionTextColor: chrome.toastAction,
       closeIconColor: chrome.toastForeground,
-      contentTextStyle: AppTextStyles.uiMd.copyWith(
-        color: chrome.toastForeground,
-        fontWeight: FontWeight.w400,
-      ),
+      contentTextStyle: AppTextStyles.uiMd
+          .copyWith(color: chrome.toastForeground, fontWeight: FontWeight.w400)
+          .merge(fonts.bodyMedium),
       shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardLg),
       insetPadding: const EdgeInsets.fromLTRB(
         AppGrouped.margin,
@@ -144,7 +140,7 @@ ThemeData buildAppTheme(
         fontSize: 18,
         fontWeight: FontWeight.w600,
         color: colors.text,
-      ),
+      ).merge(fonts.titleLarge),
     ),
     cardTheme: CardThemeData(
       elevation: brightness == Brightness.light ? 1 : 0,
@@ -179,6 +175,40 @@ ThemeData buildAppTheme(
       ),
     ),
     textTheme: textTheme,
+    primaryTextTheme: fonts,
+  );
+}
+
+/// 介面文字的字族，只有字族、不含字級與顏色：標點（，。、；：！？「」『』
+/// …—）由夜讀的標點字型畫，和閱讀器一樣照臺灣的位置，不受手機系統字型
+/// 影響（有些機型的系統字型沒有繁中標點字形，冒號、逗號偏下）；其餘字照
+/// [uiFont]（介面字型，ADR 0045），null 時照平台預設的字族。
+///
+/// 自己指定字樣、不從 `textTheme` 繼承的元件（提示訊息、標題列）也要合併
+/// 這裡對應的那一格。
+TextTheme _uiFonts(String? uiFont) {
+  final platform = Typography.material2021(platform: defaultTargetPlatform)
+      .black;
+  TextStyle font(TextStyle? style) => TextStyle(
+    fontFamily: AppTextStyles.punctuationFontFamily,
+    fontFamilyFallback: [?(uiFont ?? style?.fontFamily)],
+  );
+  return TextTheme(
+    displayLarge: font(platform.displayLarge),
+    displayMedium: font(platform.displayMedium),
+    displaySmall: font(platform.displaySmall),
+    headlineLarge: font(platform.headlineLarge),
+    headlineMedium: font(platform.headlineMedium),
+    headlineSmall: font(platform.headlineSmall),
+    titleLarge: font(platform.titleLarge),
+    titleMedium: font(platform.titleMedium),
+    titleSmall: font(platform.titleSmall),
+    bodyLarge: font(platform.bodyLarge),
+    bodyMedium: font(platform.bodyMedium),
+    bodySmall: font(platform.bodySmall),
+    labelLarge: font(platform.labelLarge),
+    labelMedium: font(platform.labelMedium),
+    labelSmall: font(platform.labelSmall),
   );
 }
 
