@@ -54,12 +54,13 @@ class AppBottomSheet extends StatelessWidget {
   static const double _headerInset =
       AppGrouped.margin - (AppGlass.buttonSize - PanelButtons.size) / 2;
 
-  /// 內容左右對齊分組卡片的外距，底下留一段空白。
+  /// 內容左右對齊分組卡片的外距；第一張卡接在頁首列下面，最後一張卡到
+  /// 面板底部和卡與卡之間一樣（[AppGrouped.sectionGap]）。
   static const EdgeInsets _contentPadding = EdgeInsets.fromLTRB(
     AppGrouped.margin,
     0,
     AppGrouped.margin,
-    AppSpacing.xxl,
+    AppGrouped.sectionGap,
   );
 
   @override
@@ -112,7 +113,7 @@ class AppBottomSheet extends StatelessWidget {
               ),
             PanelButtons(
               child: SizedBox(
-                height: AppGlass.headerToolbarHeight,
+                height: AppGlass.sheetHeaderHeight,
                 child: NavigationToolbar(
                   centerMiddle: true,
                   middleSpacing: AppSpacing.md,
@@ -162,7 +163,7 @@ class AppBottomSheet extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: children,
+                        children: GroupedListView.itemsOf(children),
                       ),
                     ),
             ),
@@ -353,19 +354,22 @@ class SheetHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppBottomSheet._headerInset,
-        AppSpacing.sm,
-        AppBottomSheet._headerInset,
-        AppSpacing.xs,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppBottomSheet._headerInset,
       ),
       child: PanelButtons(
         child: SizedBox(
-          height: AppGlass.buttonSize,
+          // 和 [AppBottomSheet] 的頁首列同高：看得到的圓鈕上下各 14。
+          height: AppGlass.sheetHeaderHeight,
           child: NavigationToolbar(
             middleSpacing: AppSpacing.md,
-            leading: leading,
-            trailing: trailing,
+            // 兩側的鈕照自己的大小置中，不被頁首列撐高。
+            leading: leading == null
+                ? null
+                : Center(widthFactor: 1, child: leading),
+            trailing: trailing == null
+                ? null
+                : Center(widthFactor: 1, child: trailing),
             middle: Semantics(
               header: true,
               child: DragOverflowText(

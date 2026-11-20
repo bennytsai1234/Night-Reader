@@ -100,12 +100,10 @@ class AppGrouped {
   /// 帶副標的列最小高度。
   static const double rowTallMinHeight = 60.0;
 
-  /// 分組之間的垂直間距。
-  static const double sectionGap = AppSpacing.xxl;
-
-  /// 清單頁頁首工具列下緣到第一項的距離（[GroupedListView] 給；第一組自己的
-  /// [sectionGap] 不算）。比頁首下緣的漸隱短，第一項上緣落在漸隱最淡的那一段。
-  static const double listTopGap = AppSpacing.md;
+  /// 分組之間的垂直間距，也是捲到底時最後一組到底部的距離；和頁首的
+  /// [AppGlass.headerGap] 同一段，一頁只有一種間距（docs/design/appearance.md
+  /// 「間距與圓角」）。
+  static const double sectionGap = AppGlass.headerGap;
 
   /// 分組卡片圓角。
   static const double radius = AppRadius.lg;
@@ -138,9 +136,20 @@ class AppGlass {
   /// 圓形玻璃按鈕。
   static const double buttonSize = 44.0;
 
-  /// 導航頁首工具列高度與下緣漸隱高度。
-  static const double headerToolbarHeight = 52.0;
-  static const double headerFadeHeight = 14.0;
+  /// 導航頁首的節奏（docs/design/components.md「導航頁首」）：圓鈕到狀態列
+  /// 下緣、圓鈕到第一個內容都是這一段。頁首遮罩在圓鈕下緣以下的這一段淡出，
+  /// 第一個內容接在淡出的下面。
+  static const double headerGap = AppSpacing.lg;
+
+  /// 導航頁首工具列：狀態列下緣先空 [headerGap]，接著一列圓鈕。
+  static const double headerToolbarHeight = headerGap + buttonSize;
+
+  /// 頁首遮罩下緣的淡出，接在工具列（與附加列）下面。
+  static const double headerFadeHeight = headerGap;
+
+  /// 底部面板的頁首列：面板裡看得到的圓鈕 32（`PanelButtons.size`）上下
+  /// 各空 [headerGap]，和頁首一樣上下一樣；第一張卡接在它下面。
+  static const double sheetHeaderHeight = 32.0 + headerGap * 2;
 
   /// 浮動分頁列後方的由下往上漸隱，與頁首下緣的漸隱對稱。
   static const double tabBarFadeHeight = headerFadeHeight;

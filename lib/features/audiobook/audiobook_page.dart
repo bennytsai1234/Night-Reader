@@ -377,7 +377,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
       );
       return Padding(
         padding: EdgeInsets.only(
-          top: padding.top + AppGlass.headerToolbarHeight,
+          top: _headerTop(context),
           bottom: _ControlDock.height + padding.bottom,
         ),
         child: AppStateView(
@@ -551,7 +551,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
   static double _headerTop(BuildContext context) =>
       MediaQuery.paddingOf(context).top +
       AppGlass.headerToolbarHeight +
-      AppSpacing.sm;
+      AppGlass.headerFadeHeight;
 
   /// 打開時清單捲到哪裡：正在播的第 [index] 列（共 [count] 列）在第一個
   /// 畫面就看得到時不捲，否則捲到它在頁首與圓鈕之間約三分之一高的地方。
@@ -567,7 +567,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
         _BookHeader.heightOf(context, book) +
         AppGrouped.sectionGap;
     final rowTop = listTop + index * _rowExtent;
-    final visibleTop = media.padding.top + AppGlass.headerToolbarHeight;
+    final visibleTop = _headerTop(context);
     final visibleBottom =
         media.size.height - _ControlDock.height - media.padding.bottom;
     if (rowTop + _rowExtent <= visibleBottom) return 0;

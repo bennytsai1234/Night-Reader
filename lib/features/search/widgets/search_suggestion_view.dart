@@ -32,12 +32,11 @@ class SearchSuggestionView extends StatelessWidget {
       padding:
           EdgeInsets.only(
             top: padding.top,
-            bottom: padding.bottom + AppSpacing.xxl,
+            bottom: padding.bottom + AppGrouped.sectionGap,
           ) +
           ReadableWidth.insetOf(context),
-      children: [
+      children: GroupedListView.itemsOf([
         GroupedSection(
-          topGap: AppSpacing.lg,
           separatorIndent: _separatorIndent,
           children: [
             for (final suggestion in suggestions)
@@ -59,7 +58,7 @@ class SearchSuggestionView extends StatelessWidget {
               ),
           ],
         ),
-      ],
+      ]),
     );
   }
 }

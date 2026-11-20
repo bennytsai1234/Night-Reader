@@ -44,8 +44,8 @@ class FloatingTabBarScope extends InheritedWidget {
       !identical(hidden, oldWidget.hidden);
 }
 
-/// 墊在浮動分頁列（或佔用它位置的編輯工具列）後方、由下往上的顏色漸隱帶，
-/// 與頁首的漸隱對稱：從螢幕底緣到分頁島上緣再往上 [AppSpacing.sm]（分頁列自己的
+/// 墊在浮動分頁列（或佔用它位置的編輯工具列）後方、由下往上的顏色漸隱帶：
+/// 從螢幕底緣到分頁島上緣再往上 [AppSpacing.sm]（分頁列自己的
 /// 上內距）與 [AppGlass.tabBarFadeHeight] 是一整段漸層（[EdgeFade.chrome]），
 /// 螢幕底緣實色、往上越來越淡，內容透到分頁島底下。只畫一段漸層，不模糊。
 ///

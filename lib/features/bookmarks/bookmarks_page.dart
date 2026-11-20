@@ -123,8 +123,7 @@ typedef _Entry = ({
 });
 
 class _BookmarksPageState extends State<BookmarksPage> {
-  static const double _tabsHeight =
-      GlassSegmented.trackHeight + AppSpacing.xs * 2;
+  static const double _tabsHeight = GlassSegmented.trackHeight;
 
   late List<Bookmark> _items = widget.initial;
   late List<Highlight> _highlights = widget.initialHighlights;
@@ -310,12 +309,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
         ],
         bottomHeight: _tabsHeight,
         bottom: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppGrouped.margin,
-            AppSpacing.xs,
-            AppGrouped.margin,
-            AppSpacing.xs,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
           child: GlassSegmented<_Tab>(
             segments: const [
               GlassSegment(_Tab.bookmarks, '書籤'),

@@ -287,8 +287,8 @@ class LogTextView extends StatelessWidget {
         child: ListView.builder(
           padding:
               EdgeInsets.only(
-                top: mediaPadding.top + AppSpacing.md,
-                bottom: mediaPadding.bottom + AppSpacing.xxxl,
+                top: mediaPadding.top,
+                bottom: mediaPadding.bottom + AppGrouped.sectionGap,
               ) +
               ReadableWidth.insetOf(context),
           itemCount: count,

@@ -258,12 +258,14 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     // 搜尋框與校驗狀態列一直在（ADR 0059）：沒有書源時搜尋框灰掉，
     // 還沒校驗過時狀態列寫「還沒校驗過」、不能點。
     final bottomChildren = <Widget>[
+      // 頁首附加列照上下一樣：圓鈕、搜尋框、校驗狀態列之間都隔
+      // [AppGlass.headerGap]，狀態列下面接頁首的淡出。
       Padding(
         padding: const EdgeInsets.fromLTRB(
           AppGrouped.margin,
-          AppSpacing.xs,
+          0,
           AppGrouped.margin,
-          AppSpacing.xs,
+          AppGlass.headerGap,
         ),
         child: SearchField(
           controller: _searchController,
@@ -274,12 +276,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         ),
       ),
       Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppGrouped.margin,
-          AppSpacing.xs,
-          AppGrouped.margin,
-          AppSpacing.xs,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
         child: SourceCheckStatusBar(
           provider: provider,
           onTap:
@@ -314,9 +311,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     ];
     final double bottomHeight =
         SearchField.height +
-        AppSpacing.xs * 2 +
+        AppGlass.headerGap +
         SourceCheckStatusBar.height +
-        AppSpacing.xs * 2 +
         (_isImporting ? 2.0 : 0.0);
     final bottom = bottomChildren.isEmpty
         ? null
@@ -423,8 +419,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
           ? SourceListSkeleton(
               padding:
                   EdgeInsets.only(
-                    top: padding.top + AppSpacing.sm,
-                    bottom: padding.bottom + AppSpacing.xxl,
+                    top: padding.top,
+                    bottom: padding.bottom + AppGrouped.sectionGap,
                   ) +
                   ReadableWidth.insetOf(context),
               count: p.lastSourceCount,
@@ -573,8 +569,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                     ),
                   SliverPadding(
                     padding: EdgeInsets.only(
-                      top: groupByHost ? 0 : AppSpacing.sm,
-                      bottom: padding.bottom + AppSpacing.xxl,
+                      bottom: padding.bottom + AppGrouped.sectionGap,
                     ),
                     sliver: canReorder
                         ? SliverReorderableList(

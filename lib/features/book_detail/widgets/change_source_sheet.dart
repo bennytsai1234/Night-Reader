@@ -174,7 +174,7 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
                       padding: EdgeInsets.only(
                         bottom:
                             MediaQuery.paddingOf(context).bottom +
-                            AppSpacing.xl,
+                            AppGrouped.sectionGap,
                       ),
                       itemCount: count,
                       itemBuilder: (ctx, i) {
