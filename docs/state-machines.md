@@ -954,3 +954,12 @@ ADR 0055 的播放器（`lib/features/audiobook/audiobook_player.dart`），讀�
 資料準備好之後又變回沒好（`ready` 從 true 變 false）時，換場切換會長回骨架，但階段停在已換成內容，骨架的樣子不照新的寬度重算。現在的七個呼叫端都只從沒好變成好（重試也不設回沒好），碰不到，維持現狀。
 
 **不收進階段的**：`ready` 是建構參數；骨架樣子的快取（`_cached`、`_cachedFor`）是算過的結果。
+
+**改後**：
+
+| 改前 | 改後 |
+|---|---|
+| `_entering`（`bool?`）、`_entranceFinished`、`_revealed` | `_EntranceStage?`：直接畫、還在進場、進場播完、已換成內容；null 只在第一次 `didChangeDependencies` 之前 |
+| `_entering != true` 直接畫；`loading: !_entranceFinished \|\| !ready`；算樣子看 `_revealed` | 都讀這一個階段 |
+
+讀者看到的都一樣。
