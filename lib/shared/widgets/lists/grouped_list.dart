@@ -29,7 +29,8 @@ export 'grouped_text_field_row.dart';
 ///
 /// 掛上時頁面還在進場（推入的頁面），先只畫骨架（[GroupedListSkeleton]，
 /// 整個畫面一個元件），換頁的第一格不建任何一列；進場播完的下一格才在骨架
-/// 底下一格建一組（[CoverRevealSlot]），都建好再照骨架換場換成內容
+/// 底下建：組標題與卡片外框先建，畫面裡的列一格一列（[CoverRevealSlot]），
+/// 都建好再照骨架換場換成內容
 /// （ADR 0029）。不是在進場中掛上的（分頁、已經在畫面上的頁面）直接建內容。
 class GroupedListView extends StatelessWidget {
   const GroupedListView({

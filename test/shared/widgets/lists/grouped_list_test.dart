@@ -97,9 +97,34 @@ void main() {
       );
       await tester.tap(find.text('開啟'));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(find.byType(GroupedListSkeleton), findsOneWidget);
-      expect(find.text('風格'), findsNothing, reason: '進場中不建列');
+      final route = ModalRoute.of(
+        tester.element(find.byType(GroupedListView, skipOffstage: false)),
+      )!;
+      var frames = 0;
+      while (!route.animation!.isCompleted) {
+        expect(
+          find.byType(GroupedListSkeleton, skipOffstage: false),
+          findsOneWidget,
+        );
+        expect(
+          find.text('風格', skipOffstage: false),
+          findsNothing,
+          reason: '進場第 $frames 格不建列',
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+        frames++;
+      }
+      expect(frames, greaterThan(5), reason: '進場要播一段');
+
+      // 進場播完後才在骨架底下建好，換場途中骨架與內容都在。
+      var overlapped = false;
+      for (var i = 0; i < 120 && !overlapped; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        overlapped =
+            find.text('風格').evaluate().isNotEmpty &&
+            find.byType(GroupedListSkeleton).evaluate().isNotEmpty;
+      }
+      expect(overlapped, isTrue, reason: '照骨架換場換成內容');
 
       await tester.pumpAndSettle();
       expect(find.text('風格'), findsOneWidget);
