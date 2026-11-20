@@ -1094,3 +1094,14 @@ Codex 審查逐入口對照新舊，沒有找到行為改變；找到的三處�
 `LaunchSkeleton._passThrough` 拿掉：建立時在進場底下、還沒換成真的才記下進場（`_motion`），沒記就是直接畫。
 
 **查過、沒修的**：減少動態、而且書架的骨架切換建立時就已經是內容時，`revealNow` 在建畫面途中把頁首換成真的，除錯版報「建畫面途中要求重建」。正式版同一輪就重建，看不出差別；要避開得把通知延到下一格，頁首會多一格骨架。書架的骨架切換在第一幀就建立，那時書架一定還在讀，碰不到，留著。
+
+**改後**：
+
+| 改前 | 改後 |
+|---|---|
+| `_controller` 的狀態、`_breathScheduled`、`_breathing.value`、`_breathSettled` 依序拼 | `_Timeline`：底色、長出、長完、呼吸、收住中、收住了；`requestPreparation` 看是不是還沒長完，`breathSettled` 看是不是收住了 |
+| `_revealStarted` 與 `_finished.isCompleted` | `_Reveal`：還沒、等收住、換場中、結束；`revealStarted`、`isFinished` 照它 |
+| 減少動態、長完停過 idle 各自設 `_breathScheduled` 與 `_breathing` | 都經過 `_breathe()`，換到呼吸並通知骨架 |
+| `LaunchSkeleton._passThrough` | 拿掉，`_motion` 不是 null 就是畫骨架到換成真的 |
+
+對外的 `LaunchEntranceMotion`（`revealStarted`、`breathSettled`、`preparing`、`isFinished`、`requestPreparation`、`capture`、`reveal`、`revealNow`）不變；讀者看到的都一樣。

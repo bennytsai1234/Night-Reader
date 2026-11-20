@@ -54,7 +54,45 @@ class LaunchEntrance extends StatefulWidget {
   State<LaunchEntrance> createState() => _LaunchEntranceState();
 }
 
-/// 進場的狀態。
+/// 開 App 的骨架走到哪（`docs/state-machines.md`「進場」）。
+enum _Timeline {
+  /// 第一幀只畫底色：等開 App 的準備工作、清記憶體、停 idle。
+  background,
+
+  /// 骨架長出，不呼吸、長到最深。
+  growing,
+
+  /// 長完那一格畫完起：骨架靜止，書架到了就在底下準備、拍圖，再停 idle。
+  grown,
+
+  /// 由左而右呼吸一口；停滿 [LaunchEntranceMotion.pause] 才收得住。
+  breathing,
+
+  /// 收住呼吸：每個位置把這一口呼完、停在最深。
+  settling,
+
+  /// 收住了，最後一個位置停好的那一格也畫完，畫面靜止。
+  settled,
+}
+
+/// 書架第一次換成內容走到哪。
+enum _Reveal {
+  /// 還沒：頁首按鈕、標題、分頁列與書架都是骨架。
+  none,
+
+  /// 書架要換場了，等骨架收住。
+  waiting,
+
+  /// 整個主頁面照兩張定格畫面換場。
+  playing,
+
+  /// 換好了（或書架一開始就是內容），整段進場結束。
+  done,
+}
+
+/// 進場的狀態：骨架那一條（[_Timeline]）與書架換成內容那一條（[_Reveal]）
+/// 同時在走，書架可以在骨架長出時就要換場（等收住），也可以在呼吸時才拿到
+/// 資料。
 class LaunchEntranceMotion {
   LaunchEntranceMotion._(this._controller, {required this.sweep});
 
@@ -77,8 +115,10 @@ class LaunchEntranceMotion {
   final ValueNotifier<bool> _revealed = ValueNotifier(false);
 
   /// 書架第一次換成內容已經開始（[reveal] 或 [revealNow]）。
-  bool get revealStarted => _revealStarted;
-  bool _revealStarted = false;
+  bool get revealStarted => _reveal != _Reveal.none;
+
+  _Timeline _timeline = _Timeline.background;
+  _Reveal _reveal = _Reveal.none;
 
   /// 開 App 的骨架呼吸由深到淺一次的時間；一口氣是它的兩倍（0.6 秒）。和
   /// 長出對稱：長出時每個位置花 0.3 秒長好、右邊晚 0.3 秒，呼吸也是每個
@@ -112,7 +152,7 @@ class LaunchEntranceMotion {
   final ValueNotifier<bool> _breathing = ValueNotifier(false);
 
   /// 整段進場已經結束：之後才建的骨架照一般的節奏呼吸。
-  bool get isFinished => _finished.isCompleted;
+  bool get isFinished => _reveal == _Reveal.done;
 
   /// 開始呼吸、停過 [pause] 時完成；系統要求減少動態時不停。
   Future<void> get _paused => _pauseOver.future;
@@ -121,9 +161,6 @@ class LaunchEntranceMotion {
   /// 整段進場結束時完成。
   Future<void> get finished => _finished.future;
   final Completer<void> _finished = Completer<void>();
-
-  /// 長完那一格畫完時決定要不要先準備書架；之後才到的書架照呼吸收住後準備。
-  bool _breathScheduled = false;
 
   /// 書架要在呼吸前準備（[requestPreparation]）：長完那一格畫完時完成。
   Completer<void>? _preparationStart;
@@ -137,7 +174,7 @@ class LaunchEntranceMotion {
   /// （ADR 0035）。回傳開始準備的時刻；太晚（已經排好呼吸）時回傳 null，
   /// 照呼吸收住後再準備（[settleBreath]）。重複呼叫回傳同一個。
   Future<void>? requestPreparation() {
-    if (_breathScheduled) return null;
+    if (_timeline.index >= _Timeline.grown.index) return null;
     return (_preparationStart ??= Completer<void>()).future;
   }
 
@@ -190,14 +227,15 @@ class LaunchEntranceMotion {
     required Duration duration,
     required bool sweep,
   }) async {
-    if (_revealStarted) {
+    if (_reveal != _Reveal.none) {
       change();
       return;
     }
-    _revealStarted = true;
+    _reveal = _Reveal.waiting;
     await settleBreath();
     // 等的期間整個進場被拆掉了（例如 App 換掉主頁面）：不再換場。
     if (_disposed) return;
+    _reveal = _Reveal.playing;
     final captured = screen.captured;
     await screen.play(
       duration: duration,
@@ -223,29 +261,35 @@ class LaunchEntranceMotion {
   Future<void>? _breathSettling;
 
   /// [settleBreath] 已經完成。
-  bool get breathSettled => _breathSettled;
-  bool _breathSettled = false;
+  bool get breathSettled => _timeline == _Timeline.settled;
 
   Future<void> _settleBreath() async {
     await _paused;
+    _timeline = _Timeline.settling;
     await rest.settle();
     // 最後一個位置是在某一格的動畫階段停好的，那一格還沒畫：等它畫完、畫面
     // 真的靜止了，下一格才開始準備書架。不然建書架會擠進收住的最後一格。
     await SchedulerBinding.instance.endOfFrame;
-    _breathSettled = true;
+    _timeline = _Timeline.settled;
   }
 
   /// 書架一開始就是內容（沒有骨架可換）：按鈕也直接到位。
   void revealNow() {
-    if (_revealStarted) return;
-    _revealStarted = true;
+    if (_reveal != _Reveal.none) return;
     _revealed.value = true;
     _finish();
   }
 
   void _finish() {
+    _reveal = _Reveal.done;
     rest.release();
     if (!_finished.isCompleted) _finished.complete();
+  }
+
+  /// 開始呼吸：骨架聽 [breathing]。
+  void _breathe() {
+    _timeline = _Timeline.breathing;
+    _breathing.value = true;
   }
 
   bool _disposed = false;
@@ -316,8 +360,7 @@ class _LaunchEntranceState extends State<LaunchEntrance>
     if (MediaQuery.disableAnimationsOf(context)) {
       _controller.value = 1;
       // 沒有長出與呼吸，也就沒有呼吸前的準備：書架到了直接換成內容。
-      motion._breathScheduled = true;
-      motion._breathing.value = true;
+      motion._breathe();
       motion._pauseOver.complete();
       return;
     }
@@ -330,7 +373,7 @@ class _LaunchEntranceState extends State<LaunchEntrance>
       _controller.removeStatusListener(onStatus);
       SchedulerBinding.instance.endOfFrame.then((_) async {
         if (!mounted) return;
-        motion._breathScheduled = true;
+        motion._timeline = _Timeline.grown;
         final start = motion._preparationStart;
         if (start != null) {
           start.complete();
@@ -339,7 +382,7 @@ class _LaunchEntranceState extends State<LaunchEntrance>
           _collectGarbage();
         }
         _timer = Timer(LaunchEntranceMotion.idle, () {
-          motion._breathing.value = true;
+          motion._breathe();
           _timer = Timer(LaunchEntranceMotion.pause, () {
             if (!motion._pauseOver.isCompleted) motion._pauseOver.complete();
           });
@@ -369,7 +412,9 @@ class _LaunchEntranceState extends State<LaunchEntrance>
       if (!mounted) return;
       _collectGarbage();
       _timer = Timer(LaunchEntranceMotion.idle, () {
-        if (mounted) _controller.forward();
+        if (!mounted) return;
+        _motion!._timeline = _Timeline.growing;
+        _controller.forward();
       });
     });
   }
@@ -445,20 +490,19 @@ class _LaunchSkeletonState extends State<LaunchSkeleton> {
   /// 開始出現，先取中央。
   double _u = 0.5;
 
+  /// 建立時在進場底下、進場還沒換成真的：照它畫骨架，直到換成真的。null
+  /// 是一直直接畫（不在進場底下，或建立時已經換成真的）。
   LaunchEntranceMotion? _motion;
-
-  /// 建立時進場已經換成真的（或不在進場底下）：一直直接畫。
-  bool _passThrough = true;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final motion = LaunchEntrance.maybeOf(context);
-    if (_motion == null) {
+    if (_motion == null && motion != null && !motion.revealed.value) {
       _motion = motion;
-      _passThrough = motion == null || motion.revealed.value;
     }
-    if (_passThrough || _motion!.revealed.value) return;
+    final drawing = _motion;
+    if (drawing == null || drawing.revealed.value) return;
     // 螢幕大小改變時（登記在這裡）重新量位置。
     MediaQuery.sizeOf(context);
     WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
@@ -476,7 +520,7 @@ class _LaunchSkeletonState extends State<LaunchSkeleton> {
   @override
   Widget build(BuildContext context) {
     final motion = _motion;
-    if (_passThrough || motion == null) return widget.child;
+    if (motion == null) return widget.child;
     final style = widget.textStyle;
     // 字的骨架是一條和字一樣高的長條，置中在那一行上。
     final barHeight = style == null
