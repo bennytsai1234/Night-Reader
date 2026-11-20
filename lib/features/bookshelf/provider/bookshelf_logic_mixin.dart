@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:night_reader/shared/shelf_trial.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book/book.dart';
@@ -112,6 +113,24 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
     UnifiedCovers.enabled.value = value;
     SharedPreferences.getInstance().then(
       (p) => p.setBool(_unifiedCoversKey, value),
+    );
+    notifyListeners();
+  }
+
+  /// 試用中：列表併成一個面（見 [ShelfTrial]）。
+  void setTrialMergedList(bool value) {
+    ShelfTrial.mergedList.value = value;
+    SharedPreferences.getInstance().then(
+      (p) => p.setBool(ShelfTrial.mergedListKey, value),
+    );
+    notifyListeners();
+  }
+
+  /// 試用中：分頁列置中縮小（見 [ShelfTrial]）。
+  void setTrialCompactTabBar(bool value) {
+    ShelfTrial.compactTabBar.value = value;
+    SharedPreferences.getInstance().then(
+      (p) => p.setBool(ShelfTrial.compactTabBarKey, value),
     );
     notifyListeners();
   }

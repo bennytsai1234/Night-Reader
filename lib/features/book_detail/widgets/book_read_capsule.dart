@@ -22,7 +22,8 @@ class BookReadCapsule extends StatelessWidget {
     required this.onPressed,
   });
 
-  static const double height = AppGlass.tabItemHeight;
+  /// 和分頁列分開：分頁列 2026-11-19 降到 52 高，這顆膠囊維持原本的 56。
+  static const double height = 56;
 
   /// 讀過的書顯示「繼續閱讀」。
   final bool started;
