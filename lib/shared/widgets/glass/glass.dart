@@ -907,28 +907,33 @@ class FloatingGlassToolbar extends StatelessWidget {
 
 /// 內容捲到浮動列底下時的邊緣漸隱。
 class EdgeFade extends StatelessWidget {
-  /// 正文上下緣：邊緣實色，往內在 45% 處剩 72%，到另一端透明。
+  /// 正文上下緣與導航頁首：從邊緣起 [solidFraction] 是實色，之後到另一端
+  /// 的這一段在 45% 處剩 72%、到另一端透明。
   const EdgeFade({
     super.key,
     required this.edge,
     required this.height,
     this.color,
+    this.solidFraction = 0,
   }) : _chrome = false;
 
-  /// 頁首與分頁列後方：沒有實色段，整條一段漸層，從螢幕邊緣的實色等速淡到
-  /// 透明，內容透到頁首與分頁列底下（docs/design/components.md「導航頁首」
-  /// 「主框架：浮動分頁列」）。
+  /// 分頁列後方：沒有實色段，整條一段漸層，從螢幕邊緣的實色等速淡到透明，
+  /// 內容透到分頁列底下（docs/design/components.md「主框架：浮動分頁列」）。
   const EdgeFade.chrome({
     super.key,
     required this.edge,
     required this.height,
     this.color,
-  }) : _chrome = true;
+  }) : _chrome = true,
+       solidFraction = 0;
 
   /// [AxisDirection.up] 表示貼在上緣（由上往下淡出）。
   final AxisDirection edge;
   final double height;
   final Color? color;
+
+  /// 從邊緣起算保持實色的比例。
+  final double solidFraction;
   final bool _chrome;
 
   @override
@@ -946,8 +951,15 @@ class EdgeFade extends StatelessWidget {
             gradient: LinearGradient(
               begin: top ? Alignment.topCenter : Alignment.bottomCenter,
               end: top ? Alignment.bottomCenter : Alignment.topCenter,
-              colors: _chrome ? [base, at(0)] : [base, at(0.72), at(0)],
-              stops: _chrome ? const [0, 1] : const [0, 0.45, 1],
+              colors: _chrome ? [base, at(0)] : [base, base, at(0.72), at(0)],
+              stops: _chrome
+                  ? const [0, 1]
+                  : [
+                      0,
+                      solidFraction,
+                      solidFraction + (1 - solidFraction) * 0.45,
+                      1,
+                    ],
             ),
           ),
         ),
@@ -1031,9 +1043,14 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
 
   double get _toolbarHeight => _hasToolbar ? AppGlass.headerToolbarHeight : 0;
 
+  /// 附加列連同它和圓鈕列之間的那一段 [AppGlass.headerGap]（上下一樣）。
+  double get _bottomExtent => bottomHeight == 0
+      ? 0
+      : (_hasToolbar ? AppGlass.headerGap : 0) + bottomHeight;
+
   @override
   Size get preferredSize => Size.fromHeight(
-    _toolbarHeight + bottomHeight + AppGlass.headerFadeHeight,
+    _toolbarHeight + _bottomExtent + AppGlass.headerFadeHeight,
   );
 
   @override
@@ -1067,8 +1084,9 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     final buttonInset = readable
         ? ReadableWidth.headerInsetOf(size)
         : AppGrouped.margin;
-    // 狀態列、工具列與附加列；漸隱帶再往下多 [AppGlass.headerFadeHeight]。
-    final barHeight = topPadding + _toolbarHeight + bottomHeight;
+    // 狀態列、工具列與附加列是實色；再往下 [AppGlass.headerFadeHeight] 淡出，
+    // 第一個內容接在淡出的下面。
+    final barHeight = topPadding + _toolbarHeight + _bottomExtent;
     final totalHeight = barHeight + AppGlass.headerFadeHeight;
     final brightness = ThemeData.estimateBrightnessForColor(bg);
     // 開 App 的進場：標題與按鈕先是骨架，跟書架一起換成真的。
@@ -1126,18 +1144,19 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
         child: Stack(
           children: [
             Positioned.fill(
-              child: EdgeFade.chrome(
+              child: EdgeFade(
                 edge: AxisDirection.up,
                 height: totalHeight,
                 color: bg,
+                solidFraction: barHeight / totalHeight,
               ),
             ),
             if (_hasToolbar)
               Positioned(
-                top: topPadding,
+                top: topPadding + AppGlass.headerGap,
                 left: 0,
                 right: 0,
-                height: AppGlass.headerToolbarHeight,
+                height: AppGlass.buttonSize,
                 child: NavigationToolbar(
                   middleSpacing: AppSpacing.md,
                   leading: !hasLeading
@@ -1177,7 +1196,7 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
               ),
             if (bottom != null)
               Positioned(
-                top: topPadding + _toolbarHeight,
+                top: topPadding + _toolbarHeight + _bottomExtent - bottomHeight,
                 left: contentSide,
                 right: contentSide,
                 height: bottomHeight,

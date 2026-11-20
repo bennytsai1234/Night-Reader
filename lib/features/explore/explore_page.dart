@@ -206,7 +206,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   EdgeInsets get _listPadding =>
       EdgeInsets.only(
         // 和書架、我的一樣從頁首下方同一條線開始。
-        top: _bodyPadding.top + AppSpacing.xs,
+        top: _bodyPadding.top,
         bottom: _bodyPadding.bottom + AppSpacing.xl,
       ) +
       ReadableWidth.insetOf(context);

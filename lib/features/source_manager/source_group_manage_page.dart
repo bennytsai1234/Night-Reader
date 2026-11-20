@@ -357,12 +357,7 @@ class _GroupSourcePickerPageState extends State<_GroupSourcePickerPage> {
           ),
         ],
         bottom: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppGrouped.margin,
-            AppSpacing.xs,
-            AppGrouped.margin,
-            AppSpacing.xs,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
           child: SearchField(
             controller: _searchController,
             hintText: '搜尋書源名稱、網址',
@@ -370,7 +365,7 @@ class _GroupSourcePickerPageState extends State<_GroupSourcePickerPage> {
             onChanged: (value) => setState(() => _query = value.trim()),
           ),
         ),
-        bottomHeight: SearchField.height + AppSpacing.xs * 2,
+        bottomHeight: SearchField.height,
       ),
       body: Builder(
         builder: (bodyContext) {
@@ -378,8 +373,8 @@ class _GroupSourcePickerPageState extends State<_GroupSourcePickerPage> {
           return ListView.builder(
             padding:
                 EdgeInsets.only(
-                  top: bodyPadding.top + AppSpacing.sm,
-                  bottom: padding.bottom + AppSpacing.xxl,
+                  top: bodyPadding.top,
+                  bottom: padding.bottom + AppGrouped.sectionGap,
                 ) +
                 ReadableWidth.insetOf(context),
             itemCount: sources.length,

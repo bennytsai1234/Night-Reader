@@ -53,14 +53,13 @@ class SearchHistoryView extends StatelessWidget {
       padding:
           EdgeInsets.only(
             top: padding.top,
-            bottom: padding.bottom + AppSpacing.xxl,
+            bottom: padding.bottom + AppGrouped.sectionGap,
           ) +
           ReadableWidth.insetOf(context),
-      children: [
+      children: GroupedListView.itemsOf([
         ...leading,
         if (provider.pastFinds.isNotEmpty)
           GroupedSection(
-            topGap: AppSpacing.lg,
             header: '過去的找書',
             separatorIndent: _separatorIndent,
             children: [
@@ -88,7 +87,6 @@ class SearchHistoryView extends StatelessWidget {
           ),
         if (provider.historyKeywords.isNotEmpty)
           GroupedSection(
-            topGap: AppSpacing.lg,
             header: '搜尋歷史',
             headerTrailing: PlainTextAction(
               label: '清除',
@@ -136,7 +134,7 @@ class SearchHistoryView extends StatelessWidget {
               ],
             ),
           ),
-      ],
+      ]),
     );
   }
 

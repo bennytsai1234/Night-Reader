@@ -35,7 +35,7 @@ class GroupedListView extends StatelessWidget {
     super.key,
     required this.children,
     this.controller,
-    this.bottomPadding = AppSpacing.xxxl,
+    this.bottomPadding = AppGrouped.sectionGap,
     this.physics,
     this.ready = true,
     this.loadingLabel,
@@ -56,20 +56,11 @@ class GroupedListView extends StatelessWidget {
   final double bottomPadding;
   final ScrollPhysics? physics;
 
-  /// 清單第一項的上緣，從清單頂端算：頁面的內容延伸到 [GlassNavHeader]
-  /// 底下時，是頁首工具列（含附加列）下緣往下 [AppGrouped.listTopGap]，落在
-  /// 頁首下緣漸隱最淡的那一段；其他情況是系統留的上方內距。
-  static double topOf(BuildContext context) {
-    final top = MediaQuery.paddingOf(context).top;
-    final scaffold = Scaffold.maybeOf(context)?.widget;
-    final underGlassHeader =
-        scaffold != null &&
-        scaffold.extendBodyBehindAppBar &&
-        scaffold.appBar is GlassNavHeader;
-    return underGlassHeader
-        ? top - AppGlass.headerFadeHeight + AppGrouped.listTopGap
-        : top;
-  }
+  /// 清單第一項的上緣，從清單頂端算：系統留的上方內距。頁面的內容延伸到
+  /// [GlassNavHeader] 底下時，這段內距已經包含頁首與它下緣的淡出，第一項
+  /// 剛好接在淡出的下面（docs/design/components.md「導航頁首」）。
+  static double topOf(BuildContext context) =>
+      MediaQuery.paddingOf(context).top;
 
   /// 清單的項目：第一項是一組時換成上方間距 0 的同一組，頁首到第一組只有
   /// [topOf] 那一段；骨架與內容都照換過的項目排。
@@ -155,7 +146,7 @@ class GroupedSheetContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _GroupedEntrance(
-    items: children,
+    items: GroupedListView.itemsOf(children),
     padding: padding,
     background: background,
     fit: StackFit.loose,

@@ -72,7 +72,7 @@ class GroupedSection extends StatelessWidget {
       );
 
   /// 同一組換上 [gap] 當上方間距：清單把第一組換成 0，頁首到第一組的距離
-  /// 只由清單給（[AppGrouped.listTopGap]）。
+  /// 只由清單給（[GroupedListView.topOf]）。
   GroupedSection withTopGap(double gap) => GroupedSection(
     key: key,
     header: header,

@@ -22,7 +22,7 @@ import 'package:night_reader/core/chinese/ui_language.dart';
 const List<String> _tabLabels = ['基礎', '搜尋', '發現', '詳情', '目錄', '正文'];
 
 /// 頁首分段控制佔用的高度（36 軌道加上下內距）。
-const double _kTabsHeight = 36 + AppSpacing.xs * 2;
+const double _kTabsHeight = 36;
 
 class SourceEditorPage extends StatefulWidget {
   final BookSource? source;
@@ -384,12 +384,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
         ],
         bottomHeight: _kTabsHeight,
         bottom: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppGrouped.margin,
-            AppSpacing.xs,
-            AppGrouped.margin,
-            AppSpacing.xs,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
           child: AnimatedBuilder(
             animation: _tabController,
             builder: (context, _) => GlassSegmented<int>(

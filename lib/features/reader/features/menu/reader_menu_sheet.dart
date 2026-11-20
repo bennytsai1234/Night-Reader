@@ -147,7 +147,7 @@ class ReaderSheetScaffold extends StatelessWidget {
               ),
             ),
             SizedBox(
-              height: AppGlass.headerToolbarHeight,
+              height: AppGlass.sheetHeaderHeight,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
@@ -187,7 +187,7 @@ class ReaderSheetScaffold extends StatelessWidget {
                   AppGrouped.margin,
                   0,
                   AppGrouped.margin,
-                  AppSpacing.xxl,
+                  AppGrouped.sectionGap,
                 ),
                 children: children,
               ),

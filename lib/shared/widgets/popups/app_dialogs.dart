@@ -366,12 +366,8 @@ class AppAlert<T> extends StatelessWidget {
                 children: [
                   Flexible(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.xl,
-                        AppSpacing.xl,
-                        AppSpacing.xl,
-                        AppSpacing.lg,
-                      ),
+                      // 文字區上下一樣，到下面的按鈕分隔線和到頂端同一段。
+                      padding: const EdgeInsets.all(AppSpacing.xl),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,

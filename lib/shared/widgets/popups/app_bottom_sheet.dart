@@ -54,12 +54,13 @@ class AppBottomSheet extends StatelessWidget {
   static const double _headerInset =
       AppGrouped.margin - (AppGlass.buttonSize - PanelButtons.size) / 2;
 
-  /// 內容左右對齊分組卡片的外距，底下留一段空白。
+  /// 內容左右對齊分組卡片的外距；第一張卡接在頁首列下面，最後一張卡到
+  /// 面板底部和卡與卡之間一樣（[AppGrouped.sectionGap]）。
   static const EdgeInsets _contentPadding = EdgeInsets.fromLTRB(
     AppGrouped.margin,
     0,
     AppGrouped.margin,
-    AppSpacing.xxl,
+    AppGrouped.sectionGap,
   );
 
   @override
@@ -112,7 +113,7 @@ class AppBottomSheet extends StatelessWidget {
               ),
             PanelButtons(
               child: SizedBox(
-                height: AppGlass.headerToolbarHeight,
+                height: AppGlass.sheetHeaderHeight,
                 child: NavigationToolbar(
                   centerMiddle: true,
                   middleSpacing: AppSpacing.md,
@@ -162,7 +163,7 @@ class AppBottomSheet extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: children,
+                        children: GroupedListView.itemsOf(children),
                       ),
                     ),
             ),

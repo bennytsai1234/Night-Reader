@@ -42,7 +42,7 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.onScopePressed,
   });
 
-  static const double _bottomHeight = GlassCapsule.height + AppSpacing.sm;
+  static const double _bottomHeight = GlassCapsule.height;
 
   @override
   Size get preferredSize =>
@@ -128,12 +128,7 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       bottomHeight: _bottomHeight,
       bottom: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppGrouped.margin,
-          0,
-          AppGrouped.margin,
-          AppSpacing.sm,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
         child: Row(
           children: [
             // 範圍膠囊是左半邊唯一能縮的，放得下就照原寬（不和右側留白

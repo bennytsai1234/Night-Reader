@@ -162,12 +162,15 @@ void main() {
       return top;
     }
 
-    testWidgets('內容延伸到玻璃頁首底下：工具列下緣往下 listTopGap', (tester) async {
+    testWidgets('內容延伸到玻璃頁首底下：接在頁首的淡出下面', (tester) async {
       final top = await topUnder(
         tester,
         appBar: const GlassNavHeader(title: '標題'),
       );
-      expect(top, 32 + AppGlass.headerToolbarHeight + AppGrouped.listTopGap);
+      expect(
+        top,
+        32 + AppGlass.headerToolbarHeight + AppGlass.headerFadeHeight,
+      );
     });
 
     testWidgets('一般頁首、沒延伸到頁首底下、沒有頁首：照系統留的內距，不會是負的', (tester) async {
