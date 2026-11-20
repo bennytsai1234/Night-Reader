@@ -24,9 +24,9 @@ abstract final class UnifiedCovers {
 }
 
 /// 沒有封面（或封面載不到）時的預設封面：深色是夜空，淺色是白天。月亮
-/// （白天是太陽）與兩層遠山在每本書都一樣，星星（白天是雲）照書名放；
-/// 天空的顏色照書在書架上的位置，由上到下深色從黃昏排到入夜、淺色從清晨
-/// 排到正午（使用者 2026-11-19 選的），不在書架上的書取中間。不放文字。
+/// （白天是太陽）、星星（白天是雲）與兩層遠山在每本書都一樣，只有天空的
+/// 顏色照書在書架上的位置，由上到下深色從黃昏排到入夜、淺色從清晨排到
+/// 正午（使用者 2026-11-19、11-20 選的），不在書架上的書取中間。不放文字。
 ///
 /// 漫畫與有聲書在同一片天空加一個記號：漫畫在右上角加一片網點，有聲書把
 /// 前面那層山換成一排音量條（`docs/design/components.md`「預設封面」）。
@@ -142,7 +142,6 @@ class _SkyPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
-    final random = math.Random(_seedOf(bookName));
     final rect = Offset.zero & size;
     final sky = _along(day ? _dayStops : _nightStops, position ?? 0.5);
 
@@ -195,14 +194,15 @@ class _SkyPainter extends CustomPainter {
       Paint()..color = light,
     );
 
-    if (day) {
-      _paintClouds(canvas, size, random, center, radius);
-    } else {
-      _paintStars(canvas, size, random, center, radius);
-    }
-
+    // 漫畫的網點畫在雲與星星底下，碰到時被雲蓋住，不在雲上多一層亮點。
     if (kind == BookSourceKind.comic) {
       _paintHalftone(canvas, size, center, radius, day: day);
+    }
+
+    if (day) {
+      _paintClouds(canvas, size);
+    } else {
+      _paintStars(canvas, size);
     }
 
     // 遠山兩層，後面的淡、前面的深，每本書同一個輪廓；有聲書前面那層換成
@@ -213,7 +213,7 @@ class _SkyPainter extends CustomPainter {
         in day ? [(0, 0.22), (1, 0.4)] : [(0, 0.18), (1, 0.32)]) {
       final color = ink.withValues(alpha: alpha);
       if (layer == 1 && kind == BookSourceKind.audio) {
-        _paintVolumeBars(canvas, size, random, color);
+        _paintVolumeBars(canvas, size, math.Random(_seedOf(bookName)), color);
         continue;
       }
       final ridge = Path()..moveTo(0, size.height);
@@ -228,49 +228,39 @@ class _SkyPainter extends CustomPainter {
     }
   }
 
-  /// 星星：上半部，避開月亮附近，位置照書名。
-  static void _paintStars(
-    Canvas canvas,
-    Size size,
-    math.Random random,
-    Offset moon,
-    double radius,
-  ) {
-    for (var i = 0; i < 6; i++) {
-      final star = Offset(
-        random.nextDouble() * size.width,
-        random.nextDouble() * size.height * 0.55,
-      );
-      if ((star - moon).distance < radius * 2) continue;
+  /// 星星：上半部五顆，避開月亮；位置、大小與亮度每本書都一樣，以封面的
+  /// 寬、高為單位（x、y、半徑、透明度）。
+  static const List<(double, double, double, double)> _stars = [
+    (0.12, 0.09, 0.012, 0.8),
+    (0.70, 0.08, 0.014, 0.85),
+    (0.86, 0.27, 0.010, 0.6),
+    (0.58, 0.41, 0.012, 0.7),
+    (0.16, 0.47, 0.009, 0.55),
+  ];
+
+  static void _paintStars(Canvas canvas, Size size) {
+    for (final (x, y, r, alpha) in _stars) {
       canvas.drawCircle(
-        star,
-        size.width * (0.006 + random.nextDouble() * 0.01),
-        Paint()
-          ..color = _moonlight.withValues(
-            alpha: 0.5 + random.nextDouble() * 0.4,
-          ),
+        Offset(size.width * x, size.height * y),
+        size.width * r,
+        Paint()..color = _moonlight.withValues(alpha: alpha),
       );
     }
   }
 
-  /// 雲：兩朵，避開太陽，位置與大小照書名。
-  static void _paintClouds(
-    Canvas canvas,
-    Size size,
-    math.Random random,
-    Offset sun,
-    double radius,
-  ) {
+  /// 雲：右上一朵小的、太陽右下一朵大的，避開太陽；每本書都一樣，以封面的
+  /// 寬、高為單位（中心 x、y 與寬度）。
+  static const List<(double, double, double)> _clouds = [
+    (0.78, 0.13, 0.15),
+    (0.62, 0.43, 0.22),
+  ];
+
+  static void _paintClouds(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = const Color(0xFFFFFFFF).withValues(alpha: 0.82);
-    var drawn = 0;
-    for (var tries = 0; tries < 8 && drawn < 2; tries++) {
-      final at = Offset(
-        size.width * (0.1 + random.nextDouble() * 0.8),
-        size.height * (0.12 + random.nextDouble() * 0.45),
-      );
-      if ((at - sun).distance < radius * 2.6) continue;
-      final w = size.width * (0.16 + random.nextDouble() * 0.1);
+    for (final (x, y, width) in _clouds) {
+      final at = Offset(size.width * x, size.height * y);
+      final w = size.width * width;
       canvas
         ..drawOval(
           Rect.fromCenter(center: at, width: w * 1.6, height: w * 0.5),
@@ -278,7 +268,6 @@ class _SkyPainter extends CustomPainter {
         )
         ..drawCircle(at + Offset(-w * 0.25, -w * 0.18), w * 0.3, paint)
         ..drawCircle(at + Offset(w * 0.15, -w * 0.25), w * 0.36, paint);
-      drawn++;
     }
   }
 

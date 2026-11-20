@@ -45,7 +45,8 @@ class NowPlayingArtwork {
   final Map<String, Uri> _resolved = {};
 
   /// 這次開 App 載不到或不是圖的封面，不每次換章都重抓。書源沒封面時常
-  /// 共用同一張預設圖的網址，所以這裡只記網址，預設封面照每本的書名畫。
+  /// 共用同一張預設圖的網址，所以這裡只記網址；預設封面照每本的類別與書名
+  /// 存一張（有聲書的音量條照書名），天空一律是夜空的中間那個顏色。
   final Set<String> _unavailable = {};
 
   /// 網路封面和書架的封面（`CachedNetworkImageProvider`）用同一個磁碟快取：
@@ -171,8 +172,8 @@ class NowPlayingArtwork {
     final file = File(
       p.join(
         (await _directory()).path,
-        // 預設封面 2026-11-19 換成月亮與山固定的天空，檔名跟著換，舊圖不再沿用。
-        'night_sky_v2_${kind.name}_${_hash(bookName)}.png',
+        // 預設封面的畫法改了檔名就換版本，舊圖不再沿用（v3：雲與星星固定）。
+        'night_sky_v3_${kind.name}_${_hash(bookName)}.png',
       ),
     );
     if (await file.exists() && await file.length() > 0) return file;

@@ -8,7 +8,12 @@ import 'package:night_reader/shared/widgets/book/book_cover_widget.dart';
 import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 
 void main() {
-  Future<Uint8List> pixelsOf(WidgetTester tester, BookSourceKind kind) async {
+  Future<Uint8List> pixelsOf(
+    WidgetTester tester,
+    BookSourceKind kind, {
+    String bookName = '詭秘之主',
+    Brightness brightness = Brightness.dark,
+  }) async {
     final boundary = GlobalKey();
     await tester.pumpWidget(
       Center(
@@ -17,10 +22,10 @@ void main() {
           child: SizedBox(
             width: 60,
             height: 84,
-            // 深色畫夜空、淺色畫白天；這裡驗證夜空。
+            // 深色畫夜空、淺色畫白天。
             child: Theme(
-              data: ThemeData(brightness: Brightness.dark),
-              child: DefaultBookCover(bookName: '詭秘之主', kind: kind),
+              data: ThemeData(brightness: brightness),
+              child: DefaultBookCover(bookName: bookName, kind: kind),
             ),
           ),
         ),
@@ -42,6 +47,33 @@ void main() {
     expect(await pixelsOf(tester, BookSourceKind.comic), isNot(novel));
     expect(await pixelsOf(tester, BookSourceKind.audio), isNot(novel));
     expect(await pixelsOf(tester, BookSourceKind.unsupported), novel);
+  });
+
+  testWidgets('不在書架上的兩本小說畫同一片天：雲、星星不照書名放', (tester) async {
+    for (final brightness in Brightness.values) {
+      expect(
+        await pixelsOf(
+          tester,
+          BookSourceKind.novel,
+          bookName: '星河彼岸',
+          brightness: brightness,
+        ),
+        await pixelsOf(
+          tester,
+          BookSourceKind.novel,
+          bookName: '夜雨聽書',
+          brightness: brightness,
+        ),
+        reason: '$brightness',
+      );
+    }
+  });
+
+  testWidgets('有聲書的音量條照書名', (tester) async {
+    expect(
+      await pixelsOf(tester, BookSourceKind.audio, bookName: '星河彼岸'),
+      isNot(await pixelsOf(tester, BookSourceKind.audio, bookName: '夜雨聽書')),
+    );
   });
 
   testWidgets('沒有封面的書照它的類別畫預設封面', (tester) async {
