@@ -286,8 +286,9 @@ class _SearchViewState extends State<SearchView> {
                   // 蓋在結果上面而不是換掉它，打完字取消時結果和捲動位置還在。
                   Positioned.fill(child: _buildSuggestions(provider)),
                   Positioned(
-                    // 進度條貼在頁首工具列（含搜尋框與膠囊）的下緣。
-                    top: padding.top - AppGlass.headerFadeHeight,
+                    // 進度條在頁首淡出的下緣、第一個內容的正上方：再往上就被
+                    // 頁首遮罩蓋住（ADR 0075）。
+                    top: padding.top - 2,
                     left: 0,
                     right: 0,
                     // 搜尋結束時停在最後的進度淡出，不在一幀內消失。

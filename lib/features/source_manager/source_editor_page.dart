@@ -22,7 +22,7 @@ import 'package:night_reader/core/chinese/ui_language.dart';
 const List<String> _tabLabels = ['基礎', '搜尋', '發現', '詳情', '目錄', '正文'];
 
 /// 頁首分段控制佔用的高度（36 軌道加上下內距）。
-const double _kTabsHeight = 36;
+const double _kTabsHeight = GlassSegmented.trackHeight;
 
 class SourceEditorPage extends StatefulWidget {
   final BookSource? source;

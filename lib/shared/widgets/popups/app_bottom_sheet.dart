@@ -354,19 +354,22 @@ class SheetHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppBottomSheet._headerInset,
-        AppSpacing.sm,
-        AppBottomSheet._headerInset,
-        AppSpacing.xs,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppBottomSheet._headerInset,
       ),
       child: PanelButtons(
         child: SizedBox(
-          height: AppGlass.buttonSize,
+          // 和 [AppBottomSheet] 的頁首列同高：看得到的圓鈕上下各 14。
+          height: AppGlass.sheetHeaderHeight,
           child: NavigationToolbar(
             middleSpacing: AppSpacing.md,
-            leading: leading,
-            trailing: trailing,
+            // 兩側的鈕照自己的大小置中，不被頁首列撐高。
+            leading: leading == null
+                ? null
+                : Center(widthFactor: 1, child: leading),
+            trailing: trailing == null
+                ? null
+                : Center(widthFactor: 1, child: trailing),
             middle: Semantics(
               header: true,
               child: DragOverflowText(
