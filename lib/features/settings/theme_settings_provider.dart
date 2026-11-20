@@ -9,6 +9,7 @@ import 'package:night_reader/core/sync/settings_sync.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 外觀風格、強調色、玻璃強度與換頁動畫；深淺模式由
@@ -65,6 +66,7 @@ class ThemeSettingsProvider extends ChangeNotifier {
   /// 同步套用了另一台的設定。
   void _reload() {
     _load();
+    TabBarLook.restore(_prefs);
     _shownUiFontFamily = uiFontFamily;
     notifyListeners();
   }
@@ -99,6 +101,9 @@ class ThemeSettingsProvider extends ChangeNotifier {
 
   /// 全 App 換頁共用的轉場。
   late AppPageTransition pageTransition;
+
+  /// 主頁分頁列與搜尋鈕的樣子；開 App 時在第一幀前讀（[TabBarLook.restore]）。
+  TabBarLook get tabBarLook => TabBarLook.current.value;
 
   /// App 介面的字型（ADR 0045）；閱讀正文另外選。
   late AppFont uiFont;
@@ -160,6 +165,13 @@ class ThemeSettingsProvider extends ChangeNotifier {
     if (pageTransition == value) return;
     pageTransition = value;
     _prefs.setString(PreferKey.pageTransition, value.name);
+    notifyListeners();
+  }
+
+  void setTabBarLook(TabBarLook value) {
+    if (tabBarLook == value) return;
+    TabBarLook.current.value = value;
+    _prefs.setString(PreferKey.tabBarLook, value.name);
     notifyListeners();
   }
 }

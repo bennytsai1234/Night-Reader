@@ -5,6 +5,7 @@ import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
+import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -22,7 +23,7 @@ import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 外觀與主題：淺色與深色各用的風格、深色用純黑、強調色、深淺、玻璃效果、
-/// 換頁動畫與介面字型。當下深淺用的風格決定 App 介面、閱讀正文與閱讀選單的配色。
+/// 換頁動畫、分頁列與介面字型。當下深淺用的風格決定 App 介面、閱讀正文與閱讀選單的配色。
 /// 載入骨架的深淺、呼吸與換場不給選，固定用 `SkeletonLook`、
 /// `SkeletonReveal` 的預設。
 class AppearanceSettingsPage extends StatelessWidget {
@@ -145,6 +146,20 @@ class AppearanceSettingsPage extends StatelessWidget {
                     label: (transition) => transition.label,
                     selected: themeSettings.pageTransition,
                     onPicked: themeSettings.setPageTransition,
+                  ),
+                ),
+              ),
+              Builder(
+                builder: (rowContext) => GroupedRow(
+                  title: '分頁列',
+                  value: themeSettings.tabBarLook.label,
+                  showChevron: false,
+                  onTap: () => _pickOption(
+                    rowContext,
+                    TabBarLook.values,
+                    label: (look) => look.label,
+                    selected: themeSettings.tabBarLook,
+                    onPicked: themeSettings.setTabBarLook,
                   ),
                 ),
               ),

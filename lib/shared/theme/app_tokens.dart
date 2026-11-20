@@ -124,19 +124,16 @@ class AppGrouped {
 class AppGlass {
   AppGlass._();
 
-  /// 浮動分頁列：44 高的分頁項，加上下各 4 的內距，共 52（使用者 2026-11-19
-  /// 從 64 降下來，少擋書架底部的書）。
-  static const double tabItemHeight = 44.0;
+  /// 浮動分頁列的高度與搜尋鈕大小照使用者選的 `TabBarLook`；這裡是不跟著
+  /// 變的部分：分頁項與分頁列邊緣的內距、分頁列與搜尋鈕之間的距離。
   static const double tabInnerInset = 4.0;
-  static const double tabBarHeight = tabItemHeight + tabInnerInset * 2;
   static const double tabBarGap = 8.0;
+
+  /// 浮在清單底部的工具列（書源管理的批次動作列）的高度。
+  static const double toolbarHeight = 44.0;
 
   /// 分頁列與螢幕底部系統區之間的距離。
   static const double tabBarBottomGap = 8.0;
-
-  /// 浮動分頁列在內容底部需要讓出的總高度（不含系統區）。
-  static const double tabBarOccupiedHeight =
-      tabBarHeight + tabBarBottomGap + AppSpacing.md;
 
   /// 圓形玻璃按鈕。
   static const double buttonSize = 44.0;

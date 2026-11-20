@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/download/book_update_service.dart';
@@ -665,7 +666,7 @@ class BookshelfEditToolbar extends StatelessWidget {
     this.progressLabel,
   });
 
-  static const double height = AppGlass.tabBarHeight;
+  static double get height => TabBarLook.current.value.barHeight;
 
   final List<BookshelfToolbarAction> actions;
 

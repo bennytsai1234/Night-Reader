@@ -74,7 +74,6 @@ enum _ShelfMenuAction {
   listView,
   unifiedCovers,
   trialMergedList,
-  trialCompactTabBar,
   sortFilter,
   select,
   export,
@@ -351,13 +350,6 @@ class _BookshelfPageState extends State<BookshelfPage>
         toggle: true,
         enabled: !provider.isGridView,
       ),
-      GlassMenuItem(
-        value: _ShelfMenuAction.trialCompactTabBar,
-        label: '試用：分頁列置中',
-        icon: Icons.width_normal_outlined,
-        checked: ShelfTrial.compactTabBar.value,
-        toggle: true,
-      ),
       const GlassMenuDivider(),
       const GlassMenuItem(
         value: _ShelfMenuAction.sortFilter,
@@ -462,8 +454,6 @@ class _BookshelfPageState extends State<BookshelfPage>
         provider.setUnifiedCovers(!provider.unifiedCovers);
       case _ShelfMenuAction.trialMergedList:
         provider.setTrialMergedList(!ShelfTrial.mergedList.value);
-      case _ShelfMenuAction.trialCompactTabBar:
-        provider.setTrialCompactTabBar(!ShelfTrial.compactTabBar.value);
       case _ShelfMenuAction.sortFilter:
         break;
       case _ShelfMenuAction.select:

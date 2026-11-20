@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/shared/widgets/book/book_cover_widget.dart';
@@ -36,7 +37,7 @@ class AudiobookMiniButton extends StatefulWidget {
   final bool hidden;
 
   /// 圓鈕的直徑，和搜尋鈕一樣大。
-  static const double size = AppGlass.tabBarHeight;
+  static double get size => TabBarLook.current.value.searchSize;
 
   /// 和下面的搜尋鈕之間的距離。
   static const double gap = AppSpacing.md;
@@ -45,7 +46,7 @@ class AudiobookMiniButton extends StatefulWidget {
   static double bottomOf(BuildContext context) =>
       MediaQuery.viewPaddingOf(context).bottom +
       AppGlass.tabBarBottomGap +
-      AppGlass.tabBarHeight +
+      TabBarLook.current.value.rowHeight +
       gap;
 
   @override
@@ -183,7 +184,7 @@ class _MiniFace extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final cover = UnifiedCovers.coverOf(book);
-    const inner = AudiobookMiniButton.size - _ring * 4;
+    final inner = AudiobookMiniButton.size - _ring * 4;
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -238,7 +239,7 @@ class _MiniFace extends StatelessWidget {
                 ? 0.0
                 : (at.inMilliseconds / total).clamp(0.0, 1.0);
             return CustomPaint(
-              size: const Size.square(AudiobookMiniButton.size - _ring * 2),
+              size: Size.square(AudiobookMiniButton.size - _ring * 2),
               painter: _RingPainter(
                 progress: progress,
                 color: scheme.primary,

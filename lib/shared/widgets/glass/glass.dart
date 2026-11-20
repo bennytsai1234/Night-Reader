@@ -881,7 +881,7 @@ class FloatingGlassToolbar extends StatelessWidget {
   const FloatingGlassToolbar({
     super.key,
     required this.child,
-    this.height = AppGlass.tabItemHeight,
+    this.height = AppGlass.toolbarHeight,
   });
 
   final Widget child;

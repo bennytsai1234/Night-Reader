@@ -126,15 +126,6 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
     notifyListeners();
   }
 
-  /// 試用中：分頁列置中縮小（見 [ShelfTrial]）。
-  void setTrialCompactTabBar(bool value) {
-    ShelfTrial.compactTabBar.value = value;
-    SharedPreferences.getInstance().then(
-      (p) => p.setBool(ShelfTrial.compactTabBarKey, value),
-    );
-    notifyListeners();
-  }
-
   /// 書架上有哪幾類書。
   Set<BookSourceKind> get shelfKinds => {
     for (final book in books) book.bookKind,

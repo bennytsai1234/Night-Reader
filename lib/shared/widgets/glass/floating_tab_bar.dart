@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/shelf_trial.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 
 import '../../layout/readable_width.dart';
@@ -10,6 +9,7 @@ import '../../theme/app_haptics.dart';
 import '../../theme/app_text_styles.dart';
 import '../../theme/app_tokens.dart';
 import 'glass.dart';
+import 'tab_bar_look.dart';
 import '../skeleton/launch_entrance.dart';
 
 import 'package:night_reader/core/chinese/ui_language.dart';
@@ -149,35 +149,37 @@ class FloatingTabBar extends StatefulWidget {
         .copyWith(bottom: systemBottom + AppGlass.tabBarBottomGap);
   }
 
-  /// 分頁列的寬度：和卡片左右切齊、扣掉右側搜尋鈕。試用「分頁列置中」時
-  /// 每個分頁 72 寬，放不下（很窄的分割視窗）就照切齊時的寬度（DESIGN.md
-  /// 設計原則 6）。
+  /// 分頁列的寬度：和卡片左右切齊、扣掉右側搜尋鈕。選了置中的樣子
+  /// （[TabBarLook.isCentered]）時每個分頁 [TabBarLook.centeredTabWidth] 寬，
+  /// 放不下（很窄的分割視窗）就照切齊時的寬度。
   static double barWidthOf(
     BuildContext context, {
     required int count,
     required bool search,
   }) {
+    final look = TabBarLook.current.value;
     final inset = ReadableWidth.cardInsetOf(context);
-    final searchWidth = search ? AppGlass.tabBarHeight + AppGlass.tabBarGap : 0;
+    final searchWidth = search ? look.searchSize + AppGlass.tabBarGap : 0;
     final full = math.max(
       0.0,
       MediaQuery.sizeOf(context).width - inset.left - inset.right - searchWidth,
     );
-    if (!ShelfTrial.compactTabBar.value) return full;
+    if (!look.isCentered) return full;
     return math.min(
       full,
-      ShelfTrial.compactTabWidth * count + AppGlass.tabInnerInset * 2,
+      TabBarLook.centeredTabWidth * count + AppGlass.tabInnerInset * 2,
     );
   }
 
   /// 搜尋鈕右緣離螢幕右邊多遠（收聽圓鈕疊在它正上方）。
   static double searchRightOf(BuildContext context, {required int tabCount}) {
+    final look = TabBarLook.current.value;
     final side = ReadableWidth.cardInsetOf(context).right;
-    if (!ShelfTrial.compactTabBar.value) return side;
+    if (!look.isCentered) return side;
     final group =
         barWidthOf(context, count: tabCount, search: true) +
         AppGlass.tabBarGap +
-        AppGlass.tabBarHeight;
+        look.searchSize;
     final width = MediaQuery.sizeOf(context).width;
     return math.max(side, (width - group) / 2);
   }
@@ -201,16 +203,16 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
   @override
   void initState() {
     super.initState();
-    ShelfTrial.compactTabBar.addListener(_onTrialChanged);
+    TabBarLook.current.addListener(_onLookChanged);
   }
 
   @override
   void dispose() {
-    ShelfTrial.compactTabBar.removeListener(_onTrialChanged);
+    TabBarLook.current.removeListener(_onLookChanged);
     super.dispose();
   }
 
-  void _onTrialChanged() => setState(() {});
+  void _onLookChanged() => setState(() {});
 
   double _pagePosition() {
     final controller = widget.controller;
@@ -225,6 +227,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
+    final look = TabBarLook.current.value;
     // 分頁列加搜尋鈕的左右和清單的卡片切齊（平板上收在內容欄裡）。
     final side = ReadableWidth.cardInsetOf(context).left;
     final barWidth = FloatingTabBar.barWidthOf(
@@ -247,7 +250,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
           LaunchSkeleton(
             child: SizedBox(
               width: barWidth,
-              height: AppGlass.tabBarHeight,
+              height: look.barHeight,
               child: _buildBar(context, barWidth),
             ),
           ),
@@ -263,12 +266,12 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
                 child: PressScale(
                   onTap: widget.onSearch,
                   child: SizedBox.square(
-                    dimension: AppGlass.tabBarHeight,
+                    dimension: look.searchSize,
                     child: GlassSurface(
                       shape: BoxShape.circle,
                       child: Icon(
                         Icons.search_rounded,
-                        size: 24,
+                        size: look.searchIconSize,
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
@@ -386,7 +389,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
                       left: AppGlass.tabInnerInset + position * itemWidth,
                       top: AppGlass.tabInnerInset,
                       width: itemWidth,
-                      height: AppGlass.tabItemHeight,
+                      height: TabBarLook.current.value.tabItemHeight,
                       child: AnimatedScale(
                         scale: _dragPosition != null ? 1.06 : 1,
                         duration: AppMotion.menu,
@@ -490,14 +493,14 @@ class _TabGlyph extends StatelessWidget {
   final Color color;
 
   @override
-  // 系統字級很大時（例如 200%）圖示加字會比 44 高，整組等比縮小放進去，
+  // 系統字級很大時（例如 200%）圖示加字會比分頁高，整組等比縮小放進去，
   // 不裁字。
   Widget build(BuildContext context) => FittedBox(
     fit: BoxFit.scaleDown,
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 22, color: color),
+        Icon(icon, size: TabBarLook.current.value.tabIconSize, color: color),
         const SizedBox(height: 2),
         UiText(
           label,
