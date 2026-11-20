@@ -49,24 +49,21 @@ void main() {
     expect(await pixelsOf(tester, BookSourceKind.unsupported), novel);
   });
 
-  testWidgets('不在書架上的兩本小說畫同一片天：雲、星星不照書名放', (tester) async {
-    for (final brightness in Brightness.values) {
-      expect(
-        await pixelsOf(
-          tester,
-          BookSourceKind.novel,
-          bookName: '星河彼岸',
-          brightness: brightness,
-        ),
-        await pixelsOf(
-          tester,
-          BookSourceKind.novel,
-          bookName: '夜雨聽書',
-          brightness: brightness,
-        ),
-        reason: '$brightness',
-      );
-    }
+  testWidgets('不在書架上的兩本小說：白天同一片天（雲固定），夜空星星照書名', (tester) async {
+    Future<Uint8List> of(String name, Brightness brightness) => pixelsOf(
+      tester,
+      BookSourceKind.novel,
+      bookName: name,
+      brightness: brightness,
+    );
+    expect(
+      await of('星河彼岸', Brightness.light),
+      await of('夜雨聽書', Brightness.light),
+    );
+    expect(
+      await of('星河彼岸', Brightness.dark),
+      isNot(await of('夜雨聽書', Brightness.dark)),
+    );
   });
 
   testWidgets('有聲書的音量條照書名', (tester) async {

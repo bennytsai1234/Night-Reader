@@ -24,9 +24,10 @@ abstract final class UnifiedCovers {
 }
 
 /// 沒有封面（或封面載不到）時的預設封面：深色是夜空，淺色是白天。月亮
-/// （白天是太陽）、星星（白天是雲）與兩層遠山在每本書都一樣，只有天空的
-/// 顏色照書在書架上的位置，由上到下深色從黃昏排到入夜、淺色從清晨排到
-/// 正午（使用者 2026-11-19、11-20 選的），不在書架上的書取中間。不放文字。
+/// （白天是太陽）、雲與兩層遠山在每本書都一樣，星星照書名放；天空的顏色
+/// 照書在書架上的位置，由上到下深色從黃昏排到入夜、淺色從清晨的藍排到
+/// 正午的黃（使用者 2026-11-19、11-20 選的），不在書架上的書取中間。不放
+/// 文字。
 ///
 /// 漫畫與有聲書在同一片天空加一個記號：漫畫在右上角加一片網點，有聲書把
 /// 前面那層山換成一排音量條（`docs/design/components.md`「預設封面」）。
@@ -114,15 +115,23 @@ class _SkyPainter extends CustomPainter {
     Color(0xFF0F2C35),
   ];
 
-  /// 白天：清晨的桃粉 → 日出的金 → 淡青 → 淺藍 → 藍 → 正午的藍。
+  /// 白天：清晨的淺藍 → 淡藍 → 淡黃 → 亮黃 → 正午明亮的黃（不從深藍開始；
+  /// 黃不偏橘，偏橘就像黃昏）。
   static const List<Color> _dayStops = [
-    Color(0xFFEFB49E),
-    Color(0xFFF1CB8F),
-    Color(0xFFC9DCD2),
-    Color(0xFFA6C8E0),
-    Color(0xFF7FB0D8),
-    Color(0xFF5C96CC),
+    Color(0xFFA3C9EA),
+    Color(0xFFC3DCEC),
+    Color(0xFFE2E8CF),
+    Color(0xFFF6E9A6),
+    Color(0xFFF9DE6E),
   ];
+
+  /// 白天天空上緣加深的墨色：藍天那端與黃天那端。
+  static const Color _dayInkBlue = Color(0xFF2E4A6B);
+  static const Color _dayInkWarm = Color(0xFF6E6A3C);
+
+  /// 白天的山色：藍天那端的藍山與正午那端的草綠山丘。
+  static const Color _dayHillBlue = Color(0xFF3E648C);
+  static const Color _dayHillGreen = Color(0xFF5F7F4A);
 
   /// 書名的 FNV-1a 雜湊：跟 `String.hashCode` 不同，保證每次啟動都一樣。
   static int _seedOf(String name) {
@@ -143,7 +152,11 @@ class _SkyPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
     final rect = Offset.zero & size;
-    final sky = _along(day ? _dayStops : _nightStops, position ?? 0.5);
+    final t = position ?? 0.5;
+    final sky = _along(day ? _dayStops : _nightStops, t);
+    // 白天的上緣加深跟著天空由藍轉黃：藍天配藍灰、黃天配橄欖灰，黃天上緣
+    // 才不會混成灰綠，也不會偏橘像黃昏。
+    final dayInk = Color.lerp(_dayInkBlue, _dayInkWarm, t)!;
 
     canvas.drawRect(
       rect,
@@ -153,7 +166,7 @@ class _SkyPainter extends CustomPainter {
           end: Alignment.bottomCenter,
           colors: day
               ? [
-                  Color.lerp(sky, const Color(0xFF2C4A6E), 0.22)!,
+                  Color.lerp(sky, dayInk, 0.22 - 0.1 * t)!,
                   Color.lerp(sky, const Color(0xFFFFFFFF), 0.38)!,
                 ]
               : [Color.lerp(sky, const Color(0xFF05070C), 0.45)!, sky],
@@ -194,7 +207,7 @@ class _SkyPainter extends CustomPainter {
       Paint()..color = light,
     );
 
-    // 漫畫的網點畫在雲與星星底下，碰到時被雲蓋住，不在雲上多一層亮點。
+    // 漫畫的網點畫在雲與星星底下，碰到時被蓋住，不在雲上多一層亮點。
     if (kind == BookSourceKind.comic) {
       _paintHalftone(canvas, size, center, radius, day: day);
     }
@@ -202,48 +215,71 @@ class _SkyPainter extends CustomPainter {
     if (day) {
       _paintClouds(canvas, size);
     } else {
-      _paintStars(canvas, size);
+      _paintStars(canvas, size, math.Random(_seedOf(bookName)), center, radius);
     }
 
-    // 遠山兩層，後面的淡、前面的深，每本書同一個輪廓；有聲書前面那層換成
-    // 音量條。
+    // 遠山兩層，圓順的稜線，每本書同一個輪廓；有聲書前面那層換成音量條。
+    // 實色，從天空底部的顏色往山色加深，後面那層淺、前面那層深：白天的山
+    // 跟著天空由藍山轉成正午的草綠山丘（使用者 2026-11-20 在候選圖上選），
+    // 夜空往黑加深。
     final ridges = math.Random(7);
-    final ink = day ? const Color(0xFF2E4A6B) : const Color(0xFF000000);
-    for (final (layer, alpha)
-        in day ? [(0, 0.22), (1, 0.4)] : [(0, 0.18), (1, 0.32)]) {
-      final color = ink.withValues(alpha: alpha);
+    final skyFoot = day ? Color.lerp(sky, const Color(0xFFFFFFFF), 0.38)! : sky;
+    final hill = day
+        ? Color.lerp(_dayHillBlue, _dayHillGreen, t)!
+        : const Color(0xFF000000);
+    for (final layer in [0, 1]) {
+      final color = Color.lerp(
+        skyFoot,
+        hill,
+        day ? (layer == 0 ? 0.3 : 0.55) : (layer == 0 ? 0.35 : 0.6),
+      )!;
       if (layer == 1 && kind == BookSourceKind.audio) {
         _paintVolumeBars(canvas, size, math.Random(_seedOf(bookName)), color);
         continue;
       }
-      final ridge = Path()..moveTo(0, size.height);
-      final baseY = size.height * (0.72 + layer * 0.1);
-      for (var x = 0.0; x <= size.width; x += size.width / 6) {
-        ridge.lineTo(x, baseY - ridges.nextDouble() * size.height * 0.08);
+      final baseY = size.height * (0.74 + layer * 0.1);
+      final rise = size.height * (layer == 0 ? 0.14 : 0.1);
+      final points = [
+        for (var i = 0; i <= 6; i++)
+          Offset(size.width * i / 6, baseY - ridges.nextDouble() * rise),
+      ];
+      final ridge = Path()
+        ..moveTo(0, size.height)
+        ..lineTo(points.first.dx, points.first.dy);
+      for (var i = 1; i < points.length - 1; i++) {
+        final mid = Offset.lerp(points[i], points[i + 1], 0.5)!;
+        ridge.quadraticBezierTo(points[i].dx, points[i].dy, mid.dx, mid.dy);
       }
       ridge
+        ..lineTo(points.last.dx, points.last.dy)
         ..lineTo(size.width, size.height)
         ..close();
       canvas.drawPath(ridge, Paint()..color = color);
     }
   }
 
-  /// 星星：上半部五顆，避開月亮；位置、大小與亮度每本書都一樣，以封面的
-  /// 寬、高為單位（x、y、半徑、透明度）。
-  static const List<(double, double, double, double)> _stars = [
-    (0.12, 0.09, 0.012, 0.8),
-    (0.70, 0.08, 0.014, 0.85),
-    (0.86, 0.27, 0.010, 0.6),
-    (0.58, 0.41, 0.012, 0.7),
-    (0.16, 0.47, 0.009, 0.55),
-  ];
-
-  static void _paintStars(Canvas canvas, Size size) {
-    for (final (x, y, r, alpha) in _stars) {
+  /// 星星：上半部，避開月亮附近，位置與亮度照書名（使用者 2026-11-20 要
+  /// 夜空的星星每本不同，雲則固定）。
+  static void _paintStars(
+    Canvas canvas,
+    Size size,
+    math.Random random,
+    Offset moon,
+    double radius,
+  ) {
+    for (var i = 0; i < 6; i++) {
+      final star = Offset(
+        random.nextDouble() * size.width,
+        random.nextDouble() * size.height * 0.55,
+      );
+      if ((star - moon).distance < radius * 2) continue;
       canvas.drawCircle(
-        Offset(size.width * x, size.height * y),
-        size.width * r,
-        Paint()..color = _moonlight.withValues(alpha: alpha),
+        star,
+        size.width * (0.006 + random.nextDouble() * 0.01),
+        Paint()
+          ..color = _moonlight.withValues(
+            alpha: 0.5 + random.nextDouble() * 0.4,
+          ),
       );
     }
   }
