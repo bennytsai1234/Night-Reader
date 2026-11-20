@@ -318,8 +318,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     }
     _backgroundSearches.work.addListener(_slotChanged);
     _backgroundSearches.runs.addListener(_slotChanged);
-    // 兩段都讀過才照它們畫：只有紀錄時，找書讀到後會插在上面把紀錄推下去，
-    // 紀錄是空的還會先畫「沒有紀錄」的空頁。
+    // 兩段都讀過才照它們畫，有一段沒讀過就兩段一起等頁面讀，版面不跳。
     if ((_aiFindDao.latestNewestFirst, _keywordDao.latestByTime) case (
       final finds?,
       final history?,
@@ -379,13 +378,16 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     if (_disposed) return;
     await _bookshelfTracker.initialize(onChanged: notifyListeners);
     await _loadGroups();
-    // 先讀過去的找書再讀紀錄：紀錄讀完才決定畫不畫空頁，兩段一起出現。
-    final finds = await _aiFindDao.getNewestFirst();
-    final findsChanged = !_sameFinds(finds, _pastFinds);
-    _pastFinds = finds;
-    _setHistory(await _keywordDao.getByTime(), findsChanged: findsChanged);
     if (_disposed) return;
+    // 先聽再讀：讀的途中做完的找書也會再讀一次。
     aiFindRuns.addListener(_onFindRunsChanged);
+    // 兩段都讀完才一起套用：紀錄讀完才決定畫不畫空頁，兩段同一次出現。
+    final history = await _keywordDao.getByTime();
+    final finds = await _readPastFinds();
+    if (_disposed) return;
+    final findsChanged = finds != null && !_sameFindRows(finds, _pastFinds);
+    if (finds != null) _pastFinds = finds;
+    _setHistory(history, findsChanged: findsChanged);
   }
 
   /// 背景的找書做完時已經存成一筆：搜尋頁開著也要看到它（Codex 審查）。
@@ -394,12 +396,33 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     if (aiFindRuns.current?.isFinished ?? false) unawaited(loadPastFinds());
   }
 
+  int _findReads = 0;
+  int _findsApplied = 0;
+
+  /// 讀一次過去的找書；頁面關了，或較晚開始的讀已經先套用了，回 null。
+  Future<List<AiFindRecord>?> _readPastFinds() async {
+    final read = ++_findReads;
+    final finds = await _aiFindDao.getNewestFirst();
+    if (_disposed || read < _findsApplied) return null;
+    _findsApplied = read;
+    return finds;
+  }
+
   /// 從找書頁回來、刪了一筆之後重讀。
   Future<void> loadPastFinds() async {
-    final finds = await _aiFindDao.getNewestFirst();
     if (_disposed) return;
+    final finds = await _readPastFinds();
+    if (finds == null) return;
     _pastFinds = finds;
     notifyListeners();
+  }
+
+  /// 最近一次讀到的那一筆：列的字沒變時不重建，點列時照 id 拿最新的報告。
+  AiFindRecord? pastFindById(String id) {
+    for (final find in _pastFinds) {
+      if (find.id == id) return find;
+    }
+    return null;
   }
 
   Future<void> deletePastFind(AiFindRecord find) async {
@@ -564,6 +587,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   Future<void> _loadGroups() async {
     final sources = await _sourceDao.getAllPart();
+    if (_disposed) return;
     final groups = <String>{};
     for (var s in sources) {
       groups.addAll(splitSourceGroups(s.bookSourceGroup));
@@ -931,10 +955,9 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   // ═══════════════════════════════════════════
 
   /// 開 App 進場播完時讀一次過去的找書與搜尋紀錄：資料層記著最近一次讀到的
-  /// （[AiFindDao.latestNewestFirst]、[SearchKeywordDao.latestByTime]），搜尋頁
-  /// 推入的第一幀就照它畫。原本推入時畫「開始搜尋你想看的書吧」，進場播完才
-  /// 讀、一幀換成紀錄：2026-11-05 手機上那一幀主執行緒 25.7ms，畫面上整區突然
-  /// 換掉；只預讀紀錄時，過去的找書約半秒後才插在上面（2026-11-19 回報）。
+  /// （[AiFindDao.latestNewestFirst]、[SearchKeywordDao.latestByTime]），兩段都
+  /// 讀過時搜尋頁推入的第一幀就照它們畫；有一段還沒讀過，兩段都等搜尋頁進場
+  /// 播完讀好再一起出現。推入後才讀會在換頁播完時整區換掉，那一幀也重。
   static Future<void> prefetchHistory() async {
     try {
       final finds = getIt<AiFindDao>();
@@ -950,14 +973,18 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   bool get historyLoaded => _historyLoaded;
   bool _historyLoaded = false;
 
-  static bool _sameFinds(List<AiFindRecord> a, List<AiFindRecord> b) =>
-      a.length == b.length &&
-      [
-        for (var i = 0; i < a.length; i++)
-          a[i].id == b[i].id && a[i].description == b[i].description,
-      ].every((same) => same);
+  /// 「過去的找書」畫出來的列一樣：同樣的順序、每列同一筆、同樣的描述。
+  static bool _sameFindRows(List<AiFindRecord> a, List<AiFindRecord> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id || a[i].description != b[i].description) {
+        return false;
+      }
+    }
+    return true;
+  }
 
-  /// [findsChanged]：同一次讀的過去的找書和推入時畫的不同，紀錄沒變也要重建。
+  /// [findsChanged]：同一次讀的過去的找書和畫著的列不同，紀錄沒變也要重建。
   void _setHistory(List<SearchKeyword> history, {bool findsChanged = false}) {
     // 搜尋頁關了才讀完（送出搜尋後馬上放到背景、返回）。
     if (_disposed) return;

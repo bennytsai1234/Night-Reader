@@ -74,9 +74,12 @@ class SearchHistoryView extends StatelessWidget {
                     size: 20,
                     color: chrome.sectionText,
                   ),
+                  // 同一筆在列的字沒變時不重建，報告照 id 拿最新讀到的。
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => AiFindPage(record: find),
+                      builder: (_) => AiFindPage(
+                        record: provider.pastFindById(find.id) ?? find,
+                      ),
                     ),
                   ),
                   onLongPress: () => _confirmDeleteFind(context, find),

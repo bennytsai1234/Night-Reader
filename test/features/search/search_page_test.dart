@@ -155,6 +155,15 @@ void main() {
     expect(find.text('夜雨'), findsOneWidget);
   });
 
+  /// 資料表寫入提交後，資料層在背景重讀；等它讀到這一筆。
+  Future<void> refreshed(AiFindDao dao, String id) async {
+    for (var i = 0; i < 200; i++) {
+      if (dao.latestNewestFirst?.any((find) => find.id == id) ?? false) return;
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    fail('資料層沒有重讀過去的找書');
+  }
+
   AiFindRecord pastFind(String description) => AiFindRecord(
     id: description,
     description: description,
@@ -168,7 +177,9 @@ void main() {
       await GetIt.instance<SearchKeywordDao>().saveKeyword('夜雨');
       await SearchProvider.prefetchHistory();
       // 開 App 讀過之後，搜尋頁關著時背景的找書才存下一筆。
-      await GetIt.instance<AiFindDao>().upsert(pastFind('想看很刺激的'));
+      final finds = GetIt.instance<AiFindDao>();
+      await finds.upsert(pastFind('想看很刺激的'));
+      await refreshed(finds, '想看很刺激的');
     });
     final provider = await pushSearch(tester);
 
@@ -198,6 +209,33 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('推入後同一筆找書更新了內容、列的字沒變：點列拿到的是新的報告', (tester) async {
+    final finds = GetIt.instance<AiFindDao>();
+    await tester.runAsync(() async {
+      await finds.upsert(pastFind('想看很刺激的'));
+      await SearchProvider.prefetchHistory();
+    });
+    final provider = await pushSearch(tester);
+    await tester.pump();
+    await tester.runAsync(() async {
+      final updated = pastFind('想看很刺激的');
+      await finds.upsert(
+        AiFindRecord(
+          id: updated.id,
+          description: updated.description,
+          depth: updated.depth,
+          createdAt: updated.createdAt,
+          outcome: updated.outcome,
+          summary: '同步來的新報告',
+        ),
+      );
+    });
+
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => provider().ready);
+    expect(provider().pastFindById('想看很刺激的')!.summary, '同步來的新報告');
+  });
+
   testWidgets('還沒讀到過去的找書時，搜尋紀錄不先單獨畫出來', (tester) async {
     await tester.runAsync(() async {
       await GetIt.instance<AiFindDao>().upsert(pastFind('想看很刺激的'));
@@ -207,7 +245,7 @@ void main() {
     });
     final provider = await pushSearch(tester);
 
-    // 只讀過紀錄：先畫紀錄，找書讀到後會插在上面把紀錄推下去。
+    // 只讀過紀錄：兩段都等頁面讀好一起出現。
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 16));
     expect(find.text('夜雨'), findsNothing);
