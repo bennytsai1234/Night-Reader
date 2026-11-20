@@ -19,13 +19,8 @@ import '../models/book/book_group.dart';
 import '../models/reading/bookmark.dart';
 import '../models/reading/highlight.dart';
 import '../models/cookie.dart';
-import '../models/dict_rule.dart';
-import '../models/http_tts.dart';
 import '../models/reading/read_record.dart';
-import '../models/server.dart';
-import '../models/txt_toc_rule.dart';
 import '../models/cache.dart';
-import '../models/keyboard_assist.dart';
 import '../models/search/search_book.dart';
 import '../models/download_task.dart';
 import '../models/search/search_keyword.dart';
@@ -39,13 +34,8 @@ import 'dao/highlight_dao.dart';
 import 'dao/replace_rule_dao.dart';
 import 'dao/search_history_dao.dart';
 import 'dao/cookie_dao.dart';
-import 'dao/dict_rule_dao.dart';
-import 'dao/http_tts_dao.dart';
 import 'dao/read_record_dao.dart';
-import 'dao/server_dao.dart';
-import 'dao/txt_toc_rule_dao.dart';
 import 'dao/cache_dao.dart';
-import 'dao/keyboard_assist_dao.dart';
 import 'dao/search_book_dao.dart';
 import 'dao/download_dao.dart';
 import 'dao/search_keyword_dao.dart';
@@ -63,14 +53,9 @@ part 'app_database.g.dart';
     SearchHistoryTable,
     ReplaceRules,
     Cookies,
-    DictRules,
-    HttpTtsTable,
     ReadRecords,
     ReadDays,
-    Servers,
-    TxtTocRules,
     CacheTable,
-    KeyboardAssists,
     SearchBooks,
     DownloadTasks,
     SearchKeywords,
@@ -86,13 +71,8 @@ part 'app_database.g.dart';
     ReplaceRuleDao,
     SearchHistoryDao,
     CookieDao,
-    DictRuleDao,
-    HttpTtsDao,
     ReadRecordDao,
-    ServerDao,
-    TxtTocRuleDao,
     CacheDao,
-    KeyboardAssistDao,
     SearchBookDao,
     DownloadDao,
     SearchKeywordDao,
@@ -137,7 +117,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -246,6 +226,25 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 20) {
         await dropForeignSourceCheckMarks();
+      }
+      if (from < 21) {
+        // 從 Legado 帶過來、從沒有功能讀寫的表：字典規則、線上朗讀引擎、
+        // 伺服器、TXT 目錄規則、鍵盤輔助。
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_txt_toc_rules_enabled_serial',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_keyboard_assists_serial',
+        );
+        for (final table in const [
+          'dict_rules',
+          'http_tts_table',
+          'servers',
+          'txt_toc_rules',
+          'keyboard_assists',
+        ]) {
+          await customStatement('DROP TABLE IF EXISTS $table');
+        }
       }
     },
     beforeOpen: (_) async {
@@ -466,16 +465,8 @@ class AppDatabase extends _$AppDatabase {
     ON read_records (lastRead DESC)
     ''',
     '''
-    CREATE INDEX IF NOT EXISTS idx_txt_toc_rules_enabled_serial
-    ON txt_toc_rules (enable, serialNumber)
-    ''',
-    '''
     CREATE INDEX IF NOT EXISTS idx_cache_deadline
     ON cache_table (deadline)
-    ''',
-    '''
-    CREATE INDEX IF NOT EXISTS idx_keyboard_assists_serial
-    ON keyboard_assists (serialNo)
     ''',
     '''
     CREATE INDEX IF NOT EXISTS idx_search_books_name_author_order

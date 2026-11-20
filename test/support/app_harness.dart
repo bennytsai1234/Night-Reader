@@ -23,7 +23,6 @@ import 'package:night_reader/core/database/dao/cache_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/cookie_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
-import 'package:night_reader/core/database/dao/keyboard_assist_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
@@ -32,7 +31,6 @@ import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_history_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
-import 'package:night_reader/core/database/dao/server_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
@@ -152,8 +150,6 @@ Future<void> setUpApp({
     ..registerLazySingleton<SearchHistoryDao>(() => SearchHistoryDao(_db))
     ..registerLazySingleton<SearchKeywordDao>(() => SearchKeywordDao(_db))
     ..registerLazySingleton<AiFindDao>(() => AiFindDao(_db))
-    ..registerLazySingleton<KeyboardAssistDao>(() => KeyboardAssistDao(_db))
-    ..registerLazySingleton<ServerDao>(() => ServerDao(_db))
     ..registerLazySingleton<ReaderChapterContentDao>(
       () => ReaderChapterContentDao(_db),
     )
