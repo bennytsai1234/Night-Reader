@@ -593,6 +593,7 @@ class SkeletonText extends StatefulWidget {
     this.style,
     this.maxLines,
     this.color,
+    this.ellipsis = false,
   });
 
   final String text;
@@ -605,6 +606,10 @@ class SkeletonText extends StatefulWidget {
 
   /// 長條的底色；null 時照骨架的樣子（[SkeletonBox]）。
   final Color? color;
+
+  /// 換上來的字放不下時收在「…」（overflow: TextOverflow.ellipsis 的 [Text]，
+  /// 例如書架的書名），長條畫到「…」；false 時換上來的是 [DragOverflowText]。
+  final bool ellipsis;
 
   @override
   State<SkeletonText> createState() => _SkeletonTextState();
@@ -632,6 +637,7 @@ class _SkeletonTextState extends State<SkeletonText> {
       direction,
       maxLines,
       maxWidth,
+      widget.ellipsis,
       PunctuationInk._revision,
     ];
     final cached = _laidOut;
@@ -661,14 +667,17 @@ class _SkeletonTextState extends State<SkeletonText> {
             when rect.top < painter.height && rect.width > 0)
           rect,
     ];
-    // 放不下時換上來的字撐滿這一欄（[DragOverflowText]）。
+    // 放不下時換上來的字撐滿這一欄（[DragOverflowText]；刪節的字也撐滿）。
     final width = painter.didExceedMaxLines && maxWidth.isFinite
         ? maxWidth
         : painter.width;
     final result = (
       size: Size(width, painter.height),
       lines: [
-        for (final line in skeletonTextLines(painter, maxWidth: maxWidth))
+        for (final line in skeletonTextLines(
+          painter,
+          maxWidth: widget.ellipsis ? null : maxWidth,
+        ))
           switch (boxes
               .where(
                 (box) =>

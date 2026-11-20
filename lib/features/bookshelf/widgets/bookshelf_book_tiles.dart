@@ -373,13 +373,14 @@ class BookshelfListCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  DragOverflowText(
-                    child: UiText(
-                      name,
-                      translate: false,
-                      maxLines: 1,
-                      style: titleStyle.copyWith(color: scheme.onSurface),
-                    ),
+                  // 書架的書名放不下時收在「…」，不像其他過長文字可以拖
+                  // （docs/design/components.md「過長文字」）。
+                  UiText(
+                    name,
+                    translate: false,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: titleStyle.copyWith(color: scheme.onSurface),
                   ),
                   // 沒有作者也留著這一行的高度：每張卡的文字位置一樣，
                   // 載入骨架（不知道哪本沒有作者）才對得上。
@@ -611,13 +612,13 @@ class BookshelfGridTile extends StatelessWidget {
                   children: [
                     SizedBox(
                       height: titleHeightFor(MediaQuery.textScalerOf(context)),
-                      child: DragOverflowText(
-                        child: UiText(
-                          name,
-                          translate: false,
-                          maxLines: 2,
-                          style: titleStyle.copyWith(color: scheme.onSurface),
-                        ),
+                      // 放不下時收在「…」（docs/design/components.md「過長文字」）。
+                      child: UiText(
+                        name,
+                        translate: false,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: titleStyle.copyWith(color: scheme.onSurface),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.sm),

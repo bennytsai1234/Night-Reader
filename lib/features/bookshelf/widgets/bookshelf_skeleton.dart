@@ -92,6 +92,7 @@ class BookshelfSkeleton extends StatelessWidget {
                       context.zh(titles[index].name),
                       style: BookshelfGridTile.titleStyle,
                       maxLines: 2,
+                      ellipsis: true,
                     )
                   : SkeletonLine(
                       style: BookshelfGridTile.titleStyle,
@@ -189,6 +190,7 @@ class _ListCardSkeleton extends StatelessWidget {
                       context.zh(title.name),
                       style: BookshelfListCard.titleStyle,
                       maxLines: 1,
+                      ellipsis: true,
                     ),
                     const SizedBox(height: 2),
                     // 沒有作者時和真的書卡一樣只留這一行的高度。

@@ -9,6 +9,7 @@ import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
+import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 
 import '../../support/skeleton_match.dart';
 
@@ -176,15 +177,16 @@ void main() {
   }
 
   // 骨架照上次記下的書名畫：每一條長條就是那本書名露出的一行，寬度與位置
-  // 都和真的文字相同，換場時長條剛好換成字；放不下時最後一行可以左右拖，
-  // 長條對準視窗露出的那一段。
+  // 都和真的文字相同，換場時長條剛好換成字；放不下時最後一行收在「…」，
+  // 長條畫到「…」。
   const names = [
     '短',
     '中等長度書名',
     '一本書名很長很長的小說',
     '都市：我成了富二代反派（快穿之後漫長的好幾十年歲月）',
     '雨夜',
-    '長夜',
+    // 網格兩行、列表一行都放不下，收在「…」。
+    '都市：我成了富二代反派（快穿之後漫長的好幾十年歲月，還有更長更長更長更長的後記與番外篇，以及作者在連載期間寫給讀者的每一封長信）',
   ];
   for (final grid in [true, false]) {
     testWidgets('${grid ? 'grid' : 'list'} title bars match the real title '
@@ -231,6 +233,29 @@ void main() {
       }
     });
   }
+
+  for (final grid in [true, false]) {
+    testWidgets('${grid ? 'grid' : 'list'} long titles end with an ellipsis '
+        'and do not drag', (tester) async {
+      final long = names.last;
+      await pumpReal(tester, grid: grid, author: '某作者', names: names);
+      final title = find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText &&
+            widget.text.toPlainText() == long &&
+            widget.overflow == TextOverflow.ellipsis,
+      );
+      expect(title, findsOneWidget);
+      expect(
+        find.ancestor(of: title, matching: find.byType(DragOverflowText)),
+        findsNothing,
+      );
+      expect(
+        (tester.renderObject(title) as RenderParagraph).didExceedMaxLines,
+        isTrue,
+      );
+    });
+  }
 }
 
 /// 列表每張卡的書名一行、作者一行，依卡片順序；作者是同一個字串，每張卡
@@ -245,9 +270,7 @@ List<Rect> _perCard(WidgetTester tester, List<String> names) {
   ];
 }
 
-/// [text] 在畫面上每一行的範圍（同一行的字框併成一個）。放不下時書名分成
-/// 照常換行的前幾行與可拖的最後一行兩段字（[DragOverflowText]），兩段都算，
-/// 可拖那一行只算視窗露出的部分。
+/// [text] 在畫面上每一行的範圍（同一行的字框併成一個，含刪節的「…」）。
 List<Rect> textLines(WidgetTester tester, String text) {
   final rects = <Rect>[];
   for (final element in find.byWidgetPredicate((widget) {
