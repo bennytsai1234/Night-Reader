@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 
 import '../widgets/rule_text_field.dart';
@@ -14,7 +13,6 @@ class SourceEditContent extends StatelessWidget {
     return GroupedListView(
       children: [
         GroupedSection(
-          topGap: AppSpacing.sm,
           children: [
             RuleTextField(
               controller: controllers['ruleContentContent']!,

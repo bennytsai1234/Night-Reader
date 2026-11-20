@@ -83,7 +83,6 @@ class _LicensesPageState extends State<LicensesPage> {
       loadingLabel: '正在載入開源許可證',
       children: [
         GroupedSection(
-          topGap: AppSpacing.md,
           children: [
             if (packages == null)
               for (final length in _placeholderLengths)
@@ -163,21 +162,13 @@ class _PackageLicensePageState extends State<PackageLicensePage> {
       extendBodyBehindAppBar: true,
       appBar: GlassNavHeader(title: widget.package),
       body: GroupedListView(
-        children: [
-          for (final (index, text) in _texts.indexed)
-            _buildLicense(context, text, first: index == 0),
-        ],
+        children: [for (final text in _texts) _buildLicense(context, text)],
       ),
     );
   }
 
-  Widget _buildLicense(
-    BuildContext context,
-    String text, {
-    required bool first,
-  }) {
+  Widget _buildLicense(BuildContext context, String text) {
     return GroupedSection(
-      topGap: first ? AppSpacing.md : AppGrouped.sectionGap,
       children: [
         GroupedContent(
           padding: const EdgeInsets.symmetric(

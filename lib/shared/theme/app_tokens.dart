@@ -103,6 +103,10 @@ class AppGrouped {
   /// 分組之間的垂直間距。
   static const double sectionGap = AppSpacing.xxl;
 
+  /// 清單頁頁首工具列下緣到第一項的距離（[GroupedListView] 給；第一組自己的
+  /// [sectionGap] 不算）。比頁首下緣的漸隱短，第一項上緣落在漸隱最淡的那一段。
+  static const double listTopGap = AppSpacing.md;
+
   /// 分組卡片圓角。
   static const double radius = AppRadius.lg;
   static const BorderRadius cardRadius = AppRadius.cardLg;

@@ -408,7 +408,6 @@ class _AppLogo extends StatelessWidget implements GroupedSkeletonItem {
   final ValueListenable<({String? version, String buildNumber})> package;
 
   static const double _iconSize = 80;
-  static const double _top = AppSpacing.md;
   static const double _nameGap = AppSpacing.lg;
   static const double _versionGap = AppSpacing.xs;
   static const TextStyle _nameStyle = AppTextStyles.titleLg;
@@ -441,13 +440,13 @@ class _AppLogo extends StatelessWidget implements GroupedSkeletonItem {
       width: width,
       strutStyle: _versionStrut,
     ).centeredIn(width);
-    const nameTop = _top + _iconSize + _nameGap;
+    const nameTop = _iconSize + _nameGap;
     final versionTop = nameTop + name.height + _versionGap;
     return GroupedItemShape(
       versionTop + version.height,
       marks: [
         SkeletonShape(
-          Rect.fromLTWH((width - _iconSize) / 2, _top, _iconSize, _iconSize),
+          Rect.fromLTWH((width - _iconSize) / 2, 0, _iconSize, _iconSize),
           radius: AppRadius.cardXl,
         ),
         ...name.marksAt(const Offset(0, nameTop)),
@@ -458,40 +457,37 @@ class _AppLogo extends StatelessWidget implements GroupedSkeletonItem {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: _top),
-      child: Column(
-        children: [
-          ClipRRect(
-            borderRadius: AppRadius.cardXl,
-            child: Image.asset(
-              'assets/ui/app_icon.webp',
-              width: _iconSize,
-              height: _iconSize,
-              fit: BoxFit.cover,
-              semanticLabel: context.ui('夜讀應用程式圖示'),
+    return Column(
+      children: [
+        ClipRRect(
+          borderRadius: AppRadius.cardXl,
+          child: Image.asset(
+            'assets/ui/app_icon.webp',
+            width: _iconSize,
+            height: _iconSize,
+            fit: BoxFit.cover,
+            semanticLabel: context.ui('夜讀應用程式圖示'),
+          ),
+        ),
+        const SizedBox(height: _nameGap),
+        UiText(
+          '夜讀',
+          style: _nameStyle.copyWith(
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: _versionGap),
+        ValueListenableBuilder(
+          valueListenable: package,
+          builder: (context, package, _) => UiText(
+            _AboutPageState._versionLabel(package.version),
+            strutStyle: _versionStrut,
+            style: _versionStyle.copyWith(
+              color: AppChrome.of(context).sectionText,
             ),
           ),
-          const SizedBox(height: _nameGap),
-          UiText(
-            '夜讀',
-            style: _nameStyle.copyWith(
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: _versionGap),
-          ValueListenableBuilder(
-            valueListenable: package,
-            builder: (context, package, _) => UiText(
-              _AboutPageState._versionLabel(package.version),
-              strutStyle: _versionStrut,
-              style: _versionStyle.copyWith(
-                color: AppChrome.of(context).sectionText,
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

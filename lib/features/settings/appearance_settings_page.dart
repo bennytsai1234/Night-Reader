@@ -38,7 +38,6 @@ class AppearanceSettingsPage extends StatelessWidget {
       body: GroupedListView(
         children: [
           GroupedSection(
-            topGap: AppSpacing.lg,
             header: '淺色風格',
             children: [_styleGrid(context, themeSettings, Brightness.light)],
           ),

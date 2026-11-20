@@ -185,7 +185,6 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
               child: GroupedListView(
                 children: [
                   GroupedSection(
-                    topGap: AppSpacing.sm,
                     children: [
                       for (final rule in _rules) _buildRuleRow(context, rule),
                     ],

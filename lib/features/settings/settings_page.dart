@@ -58,8 +58,6 @@ class SettingsPage extends StatelessWidget {
         bottomPadding: AppSpacing.lg,
         children: [
           GroupedSection(
-            // 第一列和書架、發現一樣從頁首下方同一條線開始。
-            topGap: AppSpacing.xs,
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(

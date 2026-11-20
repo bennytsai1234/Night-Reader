@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:night_reader/shared/widgets/skeleton/grouped_list_skeleton.dart';
 
@@ -129,6 +131,73 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('風格'), findsOneWidget);
       expect(find.byType(GroupedListSkeleton), findsNothing, reason: '換好就拿掉');
+    });
+  });
+
+  group('第一項的位置', () {
+    Future<double> topUnder(
+      WidgetTester tester, {
+      PreferredSizeWidget? appBar,
+      bool extend = true,
+    }) async {
+      late double top;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: MediaQuery(
+            data: const MediaQueryData(padding: EdgeInsets.only(top: 32)),
+            child: Scaffold(
+              extendBodyBehindAppBar: extend,
+              appBar: appBar,
+              body: Builder(
+                builder: (context) {
+                  top = GroupedListView.topOf(context);
+                  return const SizedBox();
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      return top;
+    }
+
+    testWidgets('內容延伸到玻璃頁首底下：工具列下緣往下 listTopGap', (tester) async {
+      final top = await topUnder(
+        tester,
+        appBar: const GlassNavHeader(title: '標題'),
+      );
+      expect(top, 32 + AppGlass.headerToolbarHeight + AppGrouped.listTopGap);
+    });
+
+    testWidgets('一般頁首、沒延伸到頁首底下、沒有頁首：照系統留的內距，不會是負的', (tester) async {
+      expect(
+        await topUnder(tester, appBar: AppBar(title: const Text('標題'))),
+        32 + kToolbarHeight,
+      );
+      expect(
+        await topUnder(
+          tester,
+          appBar: const GlassNavHeader(title: '標題'),
+          extend: false,
+        ),
+        0,
+      );
+      expect(await topUnder(tester), 32);
+    });
+
+    test('只有第一項是一組時換成上方間距 0，其他項照舊', () {
+      const second = GroupedSection(children: []);
+      final items = GroupedListView.itemsOf(const [
+        GroupedSection(children: []),
+        second,
+      ]);
+      expect((items[0] as GroupedSection).topGap, 0);
+      expect(identical(items[1], second), isTrue);
+      final padded = GroupedListView.itemsOf(const [
+        Padding(padding: EdgeInsets.only(top: 4), child: SizedBox()),
+      ]);
+      expect(padded.single, isA<Padding>());
     });
   });
 }

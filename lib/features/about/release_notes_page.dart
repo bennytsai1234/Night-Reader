@@ -6,7 +6,6 @@ import 'package:night_reader/core/app_update/update_preferences.dart';
 import 'package:night_reader/core/app_update/app_update_service.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
@@ -105,25 +104,19 @@ class _ReleaseNotesPageState extends State<ReleaseNotesPage> {
       loadingLabel: '正在載入更新紀錄',
       children: [
         if (loading)
-          for (final (index, lines) in const [4, 2, 3, 2].indexed)
-            _buildPlaceholder(context, lines: lines, first: index == 0)
+          for (final lines in const [4, 2, 3, 2])
+            _buildPlaceholder(context, lines: lines)
         else
-          for (final (index, note) in _notes.indexed)
-            _buildRelease(context, note, first: index == 0),
+          for (final note in _notes) _buildRelease(context, note),
       ],
     );
   }
 
   /// 載入中骨架照的一段版本：和 [_buildRelease] 同樣的標題、日期與 [lines]
   /// 行說明（最後一行短一些）。只給骨架量形狀，不會顯示出來。
-  Widget _buildPlaceholder(
-    BuildContext context, {
-    required int lines,
-    required bool first,
-  }) {
+  Widget _buildPlaceholder(BuildContext context, {required int lines}) {
     final chrome = AppChrome.of(context);
     return GroupedSection(
-      topGap: first ? AppSpacing.md : AppGrouped.sectionGap,
       header: 'v0.0.0',
       headerTrailing: UiText(
         '0000-00-00',
@@ -148,16 +141,11 @@ class _ReleaseNotesPageState extends State<ReleaseNotesPage> {
     );
   }
 
-  Widget _buildRelease(
-    BuildContext context,
-    ReleaseNote note, {
-    required bool first,
-  }) {
+  Widget _buildRelease(BuildContext context, ReleaseNote note) {
     final chrome = AppChrome.of(context);
     final notes = releaseNotesForDisplay(note.body);
     final publishedAt = note.publishedAt;
     return GroupedSection(
-      topGap: first ? AppSpacing.md : AppGrouped.sectionGap,
       header: note.isCurrent
           ? 'v${note.versionName}（目前版本）'
           : 'v${note.versionName}',

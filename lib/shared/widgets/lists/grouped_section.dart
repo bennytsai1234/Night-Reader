@@ -71,6 +71,20 @@ class GroupedSection extends StatelessWidget {
         children: children,
       );
 
+  /// 同一組換上 [gap] 當上方間距：清單把第一組換成 0，頁首到第一組的距離
+  /// 只由清單給（[AppGrouped.listTopGap]）。
+  GroupedSection withTopGap(double gap) => GroupedSection(
+    key: key,
+    header: header,
+    headerTrailing: headerTrailing,
+    footer: footer,
+    separatorIndent: separatorIndent,
+    margin: margin,
+    topGap: gap,
+    translateHeader: translateHeader,
+    children: children,
+  );
+
   @override
   Widget build(BuildContext context) {
     final chrome = AppChrome.of(context);

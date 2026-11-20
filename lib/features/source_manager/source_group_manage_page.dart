@@ -66,7 +66,6 @@ class SourceGroupManagePage extends StatelessWidget {
             child: GroupedListView(
               children: [
                 GroupedSection(
-                  topGap: AppSpacing.sm,
                   children: [
                     for (final group in groups)
                       SwipeActions(

@@ -1,6 +1,3 @@
-/// @docImport '../glass/glass.dart';
-library;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:flutter/scheduler.dart';
@@ -11,6 +8,7 @@ import '../../navigation/app_page_transition.dart';
 import '../../navigation/transition_settled.dart';
 import '../../theme/app_chrome.dart';
 import '../../theme/app_tokens.dart';
+import '../glass/glass.dart';
 import '../skeleton/cover_reveal.dart';
 import '../skeleton/grouped_list_skeleton.dart';
 import '../skeleton/skeleton.dart';
@@ -22,8 +20,8 @@ export 'grouped_text_field_row.dart';
 
 /// 分組清單頁面的捲動容器：分組底色、底部讓出系統區與浮動分頁列。
 ///
-/// 頁面搭配 [GlassNavHeader] 與 `extendBodyBehindAppBar: true` 時，上方
-/// 內距會包含頁首高度。
+/// 第一項從哪裡開始見 [topOf]，第一組的上方間距見 [itemsOf]；各頁不用替
+/// 第一組另給 `topGap`。自己畫骨架的頁面（例如書源登入）也照這兩個排。
 ///
 /// 每個子元件（通常是一組 [GroupedSection]）是清單的一項，捲到才建。
 ///
@@ -58,15 +56,38 @@ class GroupedListView extends StatelessWidget {
   final double bottomPadding;
   final ScrollPhysics? physics;
 
+  /// 清單第一項的上緣，從清單頂端算：頁面的內容延伸到 [GlassNavHeader]
+  /// 底下時，是頁首工具列（含附加列）下緣往下 [AppGrouped.listTopGap]，落在
+  /// 頁首下緣漸隱最淡的那一段；其他情況是系統留的上方內距。
+  static double topOf(BuildContext context) {
+    final top = MediaQuery.paddingOf(context).top;
+    final scaffold = Scaffold.maybeOf(context)?.widget;
+    final underGlassHeader =
+        scaffold != null &&
+        scaffold.extendBodyBehindAppBar &&
+        scaffold.appBar is GlassNavHeader;
+    return underGlassHeader
+        ? top - AppGlass.headerFadeHeight + AppGrouped.listTopGap
+        : top;
+  }
+
+  /// 清單的項目：第一項是一組時換成上方間距 0 的同一組，頁首到第一組只有
+  /// [topOf] 那一段；骨架與內容都照換過的項目排。
+  static List<Widget> itemsOf(List<Widget> children) => [
+    for (final (i, child) in children.indexed)
+      i == 0 && child is GroupedSection ? child.withTopGap(0) : child,
+  ];
+
   @override
   Widget build(BuildContext context) {
     final mediaPadding = MediaQuery.paddingOf(context);
     final padding =
         EdgeInsets.only(
-          top: mediaPadding.top,
+          top: topOf(context),
           bottom: mediaPadding.bottom + bottomPadding,
         ) +
         ReadableWidth.insetOf(context);
+    final items = itemsOf(children);
     final placeholder = !ready && loadingLabel != null;
     // 準備好前後都是同一串元件，只改屬性，進場的狀態才留得住。
     return Semantics(
@@ -77,7 +98,7 @@ class GroupedListView extends StatelessWidget {
       child: ExcludeSemantics(
         excluding: placeholder,
         child: _GroupedEntrance(
-          items: children,
+          items: items,
           ready: ready,
           padding: padding,
           background: AppChrome.of(context).groupedBackground,
