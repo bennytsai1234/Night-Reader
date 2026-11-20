@@ -1,5 +1,5 @@
 // 書架列表檢視的書卡上橫拖是主畫面換分頁（bookshelf_card_swipe_test）。
-// 書名放不下時那一行可以左右拖；同一手勢拖到字尾後，剩下的位移接著換分頁。
+// 書名放不下時收在「…」、不能拖，在書名上橫拖一樣是換分頁。
 
 import 'dart:ui' as ui;
 
@@ -24,7 +24,7 @@ void main() {
   double page(WidgetTester tester) =>
       tester.widget<PageView>(find.byType(PageView).first).controller!.page!;
 
-  testWidgets('在放不下的書名上往左拖到字尾：同一手勢接著換分頁', (tester) async {
+  testWidgets('在放不下的書名上往左拖：書名不動，直接換分頁', (tester) async {
     setUpPhone(tester);
     useDeviceTouchSlop(tester);
     await tester.runAsync(() async {
@@ -49,36 +49,22 @@ void main() {
 
     final title = find.text(longTitle);
     expect(title, findsOneWidget);
-    final line = find.ancestor(
-      of: title,
-      matching: find.byType(SingleChildScrollView),
+    expect(
+      find.ancestor(of: title, matching: find.byType(SingleChildScrollView)),
+      findsNothing,
+      reason: '書架的書名放不下時收在「…」，不能拖',
     );
-    expect(line, findsOneWidget, reason: '這本書的書名放不下，那一行可以拖');
-    final position = tester
-        .state<ScrollableState>(
-          find.descendant(of: line, matching: find.byType(Scrollable)),
-        )
-        .position;
-    expect(position.maxScrollExtent, greaterThan(0));
 
     final gesture = await tester.startGesture(tester.getCenter(title));
-    var finger = 0.0;
     for (var i = 0; i < 2; i++) {
       await gesture.moveBy(const Offset(-40, 0));
-      finger += 40;
       await tester.pump(const Duration(milliseconds: 16));
     }
-    expect(position.pixels, greaterThan(0), reason: '字跟著手指');
-    expect(page(tester), 0, reason: '字還沒到字尾，分頁不動');
-
-    // 同一手勢拖過字尾半頁：字停在字尾，剩下的位移換分頁。
-    while (finger < position.maxScrollExtent + 260) {
+    expect(page(tester), greaterThan(0), reason: '分頁跟著手指');
+    for (var i = 0; i < 6; i++) {
       await gesture.moveBy(const Offset(-40, 0));
-      finger += 40;
       await tester.pump(const Duration(milliseconds: 16));
     }
-    expect(position.pixels, position.maxScrollExtent, reason: '字停在字尾');
-    expect(page(tester), greaterThan(0), reason: '剩下的位移換分頁');
     await gesture.up();
     await settle(tester, const Duration(seconds: 1));
     expect(page(tester), 1, reason: '放開後停到下一頁');

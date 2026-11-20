@@ -436,8 +436,10 @@ Rect _trimPunctuation(
   if (end <= start) return line;
   // 超過最大行數的最後一行，後面接的不是換行就是放不下被截斷：收在「…」上，
   // 「…」的寬度併在最後一個看得見的字的格子裡，行尾不扣。後面接換行時這一行
-  // 是完整的，照常扣。
-  final ellipsized = lastVisible && (end >= text.length || text[end] != '\n');
+  // 是完整的，照常扣；換行前的空白不算（看的是這一行原本的結尾，不是扣掉
+  // 空白後的最後一個字）。
+  final hardBreak = RegExp(r'[^\S\n]*\n').matchAsPrefix(text, end) != null;
+  final ellipsized = lastVisible && !hardBreak;
   SkeletonGlyph? glyph(int offset) {
     final mark = text[offset];
     // 只有標點要看字框；其他字不扣，省下查字框。
@@ -579,10 +581,11 @@ Rect skeletonInkLine(Rect line, {SkeletonGlyph? first, SkeletonGlyph? last}) {
   return Rect.fromLTRB(left, line.top, right, line.bottom);
 }
 
-/// 一段字的骨架：照 [text] 以 [style] 在可用寬度裡排（[maxLines] 有給時
-/// 照 [Text] 一樣截斷加「…」），每一行在那一行字的位置畫一條和字一樣高的
-/// 圓角條，左右落在筆畫上（[skeletonTextLines]）；總高度與那段字相同，
-/// 換成字時版面不動。空字串時只留一行的高度。
+/// 一段字的骨架：照 [text] 以 [style] 在可用寬度裡排，每一行在那一行字的
+/// 位置畫一條和字一樣高的圓角條，左右落在筆畫上（[skeletonTextLines]）；總高度
+/// 與那段字相同，換成字時版面不動。空字串時只留一行的高度。超過 [maxLines]
+/// 時配對的字有兩種：預設是 [DragOverflowText]（最後一行可拖，長條畫滿這一欄
+/// 露出的字）；[ellipsis] 時是收在「…」的 [Text]，長條畫到「…」。
 ///
 /// 和 [Text] 一樣，字、字樣、寬度與標點的量測都沒變時重建不重新排字：
 /// 內容在骨架底下一幀建一段時，骨架跟著重建好幾次。
@@ -593,6 +596,7 @@ class SkeletonText extends StatefulWidget {
     this.style,
     this.maxLines,
     this.color,
+    this.ellipsis = false,
   });
 
   final String text;
@@ -605,6 +609,10 @@ class SkeletonText extends StatefulWidget {
 
   /// 長條的底色；null 時照骨架的樣子（[SkeletonBox]）。
   final Color? color;
+
+  /// 換上來的字是 overflow: TextOverflow.ellipsis 的 [Text]（例如書架的書名）：
+  /// 照它的排法與大小畫。false 時換上來的是 [DragOverflowText]。
+  final bool ellipsis;
 
   @override
   State<SkeletonText> createState() => _SkeletonTextState();
@@ -632,6 +640,7 @@ class _SkeletonTextState extends State<SkeletonText> {
       direction,
       maxLines,
       maxWidth,
+      widget.ellipsis,
       PunctuationInk._revision,
     ];
     final cached = _laidOut;
@@ -644,7 +653,7 @@ class _SkeletonTextState extends State<SkeletonText> {
       textWidthBasis: defaults.textWidthBasis,
       locale: locale,
       maxLines: maxLines,
-      ellipsis: maxLines == null ? null : '…',
+      ellipsis: maxLines == null && !widget.ellipsis ? null : '…',
     )..layout(maxWidth: maxWidth);
     // 和 Text 一樣大：一行放得下時是那一行的寬，換行或截斷時撐滿（頁面的
     // 預設字樣指定照最長一行算時照它）。長條的左右照筆畫，上下置中在那一行
@@ -661,14 +670,19 @@ class _SkeletonTextState extends State<SkeletonText> {
             when rect.top < painter.height && rect.width > 0)
           rect,
     ];
-    // 放不下時換上來的字撐滿這一欄（[DragOverflowText]）。
-    final width = painter.didExceedMaxLines && maxWidth.isFinite
+    // 放不下時換上來的可拖的字撐滿這一欄（[DragOverflowText]）；刪節的字和
+    // [Text] 一樣照排好的寬。
+    final width =
+        !widget.ellipsis && painter.didExceedMaxLines && maxWidth.isFinite
         ? maxWidth
         : painter.width;
     final result = (
       size: Size(width, painter.height),
       lines: [
-        for (final line in skeletonTextLines(painter, maxWidth: maxWidth))
+        for (final line in skeletonTextLines(
+          painter,
+          maxWidth: widget.ellipsis ? null : maxWidth,
+        ))
           switch (boxes
               .where(
                 (box) =>

@@ -31,6 +31,12 @@ Widget _landOnMotionChange(BuildContext context, Widget child) => KeyedSubtree(
   child: child,
 );
 
+/// 書卡上顯示的書名：書名裡的換行當空白，照欄寬換行，放不下時收在「…」。
+/// 匯入的書名可能帶換行，照原樣排時換行後的字被丟掉卻沒有「…」。骨架照同一份
+/// 書名畫。
+String bookshelfTitleText(BuildContext context, String name) =>
+    context.zh(name).replaceAll(RegExp(r'\s*[\r\n]+\s*'), ' ');
+
 /// 編輯模式的圓形勾選記號（Telegram 編輯清單左側的圓圈）。
 class BookshelfCheckMark extends StatelessWidget {
   const BookshelfCheckMark({
@@ -298,7 +304,7 @@ class BookshelfListCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final chrome = AppChrome.of(context);
     final slot = selecting ? _checkSlot : 0.0;
-    final name = context.zh(book.name);
+    final name = bookshelfTitleText(context, book.name);
     final author = context.zh(book.author).trim();
 
     // 封面另外排一塊：一幀建一塊時（[CoverReveal.paced]）書卡的字和封面
@@ -373,13 +379,14 @@ class BookshelfListCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  DragOverflowText(
-                    child: UiText(
-                      name,
-                      translate: false,
-                      maxLines: 1,
-                      style: titleStyle.copyWith(color: scheme.onSurface),
-                    ),
+                  // 書架的書名放不下時收在「…」，不像其他過長文字可以拖
+                  // （docs/design/components.md「過長文字」）。
+                  UiText(
+                    name,
+                    translate: false,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: titleStyle.copyWith(color: scheme.onSurface),
                   ),
                   // 沒有作者也留著這一行的高度：每張卡的文字位置一樣，
                   // 載入骨架（不知道哪本沒有作者）才對得上。
@@ -519,7 +526,7 @@ class BookshelfGridTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final name = context.zh(book.name);
+    final name = bookshelfTitleText(context, book.name);
 
     final tile = Semantics(
       selected: selecting ? selected : null,
@@ -611,13 +618,13 @@ class BookshelfGridTile extends StatelessWidget {
                   children: [
                     SizedBox(
                       height: titleHeightFor(MediaQuery.textScalerOf(context)),
-                      child: DragOverflowText(
-                        child: UiText(
-                          name,
-                          translate: false,
-                          maxLines: 2,
-                          style: titleStyle.copyWith(color: scheme.onSurface),
-                        ),
+                      // 放不下時收在「…」（docs/design/components.md「過長文字」）。
+                      child: UiText(
+                        name,
+                        translate: false,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: titleStyle.copyWith(color: scheme.onSurface),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.sm),
