@@ -18,7 +18,7 @@
 | 骨架呼吸 | `_hold`、`_waiting`、`_restFrom`、`_still`、`_restarted`（另有 `_allowed`、`_visible`、`_usingShared`、`SkeletonRest._resting` 留著，見下方） | `_BreathStage`：等開始、呼吸（從哪一輪起、是不是從最深起）、收住中、收住了；跟著共用呼吸的骨架照抄這一個值 | 等開始又收住了；收住了卻沒有收住的起點；等開 App 呼吸時底下的收住照樣在變 | 3 件（見下方） | 3 件，都碰不到（見下方） | #466 |
 | 閱讀器正文捲動 | `_initialRestoreCompleted`、`_textWaitsForBreath`、`_pendingReveal`、`_revealTimer`、`_dragging`、`_sawUserScroll`（`_rebuildQueued`、`_captureFramePending` 留成旗標）；`PumpState` 兩邊各寫 | 正文的 `_TextStage`（排版中、等掀紙、在畫面上）；手指的 `_FingerScroll`（沒有、在盡頭往外拉、拖動、甩動）；排版預算只照進行中的那次還原或手指算 | 沒排好卻在等呼吸收住；拖動中卻不算手指；被取代的還原改到接手那次的預算 | 2 件（見下方） | 1 件（見下方） | 待開 |
 | 閱讀器目錄面板 | `_built`、`_builtCovering`、`_open`、`_openedSinceClosed`、`_dragging`、`_dragAbandoned` | `_Phase`（收著、按在左緣、準備打開、打開、收起、拉著），收起與拉著帶這一趟打開過沒有 | 收著又被手指拖著；收著卻算打開中；準備打開卻沒有排好的滑出 | 4 件（見下方） | 3 件，審查另 3 件（見下方） | #467 |
-| 路由換頁 | 返回手勢 `_tracking`、`_stranded`、`_finish.isAnimating`、`_backTicker.isActive`；一趟換頁 `_direction`、`_paced`、`_firstFrame`、`_resume`（見下方） | 返回手勢 `_Swipe`（沒在拖、跟手、收尾、被蓋住停在半途）；一趟換頁 `_TripPhase`（沒在換頁、停在起點、追上、照路由的時間、跟手） | 收尾中又開始拖；被蓋住了還在收尾；被手勢拖過的一趟中途換成換頁動畫的樣子 | 1 件（見下方） | 3 件，合併前審查另 2 件（見下方） | （開 PR 後補） |
+| 路由換頁 | 返回手勢 `_tracking`、`_stranded`、`_finish.isAnimating`、`_backTicker.isActive`；一趟換頁 `_direction`、`_paced`、`_firstFrame`、`_resume`（見下方） | 返回手勢 `_Swipe`（沒在拖、跟手、收尾、被蓋住停在半途）；一趟換頁 `_TripPhase`（沒在換頁、停在起點、追上、照路由的時間、跟手） | 收尾中又開始拖；被蓋住了還在收尾；被手勢拖過的一趟中途換成換頁動畫的樣子 | 1 件（見下方） | 3 件，合併前審查另 2 件（見下方） | #472 |
 
 ## 各狀態機
 
