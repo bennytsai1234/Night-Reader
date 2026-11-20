@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
@@ -10,6 +12,7 @@ import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:night_reader/shared/widgets/lists/swipe_actions.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 
 import '../source_manager_provider.dart';
 
@@ -104,6 +107,25 @@ class SourceItemTile extends StatelessWidget {
     this.firstInGroup = false,
     this.mutationEnabled = true,
   });
+
+  /// 照網站分組時卡片頂端那一段的高度：和上一組的組間距（第一組沒有）、
+  /// 粗字網址列與它下面的分隔線；進場排隊的佔位照它加高。
+  static double hostHeaderHeight(
+    BuildContext context,
+    String hostLabel, {
+    required bool first,
+  }) {
+    final width =
+        math.min(MediaQuery.sizeOf(context).width, ReadableWidth.maxWidth) -
+        AppGrouped.margin * 2;
+    final row = GroupedRow(
+      title: hostLabel,
+      heading: true,
+      translateTitle: false,
+      showChevron: false,
+    ).skeletonShape(context, width: width);
+    return (first ? 0 : AppGrouped.sectionGap) + row.height + AppGlass.hairline;
+  }
 
   @override
   Widget build(BuildContext context) {

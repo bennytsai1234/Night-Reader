@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
 import 'package:night_reader/core/ai_find/ai_find_avoid.dart';
 import 'package:night_reader/core/ai_find/ai_find_library.dart';
 import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
@@ -349,11 +350,24 @@ void main() {
 
     await tester.tap(find.text('深度的差別'));
     await tester.pumpAndSettle();
-    for (final depth in AiFindDepth.values) {
-      for (final point in depth.points) {
-        expect(find.text(point), findsWidgets);
-      }
+    // 三種深度各一段，寫每本查到哪裡。
+    for (final heading in ['快速', '一般', '深入']) {
+      expect(
+        find.descendant(
+          of: find.byType(AppBottomSheet),
+          matching: find.text(heading),
+        ),
+        findsOneWidget,
+      );
     }
+    expect(find.text('從搜尋結果的書名、字數與簡介開頭挑'), findsOneWidget);
+    expect(find.text('每本都去看詳情（簡介、分類、字數）再推薦'), findsOneWidget);
+    expect(find.text('小說再讀第一章與最後一章，看是不是太監'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('關閉'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AppBottomSheet), findsNothing);
+    expect(find.text('深度的差別'), findsOneWidget);
   });
 
   testWidgets('the book count and the avoid list: the rows sum them up, the '

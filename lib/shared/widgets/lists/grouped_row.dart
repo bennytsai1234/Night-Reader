@@ -318,7 +318,8 @@ class GroupedRow extends StatelessWidget
     }
     if (onTap == null && onLongPress == null) {
       // 標題文字本來就會併進這個節點，再設 label 讀屏會念成「標題、標題、值」。
-      return Semantics(container: true, child: row);
+      // 卡片第一列的粗字資料在讀屏裡是標題，可以照組跳。
+      return Semantics(container: true, header: heading, child: row);
     }
     return TransitionSource(
       child: PressInk(

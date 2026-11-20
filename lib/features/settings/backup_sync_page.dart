@@ -138,6 +138,7 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
                     heading: '同步',
                     items: [
                       '閱讀進度自動同步',
+                      '剛選好或換了同步空間時，先全面同步一次',
                       '其他資料按「立即全面同步」才同步',
                       '本地書的原檔按「同步本地書」才同步',
                     ],

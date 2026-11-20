@@ -375,13 +375,6 @@ class _AiRepairPageState extends State<AiRepairPage> {
                   GroupedSection(
                     children: [
                       ..._stageRows(context, job),
-                      if (sentTo != null)
-                        GroupedRow(
-                          title: '送到',
-                          value: sentTo,
-                          translateValue: false,
-                          showChevron: false,
-                        ),
                       if (run?.isPaused ?? false)
                         GroupedRow(
                           leading: Icon(
@@ -391,6 +384,13 @@ class _AiRepairPageState extends State<AiRepairPage> {
                           ),
                           title: '已暫停',
                           subtitle: '按「繼續」從頭重修這個書源',
+                          showChevron: false,
+                        ),
+                      if (sentTo != null)
+                        GroupedRow(
+                          title: '送到',
+                          value: sentTo,
+                          translateValue: false,
                           showChevron: false,
                         ),
                     ],

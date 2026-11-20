@@ -1025,7 +1025,8 @@ class _ResetRow extends StatelessWidget implements GroupedSkeletonItem {
   }) => _row.skeletonShape(context, width: width);
 
   @override
-  Widget build(BuildContext context) => _row;
+  Widget build(BuildContext context) =>
+      Semantics(button: true, enabled: onPressed != null, child: _row);
 }
 
 /// 卡片內「左側標籤、右側控件」的一列。

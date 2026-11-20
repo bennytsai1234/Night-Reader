@@ -545,7 +545,6 @@ class _AiFindPageState extends State<AiFindPage> {
             showChevron: false,
             maxTitleLines: 3,
           ),
-          ?_sentToRow,
           if (run.isPaused)
             GroupedRow(
               leading: Icon(
@@ -572,6 +571,7 @@ class _AiFindPageState extends State<AiFindPage> {
             value: aiFindTokens(session.tokens),
             showChevron: false,
           ),
+          ?_sentToRow,
         ],
       ),
       ?history,

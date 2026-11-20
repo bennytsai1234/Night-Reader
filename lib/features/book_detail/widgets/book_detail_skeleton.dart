@@ -104,7 +104,8 @@ class BookDetailSkeleton extends StatelessWidget {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     heightFactor: 1,
-                    child: _TextBar(
+                    // 和目錄列一樣，字大時照可用寬度換行。
+                    child: SkeletonText(
                       '目錄（共 ${total > 0 ? total : '000'} 章）',
                       style: _headerStyle,
                     ),
