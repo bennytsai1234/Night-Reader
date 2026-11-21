@@ -43,8 +43,8 @@ class SourceEditBasic extends StatelessWidget {
         ),
         GroupedSection(
           children: [
+            GroupedRow(title: '備註', showChevron: false),
             GroupedTextFieldRow(
-              label: '備註',
               controller: controllers['comment']!,
               maxLines: 3,
             ),
@@ -52,8 +52,8 @@ class SourceEditBasic extends StatelessWidget {
         ),
         GroupedSection(
           children: [
+            GroupedRow(title: '自定義 Header', showChevron: false),
             GroupedTextFieldRow(
-              label: '自定義 Header',
               controller: controllers['header']!,
               hintText: 'JSON 格式',
               maxLines: 3,

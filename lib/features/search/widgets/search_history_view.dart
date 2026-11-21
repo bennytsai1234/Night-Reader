@@ -103,6 +103,11 @@ class SearchHistoryView extends StatelessWidget {
                   onLongPress: () => _confirmDeleteKeyword(context, keyword),
                 ),
               GroupedRow(
+                leading: Icon(
+                  Icons.delete_sweep_outlined,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 title: '清除搜尋紀錄',
                 accent: true,
                 showChevron: false,

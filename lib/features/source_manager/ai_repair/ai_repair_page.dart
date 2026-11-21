@@ -9,7 +9,6 @@ import 'package:night_reader/core/ai_repair/ai_repair_step.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/background_work/background_work.dart';
-import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
@@ -377,10 +376,9 @@ class _AiRepairPageState extends State<AiRepairPage> {
                       ..._stageRows(context, job),
                       if (run?.isPaused ?? false)
                         GroupedRow(
-                          leading: Icon(
+                          leading: aiInfoIcon(
+                            context,
                             Icons.pause_circle_rounded,
-                            size: 22,
-                            color: AppChrome.of(context).sectionText,
                           ),
                           title: '已暫停',
                           subtitle: '按「繼續」從頭重修這個書源',
@@ -388,6 +386,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
                         ),
                       if (sentTo != null)
                         GroupedRow(
+                          leading: aiInfoIcon(context, Icons.send_rounded),
                           title: '送到',
                           value: sentTo,
                           translateValue: false,

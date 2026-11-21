@@ -32,9 +32,13 @@ class GroupedTextFieldRow extends StatelessWidget
     this.labelWidth = 96,
     this.validator,
     this.errorText,
-  });
+  }) : assert(
+         label == null || maxLines == 1 || obscureText,
+         '多行輸入框的欄位名放在上面單獨一列（GroupedRow），不放左欄',
+       );
 
-  /// 左側固定標籤；為 null 時輸入框佔滿整列。
+  /// 左側固定標籤（只給單行的框）；為 null 時輸入框佔滿整列。多行的框
+  /// 欄位名在上面單獨一列，框佔滿下一列。
   final String? label;
 
   /// 標籤欄寬度。
@@ -119,8 +123,8 @@ class GroupedTextFieldRow extends StatelessWidget
   /// 那一塊（[groupedTextFieldShape]）。
   ///
   /// 單行的標籤與輸入框各自置中在列裡，列被按鈕或換行的標籤撐高時三者仍在
-  /// 同一條中線；錯誤訊息排在輸入框下面，不推動標籤。多行的靠上，標籤對齊
-  /// 第一行。
+  /// 同一條中線；錯誤訊息排在輸入框下面，不推動標籤。多行的沒有標籤，框
+  /// 撐滿整列。
   _RowLayout _layout(BuildContext context, double fieldHeight) {
     final label = switch (this.label) {
       final text? => GroupedItemShape.text(
@@ -139,12 +143,9 @@ class GroupedTextFieldRow extends StatelessWidget
     final labelHeight = label?.height ?? 0;
     if (!_single) {
       return _RowLayout(
-        height: math.max(
-          AppGrouped.rowMinHeight,
-          math.max(box, AppSpacing.md + labelHeight),
-        ),
-        label: label,
-        labelTop: AppSpacing.md,
+        height: math.max(AppGrouped.rowMinHeight, box),
+        label: null,
+        labelTop: 0,
         box: box,
         boxTop: 0,
         textTop: AppSpacing.md,

@@ -1176,8 +1176,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
                     GroupedSection(
                       margin: EdgeInsets.zero,
                       children: [
+                        GroupedRow(title: '簡介', showChevron: false),
                         GroupedTextFieldRow(
-                          label: '簡介',
                           controller: i,
                           minLines: 3,
                           maxLines: 8,

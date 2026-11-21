@@ -232,13 +232,14 @@ class _ReaderStyleSelector extends StatelessWidget
                 ),
               ),
               alignment: Alignment.center,
-              // 大「夜」是正文字色：純黑時紙都是黑的，靠字色分出風格。
+              // 中間的字（淺色「日」、深色「夜」）是正文字色：純黑時紙都是
+              // 黑的，靠字色分出風格。
               child: UiText(
-                '夜',
+                palette.glyph,
                 // 色票大小固定，字不隨系統字級放大。
                 textScaler: TextScaler.noScaling,
                 style: AppTextStyles.uiSm.copyWith(
-                  fontSize: 26,
+                  fontSize: 20,
                   color: palette.readerText,
                   fontWeight: FontWeight.w600,
                   height: 1.1,

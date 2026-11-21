@@ -32,8 +32,8 @@ class ReplaceEditTestPanel extends StatelessWidget {
         GroupedSection(
           margin: margin,
           children: [
+            GroupedRow(title: '測試原文', showChevron: false),
             GroupedTextFieldRow(
-              label: '測試原文',
               controller: testInputCtrl,
               maxLines: 3,
               style: AppTextStyles.bodySm.copyWith(

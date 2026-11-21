@@ -10,18 +10,26 @@ typedef HelpSection = ({String? heading, List<String> items});
 
 /// 收起來的說明（ADR 0076）：卡片裡的一列，標題寫這段說明回答的問題
 /// （「會送出什麼」「什麼時候同步」），點了開底部面板，面板裡小標分段、
-/// 一列一件事。一頁最多一列。
-class GroupedHelpRow extends StatelessWidget implements GroupedSkeletonItem {
+/// 一列一件事。一頁最多一列。同一張卡片的其他列有列首圖示時它也帶一個
+/// （[leading]）。
+class GroupedHelpRow extends StatelessWidget
+    implements GroupedRowLike, GroupedSkeletonItem {
   const GroupedHelpRow({
     super.key,
     required this.title,
     required this.sections,
+    this.leading,
   });
 
   final String title;
   final List<HelpSection> sections;
+  final Widget? leading;
 
-  GroupedRow get _row => GroupedRow(title: title, onTap: () {});
+  @override
+  bool get hasLeading => leading != null;
+
+  GroupedRow get _row =>
+      GroupedRow(leading: leading, title: title, onTap: () {});
 
   @override
   GroupedItemShape skeletonShape(
@@ -51,6 +59,7 @@ class GroupedHelpRow extends StatelessWidget implements GroupedSkeletonItem {
 
   @override
   Widget build(BuildContext context) => GroupedRow(
+    leading: leading,
     title: title,
     onTap: () => show(context, title: title, sections: sections),
   );
