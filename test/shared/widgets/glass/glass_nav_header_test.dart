@@ -51,6 +51,42 @@ void main() {
     );
   });
 
+  testWidgets('the buttons sit as far below the status bar text as above the '
+      'first content on a tall status bar', (tester) async {
+    // Pixel 9：狀態列 54，字的下緣在 54 / 2 + 5 = 32。
+    AppGlass.statusBarSlack = AppGlass.statusBarSlackOf(54);
+    addTearDown(() => AppGlass.statusBarSlack = 0);
+    late double contentTop;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(400, 800),
+            padding: EdgeInsets.only(top: 54),
+          ),
+          child: Scaffold(
+            extendBodyBehindAppBar: true,
+            appBar: GlassNavHeader(
+              title: '書架',
+              leading: GlassIconButton(icon: Icons.sort, onPressed: () {}),
+            ),
+            body: Builder(
+              builder: (context) {
+                contentTop = MediaQuery.paddingOf(context).top;
+                return const SizedBox.expand();
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final button = tester.getRect(find.byType(GlassIconButton));
+    expect(button.top - 32, AppGlass.headerGap);
+    expect(contentTop - button.bottom, AppGlass.headerGap);
+  });
+
   testWidgets('the sheen finishes its sweep after checking ends', (
     tester,
   ) async {

@@ -68,10 +68,9 @@ class _HeaderScrollFadeState extends State<HeaderScrollFade> {
     final contentTop = _contentTop;
     if (!mounted || position == null || contentTop == null) return;
     // 頁首下緣（工具列下緣再加漸隱帶）：從這裡開始淡。
-    final start =
-        MediaQuery.viewPaddingOf(context).top +
-        AppGlass.headerToolbarHeight +
-        AppGlass.headerFadeHeight;
+    final start = AppGlass.headerBottomOf(
+      MediaQuery.viewPaddingOf(context).top,
+    );
     final top = contentTop - position.pixels;
     _opacity.value =
         ((top - start + HeaderScrollFade.distance) / HeaderScrollFade.distance)

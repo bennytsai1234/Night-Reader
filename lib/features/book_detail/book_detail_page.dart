@@ -135,9 +135,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
 
   /// 玻璃頁首（狀態列＋工具列＋漸隱）佔用的高度。
   double _headerExtent(BuildContext context) =>
-      MediaQuery.paddingOf(context).top +
-      AppGlass.headerToolbarHeight +
-      AppGlass.headerFadeHeight;
+      AppGlass.headerBottomOf(MediaQuery.paddingOf(context).top);
 
   @override
   Widget build(BuildContext context) {

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 
 /// 掛在根 Navigator 的狀態列策略；見 [StatusBarPolicy]。
 final StatusBarPolicy statusBarPolicy = StatusBarPolicy();
@@ -269,11 +270,12 @@ class _StatusBarStableInsetState extends State<StatusBarStableInset>
     final extent = measured != null && measured.size == media.size
         ? measured.extent
         : 0.0;
+    final top = math.max(media.padding.top, extent);
+    // 頁首從狀態列的字下面量起；頁首的高度在沒有 context 的地方也要用到。
+    AppGlass.statusBarSlack = AppGlass.statusBarSlackOf(top);
     return MediaQuery(
       data: media.copyWith(
-        padding: media.padding.copyWith(
-          top: math.max(media.padding.top, extent),
-        ),
+        padding: media.padding.copyWith(top: top),
         viewPadding: media.viewPadding.copyWith(
           top: math.max(media.viewPadding.top, extent),
         ),
