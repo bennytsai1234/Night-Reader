@@ -35,7 +35,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - 改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build`，產生的 `.g.dart` 一起提交。
 - 新增或改名 `lib/` 的檔後跑 `dart run tool/file_names.dart`，檢查檔名對得上主要類別（`CODING_STANDARDS.md`「命名」）；推送前的 hook 不跑它，CI 才跑。
 - 推送前的 hook 跑 `flutter analyze`，看 `pre-push:` 開頭那一行（通過是 `pre-push: analyze 通過（全套測試看 CI）`）；Git 會在它後面再印遠端訊息，只看最後幾行會漏掉。
-- 本機不建置、不除錯執行。給使用者看畫面用 `test/support/screenshot.dart` 畫成 PNG；對照整個 App 時重拍 `test/screens/`。
+- 給使用者看畫面：小調整在模擬器上用開發模式跑分支、改了就熱重載，使用者在 T3 裝置面板即時看（`docs/agents/emulator.md`「開發模式」）；幾個候選並排、淺深一起看時用 `test/support/screenshot.dart` 畫成 PNG，對照整個 App 時重拍 `test/screens/`。模擬器只看版面，動畫順不順照下一條量。
 - 改到轉場、骨架換場、開 App 進場、跳章，或宣稱某段工作已離開主執行緒時，用 `tool/frame_budget_compare.sh` 量前後，表寫進 commit message。
 - 手機上的驗證是使用者的事，不要求、不提及，回報也不列。模擬器由 agent 自己用：發測試版前，與只有正式版才出錯時，做法在 `docs/agents/emulator.md`。
 - Flutter `3.47.2` 固定在 `ci.yml` 與 `android-release.yml`，升級時兩處一起改。`third_party/` 三個 fork 的修補紀錄在各自的 `PATCHES.md`。
