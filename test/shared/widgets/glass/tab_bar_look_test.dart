@@ -190,16 +190,22 @@ void main() {
   });
 
   group('從偏好設定讀', () {
-    test('沒選過是撐滿；選過的照選的', () async {
+    test('沒選過是撐滿加高；選過的照選的', () async {
       SharedPreferences.setMockInitialValues({});
       TabBarLook.restore(await SharedPreferences.getInstance());
-      expect(TabBarLook.current.value, TabBarLook.full);
+      expect(TabBarLook.current.value, TabBarLook.tall);
 
       SharedPreferences.setMockInitialValues({
-        PreferKey.tabBarLook: TabBarLook.tall.name,
+        PreferKey.tabBarLook: TabBarLook.full.name,
       });
       TabBarLook.restore(await SharedPreferences.getInstance());
-      expect(TabBarLook.current.value, TabBarLook.tall);
+      expect(TabBarLook.current.value, TabBarLook.full);
+    });
+
+    test('之前關著試用的「分頁列置中」換成當時看到的撐滿，不是加高', () async {
+      SharedPreferences.setMockInitialValues({'trial_compact_tab_bar': false});
+      TabBarLook.restore(await SharedPreferences.getInstance());
+      expect(TabBarLook.current.value, TabBarLook.full);
     });
 
     test('之前開著試用的「分頁列置中」換成置中，試用的鍵刪掉', () async {
