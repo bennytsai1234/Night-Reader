@@ -385,7 +385,7 @@ class _StyleGrid extends StatelessWidget implements GroupedSkeletonItem {
   }
 }
 
-/// 一張摺角書頁：閱讀紙色上一個大「夜」與幾條正文色實線，右上角摺起露出
+/// 一張摺角書頁：閱讀紙色上一個字（淺色「日」、深色「夜」）與幾條正文色實線，右上角摺起露出
 /// 主色；風格名稱寫在頁下。純黑時六張紙都是黑的，靠大面積的字色分出風格。
 /// 選中時書頁浮起、加主色外框、名稱變粗。
 class _StyleCard extends StatelessWidget {
@@ -408,8 +408,8 @@ class _StyleCard extends StatelessWidget {
   static const double aspectRatio = 3 / 4;
   static const double labelGap = AppSpacing.sm;
 
-  /// 頁上「夜」的字級、上緣與下緣（行高 1.1）；正文線從下緣底下開始。
-  static const double glyphSize = 24;
+  /// 頁上那個字的字級、上緣與下緣（行高 1.1）；正文線從下緣底下開始。
+  static const double glyphSize = 18;
   static const double glyphTop = 4;
   static const double glyphBottom = glyphTop + glyphSize * 1.1;
 
@@ -428,7 +428,7 @@ class _StyleCard extends StatelessWidget {
       child: Align(
         alignment: Alignment.topLeft,
         child: UiText(
-          '夜',
+          palette.glyph,
           // 書頁是縮圖，字跟著頁面大小，不隨系統字級放大。
           textScaler: TextScaler.noScaling,
           style: AppTextStyles.uiMd.copyWith(
@@ -564,7 +564,7 @@ class _FoldedPagePainter extends CustomPainter {
     const thickness = 3.0;
     const lineGap = 6.5;
     final paint = Paint()..color = ink.withValues(alpha: 0.85);
-    // 從頁面一半、而且在「夜」底下開始：窄視窗的書頁矮，一半會壓到字。
+    // 從頁面一半、而且在字底下開始：窄視窗的書頁矮，一半會壓到字。
     var top = math.max(size.height * 0.5, _StyleCard.glyphBottom + 3);
     for (var i = 0; i < _lines.length; i++) {
       if (top + thickness > size.height - 4) break;

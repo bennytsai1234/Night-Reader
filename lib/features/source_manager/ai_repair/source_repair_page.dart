@@ -286,21 +286,19 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
                     ),
                   if (_run.isPaused)
                     GroupedRow(
-                      leading: Icon(
-                        Icons.pause_circle_rounded,
-                        size: 22,
-                        color: AppChrome.of(context).sectionText,
-                      ),
+                      leading: aiInfoIcon(context, Icons.pause_circle_rounded),
                       title: '已暫停',
                       subtitle: '按「繼續」接著修，已經有結果的書源不再處理',
                       showChevron: false,
                     ),
                   GroupedRow(
+                    leading: aiInfoIcon(context, Icons.data_usage_rounded),
                     title: 'AI 用量',
                     value: _tokens(_batch.tokensUsed),
                     showChevron: false,
                   ),
                   GroupedRow(
+                    leading: aiInfoIcon(context, Icons.send_rounded),
                     title: '送到',
                     value:
                         '${Uri.tryParse(service.baseUrl)?.host ?? service.baseUrl}'
@@ -640,6 +638,7 @@ GroupedSection? aiStepsHistory(
   return GroupedSection(
     children: [
       GroupedRow(
+        leading: aiInfoIcon(context, Icons.history_rounded),
         title: '經過',
         value: '${steps.length} 步',
         trailing: Icon(
@@ -671,6 +670,11 @@ GroupedSection? aiStepsHistory(
     ],
   );
 }
+
+/// AI 修復與 AI 找書狀態卡片裡其他列（已暫停、用量、送到、經過）的列首
+/// 圖示，和步驟圖示同大小，用分組標題的灰。
+Widget aiInfoIcon(BuildContext context, IconData icon) =>
+    Icon(icon, size: 22, color: AppChrome.of(context).sectionText);
 
 /// 修復步驟的圖示：做完是綠色勾、做著是轉圈、失敗是紅色叉、還沒開始是空心圓。
 Widget aiRepairStepIcon(BuildContext context, AiRepairStepState state) =>

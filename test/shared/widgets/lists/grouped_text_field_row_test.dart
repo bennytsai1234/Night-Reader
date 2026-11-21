@@ -142,17 +142,25 @@ void main() {
     );
   });
 
-  testWidgets('多行輸入框的標籤對齊第一行', (tester) async {
+  testWidgets('多行輸入框不帶左欄標籤：框從列的內距起撐滿，骨架和內容一樣高', (tester) async {
     await pumpRow(
       tester,
       GroupedTextFieldRow(
-        label: '備註',
         controller: TextEditingController(text: '一\n二\n三'),
-        maxLines: null,
+        minLines: 3,
+        maxLines: 3,
       ),
     );
-    final label = tester.getRect(find.text('備註'));
-    final field = tester.getRect(find.byType(EditableText));
-    expect(label.top, moreOrLessEquals(field.top, epsilon: 0.5));
+    final field = local(tester, find.byType(EditableText));
+    expect(field.left, moreOrLessEquals(AppGrouped.rowPadding, epsilon: 0.5));
+    expect(
+      skeletonOf(tester).height,
+      moreOrLessEquals(rowRect(tester).height, epsilon: 0.5),
+    );
+    expect(
+      () => GroupedTextFieldRow(label: '備註', maxLines: 3),
+      throwsAssertionError,
+      reason: '多行框的欄位名放在上面單獨一列',
+    );
   });
 }

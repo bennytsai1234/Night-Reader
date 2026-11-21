@@ -29,6 +29,7 @@ import 'package:night_reader/core/constant/book_type.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/dao/ai_find_dao.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/search/ai_find_record.dart';
 import 'package:night_reader/core/models/book/book.dart';
@@ -106,6 +107,17 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
           ),
         ),
       );
+      await tapTooltip(t, '搜尋');
+    },
+  ),
+  's08c_search_history': (
+    const {},
+    (t) async {
+      await t.runAsync(() async {
+        for (final word in ['夜雨聽書', '山海經', '長安']) {
+          await getIt<SearchKeywordDao>().saveKeyword(word);
+        }
+      });
       await tapTooltip(t, '搜尋');
     },
   ),

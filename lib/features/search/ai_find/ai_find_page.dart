@@ -23,8 +23,7 @@ import 'package:night_reader/features/search/widgets/search_result_item.dart';
 import 'package:night_reader/features/source_manager/ai_repair/ai_repair_settings_page.dart';
 import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
 import 'package:night_reader/features/source_manager/ai_repair/source_repair_page.dart'
-    show aiRepairStepIcon, aiStepsHistory;
-import 'package:night_reader/shared/theme/app_chrome.dart';
+    show aiInfoIcon, aiRepairStepIcon, aiStepsHistory;
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
@@ -442,8 +441,10 @@ class _AiFindPageState extends State<AiFindPage> {
   }
 
   /// 卡片裡的一列「送到」；還沒設好服務時不出現。
-  Widget? get _sentToRow => switch (_sentTo) {
+  /// 「送到」這一列；同一張卡片的其他列有圖示時（進行中）帶 [leading]。
+  Widget? _sentToRow({Widget? leading}) => switch (_sentTo) {
     final label? => GroupedRow(
+      leading: leading,
       title: '送到',
       value: label,
       translateValue: false,
@@ -501,7 +502,7 @@ class _AiFindPageState extends State<AiFindPage> {
     ),
     GroupedSection(
       children: [
-        ?_sentToRow,
+        ?_sentToRow(),
         GroupedRow(
           title: '開始找書',
           accent: true,
@@ -538,6 +539,7 @@ class _AiFindPageState extends State<AiFindPage> {
       GroupedSection(
         children: [
           GroupedRow(
+            leading: aiInfoIcon(context, Icons.auto_awesome_outlined),
             // 使用者自己寫的描述照原文（ADR 0066）。
             translateTitle: false,
             title: session.description,
@@ -547,11 +549,7 @@ class _AiFindPageState extends State<AiFindPage> {
           ),
           if (run.isPaused)
             GroupedRow(
-              leading: Icon(
-                Icons.pause_circle_rounded,
-                size: 22,
-                color: AppChrome.of(context).sectionText,
-              ),
+              leading: aiInfoIcon(context, Icons.pause_circle_rounded),
               title: '已暫停',
               subtitle: '按「繼續」接著問',
               showChevron: false,
@@ -567,11 +565,12 @@ class _AiFindPageState extends State<AiFindPage> {
               showChevron: false,
             ),
           GroupedRow(
+            leading: aiInfoIcon(context, Icons.data_usage_rounded),
             title: 'AI 用量',
             value: aiFindTokens(session.tokens),
             showChevron: false,
           ),
-          ?_sentToRow,
+          ?_sentToRow(leading: aiInfoIcon(context, Icons.send_rounded)),
         ],
       ),
       ?history,

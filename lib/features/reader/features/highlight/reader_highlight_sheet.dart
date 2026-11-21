@@ -125,8 +125,8 @@ class _ReaderHighlightSheetState extends State<ReaderHighlightSheet> {
           ),
           GroupedSection(
             children: [
+              GroupedRow(title: '備忘', showChevron: false),
               GroupedTextFieldRow(
-                label: '備忘',
                 controller: _note,
                 minLines: 2,
                 maxLines: 6,

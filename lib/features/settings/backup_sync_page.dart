@@ -132,6 +132,10 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
                     : null,
               ),
               const GroupedHelpRow(
+                leading: GroupedIconTile(
+                  Icons.schedule_rounded,
+                  tint: AppTint.azurite,
+                ),
                 title: '什麼時候同步',
                 sections: [
                   (

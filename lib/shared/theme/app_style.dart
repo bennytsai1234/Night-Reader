@@ -325,6 +325,10 @@ class StylePalette extends ThemeExtension<StylePalette> {
 
   final Brightness brightness;
 
+  /// 風格縮圖（「外觀與主題」的書頁、閱讀器的色票）上那個字：淺色是白天
+  /// 「日」，深色是晚上「夜」。
+  String get glyph => brightness == Brightness.light ? '日' : '夜';
+
   /// App 頁面底色、卡片與面板底色、頁首與浮動分頁列等玻璃列的色調，照
   /// [AppLayers] 的分層規則算好：淺色頁面比卡片暗、玻璃與卡片同色；深色
   /// 卡片比頁面亮、玻璃再亮一階。
