@@ -137,15 +137,32 @@ class AppGlass {
   static const double buttonSize = 44.0;
 
   /// 導航頁首的節奏（docs/design/components.md「導航頁首」）：圓鈕到狀態列
-  /// 下緣、圓鈕到第一個內容都是這一段。頁首遮罩在圓鈕下緣以下的這一段淡出，
+  /// 的字、圓鈕到第一個內容都是這一段。頁首遮罩在圓鈕下緣以下的這一段淡出，
   /// 第一個內容接在淡出的下面。
   static const double headerGap = AppSpacing.lg;
 
-  /// 導航頁首工具列：狀態列下緣先空 [headerGap]，接著一列圓鈕。
+  /// 導航頁首工具列：狀態列的字下面先空 [headerGap]，接著一列圓鈕。從狀態列
+  /// 下緣算要再扣 [statusBarSlack]。
   static const double headerToolbarHeight = headerGap + buttonSize;
+
+  /// 狀態列的字（時間、電量）下緣到狀態列下緣的空白；頁首從字下面量起，
+  /// 整個往上收這一段（ADR 0075）。有鏡頭挖孔的手機狀態列特別高（Pixel 9
+  /// 是 54），字只佔中間。由 `StatusBarStableInset` 照這台的狀態列高度設定，
+  /// 頁首的 `preferredSize` 拿不到 context，所以放在這裡；沒有它的測試是 0。
+  static double statusBarSlack = 0;
+
+  /// Android 把狀態列的字垂直置中，字約 10 高：字的下緣在狀態列一半再
+  /// 往下 5。
+  static double statusBarSlackOf(double statusBarHeight) =>
+      math.max(0.0, statusBarHeight / 2 - 5);
 
   /// 頁首遮罩下緣的淡出，接在工具列（與附加列）下面。
   static const double headerFadeHeight = headerGap;
+
+  /// 只有一列圓鈕的頁首下緣（淡出的下緣），從螢幕頂端算；第一個內容接在
+  /// 這裡。[statusBarHeight] 是 `MediaQuery.paddingOf(context).top`。
+  static double headerBottomOf(double statusBarHeight) =>
+      statusBarHeight - statusBarSlack + headerToolbarHeight + headerFadeHeight;
 
   /// 底部面板的頁首列：面板裡看得到的圓鈕 32（`PanelButtons.size`）上下
   /// 各空 [headerGap]，和頁首一樣上下一樣；第一張卡接在它下面。

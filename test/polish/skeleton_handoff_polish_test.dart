@@ -170,7 +170,15 @@ Future<void> _detailTocToSixth(WidgetTester tester) async {
   await tester.scrollUntilVisible(
     find.text(kChapterTitles[5]),
     200,
-    scrollable: find.byType(Scrollable).last,
+    // 頁面本身的直向捲動；放不下的字（例如最新章節）是可以左右拖的
+    // 橫向 Scrollable，不能拿它捲。
+    scrollable: find
+        .byWidgetPredicate(
+          (w) =>
+              w is Scrollable &&
+              axisDirectionToAxis(w.axisDirection) == Axis.vertical,
+        )
+        .last,
   );
   await settle(tester, const Duration(milliseconds: 800));
 }

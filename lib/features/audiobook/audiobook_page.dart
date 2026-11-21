@@ -549,9 +549,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
       book.originName;
 
   static double _headerTop(BuildContext context) =>
-      MediaQuery.paddingOf(context).top +
-      AppGlass.headerToolbarHeight +
-      AppGlass.headerFadeHeight;
+      AppGlass.headerBottomOf(MediaQuery.paddingOf(context).top);
 
   /// 打開時清單捲到哪裡：正在播的第 [index] 列（共 [count] 列）在第一個
   /// 畫面就看得到時不捲，否則捲到它在頁首與圓鈕之間約三分之一高的地方。

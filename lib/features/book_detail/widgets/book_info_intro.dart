@@ -42,12 +42,7 @@ class BookInfoDetails extends StatelessWidget {
           GroupedRow(title: '分類', value: kind, translateValue: false),
         if (wordCount.isNotEmpty) GroupedRow(title: '字數', value: wordCount),
         if (latest.isNotEmpty)
-          GroupedRow(
-            title: '最新章節',
-            subtitle: latest,
-            translateSubtitle: false,
-            maxSubtitleLines: 1,
-          ),
+          GroupedRow(title: '最新章節', value: latest, translateValue: false),
       ],
     );
   }

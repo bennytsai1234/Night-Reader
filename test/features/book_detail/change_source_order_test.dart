@@ -54,6 +54,9 @@ const _sites = <String, (int, String?)>{
 };
 
 void main() {
+  // 換源會載入繁簡字典（asset），要有測試用的 binding。
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late AppDatabase db;
   late BookSourceDao sourceDao;
 

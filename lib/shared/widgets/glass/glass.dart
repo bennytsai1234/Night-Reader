@@ -1048,15 +1048,22 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
       ? 0
       : (_hasToolbar ? AppGlass.headerGap : 0) + bottomHeight;
 
+  /// 頁首從狀態列的字下面量起（[AppGlass.statusBarSlack]），比狀態列下緣
+  /// 高出的那段由 [Scaffold] 給的狀態列高度扣掉。
   @override
   Size get preferredSize => Size.fromHeight(
-    _toolbarHeight + _bottomExtent + AppGlass.headerFadeHeight,
+    _toolbarHeight +
+        _bottomExtent +
+        AppGlass.headerFadeHeight -
+        AppGlass.statusBarSlack,
   );
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final topPadding = MediaQuery.paddingOf(context).top;
+    // 狀態列的字的下緣：頁首從這裡往下排。
+    final topPadding =
+        MediaQuery.paddingOf(context).top - AppGlass.statusBarSlack;
     final bg = backgroundColor ?? theme.scaffoldBackgroundColor;
     final fg = foregroundColor ?? theme.colorScheme.onSurface;
     // 只在能不能返回改變時重建：`ModalRoute.of` 會讓頁首在每次從這一頁推入、

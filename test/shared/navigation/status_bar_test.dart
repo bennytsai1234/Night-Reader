@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/navigation/status_bar.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 
 void main() {
   group('StatusBarPolicy', () {
@@ -231,6 +232,8 @@ void main() {
   group('StatusBarStableInset', () {
     const channel = MethodChannel('night_reader/system_bars');
 
+    tearDown(() => AppGlass.statusBarSlack = 0);
+
     /// 以邏輯像素設定系統回報的上緣內距（測試裝置像素比為 2）。
     void setSystemTop(WidgetTester tester, double top) {
       tester.view.padding = FakeViewPadding(top: top * 2);
@@ -268,6 +271,8 @@ void main() {
     testWidgets('狀態列收起時頁面仍保留狀態列原本的高度', (tester) async {
       final top = await pumpInset(tester, () async => 32);
       expect(top(), 32);
+      // 頁首從狀態列的字下面量起：字的下緣在 32 / 2 + 5。
+      expect(AppGlass.statusBarSlack, 32 - (32 / 2 + 5));
 
       // 閱讀頁收起狀態列後，系統只回報挖孔高度。
       setSystemTop(tester, 20);
