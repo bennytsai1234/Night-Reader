@@ -24,7 +24,7 @@ enum TabBarLook {
     isCentered: true,
   ),
 
-  /// 和卡片左右切齊，64 高（2026-11-19 改矮之前的樣子）。
+  /// 和卡片左右切齊，64 高（預設；2026-11-19 改矮之前的樣子）。
   tall('撐滿，加高', tabItemHeight: 56, searchSize: 64, isCentered: false);
 
   const TabBarLook(
@@ -61,7 +61,7 @@ enum TabBarLook {
   /// 分頁列加搜尋鈕那一列的高度：兩者垂直置中，取高的那個。
   double get rowHeight => math.max(barHeight, searchSize);
 
-  static const TabBarLook defaultLook = full;
+  static const TabBarLook defaultLook = tall;
 
   /// 目前的樣子。開 App 時在第一幀前讀（[restore]）：分頁列在任何頁面之前
   /// 就畫了。
@@ -96,8 +96,8 @@ enum TabBarLook {
     };
   }
 
-  static TabBarLook _ofTrial({required bool trial}) =>
-      trial ? centered : defaultLook;
+  /// 試用開關關著時看到的是當時的預設撐滿，不是現在的預設。
+  static TabBarLook _ofTrial({required bool trial}) => trial ? centered : full;
 
   static TabBarLook fromStorage(String? name) =>
       values.firstWhere((look) => look.name == name, orElse: () => defaultLook);
