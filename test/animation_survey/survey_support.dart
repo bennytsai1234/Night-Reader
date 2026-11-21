@@ -39,6 +39,9 @@ final bool surveyDry = Platform.environment['SURVEY_DRY'] == '1';
 /// 一步最多錄幾格才算「停不下來」：300 格約 4.8 秒，再加尾段。
 const int surveyMaxFrames = 300;
 
+/// 停下來之後再多錄的格數。
+const int _tailFrames = 30;
+
 /// 暖身中：[surveyStep] 照做動作、推到停下，但不錄、不印。
 bool _warming = false;
 
@@ -86,9 +89,8 @@ Future<void> runSurvey(
 }
 
 /// 暖身那次開 App 後，書架補下載排的任務會一直跑進正式錄（每秒排程、抓
-/// 章節失敗、寫失敗紀錄），混進每一區的數字（開 App 呼吸中那格 17ms 就是
-/// 它，2026-10-27 查到）。全部暫停、等排程停下；暫停的任務正式錄那次開 App
-/// 也不會被書架補下載排回去（ADR 0008）。
+/// 章節失敗、寫失敗紀錄），混進每一區的數字。全部暫停、等排程停下；暫停的
+/// 任務正式錄那次開 App 也不會被書架補下載排回去（ADR 0008）。
 Future<void> _pauseWarmupDownloads(WidgetTester tester) async {
   final downloads = DownloadService();
   final tasks = [...downloads.tasks];
@@ -112,9 +114,7 @@ bool _routeMoving() {
     final nav = (e as StatefulElement).state as NavigatorState;
     if (nav.userGestureInProgress) return true;
   }
-  // 換頁走 App 的轉場元件（私有類別，照名字找、用 dynamic 拿它的 route）。原本
-  // 拿 ModalBarrier 問 ModalRoute.of：遮罩在頁面範圍外，永遠問不到，換頁從沒
-  // 被認出來過（2026-10-28 查到）。
+  // 換頁走 App 的轉場元件（私有類別，照名字找，用 dynamic 讀它的 route）。
   for (final e
       in find
           .byWidgetPredicate(
@@ -188,7 +188,7 @@ bool surveyQuiet() =>
     !_scrolling() &&
     SchedulerBinding.instance.transientCallbackCount == 0;
 
-/// 做 [action]，再逐格錄到 [until]（預設 [surveyQuiet]）成立後多 [tailFrames]
+/// 做 [action]，再逐格錄到 [until]（預設 [surveyQuiet]）成立後多錄 [_tailFrames]
 /// 格。[key] 是這步的代號（英數字，不能有 `-`），[label] 是給人看的名稱。
 /// [onFrame] 在每格開始前呼叫，拖動這類手勢一格送一步（見 [dragOnFrames]）。
 Future<void> surveyStep(
@@ -201,7 +201,6 @@ Future<void> surveyStep(
   Future<void> Function(int frame)? onFrame,
   // 點下去後要等資料才推頁面的，第一格畫面還沒動；至少錄 20 格（0.32 秒）。
   int minFrames = 20,
-  int tailFrames = 30,
 }) async {
   assert(!key.contains('-'), '步驟鍵不能有 -：$key');
   final done = until ?? surveyQuiet;
@@ -227,7 +226,7 @@ Future<void> surveyStep(
         frames++;
         await onFrame?.call(i);
       },
-      tailFrames: tailFrames,
+      tailFrames: _tailFrames,
       realAsync: true,
     );
     await rest(tester);
@@ -242,7 +241,7 @@ Future<void> surveyStep(
         frames++;
         await onFrame?.call(i);
       },
-      tailFrames: tailFrames,
+      tailFrames: _tailFrames,
       realAsync: true,
     );
     costs = [for (final c in result) c.judged / 1000];
@@ -260,7 +259,7 @@ Future<void> surveyStep(
       },
       until: stop,
       onFrame: onFrame,
-      tailFrames: tailFrames,
+      tailFrames: _tailFrames,
       realAsync: true,
     );
     final meta = jsonDecode(

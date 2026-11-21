@@ -98,6 +98,15 @@ Future<void> _waitSkeletons(WidgetTester tester) async {
   await settle(tester, const Duration(milliseconds: 800));
 }
 
+/// 讓真的時間過 [count] 次（每次 [gap]），每次之後排一格畫面：圖片解碼與
+/// 背景工作要等真的時間，測試的假時鐘不會推它們。
+Future<void> _passRealTime(WidgetTester tester, int count, Duration gap) async {
+  for (var i = 0; i < count; i++) {
+    await tester.runAsync(() => Future<void>.delayed(gap));
+    await settle(tester, _ms(100));
+  }
+}
+
 Future<void> _openMine(WidgetTester tester, String row) async {
   await _tapText(tester, '我的');
   await _tapText(tester, row);
@@ -380,10 +389,7 @@ final _shots = <_Shot>[
       final book = await t.runAsync(_seedComic);
       _push(t, BookOpenRoute(book: book!));
       await settle(t, _ms(1500));
-      for (var i = 0; i < 20; i++) {
-        await t.runAsync(() => Future<void>.delayed(_ms(50)));
-        await settle(t, _ms(100));
-      }
+      await _passRealTime(t, 20, _ms(50));
     },
   ),
   _Shot(
@@ -397,10 +403,7 @@ final _shots = <_Shot>[
         ),
       );
       await settle(t, _ms(1200));
-      for (var i = 0; i < 10; i++) {
-        await t.runAsync(() => Future<void>.delayed(_ms(50)));
-        await settle(t, _ms(100));
-      }
+      await _passRealTime(t, 10, _ms(50));
       engine.advance(const Duration(minutes: 8, seconds: 12));
       await settle(t, _ms(1500));
     },
@@ -414,10 +417,7 @@ final _shots = <_Shot>[
         MaterialPageRoute<void>(builder: (_) => AiRepairPage(session: session)),
       );
       await settle(t, _ms(1200));
-      for (var i = 0; i < 20; i++) {
-        await t.runAsync(() => Future<void>.delayed(_ms(30)));
-        await settle(t, _ms(100));
-      }
+      await _passRealTime(t, 20, _ms(30));
     },
   ),
 ];
@@ -1035,12 +1035,7 @@ void main() {
           // ignore: avoid_print
           print('CLIP ${s.name}');
         } else {
-          for (var i = 0; i < 20; i++) {
-            await tester.runAsync(
-              () => Future<void>.delayed(const Duration(milliseconds: 30)),
-            );
-            await settle(tester, const Duration(milliseconds: 100));
-          }
+          await _passRealTime(tester, 20, _ms(30));
           final file = await saveScreenshot(tester, s.name, dir: webDir);
           // ignore: avoid_print
           print('SHOT ${file.path}');

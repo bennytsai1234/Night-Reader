@@ -67,7 +67,7 @@ Finder get _thumb => find.descendant(
 );
 
 /// 閱讀器已經開好：路由到位、沒有在重排（紙由 surveyQuiet 管）。
-/// 不用 hasStableWorld：從詳情開的閱讀器它一直是 false，但紙已經掀開、畫面不動。
+/// 從詳情開的閱讀器 hasStableWorld 一直是 false，紙已掀開、畫面不動就算好。
 bool _readerReady(WidgetTester tester) {
   if (find.byType(ReaderTextView).evaluate().isEmpty) return false;
   final runtime = tester

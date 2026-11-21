@@ -233,7 +233,7 @@ void main() {
         );
 
         // 第二次進搜尋：歷史關鍵字在，點一個進去，搜尋途中按結束。假網站的回應
-        // 預設 0.3 秒，搜完前就錄完了、按不到結束，這次改成 2 秒才回來。
+        // 預設 0.3 秒，搜完前就錄完了、按不到結束，這裡把回應延到 2 秒。
         await tester.runAsync(
           () => installFakeSite(latency: const Duration(seconds: 2)),
         );

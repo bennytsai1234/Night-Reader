@@ -251,21 +251,6 @@ void main() {
       progress = ValueNotifier(null);
     });
 
-    /// 紀錄存到小數一位，兩次記下的同一行最多差 0.1。
-    void expectSameLines(List<Rect> actual, List<Rect> expected) {
-      expect(actual.length, expected.length);
-      for (var i = 0; i < expected.length; i++) {
-        for (final (a, e) in [
-          (actual[i].left, expected[i].left),
-          (actual[i].top, expected[i].top),
-          (actual[i].right, expected[i].right),
-          (actual[i].bottom, expected[i].bottom),
-        ]) {
-          expect(a, closeTo(e, 0.11), reason: '第 $i 行');
-        }
-      }
-    }
-
     /// 推進到骨架換場播完（同 [settle]，它定義在後面）。
     Future<void> settleReveal(WidgetTester tester) async {
       final frames = _revealTime.inMilliseconds ~/ 16 + 12;
@@ -336,7 +321,10 @@ void main() {
         await tester.pump(const Duration(milliseconds: 16));
       }
       await tester.pumpWidget(const SizedBox.shrink());
-      expectSameLines(store.read('http://interaction.test')!.lines, page.lines);
+      _expectSameLines(
+        store.read('http://interaction.test')!.lines,
+        page.lines,
+      );
     });
 
     testWidgets('opening somewhere else does not use the record', (
@@ -1876,21 +1864,6 @@ void main() {
       return store.read(bookUrl)!.lines;
     }
 
-    /// 紀錄存到小數一位，同一行最多差 0.1。
-    void expectSameLines(List<Rect> actual, List<Rect> expected) {
-      expect(actual.length, expected.length);
-      for (var i = 0; i < expected.length; i++) {
-        for (final (a, e) in [
-          (actual[i].left, expected[i].left),
-          (actual[i].top, expected[i].top),
-          (actual[i].right, expected[i].right),
-          (actual[i].bottom, expected[i].bottom),
-        ]) {
-          expect(a, closeTo(e, 0.11), reason: '第 $i 行');
-        }
-      }
-    }
-
     testWidgets('a jump leaves the middle empty until its first page is laid '
         'out, then the bars become the text', (tester) async {
       final target = Completer<String?>();
@@ -1915,7 +1888,7 @@ void main() {
       expect(veil.titleLines, contains(0), reason: '跳到章首，第一行是章名');
       await finishJump(tester, jump);
       expect(runtime.state.visibleLocation.chapterIndex, 7);
-      expectSameLines(await linesOnLeaving(tester), veil.lines!);
+      _expectSameLines(await linesOnLeaving(tester), veil.lines!);
     });
 
     testWidgets('opening without a record waits for the first page too', (
@@ -1925,7 +1898,7 @@ void main() {
       expect(veilLines(tester), isNull);
       final veil = await untilVeilLines(tester);
       await untilVeilGone(tester);
-      expectSameLines(await linesOnLeaving(tester), veil.lines!);
+      _expectSameLines(await linesOnLeaving(tester), veil.lines!);
     });
 
     testWidgets('a record of different text is dropped for the first page', (
@@ -1957,7 +1930,7 @@ void main() {
         accept: (lines) => !listEquals(lines, stale),
       );
       await untilVeilGone(tester);
-      expectSameLines(await linesOnLeaving(tester), veil.lines!);
+      _expectSameLines(await linesOnLeaving(tester), veil.lines!);
     });
 
     testWidgets('jumping while the opening reveal plays drops the record', (
@@ -1991,7 +1964,7 @@ void main() {
       );
       await finishJump(tester, jump);
       expect(runtime.state.visibleLocation.chapterIndex, 1);
-      expectSameLines(await linesOnLeaving(tester), veil.lines!);
+      _expectSameLines(await linesOnLeaving(tester), veil.lines!);
     });
 
     /// 一幀一幀推進到紙掀完，回傳紙上最後畫的那組行。
@@ -2017,7 +1990,7 @@ void main() {
       unawaited(runtime.jumpToChapter(1));
       final last = await lastLinesUntilVeilGone(tester);
       expect(runtime.state.visibleLocation.chapterIndex, 1);
-      expectSameLines(await linesOnLeaving(tester), last);
+      _expectSameLines(await linesOnLeaving(tester), last);
     });
 
     testWidgets('a layout change during the fade-in measures the page again', (
@@ -2042,7 +2015,7 @@ void main() {
       unawaited(runtime.applyPresentation(spec: larger));
       final last = await lastLinesUntilVeilGone(tester);
       expect(last, isNot(first));
-      expectSameLines(await linesOnLeaving(tester), last);
+      _expectSameLines(await linesOnLeaving(tester), last);
     });
 
     testWidgets('an old skeleton fades out completely before it is replaced', (
@@ -2103,7 +2076,7 @@ void main() {
         waitForOpen: false,
       );
       final last = await lastLinesUntilVeilGone(tester);
-      expectSameLines(await linesOnLeaving(tester), last);
+      _expectSameLines(await linesOnLeaving(tester), last);
     });
 
     testWidgets('with the previous chapter unavailable the skeleton sits '
@@ -2122,7 +2095,22 @@ void main() {
         waitForOpen: false,
       );
       final last = await lastLinesUntilVeilGone(tester);
-      expectSameLines(await linesOnLeaving(tester), last);
+      _expectSameLines(await linesOnLeaving(tester), last);
     });
   });
+}
+
+/// 紀錄存到小數一位，兩次記下的同一行最多差 0.1。
+void _expectSameLines(List<Rect> actual, List<Rect> expected) {
+  expect(actual.length, expected.length);
+  for (var i = 0; i < expected.length; i++) {
+    for (final (a, e) in [
+      (actual[i].left, expected[i].left),
+      (actual[i].top, expected[i].top),
+      (actual[i].right, expected[i].right),
+      (actual[i].bottom, expected[i].bottom),
+    ]) {
+      expect(a, closeTo(e, 0.11), reason: '第 $i 行');
+    }
+  }
 }

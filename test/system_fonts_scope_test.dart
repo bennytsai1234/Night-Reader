@@ -7,7 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 // 量幀數、錄全 App 動畫與細節檢查這幾組平常跳過的測試。
 const _allowed = [
   'test/screens/',
-  'test/_screens/',
   'test/frame_budget/',
   'test/animation_survey/',
   'test/polish/',

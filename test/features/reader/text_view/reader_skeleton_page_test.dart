@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -61,12 +62,9 @@ void main() {
   });
 
   test('the layout key is the same on every launch', () {
-    // 不能用 Object.hash：每次啟動 App 的雜湊種子不同。
-    expect(
-      ReaderSkeletonPage.layoutKeyOf(spec()),
-      ReaderSkeletonPage.layoutKeyOf(spec()),
-    );
-    expect(ReaderSkeletonPage.layoutKeyOf(spec()), contains('18'));
+    // 不能用 Object.hash：每次啟動 App 的雜湊種子不同。鍵就是排版數值本身。
+    final key = jsonDecode(ReaderSkeletonPage.layoutKeyOf(spec())) as List;
+    expect(key, containsAll(<Object>[400, 800, 18]));
   });
 
   test('a saved page reads back with one-decimal lines', () {
