@@ -39,9 +39,6 @@ class BookDetailSkeleton extends StatelessWidget {
   static final TextStyle _rowStyle = AppTextStyles.bodyBase.copyWith(
     height: 1.3,
   );
-  static final TextStyle _subtitleStyle = AppTextStyles.bodySm.copyWith(
-    height: 1.3,
-  );
   static final TextStyle _headerStyle = AppTextStyles.bodyBase.copyWith(
     fontWeight: FontWeight.w600,
     height: 1.3,
@@ -190,22 +187,8 @@ class BookDetailSkeleton extends StatelessWidget {
         if (latest.isNotEmpty)
           GroupedRow(
             title: '最新章節',
-            // 帶副標的列最少 60 高；這裡的副標是骨架，自己撐到同樣高。
-            titleWidget: ConstrainedBox(
-              constraints: const BoxConstraints(
-                minHeight: AppGrouped.rowTallMinHeight - AppSpacing.md * 2,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _TextBar('最新章節', style: _rowStyle),
-                  const SizedBox(height: 2),
-                  _TextBar(latest, style: _subtitleStyle),
-                ],
-              ),
-            ),
+            titleWidget: _TextBar('最新章節', style: _rowStyle),
+            trailing: value(latest),
           ),
       ],
     );
