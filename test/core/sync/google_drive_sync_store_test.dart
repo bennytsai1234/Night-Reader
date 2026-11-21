@@ -37,7 +37,6 @@ class _FakeAuth implements GoogleDriveAuth {
 /// 記在記憶體裡的雲端硬碟 App 資料夾：列出、下載、更新內容、多段上傳新建。
 class _FakeDrive implements HttpClientAdapter {
   final Map<String, ({String name, String content, int version})> files = {};
-  final List<String> log = [];
   Set<String> rejected = {};
 
   /// 下載這些檔名的檔案時回 403（只有這幾份被拒絕）。
@@ -63,7 +62,6 @@ class _FakeDrive implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     final auth = options.headers['Authorization'] as String;
-    log.add('${options.method} ${options.uri.path}');
     if (rejected.contains(auth.substring(7))) return _json(401, {});
     final uri = options.uri;
     final body = <int>[];

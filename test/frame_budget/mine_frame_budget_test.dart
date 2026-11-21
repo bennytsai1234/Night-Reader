@@ -24,7 +24,7 @@ import '../support/app_harness.dart';
 import '../support/navigation_budget.dart';
 import '../support/screenshot.dart';
 
-/// 「資料與隱私」用網頁元件，測試環境畫不出來，不列。
+/// 「我的」第一層的每一列，順序同 `settings_page.dart`。
 const _rows = <(String, Type)>[
   ('閱讀偏好', ReadingSettingsPage),
   ('外觀與主題', AppearanceSettingsPage),

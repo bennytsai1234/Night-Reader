@@ -7,9 +7,8 @@ import 'package:night_reader/core/app_update/app_update_service.dart';
 
 /// 依路徑回傳固定 JSON 的 HTTP 轉接器，記下請求過的路徑。
 class _ReleaseApi implements HttpClientAdapter {
-  _ReleaseApi({required this.latest, required this.list});
+  _ReleaseApi({required this.list});
 
-  final Object latest;
   final Object list;
   final paths = <String>[];
 
@@ -20,7 +19,7 @@ class _ReleaseApi implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     paths.add(options.uri.path);
-    var body = options.uri.path.endsWith('/latest') ? latest : list;
+    Object body = list;
     // 清單照 page／per_page 分頁，和 GitHub 一樣。
     final query = options.uri.queryParameters;
     if (body is List && query.containsKey('per_page')) {
@@ -88,7 +87,6 @@ void main() {
 
   group('checkLatest', () {
     final api = _ReleaseApi(
-      latest: _release('v0.3.3'),
       list: [
         _release('v0.3.5-beta.9', draft: true),
         _release('v0.3.4-beta.4', prerelease: true, apk: false),
@@ -160,7 +158,7 @@ void main() {
       String current, {
       bool includeBeta = true,
     }) async => (await _service(
-      _ReleaseApi(latest: stable, list: list),
+      _ReleaseApi(list: list),
       current,
     ).checkLatest(includeBeta: includeBeta))?.updateLog;
 
@@ -245,7 +243,6 @@ void main() {
 
     test('reads further pages until the installed cycle', () async {
       final api = _ReleaseApi(
-        latest: stable,
         list: [
           for (var i = 150; i >= 1; i--) release('v0.3.5-beta.$i', '- 第$i條'),
           release('v0.3.4', '- 上一版', prerelease: false),
@@ -265,7 +262,6 @@ void main() {
 
   group('fetchReleaseNotes', () {
     final api = _ReleaseApi(
-      latest: _release('v0.3.3'),
       list: [
         _release('v0.3.5-beta.9', draft: true),
         {

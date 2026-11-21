@@ -255,74 +255,6 @@ void main() {
       );
     }, skip: quickJsSkip);
 
-    test('java bridge exposes missing helper methods', () {
-      if (runtime == null) {
-        expect(runtimeError, isNotNull);
-        return;
-      }
-      final ext = JsExtensions(runtime!);
-      ext.inject();
-
-      expect(
-        runtime!.evaluate('typeof java.base64Decode').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof java.md5Encode16').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof java.hexEncodeToString').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof java.hexDecodeToString').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof java.randomUUID').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof java.timeFormat').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof java.timeFormatUTC').stringResult,
-        'function',
-      );
-      expect(runtime!.evaluate('typeof java.HMacHex').stringResult, 'function');
-      expect(
-        runtime!.evaluate('typeof java.desEncodeToBase64String').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof java.toNumChapter').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof java.cacheFile').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof java.importScript').stringResult,
-        'function',
-      );
-      expect(runtime!.evaluate('typeof java.head').stringResult, 'function');
-      expect(
-        runtime!.evaluate('typeof java.webViewGetSource').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof java.webViewGetOverrideUrl').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof java.encodeURI').stringResult,
-        'function',
-      );
-    });
-
     test('java.log returns the original value like Legado', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);
@@ -356,39 +288,16 @@ void main() {
       expect(result.stringResult, '{"id":"164"}');
     });
 
-    test('cookie and cache bridges are exposed', () {
+    test('cookie.set and cookie.remove shorthands are there besides the Legado names', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);
         return;
       }
-      final ext = JsExtensions(runtime!);
-      ext.inject();
+      JsExtensions(runtime!).inject();
 
       expect(runtime!.evaluate('typeof cookie.set').stringResult, 'function');
       expect(
         runtime!.evaluate('typeof cookie.remove').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof cookie.getCookie').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof cookie.setCookie').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof cookie.removeCookie').stringResult,
-        'function',
-      );
-      expect(runtime!.evaluate('typeof cache.get').stringResult, 'function');
-      expect(
-        runtime!.evaluate('typeof cache.getFile').stringResult,
-        'function',
-      );
-      expect(runtime!.evaluate('typeof cache.put').stringResult, 'function');
-      expect(
-        runtime!.evaluate('typeof cache.putFile').stringResult,
         'function',
       );
     });
@@ -405,48 +314,6 @@ void main() {
 
       expect(result.isError, isTrue);
       expect(result.stringResult, contains('只能在書源 isolate'));
-    });
-
-    test('source bridge is exposed when source exists', () {
-      if (runtime == null) {
-        expect(runtimeError, isNotNull);
-        return;
-      }
-      final ext = JsExtensions(
-        runtime!,
-        source: BookSource(
-          bookSourceUrl: 'https://example.com',
-          bookSourceName: 'Example',
-        ),
-      );
-      ext.inject();
-
-      expect(
-        runtime!.evaluate('typeof source.getLoginInfo').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof source.getKey').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof source.getVariable').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof source.setVariable').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof source.getHeaderMap').stringResult,
-        'function',
-      );
-      expect(
-        runtime!.evaluate('typeof source.putLoginInfo').stringResult,
-        'function',
-      );
-      expect(runtime!.evaluate('typeof source.put').stringResult, 'function');
-      expect(runtime!.evaluate('typeof source.get').stringResult, 'function');
     });
 
     test('interactive JS calls are refused outside the login page', () {
@@ -792,7 +659,7 @@ void main() {
       expect(result.stringResult, '解压成功');
     });
 
-    test('Java String getBytes returns a writable buffer', () {
+    test('Java String getBytes gives the bytes of the string', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);
         return;

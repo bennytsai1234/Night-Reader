@@ -40,8 +40,8 @@ import '../support/screenshot.dart';
 
 typedef Steps = Future<void> Function(WidgetTester tester);
 
-Future<void> tapText(WidgetTester tester, String text, {int index = 0}) async {
-  await tester.tap(find.text(text).at(index), warnIfMissed: false);
+Future<void> tapText(WidgetTester tester, String text) async {
+  await tester.tap(find.text(text).first, warnIfMissed: false);
   await settle(tester, const Duration(milliseconds: 900));
 }
 
@@ -227,7 +227,10 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
     },
   ),
   'r10_header_hidden_bar': (
-    const {'hideStatusBar': true, 'reader_header_info': '1,4'},
+    const {
+      PreferKey.readerHideStatusBar: true,
+      PreferKey.readerHeaderInfo: '1,4',
+    },
     (t) async => openReader(t),
   ),
   // 上下邊距各 16：正文與頁首頁尾之間有空隙，跨邊的那一行在空隙裡漸隱。
@@ -240,7 +243,10 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
     (t) async => openReader(t),
   ),
   'r11_menu_hidden_bar': (
-    const {'hideStatusBar': true, 'reader_header_info': '1,4'},
+    const {
+      PreferKey.readerHideStatusBar: true,
+      PreferKey.readerHeaderInfo: '1,4',
+    },
     openReaderMenu,
   ),
   // 各處的選單（ADR 0059：項目一律畫出，不能用的灰掉）。

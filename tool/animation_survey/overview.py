@@ -21,7 +21,7 @@ from make_pages import survey_root  # noqa: E402
 PAGES = os.path.join(survey_root(), 'pages')
 
 AREA_NAMES = {
-    'sample': '樣本：書架切換列表／網格', 'tabs': '換分頁', 'launch': '開 App 進場', 'shelf': '書架', 'book': '書籍詳情與目錄',
+    'tabs': '換分頁', 'launch': '開 App 進場', 'shelf': '書架', 'book': '書籍詳情與目錄',
     'reader': '閱讀器', 'search': '搜尋', 'explore': '發現', 'download': '下載',
     'sources': '書源管理', 'mine': '「我的」：外觀與主題', 'mine2': '「我的」：其他各頁',
 }

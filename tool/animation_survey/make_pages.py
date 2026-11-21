@@ -106,10 +106,11 @@ def build_area(area, steps):
 
 def overview():
     rows = []
-    order = ['sample', 'tabs', 'launch', 'shelf', 'book', 'reader', 'search', 'explore',
+    order = ['tabs', 'launch', 'shelf', 'book', 'reader', 'search', 'explore',
              'download', 'sources', 'mine', 'mine2']
     pages = [p for p in os.listdir(PAGES)
-             if os.path.isdir(os.path.join(PAGES, p)) and p.rsplit('-', 1)[-1].isdigit()]
+             if os.path.isdir(os.path.join(PAGES, p)) and p.rsplit('-', 1)[-1].isdigit()
+             and p.rsplit('-', 1)[0] in order]
     for page in sorted(pages, key=lambda p: (order.index(p.rsplit('-', 1)[0]), int(p.rsplit('-', 1)[1]))):
         cfg_path = os.path.join(PAGES, page, 'config.json')
         if not os.path.isfile(cfg_path):
