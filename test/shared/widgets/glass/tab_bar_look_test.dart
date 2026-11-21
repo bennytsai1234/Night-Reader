@@ -4,7 +4,6 @@ import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/audiobook/audiobook_mini_button.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';
 import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
@@ -63,11 +62,10 @@ void main() {
         count: 3,
         search: true,
       );
+      // 置中：三個 72 寬的分頁加兩側內距 4 × 2；撐滿：螢幕扣掉兩側 16、搜尋鈕和間距 8。
       expect(
         barWidth,
-        look.isCentered
-            ? TabBarLook.centeredTabWidth * 3 + AppGlass.tabInnerInset * 2
-            : 393 - 16 * 2 - look.searchSize - AppGlass.tabBarGap,
+        look.isCentered ? 224 : 393 - 16 * 2 - look.searchSize - 8,
       );
       final right = FloatingTabBar.searchRightOf(context, tabCount: 3);
       expect(393 - searchRect(tester).right, moreOrLessEquals(right));

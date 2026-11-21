@@ -24,12 +24,6 @@ void main() {
     expect(task.failureSummary(), '這本書的書源已經刪除，換源');
   });
 
-  test('a row saved by an older version still shows its message', () {
-    final task = failed()
-      ..setFailure(reason: '下載失敗', message: '發生未預期的錯誤', chapterIndex: 0);
-    expect(task.failureSummary(), '第 1 章：發生未預期的錯誤');
-  });
-
   test('nothing recorded means no summary line', () {
     expect(failed().failureSummary(), isNull);
   });

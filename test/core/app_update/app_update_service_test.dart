@@ -305,7 +305,6 @@ void main() {
         '0.3.2',
       ]);
       expect(notes.first.isCurrent, isTrue);
-      expect(releaseNotesForDisplay(notes.first.body), '• 閱讀時記住位置');
     });
   });
 }

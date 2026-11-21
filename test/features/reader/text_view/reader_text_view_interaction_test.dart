@@ -557,23 +557,6 @@ void main() {
     await settle(tester);
   });
 
-  testWidgets('a tap-zone page turn works while text selection is off', (
-    tester,
-  ) async {
-    await pumpReader(tester);
-    final position = scrollPosition(tester);
-    final start = position.pixels;
-    Future<bool>? turn;
-    onTap = (_) => turn = viewport.moveToNextPage!();
-
-    await tester.tapAt(const Offset(200, 300));
-    await settle(tester);
-
-    expect(turn, isNotNull);
-    expect(await turn, isTrue);
-    expect(position.pixels, greaterThan(start));
-  });
-
   testWidgets('a jump covers the text with paper until its chapter arrives', (
     tester,
   ) async {

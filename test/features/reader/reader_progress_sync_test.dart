@@ -256,8 +256,7 @@ void main() {
   });
 
   group('leaving the reader', () {
-    test('closing it saves the position and asks for the progress to go up '
-        'first', () async {
+    test('closing it asks for the progress to go up first', () async {
       final progressSync = ReaderProgressSync(
         book: book,
         runtime: () => runtime,

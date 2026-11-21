@@ -53,7 +53,7 @@ void main() {
         applyAiChange(sourceForAi(original), (source: null, patch: {})),
       );
 
-      expect((await _parse(changed)).tocUrl, (await _parse(original)).tocUrl);
+      expect((await _parse(changed)).tocUrl, _bookUrl);
     },
   );
 }

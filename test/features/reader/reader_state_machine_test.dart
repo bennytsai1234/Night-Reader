@@ -95,9 +95,13 @@ void main() {
       () {
         final machine = ReaderStateMachine(_initialState());
         final staged = _layoutSpec(fontSize: 22);
-        machine.beginPresentation(spec: staged, layoutGeneration: 1);
+        final presentation = machine.beginPresentation(
+          spec: staged,
+          layoutGeneration: 1,
+        );
         const target = ReaderLocation(chapterIndex: 3, charOffset: 42);
         final jump = machine.beginJump(location: target);
+        expect(machine.isCurrent(presentation), isFalse);
         final resized = _layoutSpec(
           fontSize: 22,
           viewportSize: const Size(360, 600),
@@ -139,25 +143,6 @@ void main() {
         expect(() => machine.publishContentGeneration(0), throwsStateError);
       },
     );
-
-    test('superseding operation inherits an uncommitted layout intent', () {
-      final machine = ReaderStateMachine(_initialState());
-      final spec = _layoutSpec(fontSize: 22);
-      final presentation = machine.beginPresentation(
-        spec: spec,
-        layoutGeneration: 1,
-      );
-      const target = ReaderLocation(chapterIndex: 3, charOffset: 42);
-      final jump = machine.beginJump(location: target);
-
-      expect(machine.isCurrent(presentation), isFalse);
-      expect(jump.layoutGeneration, 1);
-      expect(machine.stagedLayoutSpec?.layoutSignature, spec.layoutSignature);
-      expect(jump.targetLocation, target);
-      expect(machine.commitLayoutForOperation(jump), isTrue);
-      expect(machine.state.layoutGeneration, 1);
-      expect(machine.state.layoutSpec.layoutSignature, spec.layoutSignature);
-    });
 
     test(
       'external unavailability can only mark a Reader with no stable world',

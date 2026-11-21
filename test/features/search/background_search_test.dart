@@ -50,8 +50,6 @@ class _OtherJob implements BackgroundJob {
   void openFromNotification() {}
 }
 
-/// 向書源搜尋的那一步：每個書源送出時記下，等測試決定回什麼；取消時照
-/// Dio 丟出取消。
 /// 存搜尋紀錄要等 [gate]：新的一次搜尋停在開始前那段空檔。
 class _GatedKeywordDao extends SearchKeywordDao {
   _GatedKeywordDao(super.db);
@@ -65,6 +63,8 @@ class _GatedKeywordDao extends SearchKeywordDao {
   }
 }
 
+/// 向書源搜尋的那一步：每個書源送出時記下，等測試決定回什麼；取消時照
+/// Dio 丟出取消。
 class _Loader {
   /// 這些書源不理會取消（網站卡住、規則跑不完），要測試回了才回。
   final Set<String> ignoresCancel = {};
@@ -107,7 +107,6 @@ class _Loader {
       _pending.remove(name)!.completeError(StateError('網站壞了'));
 }
 
-/// 讓搜尋與結果檔的寫入往前跑完（寫檔要真的等一下）。
 /// 等到 [done]（第一次搜尋要等繁簡字典載入）。
 Future<void> until(bool Function() done) async {
   for (var i = 0; i < 200 && !done(); i++) {
@@ -115,6 +114,7 @@ Future<void> until(bool Function() done) async {
   }
 }
 
+/// 讓搜尋與結果檔的寫入往前跑完（寫檔要真的等一下）。
 Future<void> settle() async {
   await pumpEventQueue();
   await Future<void>.delayed(const Duration(milliseconds: 30));

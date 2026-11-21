@@ -14,10 +14,7 @@ void main() {
   test('half-width brackets in Chinese become full-width, nested ones too', () {
     expect(normalizeTypography('他說(真的)。'), '他說（真的）。');
     expect(normalizeTypography('他說(她想(真的嗎)還是假的)'), '他說（她想（真的嗎）還是假的）');
-    expect(
-      normalizeTypography('他說[她想[真的嗎]還是假的]'),
-      normalizeTypography('他說【她想【真的嗎】還是假的】'),
-    );
+    expect(normalizeTypography('他說[她想[真的嗎]還是假的]'), '他說「她想「真的嗎」還是假的」');
   });
 
   test('Latin and unpaired brackets stay as they are', () {
