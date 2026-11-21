@@ -30,7 +30,7 @@
 
 給使用者看小調整（字級、間距、圖示）時用：使用者在旁邊看、直接說要改哪裡，改了約一秒就看得到。
 
-- 在分支的 worktree 背景跑 `tail -f <指令檔> | flutter run -d <序號> --debug > <log> 2>&1`（指令檔與 log 放暫存區）。開發版的套件名是 `com.inkpage.reader.debug`，和裝好的測試版並存、資料分開。第一次在這台建置要幾分鐘（Gradle 從頭編外掛），之後快很多。
+- 在分支的 worktree 背景跑 `tail -f <指令檔> | flutter run -d <序號> --debug > <log> 2>&1`（指令檔與 log 放暫存區）。開發版的套件名是 `com.inkpage.reader.debug`，和裝好的測試版並存、資料分開；它在 Google 登記過（ADR 0039），開發模式也能測 Google 雲端硬碟同步。第一次在這台建置要幾分鐘（Gradle 從頭編外掛），之後快很多。
 - 用 Monitor 看 log 裡的 `Flutter run key commands|Reloaded|Error|FAILURE|Exception|Lost connection`，出現 `Flutter run key commands` 就是裝好了。
 - 改完程式 `echo r >> <指令檔>` 熱重載（約 1 秒，log 出現 `Reloaded`）；改到 `initState`、常數或啟動流程時送 `R` 熱重啟。用完送 `q` 結束，再關模擬器。
 - 開發模式比正式版慢很多，模擬器又不走 Vulkan：只看版面、文字與圖示；動畫與效能照 `AGENTS.md`「驗證」量。
