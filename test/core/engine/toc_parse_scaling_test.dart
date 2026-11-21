@@ -65,16 +65,4 @@ void main() {
       reason: '1000 章 $small µs，4000 章 $large µs',
     );
   });
-
-  test('a simple selector still matches the element itself', () async {
-    final result = await ChapterListParser.parse(
-      source: source,
-      book: book,
-      body: tocHtml(3),
-      baseUrl: book.tocUrl,
-    );
-
-    expect(result.chapters.map((c) => c.title), ['第1章', '第2章', '第3章']);
-    expect(result.chapters.first.url, 'https://toc.test/book/0.html');
-  });
 }

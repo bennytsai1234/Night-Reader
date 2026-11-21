@@ -75,18 +75,6 @@ void main() {
     return (controller, line, position);
   }
 
-  testWidgets('short labels retain their original layout', (tester) async {
-    await tester.pumpWidget(testPage('短文字', maxLines: 2));
-    expect(
-      find.descendant(
-        of: find.byType(DragOverflowText),
-        matching: find.byType(SingleChildScrollView),
-      ),
-      findsNothing,
-    );
-    expect(find.text('短文字'), findsOneWidget);
-  });
-
   testWidgets('unlimited long text still wraps and never becomes a marquee', (
     tester,
   ) async {

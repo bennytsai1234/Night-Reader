@@ -191,8 +191,8 @@ void main() {
     expect(text, contains('"User-Agent": "夜讀"'));
   });
 
-  test('what was recorded is on disk, and the next start reads it back as '
-      'last time', () async {
+  test('the next start reads back when the last session began, in '
+      'milliseconds', () async {
     await CrashTrail.start(directory);
     CrashTrail.action('開始校驗書源（199 個）');
     await CrashTrail.flushForTesting();
@@ -202,10 +202,14 @@ void main() {
 
     final previous = CrashTrail.previous;
     expect(previous, isNotNull);
-    expect(previous!.text, contains('開始校驗書源（199 個）'));
+    // 崩潰記錄拿它跟系統的毫秒時間比，單位錯了（例如秒）就對不上。
+    final now = DateTime.now().millisecondsSinceEpoch;
     expect(
-      previous.start,
-      lessThanOrEqualTo(DateTime.now().millisecondsSinceEpoch),
+      previous!.start,
+      allOf(
+        lessThanOrEqualTo(now),
+        greaterThan(now - const Duration(hours: 1).inMilliseconds),
+      ),
     );
   });
 }

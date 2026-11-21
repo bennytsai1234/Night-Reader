@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
 
@@ -34,9 +33,12 @@ void main() {
     });
 
     test('a whole-page fade is the same everywhere', () {
-      final eased = AppMotion.fadeCurve.transform(0.3);
-      expect(SkeletonReveal.incomingOpacityAt(0.3, 0, sweep: false), eased);
-      expect(SkeletonReveal.incomingOpacityAt(0.3, 1, sweep: false), eased);
+      final middle = SkeletonReveal.incomingOpacityAt(0.3, 0, sweep: false);
+      expect(SkeletonReveal.incomingOpacityAt(0.3, 1, sweep: false), middle);
+      expect(SkeletonReveal.incomingOpacityAt(0, 1, sweep: false), 0);
+      expect(SkeletonReveal.incomingOpacityAt(1, 0, sweep: false), 1);
+      // 淡入淡出曲線前段慢，0.3 時還不到 0.3。
+      expect(middle, lessThan(0.3));
     });
 
     test('the gradient stops trace the curve across the moving part', () {

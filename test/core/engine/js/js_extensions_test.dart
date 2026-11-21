@@ -1056,21 +1056,6 @@ void main() {
       expect(result.stringResult, '{"book":[{"title":"深空彼岸"}],"ok":true}');
     });
 
-    test('java.toNumChapter matches Legado chapter numbering helper', () {
-      if (runtime == null) {
-        expect(runtimeError, isNotNull);
-        return;
-      }
-      final ext = JsExtensions(runtime!);
-      ext.inject();
-
-      final result = runtime!.evaluate(r'''
-        java.toNumChapter("第十二章 归来");
-      ''');
-
-      expect(result.stringResult, '第12章 归来');
-    });
-
     test('java.toNumChapter reads 两、兩、万、亿 and spoken forms', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);

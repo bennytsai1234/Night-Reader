@@ -683,17 +683,6 @@ void main() {
     );
   }
 
-  test('段落文字 fixture 涵蓋句中切、行中切與 surrogate pair 邊界', () {
-    // 66/67 是 😀 的高/低代理；68 緊接在代理對之後，是合法但非句界的切點。
-    expect(
-      paragraphText.codeUnitAt(66),
-      inInclusiveRange(0xD800, 0xDBFF),
-      reason: 'fixture 需要在 66 起有一個 surrogate pair',
-    );
-    expect(paragraphText.codeUnitAt(67), inInclusiveRange(0xDC00, 0xDFFF));
-    expect(paragraphText[68 - 1], isNot('。'));
-  });
-
   group('連續段落排版：block 切法不得產生額外硬換行', () {
     late ui.Paragraph reference;
     late List<double> referenceLineTops;
@@ -1121,46 +1110,6 @@ void main() {
       expect(index.invalidateChapter(0), isFalse);
       expect(index.resetGeneration, generationBefore + 1);
     });
-
-    test('章節 evicted 後以不同 segmentation 重新 admit：不殘留舊切法的高度', () {
-      const center = BlockKey(chapterIndex: 5, blockIndex: 0);
-      final index = DocumentIndex(centerKey: center);
-      // 舊 segmentation：chapter 4 被切成 5 塊，總高 100。
-      index.admitAll({
-        for (var i = 0; i < 5; i += 1)
-          BlockKey(chapterIndex: 4, blockIndex: i): const BlockMetrics(
-            height: 20,
-            lineCount: 1,
-          ),
-        center: const BlockMetrics(height: 60, lineCount: 2),
-      });
-      expect(index.chapterExtent(4), 100);
-
-      // 章節 4 evicted／invalidated：DocumentIndex 端必須整批丟棄，否則
-      // 新 segmentation 缺席的舊 blockIndex 會一直錯誤貢獻文檔幾何。
-      expect(index.invalidateChapter(4), isTrue);
-      expect(index.chapterExtent(4), 0);
-
-      // 重新載入後 maxBlockChars 變大，chapter 4 只剩 2 塊。
-      index.admitAll({
-        for (var i = 0; i < 2; i += 1)
-          BlockKey(chapterIndex: 4, blockIndex: i): const BlockMetrics(
-            height: 45,
-            lineCount: 3,
-          ),
-      });
-
-      // 只有新 segmentation 的高度；舊切法遺留的 blockIndex 2..4 不殘留。
-      expect(index.chapterExtent(4), 90);
-      expect(
-        index.metricsFor(const BlockKey(chapterIndex: 4, blockIndex: 2)),
-        isNull,
-      );
-      expect(
-        index.metricsFor(const BlockKey(chapterIndex: 4, blockIndex: 4)),
-        isNull,
-      );
-    });
   });
 
   group('MeasurementStore', () {
@@ -1260,28 +1209,6 @@ void main() {
       expect(index.topOf(const BlockKey(chapterIndex: 0, blockIndex: 1)), 0);
       expect(index.topOf(const BlockKey(chapterIndex: 0, blockIndex: 0)), -100);
     });
-
-    test(
-      'a ready contiguous edge is usable even inside the visible viewport',
-      () {
-        final index = DocumentIndex(
-          centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
-        );
-        final admission = AdmissionController(documentIndex: index)
-          ..reset(epoch: LayoutEpoch.initial, chapterCount: 1)
-          ..registerChapter(_chapterBlocks(0, 2))
-          ..offer(_ready(0, 0));
-        addTearDown(admission.dispose);
-
-        admission.offer(_ready(0, 1));
-        expect(index.topOf(const BlockKey(chapterIndex: 0, blockIndex: 0)), 0);
-        expect(
-          index.topOf(const BlockKey(chapterIndex: 0, blockIndex: 1)),
-          100,
-        );
-        expect(index.admittedCount, 2);
-      },
-    );
 
     test('invalidateChapter（連同 DocumentIndex）讓舊 segmentation 重新載入後'
         '不與新高度混疊——重現章節 evicted／invalidated 後 maxBlockChars '

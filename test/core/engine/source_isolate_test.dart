@@ -331,12 +331,14 @@ Future<String?> _isolateNameOn(String affinity) => SourceIsolate.run(
   affinity: affinity,
 );
 
-/// 送到兩條不同書源 isolate 的兩個 affinity。
-(String, String) _affinitiesOnDifferentWorkers() {
-  int slot(String key) => key.hashCode % SourceIsolate.workerCount;
-  for (var i = 1; ; i++) {
-    if (slot('w$i') != slot('w0')) return ('w0', 'w$i');
+/// 兩個 affinity，實際跑在兩條不同的書源 isolate 上（看執行時的 isolate 名字，
+/// 不照分派的算式）。
+Future<(String, String)> _affinitiesOnDifferentWorkers() async {
+  final first = await _isolateNameOn('w0');
+  for (var i = 1; i < 64; i++) {
+    if (await _isolateNameOn('w$i') != first) return ('w0', 'w$i');
   }
+  throw StateError('64 個 affinity 都送到同一條書源 isolate');
 }
 
 Book _book(String url) =>
@@ -534,7 +536,7 @@ void main() {
     });
 
     test('stop only their own source isolate', () async {
-      final (frozen, other) = _affinitiesOnDifferentWorkers();
+      final (frozen, other) = await _affinitiesOnDifferentWorkers();
       final blocked = _blockOn('$baseUrl/held/frozen', affinity: frozen);
       await gate(arrived, 'frozen').future;
 

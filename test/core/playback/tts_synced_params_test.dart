@@ -57,7 +57,7 @@ void main() {
 
     expect(tts.rate, TTSService.defaultRate);
     expect(tts.pitch, TTSService.defaultPitch);
-    // flutter_tts 的刻度是 0.5 = 正常速度。
-    expect(engineRates, contains(TTSService.defaultRate * 0.5));
+    // 預設 2 倍，flutter_tts 的刻度是 0.5 = 正常速度，引擎收到 1.0。
+    expect(engineRates, contains(1.0));
   });
 }

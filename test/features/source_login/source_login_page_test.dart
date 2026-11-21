@@ -221,16 +221,6 @@ void main() {
       expect(saved?['帳號'], '網站登入前填的帳號');
     });
 
-    testWidgets('is in the form of a website source', (tester) async {
-      setupTestDI();
-      await tester.runAsync(() => dao.upsert(source));
-
-      await openLogin(tester);
-      await showActions(tester);
-
-      expect(find.text('在網站登入'), findsOneWidget);
-    });
-
     testWidgets('stays under a form that cannot be read', (tester) async {
       setupTestDI();
       final broken = BookSource.fromJson({

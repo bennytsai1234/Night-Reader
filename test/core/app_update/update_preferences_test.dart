@@ -14,10 +14,7 @@ void main() {
 
   test('automatic check and Wi-Fi download default to on', () async {
     expect(await preferences.autoCheck(), isTrue);
-    expect(
-      await preferences.autoDownload(),
-      UpdatePreferences.defaultAutoDownload,
-    );
+    expect(await preferences.autoDownload(), isTrue);
 
     await preferences.setAutoCheck(false);
     await preferences.setAutoDownload(false);

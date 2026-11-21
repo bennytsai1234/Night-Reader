@@ -58,8 +58,8 @@ void main() {
       rawText: '　　第一段。\n　　第二段。',
     );
     expect(document.chapterIndex, 7);
-    expect(document.paragraphs, onMain.paragraphs);
-    expect(document.displayText, onMain.displayText);
+    expect(document.paragraphs, ['第一段。', '第二段。']);
+    expect(document.displayText, '第一章\n\n第一段。\n\n第二段。');
     expect(document.contentHash, onMain.contentHash);
   });
 

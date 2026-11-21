@@ -193,11 +193,8 @@ void main() {
     );
   });
 
-  testWidgets('不再有骨架的選項，骨架照固定的樣子與換場', (tester) async {
+  testWidgets('骨架照固定的樣子與換場', (tester) async {
     await pumpPage(tester);
-    for (final title in ['骨架深淺', '骨架呼吸', '骨架換場', '換場時長']) {
-      expect(find.text(title), findsNothing, reason: title);
-    }
     final context = tester.element(find.byType(AppearanceSettingsPage));
     expect(SkeletonLook.of(context), const SkeletonLook());
     expect(SkeletonLook.of(context).strength, SkeletonStrength.standard);

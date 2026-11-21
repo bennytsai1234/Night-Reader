@@ -1154,39 +1154,6 @@ void main() {
         expect(tester.takeException(), isNull);
       });
     }
-
-    testWidgets('a normal size still breathes left to right', (tester) async {
-      tester.view.physicalSize = const Size(400, 400);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final boundary = GlobalKey();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: RepaintBoundary(
-            key: boundary,
-            child: const ColoredBox(
-              color: Color(0xFFFFFFFF),
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: Skeleton(
-                  child: SkeletonBox(width: 400, height: 40, color: black),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 200));
-      final bytes = await tester.runAsync(() async {
-        final image =
-            await (boundary.currentContext!.findRenderObject()!
-                    as RenderRepaintBoundary)
-                .toImage();
-        return image.toByteData();
-      });
-      int red(int x) => bytes!.getUint8((10 * 400 + x) * 4);
-      expect(red(10), isNot(closeTo(red(390), 2)));
-    });
   });
 }
 

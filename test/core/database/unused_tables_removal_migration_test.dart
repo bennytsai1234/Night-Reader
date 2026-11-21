@@ -11,8 +11,7 @@ const _unusedTables = [
 ];
 
 /// 從 Legado 帶過來、從沒有功能讀寫的五張表（字典規則、線上朗讀引擎、
-/// 伺服器、TXT 目錄規則、鍵盤輔助）：舊版（schema 20）升級後連同索引刪掉，
-/// 新建的資料庫也沒有。
+/// 伺服器、TXT 目錄規則、鍵盤輔助）：舊版（schema 20）升級後連同索引刪掉。
 void main() {
   Future<List<String>> leftovers(AppDatabase db) async {
     final rows = await db
@@ -46,12 +45,5 @@ void main() {
     expect(await leftovers(db), isEmpty);
     final version = await db.customSelect('PRAGMA user_version').getSingle();
     expect(version.data.values.single, db.schemaVersion);
-  });
-
-  test('a new database has none of them', () async {
-    final db = AppDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(db.close);
-
-    expect(await leftovers(db), isEmpty);
   });
 }

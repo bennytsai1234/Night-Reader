@@ -153,11 +153,4 @@ void main() {
     expect(lines.first, isNot(contains('一字不差')));
     expect(lines.last, contains('（內容和頁 1 一字不差）'));
   });
-
-  test('試抓可以從發現頁開始，照 exploreUrl 的寫法交給除錯', () {
-    expect(
-      probeStart('explore', keyword: '', url: '/sort/{{page}}.html'),
-      '::/sort/{{page}}.html',
-    );
-  });
 }

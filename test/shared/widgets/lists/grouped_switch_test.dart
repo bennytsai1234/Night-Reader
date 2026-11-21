@@ -31,7 +31,11 @@ void main() {
 
     expect(
       tester.getSemantics(find.byType(GroupedSwitch)),
-      matchesSemantics(hasToggledState: true, hasEnabledState: true),
+      matchesSemantics(
+        hasToggledState: true,
+        hasEnabledState: true,
+        isEnabled: false,
+      ),
     );
   });
 

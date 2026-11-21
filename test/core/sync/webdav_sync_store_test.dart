@@ -111,12 +111,10 @@ void main() {
   test('the version can be asked without downloading the file', () async {
     expect(await store().version('p.json'), isNull);
     await store().write('p.json', 'one');
+    final expected = (await store().read('p.json'))!.version;
     server.log.clear();
-    expect(
-      await store().version('p.json'),
-      (await store().read('p.json'))!.version,
-    );
-    expect(server.log.first, 'HEAD /dav/NightReader/p.json');
+    expect(await store().version('p.json'), expected);
+    expect(server.log.where((line) => line.startsWith('GET')), isEmpty);
   });
 
   test('a write over a newer version is a conflict', () async {

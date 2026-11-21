@@ -29,7 +29,6 @@ const _service = (
   effort: '',
 );
 
-/// 換掉 Android 那一半，看通知實際收到什麼（只驗 Dart 這邊的協定）。
 /// 存在記憶體裡的暫停存檔。
 class _MemoryFile extends PausedWorkFile {
   _MemoryFile([this.text]) : super('check_sources');
@@ -69,6 +68,7 @@ class _SlowToCloseFile extends _MemoryFile {
   }
 }
 
+/// 換掉 Android 那一半，看通知實際收到什麼（只驗 Dart 這邊的協定）。
 class _FakePlatform implements BackgroundWorkPlatform {
   final List<String> calls = [];
 
@@ -154,7 +154,7 @@ void main() {
       ..stage = RepairStage.repairing
       ..stageDone = 3
       ..stageTotal = 4;
-    expect(repairBatchProgress(batch), (3 + 0.75) / 4);
+    expect(repairBatchProgress(batch), 0.9375);
 
     // 沒有搬家的網站：這一段一開始就沒有東西要做，不除以零。
     batch

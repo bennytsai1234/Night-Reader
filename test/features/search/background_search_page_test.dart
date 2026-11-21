@@ -242,7 +242,6 @@ void main() {
       expect(done, findsOneWidget);
     }
 
-    /// 甲回來一本「甲書」。
     /// 甲回來一本「甲書」，等它併進結果、結果檔記下它。
     Future<void> answerFirst(WidgetTester tester) async {
       pending.remove('甲')!.complete([

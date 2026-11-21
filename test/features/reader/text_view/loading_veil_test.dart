@@ -483,16 +483,15 @@ void main() {
       titleLines: const {0},
     );
     await advance(tester, revealTime);
-    // 正文的長條和字一樣高（18），章名照章名與正文的字級比放大。
-    final title = 18 * spec.style.titleFontSize / spec.style.fontSize / 2;
+    // 正文的長條和字一樣高（18），章名的長條高 22（章名字級 18 + 4）。
     final radius = AppRadius.cardXs.topLeft;
     expect(
       find.byType(LoadingVeil),
       paints
         ..rect()
-        ..rrect(rrect: RRect.fromLTRBR(20, 25 - title, 300, 25 + title, radius))
-        ..rrect(rrect: RRect.fromLTRBR(56, 69 - 9, 380, 69 + 9, radius))
-        ..rrect(rrect: RRect.fromLTRBR(20, 99 - 9, 200, 99 + 9, radius)),
+        ..rrect(rrect: RRect.fromLTRBR(20, 14, 300, 36, radius))
+        ..rrect(rrect: RRect.fromLTRBR(56, 60, 380, 78, radius))
+        ..rrect(rrect: RRect.fromLTRBR(20, 90, 200, 108, radius)),
     );
     expect(find.byType(LoadingVeil), paintsExactlyCountTimes(#drawRRect, 3));
     await finish(tester);
@@ -511,14 +510,13 @@ void main() {
       titleLines: const {0},
     );
     await advance(tester, revealTime);
-    final title = 18 * spec.style.titleFontSize / spec.style.fontSize / 2;
     final radius = AppRadius.cardXs.topLeft;
     expect(
       find.byType(LoadingVeil),
       paints
         ..rect()
-        ..rrect(rrect: RRect.fromLTRBR(20, 25 - title, 300, 25 + title, radius))
-        ..rrect(rrect: RRect.fromLTRBR(20, 69 - 9, 200, 69 + 9, radius)),
+        ..rrect(rrect: RRect.fromLTRBR(20, 14, 300, 36, radius))
+        ..rrect(rrect: RRect.fromLTRBR(20, 60, 200, 78, radius)),
     );
     await finish(tester);
   });
