@@ -128,7 +128,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     _resting = null;
     if (widget.loading) {
       // 定格換場還沒播完就要長回骨架：先換回真的畫面，從內容接著長回去。
-      // 呼吸前的準備做到一半的話放棄，骨架照常呼吸。
+      // 長完停時的準備做到一半的話放棄，骨架照常呼吸。
       _snapshotting?.finish();
       _snapshotting = null;
       widget.entrance?.donePreparing();
@@ -207,7 +207,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
       if (current()) _controller.value = 1;
     }
 
-    // 呼吸前：先拍好兩張定格畫面、換回骨架，等呼吸收住再接著換場（ADR
+    // 長完停時：先拍好兩張定格畫面、換回骨架，停完就接著換場、不呼吸（ADR
     // 0035）。等的這段當作還在載入（[_resting]）：重新載入時拍好的圖放掉
     // （[didUpdateWidget] 的 finish），照呼吸收住後再拍。
     if (entrance.preparing) {
@@ -282,7 +282,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     final appearing = entrance?.skeleton;
     final loading = widget.loading || entrance != null || _resting != null;
     // 還沒開始換場：內容建在骨架底下看不到（有墊色時被骨架整個蓋住，沒有
-    // 時全透明），例如等封面、開 App 呼吸前就拍好兩張定格畫面時呼吸的那段
+    // 時全透明），例如等封面、開 App 長完停時拍好兩張定格畫面到換場前的那段
     // （ADR 0035）。不畫（手機不必每一格多畫一整頁看不到的書架），也點不到。
     final covered = _controller.isDismissed;
     final hidden = loading || covered || reveal != null && reveal.waiting;
@@ -344,8 +344,8 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
             ),
           )
         : null;
-    // 開 App 的定格換場播完前骨架層留著（換成內容後全透明、不畫）：呼吸前
-    // 拍好兩張圖換回骨架時不必重建整片骨架。
+    // 開 App 的定格換場播完前骨架層留著（換成內容後全透明、不畫）：長完停
+    // 時拍好兩張圖換回骨架時不必重建整片骨架。
     final showSkeleton = !_controller.isCompleted || _snapshotting != null;
     // 兩層各有 key：另一層進出 Stack 時不會被錯配、重建。有墊色時骨架在
     // 上面蓋住內容；沒有時骨架在下、內容在上，各自淡入淡出。

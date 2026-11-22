@@ -17,11 +17,12 @@ import 'snapshot_sweep.dart';
 /// 的標題與兩側按鈕、底部分頁列（書架以外用 [LaunchSkeleton]）。長出時骨架
 /// 不呼吸、長到最深；長完、書也讀到了，就在靜止的畫面上一次準備好書架與
 /// 封面，把骨架畫面與換好的畫面各畫成一張圖、換回骨架，清掉建書架留下的
-/// 記憶體，再停 [LaunchEntranceMotion.idle] 才由左而右呼吸一口（[Skeleton]
-/// 底下的呼吸看這裡的 [LaunchEntranceMotion.breathing]，ADR 0035）；呼吸時
-/// 底下不做事。呼完收住、停在最深就換場：換場的 0.6 秒只把兩張圖照每個像素
-/// 的橫向位置混合（[SnapshotSweep]，ADR 0031），頁首、分頁列與書架照同一條
-/// 曲線由左而右換過去。長完時書還沒讀到，呼吸收住後才準備、拍圖，再隔
+/// 記憶體，再停 [LaunchEntranceMotion.idle] 就換場，不呼吸（ADR 0035）：換場
+/// 的 0.6 秒只把兩張圖照每個像素的橫向位置混合（[SnapshotSweep]，ADR
+/// 0031），頁首、分頁列與書架照同一條曲線由左而右換過去。長完時書還沒讀到
+/// （或準備到一半放棄），停 [LaunchEntranceMotion.idle] 後由左而右呼吸一口
+/// 等它（[Skeleton] 底下的呼吸看這裡的 [LaunchEntranceMotion.breathing]）；
+/// 呼吸時底下不做事，收住、停在最深後才準備、拍圖，再隔
 /// [LaunchEntranceMotion.idle] 換場。動畫在動的每一格，主執行緒都不做別的事。
 ///
 /// 包在主頁面外面；底下的頁首（`GlassNavHeader`）、分頁列與書架用
@@ -65,7 +66,8 @@ enum _Timeline {
   /// 長完那一格畫完起：骨架靜止，書架到了就在底下準備、拍圖，再停 idle。
   grown,
 
-  /// 由左而右呼吸一口；停滿 [LaunchEntranceMotion.pause] 才收得住。
+  /// 由左而右呼吸一口；停滿 [LaunchEntranceMotion.pause] 才收得住。書架在
+  /// 長完時已經準備好就不經過這一段。
   breathing,
 
   /// 收住呼吸：每個位置把這一口呼完、停在最深。
@@ -109,7 +111,7 @@ class LaunchEntranceMotion {
   final SnapshotSweepController screen = SnapshotSweepController();
 
   /// 頁首按鈕、標題與分頁列已經換成真的（[LaunchSkeleton] 聽它）。換場時換
-  /// 成 true 就一直是 true，之後書架重新載入不再影響它們；呼吸前拍定格畫面
+  /// 成 true 就一直是 true，之後書架重新載入不再影響它們；長完停時拍定格畫面
   /// 時（[capture]）暫時換成真的、拍好換回來。
   ValueListenable<bool> get revealed => _revealed;
   final ValueNotifier<bool> _revealed = ValueNotifier(false);
@@ -154,7 +156,8 @@ class LaunchEntranceMotion {
   /// 整段進場已經結束：之後才建的骨架照一般的節奏呼吸。
   bool get isFinished => _reveal == _Reveal.done;
 
-  /// 開始呼吸、停過 [pause] 時完成；系統要求減少動態時不停。
+  /// 開始呼吸、停過 [pause] 時完成；書架在長完時已經準備好（不呼吸）或系統
+  /// 要求減少動態時不停。
   Future<void> get _paused => _pauseOver.future;
   final Completer<void> _pauseOver = Completer<void>();
 
@@ -162,33 +165,32 @@ class LaunchEntranceMotion {
   Future<void> get finished => _finished.future;
   final Completer<void> _finished = Completer<void>();
 
-  /// 書架要在呼吸前準備（[requestPreparation]）：長完那一格畫完時完成。
+  /// 書架要在長完停時準備（[requestPreparation]）：長完那一格畫完時完成。
   Completer<void>? _preparationStart;
 
-  /// 呼吸前的準備做完（或放棄）時完成，之後才開始呼吸。
+  /// 長完停時的準備做完（或放棄）時完成，之後才換場（拍好時）或開始呼吸。
   final Completer<void> _preparationDone = Completer<void>();
 
   /// 骨架長完時書架的資料已經到了：長完那一格畫完就在靜止的畫面上建好書架、
-  /// 等封面、拍好兩張定格畫面（[capture]），清掉記憶體再隔 [idle] 才開始
-  /// 呼吸，呼吸收住就直接換場；呼吸的每一格與換場前都不再做重的工作
-  /// （ADR 0035）。回傳開始準備的時刻；太晚（已經排好呼吸）時回傳 null，
+  /// 等封面、拍好兩張定格畫面（[capture]），清掉記憶體再隔 [idle] 就換場，
+  /// 不呼吸；換場前不再做重的工作（ADR 0035）。回傳開始準備的時刻；太晚（已經排好呼吸）時回傳 null，
   /// 照呼吸收住後再準備（[settleBreath]）。重複呼叫回傳同一個。
   Future<void>? requestPreparation() {
     if (_timeline.index >= _Timeline.grown.index) return null;
     return (_preparationStart ??= Completer<void>()).future;
   }
 
-  /// 正在做呼吸前的準備（[requestPreparation]）。
+  /// 正在做長完停時的準備（[requestPreparation]）。
   bool get preparing =>
       (_preparationStart?.isCompleted ?? false) &&
       !_preparationDone.isCompleted;
 
-  /// 呼吸前的準備做完或放棄（例如書架又回到載入中）：開始呼吸。
+  /// 長完停時的準備做完或放棄（例如書架又回到載入中）：拍好了就換場，放棄了就開始呼吸。
   void donePreparing() {
     if (!_preparationDone.isCompleted) _preparationDone.complete();
   }
 
-  /// 呼吸前拍好兩張定格畫面：[change] 把書架換成內容，頁首按鈕、標題與
+  /// 長完停時拍好兩張定格畫面：[change] 把書架換成內容，頁首按鈕、標題與
   /// 分頁列同時換成真的，拍下後 [restore] 換回骨架（[SnapshotSweepController.capture]）；
   /// 做完準備（[donePreparing]）。
   Future<void> capture({
@@ -218,7 +220,7 @@ class LaunchEntranceMotion {
 
   /// 書架第一次換成內容：呼吸停過 [pause]、收住（[rest]）後，[change] 把
   /// 書架換成內容，頁首按鈕、標題與分頁列同時換成真的，照 [screen] 換場
-  /// （[sweep] 時由左而右）；播完才算整段進場結束。兩張定格畫面呼吸前已經
+  /// （[sweep] 時由左而右）；播完才算整段進場結束。兩張定格畫面長完停時已經
   /// 拍好（[capture]）時，換上「之前」那張圖的下一格就開始換場；還沒拍時
   /// 這時才拍，拍好、清掉記憶體再隔 [idle] 才換場。之後再呼叫（書架重新
   /// 載入）只做 [change]。
@@ -243,8 +245,8 @@ class LaunchEntranceMotion {
       gap: captured ? Duration.zero : idle,
       // 換場前畫面停著時清掉建書架留下的記憶體：不清的話，換場開始後約
       // 0.15 秒 Dart 趁兩格之間的空檔回收一次，手機上一次 12～13ms，超過
-      // 一格（120Hz 是 8.3ms），換場途中掉一格（2026-10-25 量到）。呼吸前
-      // 拍好的已經在呼吸前清過。
+      // 一格（120Hz 是 8.3ms），換場途中掉一格（2026-10-25 量到）。長完停
+      // 時拍好的已經在那時清過。
       settle: captured ? null : _collectGarbage,
       change: () {
         change();
@@ -289,6 +291,12 @@ class LaunchEntranceMotion {
     rest.release();
     _reveal = _Reveal.done;
     if (!_finished.isCompleted) _finished.complete();
+  }
+
+  /// 書架在長完時已經準備好：不呼吸，骨架停在最深，直接當作收住了
+  /// （[settleBreath] 不用等呼吸）。
+  void _skipBreath() {
+    if (!_pauseOver.isCompleted) _pauseOver.complete();
   }
 
   /// 開始呼吸：骨架聽 [breathing]。
@@ -387,6 +395,12 @@ class _LaunchEntranceState extends State<LaunchEntrance>
           _collectGarbage();
         }
         _timer = Timer(LaunchEntranceMotion.idle, () {
+          // 書架已經在底下建好、兩張定格畫面也拍好：不呼吸，停完就換場
+          // （ADR 0035）。
+          if (motion.screen.captured) {
+            motion._skipBreath();
+            return;
+          }
           motion._breathe();
           _timer = Timer(LaunchEntranceMotion.pause, () {
             if (!motion._pauseOver.isCompleted) motion._pauseOver.complete();

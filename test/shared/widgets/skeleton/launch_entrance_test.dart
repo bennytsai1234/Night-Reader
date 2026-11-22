@@ -302,15 +302,16 @@ void main() {
     expect(find.text('內容'), findsNothing);
 
     // 骨架出現播完（0.6 秒）：長完停的時候拍下骨架畫面、換成內容拍下換好
-    // 的畫面、換回骨架；停 idle 後呼吸一口，收住就換場，之後只貼兩張圖。
+    // 的畫面、換回骨架；停 idle 就換場、不呼吸，之後只貼兩張圖。
     final motion = motionOf(tester);
-    while (!motion.breathing.value) {
+    while (!motion.screen.captured) {
       await frame(tester);
     }
-    expect(find.byType(SkeletonBox), findsWidgets, reason: '換回骨架照常呼吸');
+    expect(find.byType(SkeletonBox), findsWidgets, reason: '拍完換回骨架');
     expect(motion.revealed.value, isFalse, reason: '頁首與分頁列也換回骨架');
     expect(crossfading(tester), isFalse);
     expect(await pumpUntilCrossfading(tester), lessThan(untilCrossfade));
+    expect(motion.breathing.value, isFalse, reason: '書架好了不呼吸');
     expect(find.text('內容'), findsOneWidget, reason: '底下已經換成內容');
 
     // 換上骨架那張圖的那一格畫完，下一格開始掃。
@@ -336,15 +337,22 @@ void main() {
     expect(leftTaps, 2, reason: '換場後照常點得到');
   });
 
-  testWidgets('pictures taken before the breath: the sweep starts as soon as '
-      'the breath rests', (tester) async {
+  testWidgets('pictures taken while the grown skeleton is still: no breath, '
+      'the sweep starts once idle has passed', (tester) async {
     await tester.pumpWidget(host(loading: false));
     await startGrowing(tester);
     final motion = motionOf(tester);
-    while (!motion.breathing.value) {
+    while (!motion.screen.captured) {
       await frame(tester);
     }
-    expect(await pumpUntilCrossfading(tester), lessThan(untilCrossfade));
+    final waited = await pumpUntilCrossfading(tester);
+    expect(waited, lessThan(untilCrossfade));
+    expect(
+      waited,
+      greaterThanOrEqualTo(LaunchEntranceMotion.idle.inMilliseconds ~/ 16 - 1),
+      reason: '拍好、清完記憶體後停滿 idle 才換場',
+    );
+    expect(motion.breathing.value, isFalse, reason: '書架好了不呼吸');
     // 換上「之前」那張圖的那一格畫完，下一格就開始掃。
     await frame(tester);
     await frame(tester);
@@ -480,7 +488,9 @@ void main() {
     testWidgets('books read before the skeleton has grown: nothing is built '
         'while it grows; once it has grown and that frame is drawn, the shelf '
         'is built and both pictures taken while the screen is still, and the '
-        'breath that follows builds nothing', (tester) async {
+        'sweep follows without a breath and without building again', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         host(loading: false, waitForCovers: CoverWait.onDevice),
       );
@@ -492,26 +502,25 @@ void main() {
         reason: '長完那一格畫完、畫面靜止了，下一格才建書架',
       );
       expect(motion.skeleton.isCompleted, isTrue);
-      expect(motion.breathing.value, isFalse, reason: '呼吸前就建好');
-      while (!motion.breathing.value) {
-        await frame(tester);
-      }
+      expect(motion.breathing.value, isFalse, reason: '長完停時就建好');
       final built = contentBuilds;
       expect(await pumpUntilCrossfading(tester), lessThan(untilCrossfade));
-      expect(contentBuilds, built, reason: '呼吸與收住時不再建');
+      expect(contentBuilds, built, reason: '換場前不再建');
+      expect(motion.breathing.value, isFalse, reason: '書架好了不呼吸');
       expect(tester.takeException(), isNull);
       await pumpUntilFinished(tester);
       expect(finished, 1);
     });
 
-    testWidgets('the shelf built under the breathing skeleton is neither drawn '
+    testWidgets('the shelf built under the grown skeleton is neither drawn '
         'nor tappable', (tester) async {
       await tester.pumpWidget(host(loading: false));
       await startGrowing(tester);
       final motion = motionOf(tester);
-      while (!motion.breathing.value) {
+      while (!motion.screen.captured) {
         await frame(tester);
       }
+      await frame(tester);
       expect(find.text('內容'), findsOneWidget, reason: '建好了');
       bool painted() => tester
           .widget<PaintedWhen>(
@@ -549,27 +558,23 @@ void main() {
       expect(finished, 1);
     });
 
-    testWidgets('a reload during the breath drops the pictures taken before '
-        'it, prepares again once the breath rests, and still ends the '
-        'entrance once', (tester) async {
+    testWidgets('a reload after the pictures are taken, before the sweep, '
+        'drops them, breathes, prepares again once the breath rests, and '
+        'still ends the entrance once', (tester) async {
       Widget at({required bool loading}) =>
           host(loading: loading, waitForCovers: CoverWait.onDevice);
       await tester.pumpWidget(at(loading: false));
       await startGrowing(tester);
       final motion = motionOf(tester);
-      while (!motion.breathing.value) {
+      while (!motion.screen.captured) {
         await frame(tester);
       }
-      // 呼吸的頭一段一格一格推進：開始呼吸後才算停頓。
-      for (var i = 0; i < 6; i++) {
-        await frame(tester);
-      }
-      expect(tester.hasRunningAnimations, isTrue, reason: '還在呼吸');
-      expect(motion.screen.captured, isTrue);
 
       await tester.pumpWidget(at(loading: true));
       await tester.pump(const Duration(milliseconds: 50));
       expect(motion.screen.captured, isFalse, reason: '拍好的圖放掉');
+      await tester.pump(LaunchEntranceMotion.idle);
+      expect(motion.breathing.value, isTrue, reason: '沒拍好就照常呼吸等它');
       await tester.pumpWidget(at(loading: false));
       final built = contentBuilds;
       expect(await pumpUntilBuilt(tester, before: built), isTrue);
