@@ -1,33 +1,20 @@
 # 專案規則
 
-Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `arm64-v8a` APK，另附未簽章的 iOS IPA（ADR 0003）。
-
-| 檔案 | 放什麼 |
-|---|---|
-| `README.md`、`CHANGELOG.md`、`PRIVACY.md` | 給讀者看的產品說明、正式版更新說明、隱私權政策（`PRIVACY.md` 和 App 的「隱私說明」一起改） |
-| `DESIGN.md` | 產品界線、設計原則、否決過的方向；各元件與畫面的規格照區域放在 `docs/design/`，改哪裡讀哪份 |
-| `GLOSSARY.md` | 和使用者討論時用的詞 |
-| `CODING_STANDARDS.md` | 寫碼規範，`review` 依它審 |
-| `docs/adr/` | 決定與理由、否決過什麼；索引在 `docs/adr/README.md` |
-| `docs/agents/` | 只在特定情況用到的做法與坑，下面寫明什麼時候讀哪份 |
-| `TODO.md` | 待辦清單：還沒做的事一條一行；開工後這次的步驟列在那條底下，做一步勾一步；做完刪掉 |
-| `HANDOFF.md` | 對話之間接手用的交接，只在做到一半要換對話時才有（`handoff` 技能），做完就刪 |
+Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `arm64-v8a` APK，另附未簽章的 iOS IPA（ADR 0003）。產品取捨與外觀規則在 `DESIGN.md`，各元件與畫面的規格在 `docs/design/`，改哪裡讀哪份。`PRIVACY.md` 和 App 的「隱私說明」一起改。
 
 ## 和使用者的工作默契
 
-- **做到好，自己合併收工**：交代的事自己做到好，途中看到的警告、同一原因的其他問題一起收掉，不為這些另外問（使用者的話：「像許願機一樣」）。全部做完才收尾，`feat/` 還要等使用者說這條沒問題；收尾後自己合併（ADR 0049）。
-- **結果寫在對話裡**：使用者不看 PR 與 GitHub Actions。審查發現、修了什麼、CI 與合併結果都寫進回覆，不寫「見 PR」。
-- **視覺由使用者在圖上選**：改外觀前用 `test/support/screenshot.dart` 畫出候選，淺色、深色各一組，選了就寫進 `docs/design/` 對應的那份，不做成設定（ADR 0030）；使用者要日常用過才選得出來的，先做成試用開關，選定後拿掉。系統畫的畫面（通知、鎖定畫面）與並排比較的做法在 `docs/agents/candidates.md`。版型與動畫只要小修，不要大改。
-- **動畫用動畫儀表板說明**：說明動畫、轉場與時間軸，或給候選與改前改後時，照 `animation-dashboard` 技能把儀表板放進對話，再補判斷。
-- **淺色與深色一起看**：分析配色、框線、陰影與層次時兩邊都要寫、都要量。
+- **做到好，自己合併**：交代的事自己做到好，途中看到的警告、同一原因的其他問題一起收掉，不另外問；`feat/` 等使用者說沒問題才收尾，其他做完就收尾、自己合併（ADR 0049）。
+- **結果寫在對話裡**：使用者不看 PR 與 GitHub Actions，審查發現、修了什麼、CI 與合併結果都寫進回覆。
+- **視覺由使用者在圖上選**：改外觀前用 `test/support/screenshot.dart` 畫出候選，淺色、深色各一組，選了就寫進 `docs/design/`，不做成設定（ADR 0030）；要日常用過才選得出來的先做成試用開關。系統畫的畫面與並排比較的做法在 `docs/agents/candidates.md`。版型與動畫只小修，不大改。
+- **淺色與深色一起看**：分析配色、框線、陰影與層次時兩邊都寫、都量。
 - **使用者說「(adr)」或「寫進 ADR」就當場寫**：這是「定案、以後不要再提」的標記。
-- **審查意見**：Codex 的前端意見不可靠；不照對比度這類工具意見調色。
+- **Codex 的前端意見不可靠**；不照對比度這類工具意見調色。
 
 ## 維護範圍
 
-工作重心是打磨現有功能（改進、UI 精修、互動、精簡、效能、相容性、重構）；全新的功能線要使用者明確提出，談定案時照 `docs/agents/new-feature.md` 走一遍觸點。取捨照 `DESIGN.md`「產品界線」「設計原則」與「否決過的方向」，要違反先改對應的 ADR。
+工作重心是打磨現有功能（改進、UI 精修、互動、精簡、效能、相容性、重構）；全新的功能線要使用者明確提出，談定案時照 `docs/agents/new-feature.md` 走一遍觸點。取捨照 `DESIGN.md`，要違反先改對應的 ADR。評估需求時考量所有讀者，不以使用者本人需不需要為依據。
 書源、校驗、規則引擎該怎麼表現拿不準時，照 Legado 原始碼做（位置在 `docs/agents/environment.md`），不自己定標準；夜讀刻意不同的寫在 ADR。
-評估需求時考量所有讀者的需求與實際效益，不以使用者本人是否需要為取捨依據。
 
 ## 開發設定
 
@@ -38,29 +25,27 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 ## 驗證
 
-- CI（`.github/workflows/ci.yml`）在開 PR、PR 有新推送、推上 `beta` 時跑；做的途中推分支只是備份，不跑。本機只跑受影響的測試（快測）：在整個 `test/` grep 改到的類別與函式，改掉或拿掉的輸出文字也 grep 那段字本身（測試常直接比對它），引用到的檔都算（測試常放在別的資料夾，例如書源引擎的解析在 `test/core/engine/` 各處都有）。全套測試只在 CI 跑。
-- 改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build`，產生的 `.g.dart` 一起提交。
-- 新增或改名 `lib/` 的檔後跑 `dart run tool/file_names.dart`，檢查檔名對得上主要類別（`CODING_STANDARDS.md`「命名」）；推送前的 hook 不跑它，CI 才跑。
-- 推送前的 hook 跑 `flutter analyze`，看 `pre-push:` 開頭那一行（通過是 `pre-push: analyze 通過（全套測試看 CI）`）；Git 會在它後面再印遠端訊息，只看最後幾行會漏掉。
-- 給使用者看畫面：小調整在模擬器上用開發模式跑分支、改了就熱重載，使用者在 T3 裝置面板即時看（`docs/agents/emulator.md`「開發模式」）；幾個候選並排、淺深一起看時用 `test/support/screenshot.dart` 畫成 PNG，對照整個 App 時重拍 `test/screens/`。模擬器只看版面，動畫順不順照下一條量。
+- 本機只跑受影響的測試，全套測試只在 CI 跑：在整個 `test/` grep 改到的類別與函式，拿掉的輸出文字也 grep 那段字（測試常直接比對它）；測試常放在別的資料夾，例如書源引擎的解析在 `test/core/engine/` 各處都有。
+- CI 在開 PR、PR 有新推送、推上 `beta` 時跑；做到一半推分支不會跑。
+- 推送前的 hook 看 `pre-push:` 開頭那一行，Git 會在它後面再印遠端訊息。
+- 給使用者看畫面：小調整用模擬器的開發模式跑分支、改了就熱重載（`docs/agents/emulator.md`「開發模式」）；候選並排、淺深一起看時用 `test/support/screenshot.dart` 畫成 PNG，對照整個 App 時重拍 `test/screens/`。模擬器只看版面。
 - 改到轉場、骨架換場、開 App 進場、跳章，或宣稱某段工作已離開主執行緒時，用 `tool/frame_budget_compare.sh` 量前後，表寫進 commit message。
-- 手機上的驗證是使用者的事，不要求、不提及，回報也不列。模擬器由 agent 自己用：發測試版前，與只有正式版才出錯時，做法在 `docs/agents/emulator.md`。
-- Flutter `3.47.2` 固定在 `ci.yml` 與 `android-release.yml`，升級時兩處一起改。`third_party/` 各 fork 的修補紀錄在各自的 `PATCHES.md`。
+- 手機上的驗證是使用者的事，不要求、不提及，回報也不列。模擬器由 agent 自己用：發測試版前，與只有正式版才出錯時（`docs/agents/emulator.md`）。
+- `third_party/` 是改過的套件，改了記進各自的 `PATCHES.md`。
 
 ## Git 與發版
 
-- `beta` 是預設分支，日常改動都進這裡；`main` 只快轉到 `beta` 上使用者用過沒問題的提交，用來發正式版（ADR 0049）。分支保護只禁止強制推送與刪除；不改寫歷史，versionCode 靠提交數只增不減。
+- `beta` 是預設分支，日常改動都進這裡；`main` 只快轉到 `beta` 上使用者用過沒問題的提交，用來發正式版（ADR 0049）。不改寫歷史：versionCode 靠提交數只增不減。
 - 只改說明文件（`.md`、`docs/`）時，`git pull --ff-only` 後直接在 `beta` 上改、推，不開分支、不審。
-- 程式、測試、CI、hook、`pubspec.yaml`、`website/` 在從 `beta` 開的分支上做，同一段工作的改動與跟著改的文件都放同一條分支、一個 PR。發正式版的升版號提交例外，照 `docs/agents/release.md` 直接推上 `beta`。
+- 程式、測試、CI、hook、`pubspec.yaml`、`website/` 在從 `beta` 開的分支上做，跟著改的文件放同一條分支、一個 PR。發正式版的升版號提交例外（`docs/agents/release.md`）。
 - commit 與 PR 標題用 Conventional Commits 格式（`fix(reader): …`），本文用繁體中文。
 - **收尾**前讀 `docs/agents/finish.md`，CI 通過要**合併**前讀 `docs/agents/merge.md`；使用者說要**發測試版**或**發正式版**時讀 `docs/agents/release.md`。
-- 長期有效的內容依性質放：決定寫 ADR（加進索引），寫碼規範寫 `CODING_STANDARDS.md`，用語寫 `GLOSSARY.md`，畫面規格寫 `docs/design/`；本檔只放每件工作都用得到的規則。
 
 ## 環境
 
-- **同一個資料夾常有好幾個 session**：切分支會影響別人。自己的工作開 repo 外的 worktree，開工前 `git branch --show-current` 確認。預覽伺服器的 port 被佔用就換一個，不要結束別人的程序。
+- **同一個資料夾常有好幾個 session**：自己的工作開 repo 外的 worktree，開工前 `git branch --show-current` 確認。預覽伺服器的 port 被佔用就換一個，不結束別人的程序。
 - **開分支加 `--no-track`**：這台的 `push.default=upstream`，從 `origin/beta` 開的分支沒加會直接推進 `beta`。
-- **新 worktree 的 sqlite3**：公司網路會改掉 sqlite3 套件下載的 `sqlite3.dll`，雜湊核對不過就建不起來。從主資料夾開 worktree 時，`.githooks/post-checkout` 會把主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-*\` 裡核對過的最新一份複製過去；建置仍報 sqlite3 雜湊不符時，手動複製同一個檔到 worktree 的同一個位置。
+- **新 worktree 的 sqlite3**：公司網路會改掉 sqlite3 套件下載的 `sqlite3.dll`，雜湊核對不過就建不起來。`.githooks/post-checkout` 會從主資料夾複製核對過的一份；建置仍報雜湊不符時，手動複製主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-*\` 裡最新的那份到 worktree 的同一個位置。
 - 碰到這些情況先讀對應的文件：
   - 判斷掉幀是誰造成的、某件工作佔不佔主執行緒：`docs/agents/main-thread.md`
   - 幾個旗標互相牽動、要改成狀態機：`docs/state-machines.md`「做法」，做完在那裡加一列
