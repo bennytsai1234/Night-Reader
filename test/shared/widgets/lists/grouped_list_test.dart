@@ -139,6 +139,136 @@ void main() {
     });
   });
 
+  group('換場後先建畫面外的列', () {
+    // 八組各五列，比一個畫面長、在畫面加下面三個畫面以內。
+    const sections = 8;
+    const rowsPerSection = 5;
+    String title(int s, int r) => '第$s組第$r列';
+
+    int builtRows() => find
+        .textContaining('組第', skipOffstage: false, findRichText: true)
+        .evaluate()
+        .length;
+
+    Future<void> open(WidgetTester tester, {required Widget page}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () =>
+                      Navigator.of(context)
+                          .push(MaterialPageRoute<void>(builder: (_) => page)),
+                  child: const Text('開啟'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('開啟'));
+      await tester.pump();
+    }
+
+    Widget page({List<Widget> extra = const []}) => Scaffold(
+      body: GroupedListView(
+        children: [
+          for (var s = 0; s < sections; s++)
+            GroupedSection(
+              children: [
+                for (var r = 0; r < rowsPerSection; r++)
+                  GroupedRow(title: title(s, r)),
+                if (s == 0) ...extra,
+              ],
+            ),
+        ],
+      ),
+    );
+
+    /// 推到換場播完：骨架拿掉的那一格。
+    Future<void> reveal(WidgetTester tester) async {
+      bool skeleton() => find
+          .byType(GroupedListSkeleton, skipOffstage: false)
+          .evaluate()
+          .isNotEmpty;
+      expect(skeleton(), isTrue, reason: '推入的頁面先畫骨架');
+      for (var i = 0; i < 300 && skeleton(); i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(skeleton(), isFalse);
+    }
+
+    testWidgets('換場播完的下一格一次建好畫面外的列，之後捲到底再捲回來不再建列、也不拆掉', (tester) async {
+      await open(tester, page: page());
+      await reveal(tester);
+      expect(
+        builtRows(),
+        lessThan(sections * rowsPerSection),
+        reason: '整組在畫面外的列換場不等它們',
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(builtRows(), sections * rowsPerSection, reason: '換場播完的下一格都建好');
+
+      // 手指捲到底再捲回來，每一格都沒有新建或拆掉的列。
+      final gesture = await tester.startGesture(const Offset(400, 500));
+      for (var i = 0; i < 120; i++) {
+        await gesture.moveBy(Offset(0, i < 60 ? -40 : 40));
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(builtRows(), sections * rowsPerSection, reason: '捲動第 $i 格');
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(builtRows(), sections * rowsPerSection);
+    });
+
+    testWidgets('換場後清單高度變了（鍵盤升降），建好的列不拆掉重建', (tester) async {
+      addTearDown(tester.view.reset);
+      await open(tester, page: page());
+      await reveal(tester);
+      await tester.pump(const Duration(milliseconds: 16));
+      final before = [
+        for (var s = 0; s < 2; s++)
+          for (var r = 0; r < rowsPerSection; r++)
+            tester.element(
+              find.text(title(s, r), skipOffstage: false, findRichText: true),
+            ),
+      ];
+      tester.view.physicalSize = tester.view.physicalSize / 2;
+      await tester.pump();
+      tester.view.resetPhysicalSize();
+      await tester.pump();
+      final after = [
+        for (var s = 0; s < 2; s++)
+          for (var r = 0; r < rowsPerSection; r++)
+            tester.element(
+              find.text(title(s, r), skipOffstage: false, findRichText: true),
+            ),
+      ];
+      for (final (i, element) in after.indexed) {
+        expect(identical(element, before[i]), isTrue, reason: '第 $i 列被重建');
+      }
+    });
+
+    testWidgets('換場後才多出來的列（打開開關多出的）直接建，不排隊', (tester) async {
+      final extra = ValueNotifier<bool>(false);
+      addTearDown(extra.dispose);
+      await open(
+        tester,
+        page: ValueListenableBuilder<bool>(
+          valueListenable: extra,
+          builder: (context, shown, _) =>
+              page(extra: [if (shown) const GroupedRow(title: '多出來的列')]),
+        ),
+      );
+      await tester.pumpAndSettle();
+      extra.value = true;
+      await tester.pump();
+      expect(find.text('多出來的列', findRichText: true), findsOneWidget);
+    });
+  });
+
   group('第一項的位置', () {
     Future<double> topUnder(
       WidgetTester tester, {
