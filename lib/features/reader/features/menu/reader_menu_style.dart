@@ -13,8 +13,8 @@ class ReaderMenuStyle {
   final Color mutedForeground;
   final Color outline;
 
-  /// 面板裡分組卡片上的分隔線：和卡片的深淺差照 App 的。[outline] 是對 App
-  /// 的卡片調的，直接畫在面板底上的列（目錄）照舊用它。
+  /// 面板裡分組卡片上的分隔線；[outline] 是直接畫在選單底上的列（目錄）用的。
+  /// 兩者和底色的深淺差都照 App 的分隔線和卡片的差距。
   final Color cardOutline;
   final Color accent;
   final Color onAccent;
@@ -68,6 +68,10 @@ class ReaderMenuStyle {
             foreground,
             AppLayers.floatGapDark,
           );
+    final lineGap =
+        (AppLayers.lightness(palette.border) -
+                AppLayers.lightness(palette.surface))
+            .abs();
     return ReaderMenuStyle(
       brightness: palette.brightness,
       background: background,
@@ -80,14 +84,8 @@ class ReaderMenuStyle {
         from: palette.surface,
         to: palette.readerMenu,
       ),
-      outline: palette.border,
-      cardOutline: AppLayers.step(
-        card,
-        foreground,
-        (AppLayers.lightness(palette.border) -
-                AppLayers.lightness(palette.surface))
-            .abs(),
-      ),
+      outline: AppLayers.step(palette.readerMenu, foreground, lineGap),
+      cardOutline: AppLayers.step(card, foreground, lineGap),
       accent: palette.primary,
       onAccent: palette.onPrimary,
       accentMuted: palette.primary.withValues(alpha: 0.18),

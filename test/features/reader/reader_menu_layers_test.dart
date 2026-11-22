@@ -6,7 +6,9 @@ import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 
 void main() {
-  testWidgets('閱讀器面板的卡片照分層：淺色是紙那一階，深色比面板亮一階；分隔線和卡片的差距同 App', (tester) async {
+  testWidgets('閱讀器面板的卡片照分層：淺色是紙那一階，深色比面板亮一階；選單底與卡片上的分隔線和底色的差距同 App', (
+    tester,
+  ) async {
     for (final style in AppStyle.values) {
       for (final brightness in Brightness.values) {
         for (final pureBlack in [true, false]) {
@@ -50,6 +52,11 @@ void main() {
                       AppLayers.lightness(palette.surface))
                   .abs();
           expect((line - card).abs(), closeTo(appGap, 0.6), reason: reason);
+          expect(
+            (AppLayers.lightness(menu.outline) - panel).abs(),
+            closeTo(appGap, 0.6),
+            reason: '$reason：直接畫在選單底上的分隔線',
+          );
         }
       }
     }

@@ -72,7 +72,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildAppTheme(AppStyle.paper, Brightness.light),
-        home: const Scaffold(body: ReadingStatsView()),
+        home: Scaffold(body: ReadingStatsView(memory: ReadingStatsMemory())),
       ),
     );
     await settle(tester);
