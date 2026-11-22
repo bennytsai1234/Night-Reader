@@ -28,6 +28,8 @@ class SettingsSync extends SyncKind {
     PreferKey.themeMode,
     PreferKey.lightStyle,
     PreferKey.darkStyle,
+    PreferKey.lightTextStyle,
+    PreferKey.darkTextStyle,
     PreferKey.pureBlack,
     PreferKey.appAccent,
     PreferKey.glassStrength,

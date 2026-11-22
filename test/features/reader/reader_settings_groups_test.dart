@@ -153,7 +153,7 @@ void main() {
     expect(theme.textTheme.bodyMedium?.color, foreground);
   });
 
-  testWidgets('外觀與排版面板在窄視窗不溢位，每個風格都點得到，點了只換目前深淺的風格', (tester) async {
+  testWidgets('外觀與排版面板在窄視窗不溢位，每個風格都點得到，點了只換目前深淺的正文風格', (tester) async {
     // 面板左右各內縮 16，內容寬 248，放不下六個並排的色票。
     tester.view.physicalSize = const Size(280, 640);
     tester.view.devicePixelRatio = 1;
@@ -188,12 +188,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(last);
     await tester.pump();
-    expect(themeSettings.lightStyle, AppStyle.values.last);
+    expect(themeSettings.textStyleFor(Brightness.light), AppStyle.values.last);
     expect(
-      themeSettings.darkStyle,
-      ThemeSettingsProvider.defaultDarkStyle,
-      reason: '淺色時點色票不動深色的風格',
+      themeSettings.lightStyle,
+      ThemeSettingsProvider.defaultLightStyle,
+      reason: '色票只換正文，選單與 App 的介面風格不動',
     );
+    expect(themeSettings.darkTextStyle, isNull, reason: '淺色時點色票不動深色的正文');
   });
 
   testWidgets('外觀與排版面板只放常調的幾項，更多排版設定進閱讀偏好，關掉後閱讀器才重讀', (tester) async {

@@ -389,6 +389,7 @@ class NightReaderApp extends StatelessWidget {
           theme: buildAppTheme(
             themeSettings.lightStyle,
             Brightness.light,
+            textStyle: themeSettings.lightTextStyle,
             glassStrength: themeSettings.glassStrength,
             accent: themeSettings.accent,
             pageTransition: themeSettings.pageTransition,
@@ -397,6 +398,7 @@ class NightReaderApp extends StatelessWidget {
           darkTheme: buildAppTheme(
             themeSettings.darkStyle,
             Brightness.dark,
+            textStyle: themeSettings.darkTextStyle,
             glassStrength: themeSettings.glassStrength,
             accent: themeSettings.accent,
             pageTransition: themeSettings.pageTransition,

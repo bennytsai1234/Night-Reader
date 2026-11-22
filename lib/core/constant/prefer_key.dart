@@ -10,6 +10,11 @@ class PreferKey {
   static const String lightStyle = 'app_style_light';
   static const String darkStyle = 'app_style_dark';
 
+  /// 正文（閱讀紙與字）淺色、深色另選的風格（[AppStyle.name]）；沒存時跟
+  /// [lightStyle]、[darkStyle]。
+  static const String lightTextStyle = 'reader_text_style_light';
+  static const String darkTextStyle = 'reader_text_style_dark';
+
   /// 淺深共用一個風格時存的鍵；讀到就搬到 [lightStyle]、[darkStyle] 後刪掉。
   static const String sharedStyle = 'app_style';
 

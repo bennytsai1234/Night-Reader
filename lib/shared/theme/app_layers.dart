@@ -59,6 +59,43 @@ class AppLayers {
     );
   }
 
+  /// 色調（彩度、色相）照 [tone]、明度是 [l] 的顏色。超出 sRGB 時降彩度，
+  /// 明度維持 [l]。
+  static Color withLightness(Color tone, double l) {
+    final source = lch(tone);
+    var chroma = source.c;
+    for (var i = 0; i < 24; i++) {
+      final color = _fromLch(l, chroma, source.h);
+      if ((lightness(color) - l).abs() < 0.3 || chroma < 0.5) return color;
+      chroma *= 0.85;
+    }
+    return _fromLch(l, 0, source.h);
+  }
+
+  /// [lch] 的反函數，超出 sRGB 的分量截到 0–1。
+  static Color _fromLch(double l, double c, double h) {
+    final a = c * math.cos(h * math.pi / 180);
+    final b = c * math.sin(h * math.pi / 180);
+    final fy = (l + 16) / 116, fx = fy + a / 500, fz = fy - b / 200;
+    double inv(double t) =>
+        t * t * t > 0.008856 ? t * t * t : (t - 16 / 116) / 7.787;
+    final x = inv(fx) * 0.95047, y = inv(fy), z = inv(fz) * 1.08883;
+    int channel(double v) {
+      final c = v.clamp(0.0, 1.0);
+      final s = c <= 0.0031308
+          ? 12.92 * c
+          : 1.055 * math.pow(c, 1 / 2.4).toDouble() - 0.055;
+      return (s * 255).round().clamp(0, 255);
+    }
+
+    return Color.fromARGB(
+      255,
+      channel(3.2406 * x - 1.5372 * y - 0.4986 * z),
+      channel(-0.9689 * x + 1.8758 * y + 0.0415 * z),
+      channel(0.0557 * x - 0.2040 * y + 1.0570 * z),
+    );
+  }
+
   /// CIELAB 明度 L*（0–100）。
   static double lightness(Color color) {
     final y = color.computeLuminance();
