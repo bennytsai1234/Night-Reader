@@ -20,7 +20,7 @@
 
 <p align="center"><img src="docs/readme/library.webp" width="100%" alt="多書源搜尋：繁簡一起找，同一本書合成一筆；換源：照章名找回讀到的那一章，書籤和標註都還在；整本下載：小說與漫畫放上書架就整本下載，沒網路也能讀；本地書：TXT、EPUB 匯入自動分章；多台同步：經 Google 雲端硬碟或 WebDAV"></p>
 
-<p align="center"><img src="docs/readme/sources.webp" width="100%" alt="書源校驗：批次找出失效的書源，也能逐步除錯；AI 修復：用自己的 AI 服務修好壞掉的書源，校驗通過才換上。夜讀不附書源，網路上搜「Legado 書源」，在書源網站點「一鍵導入」就會打開夜讀"></p>
+<p align="center"><img src="docs/readme/sources.webp" width="100%" alt="書源校驗：批次找出失效的書源，也能逐步除錯；AI 修復：用自己的 AI 服務修好壞掉的書源，校驗通過才換上；AI 找書：寫一段想看的，用自己的 AI 服務在書源裡搜、試讀，推薦幾本並寫理由。夜讀不附書源，網路上搜「Legado 書源」，在書源網站點「一鍵導入」就會打開夜讀"></p>
 
 <p align="center"><a href="https://github.com/bennytsai1234/Night-Reader/releases/latest"><img src="docs/readme/download.webp" width="100%" alt="下載夜讀"></a></p>
 
