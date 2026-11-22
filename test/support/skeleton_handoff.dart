@@ -103,6 +103,10 @@ class _Slot {
   /// 的 `SliverSkeletonSwitcher`）拆掉前已經淡得差不多，不算。
   bool lost = false;
 
+  /// 清單版的骨架換場（`SliverSkeletonSwitcher`）：骨架與內容兩層並排在這
+  /// 個元件底下，換場播完骨架那層就拆掉，內容要從這裡找。
+  Element? holder;
+
   /// 骨架最後一次看到時的濃度（[SkeletonRevealLayer.presence]）。
   double presence = 0;
 }
@@ -141,6 +145,9 @@ class SkeletonHandoffWatch {
             _Slot(_placeOf(element), _rectOf(element), ModalRoute.of(element)),
       );
       slot.presence = layer.presence.value;
+      if (parent.widget.key == const ValueKey('skeleton')) {
+        slot.holder ??= _parentOf(parent);
+      }
       // 骨架完全淡掉的那幾格看不到，不算畫面上的樣子；換完前又出現（例如
       // 換場途中再載入）時從頭等內容。
       if (layer.presence.value <= 0) continue;
@@ -148,7 +155,9 @@ class SkeletonHandoffWatch {
       slot.content = null;
       // 骨架層和內容層都照兩層共同的容器量：容器跟著頁面滑動不算變化，兩層
       // 之間的位移照樣量得到。
-      final origin = _rectOf(parent).topLeft;
+      final origin = slot.holder != null
+          ? _boxOriginAbove(slot.holder!)
+          : _rectOf(parent).topLeft;
       final bars = [
         for (final bar in _barsUnder(tester, element)) bar.shift(-origin),
       ];
@@ -179,7 +188,12 @@ class SkeletonHandoffWatch {
         in _slots.entries.indexed) {
       if (present.contains(parent) || slot.content != null) continue;
       if (slot.snapshots.isEmpty || slot.gone || slot.lost) continue;
-      final content = parent.mounted ? _contentLayerUnder(parent) : null;
+      final holder = slot.holder;
+      final content = parent.mounted
+          ? _contentLayerUnder(parent)
+          : holder != null && holder.mounted
+          ? _keyedChild(holder, 'content')
+          : null;
       if (content == null) {
         final route = slot.route;
         if (!parent.mounted &&
@@ -192,7 +206,9 @@ class SkeletonHandoffWatch {
         }
         continue;
       }
-      final origin = _rectOf(parent).topLeft;
+      final origin = holder != null
+          ? _boxOriginAbove(holder)
+          : _rectOf(parent).topLeft;
       // 骨架只畫到畫面邊（再下面的列捲到才建，`GroupedItemShape`），畫面外
       // 的內容不比。
       final screen = _screenOf(tester);
@@ -443,6 +459,27 @@ Element? _contentLayerUnder(Element parent) {
     )) {
       found = child;
     }
+  });
+  return found;
+}
+
+/// 清單版的換場沒有自己的 box：照外面最近的一個 box（清單的視窗）量，
+/// 頁面推入、滑動時跟著整頁一起移動。
+Offset _boxOriginAbove(Element element) {
+  var origin = Offset.zero;
+  element.visitAncestorElements((ancestor) {
+    final box = ancestor.renderObject;
+    if (box is! RenderBox || !box.hasSize) return true;
+    origin = box.localToGlobal(Offset.zero);
+    return false;
+  });
+  return origin;
+}
+
+Element? _keyedChild(Element holder, String key) {
+  Element? found;
+  holder.visitChildElements((child) {
+    if (child.widget.key == ValueKey(key)) found = child;
   });
   return found;
 }

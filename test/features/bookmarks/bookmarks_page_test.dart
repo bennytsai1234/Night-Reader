@@ -164,6 +164,40 @@ void main() {
     await closePage(tester);
   });
 
+  testWidgets('統計在推入前讀好：第一次點「統計」那一幀就畫出統計', (tester) async {
+    await tester.runAsync(
+      () => GetIt.instance<ReadRecordDao>().upsert(
+        ReadRecord(
+          id: 1,
+          bookName: '夜雨聽書',
+          readTime: 1234,
+          lastRead: DateTime.now().millisecondsSinceEpoch,
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => BookmarksPage.open(context),
+            child: const Text('打開'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('打開'));
+    await settle(tester);
+    expect(find.byType(BookmarksPage), findsOneWidget);
+
+    await tester.tap(find.text('統計'));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('夜雨聽書'), findsOneWidget);
+    await settle(tester);
+    await closePage(tester);
+  });
+
   testWidgets('切回「統計」先畫上一次的統計，不閃載入圈', (tester) async {
     await tester.runAsync(
       () => GetIt.instance<ReadRecordDao>().upsert(

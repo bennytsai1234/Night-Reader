@@ -10,8 +10,9 @@ import 'skeleton.dart';
 import 'skeleton_reveal.dart';
 
 /// 清單（sliver）版的 [SkeletonSwitcher]：載入中是一段 [skeleton]（一般
-/// box）；資料到了先把 [builder] 給的 slivers 在骨架底下排好（全透明，一幀
-/// 建一個），全部建好的下一幀才照骨架換場（[SkeletonReveal] 的方式與時長）
+/// box）；資料到了那一幀只換上呼叫端給的新骨架（照到了的資料排），下一幀
+/// 起把 [builder] 給的 slivers 在骨架底下排好（全透明，一幀建一個），全部
+/// 建好的下一幀才照骨架換場（[SkeletonReveal] 的方式與時長）
 /// 讓內容淡入、骨架淡出，兩者疊在同一個位置、跟著捲動。換場只改透明度，
 /// 結束後骨架移出畫面、內容不留圖層。系統關閉動畫時直接換成內容。
 ///
@@ -81,10 +82,11 @@ class _SliverSkeletonSwitcherState extends State<SliverSkeletonSwitcher>
       });
       return;
     }
-    // 內容在骨架底下一幀建一個 sliver，全部建好下一幀才開始換場：原本一幀
+    // 資料到的這一幀只讓骨架照新資料變形（呼叫端給的 [skeleton]），下一幀
+    // 起內容在骨架底下一幀建一個 sliver，全部建好下一幀才開始換場：原本一幀
     // 建完整頁內容（書籍詳情在電腦 debug 模式約 50–100ms），骨架的呼吸在那
-    // 一幀頓住；建內容也不和換場的第一段擠在同一幀（ADR 0018）。
-    _built = 1;
+    // 一幀頓住；建內容也不和骨架變形、換場的第一段擠在同一幀（ADR 0018）。
+    _built = 0;
     _buildNext(round);
   }
 
