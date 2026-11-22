@@ -33,7 +33,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 - 快測：`tool/flutter_test.sh {target}`（`{target}` 是測試檔或資料夾，`--run-skipped -t …` 這類參數照接；錯誤一定印出，輸出整份看）
 - 合併前檢查：PR 的 CI（`.github/workflows/ci.yml`）
-- 高風險：`lib/core/database/`、`lib/core/backup/`、`lib/core/sync/`、`lib/core/storage/`、`lib/core/background_work/`、`lib/core/download/`、`lib/core/source_check/`、`lib/core/engine/`、`lib/core/ai_repair/`、`lib/core/ai_find/`、`lib/core/diagnostics/`
+- 高風險：`lib/core/database/`、`lib/core/backup/`、`lib/core/sync/`、`lib/core/storage/`、`lib/core/local_book/`、`lib/core/background_work/`、`lib/core/download/`、`lib/core/source_check/`、`lib/core/source_switch/`、`lib/core/playback/`、`lib/core/comic/`、`lib/core/engine/`、`lib/core/source/`、`lib/core/network/`、`lib/core/ai_repair/`、`lib/core/ai_find/`、`lib/core/diagnostics/`
 - 不能改：`lib/**/*.g.dart`
 
 ## 驗證
