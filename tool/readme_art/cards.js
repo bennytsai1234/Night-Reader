@@ -3,8 +3,8 @@ window.CARDS = {
     "tablet": {"left": 518, "top": 46, "width": 256}, "phone": {"left": 420, "top": 138, "width": 172}},
 
   "reading": {"type": "row", "t": 0.3, "dim": 0.5, "w": 196, "items": [
-    {"s": "open", "a": "clip:open", "h": "流暢", "p": "開 App、開書、換頁<br>都不掉幀"},
-    {"s": "reader-kraft_light", "a": "wipe:reader-kraft_light,reader-bamboo_light,reader-tea_dark,reader-plain_dark", "h": "六種風格", "p": "白天、晚上各選一個<br>晚上可以純黑"},
+    {"s": "open", "a": "clip:open", "h": "流暢", "p": "開書、換頁<br>都不掉幀"},
+    {"s": "reader-kraft_light", "a": "wipe:reader-kraft_light,reader-bamboo_light,reader-tea_dark,reader-plain_dark", "h": "六種風格", "p": "白天、晚上各選一個<br>正文可另選、晚上可純黑"},
     {"s": "tts", "a": "clip:tts", "h": "朗讀", "p": "標出正在讀的那句<br>可以定時停"}
   ]},
   "tidy": {"type": "row", "t": 0.5, "dim": 0.5, "w": 168, "gap": 22, "items": [
@@ -23,13 +23,13 @@ window.CARDS = {
     {"s": "source-change", "h": "換源", "p": "照章名找回那一章<br>書籤和標註都還在"},
     {"s": "download", "a": "clip:download:hold", "h": "整本下載", "p": "小說、漫畫放上書架<br>就整本下載"},
     {"s": "local-toc", "h": "本地書", "p": "TXT、EPUB<br>匯入自動分章"},
-    {"s": "sync-phone", "a": "devices:sync-phone,sync-tablet", "h": "多台同步", "p": "Google 雲端硬碟<br>或 WebDAV"}
+    {"s": "sync-phone", "a": "devices:sync-phone,sync-tablet", "h": "多台同步", "p": "WebDAV，Android<br>也能用 Google 雲端硬碟"}
   ]},
   "sources": {"type": "row", "t": 1, "dim": 0.55, "w": 196, "moon": [480, -200], "items": [
     {"s": "source-check", "h": "書源校驗", "p": "批次找出失效的書源<br>也能逐步除錯"},
     {"s": "ai-repair", "h": "AI 修復", "p": "用自己的 AI 修好書源<br>校驗通過才換上"},
     {"s": "ai-find", "h": "AI 找書", "p": "寫一段想看的<br>AI 在書源裡找來推薦"}
-  ], "note": ["夜讀不附書源", "網路上搜「Legado 書源」，在書源網站點「一鍵導入」就會打開夜讀"]},
+  ], "note": ["夜讀不附書源", "網路上搜「Legado 書源」，Android 上在書源網站點「一鍵導入」就會打開夜讀"]},
 
   "download": {"type": "download"}
 }
