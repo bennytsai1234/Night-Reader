@@ -197,6 +197,49 @@ void main() {
     expect(themeSettings.darkTextStyle, isNull, reason: '淺色時點色票不動深色的正文');
   });
 
+  testWidgets('點正跟著介面風格的那個色票，也記下正文，之後換介面風格正文不跟著換', (tester) async {
+    final themeSettings = ThemeSettingsProvider();
+    final settings = ReaderSettingsController();
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: themeSettings,
+        child: MaterialApp(
+          theme: buildAppTheme(themeSettings.lightStyle, Brightness.light),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => ReaderSettingsSheets.showInterfaceSettings(
+                  context,
+                  settings,
+                ),
+                child: const Text('開啟'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('開啟'));
+    await tester.pumpAndSettle();
+    expect(themeSettings.lightTextStyle, isNull);
+
+    final current = find.text(themeSettings.lightStyle.label);
+    await tester.ensureVisible(current);
+    await tester.pumpAndSettle();
+    await tester.tap(current);
+    await tester.pump();
+    expect(
+      themeSettings.lightTextStyle,
+      ThemeSettingsProvider.defaultLightStyle,
+    );
+
+    themeSettings.setStyle(Brightness.light, AppStyle.paper);
+    expect(
+      themeSettings.textStyleFor(Brightness.light),
+      ThemeSettingsProvider.defaultLightStyle,
+    );
+  });
+
   testWidgets('外觀與排版面板只放常調的幾項，更多排版設定進閱讀偏好，關掉後閱讀器才重讀', (tester) async {
     final themeSettings = ThemeSettingsProvider();
     final settings = ReaderSettingsController();

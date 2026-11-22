@@ -60,11 +60,13 @@ class AppearanceSettingsPage extends StatelessWidget {
                       GlassSegment(contrast, contrast.label),
                   ],
                   selected: themeSettings.contrast,
-                  // 和風格、純黑一樣，新配色從點擊處暈開。
-                  onChanged: (contrast) => ThemeRevealScope.of(context).run(
-                    current: contrast == themeSettings.contrast,
-                    change: () => themeSettings.setContrast(contrast),
-                  ),
+                  // 和風格、純黑一樣，新配色從點擊處暈開；暈開中點回目前那一段
+                  // 就取消記下的那一次。
+                  onChanged: (contrast) => ThemeRevealScope.of(context)
+                      .run(change: () => themeSettings.setContrast(contrast)),
+                  onReselected: (contrast) =>
+                      ThemeRevealScope.of(context)
+                          .run(current: true, change: () {}),
                 ),
               ),
             ],
