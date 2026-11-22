@@ -499,13 +499,7 @@ void main() {
         await tester.pump(frame);
         frames++;
       }
-      expect(
-        frames,
-        greaterThanOrEqualTo(
-          LaunchEntranceMotion.grow.inMicroseconds ~/ frame.inMicroseconds,
-        ),
-        reason: '長出要播完一整段',
-      );
+      expect(frames, greaterThan(30), reason: '長出要播完一整段');
       // 長完先停 idle（這一格整片重建），停的期間整片最深。
       var previous = await sample(tester);
       expect(previous, everyElement(0));
@@ -517,12 +511,7 @@ void main() {
       }
       expect(still, greaterThan(4), reason: '停滿 idle 才呼吸');
       // 開始呼吸：從整片最深開始，左邊先變淺、右邊還沒輪到，一路接得上。
-      // 右邊晚半輪（[LaunchEntranceMotion.breath]）才輪到：在那之前看。
-      previous = await pumpSmoothly(
-        tester,
-        previous,
-        LaunchEntranceMotion.breath.inMicroseconds ~/ frame.inMicroseconds - 1,
-      );
+      previous = await pumpSmoothly(tester, previous, 12);
       expect(previous.first, greaterThan(0), reason: '左邊先開始變淺');
       expect(previous.last, 0, reason: '右邊還沒輪到');
       previous = await pumpSmoothly(tester, previous, cycleFrames);

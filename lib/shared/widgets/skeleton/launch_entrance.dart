@@ -13,8 +13,7 @@ import 'snapshot_sweep.dart';
 /// 開 App 的進場（ADR 0025）：系統啟動畫面只有底色，Flutter 第一幀也只畫
 /// 底色；開 App 的準備工作（[prepared]）做完、畫面畫完，先清掉開 App 留下
 /// 的記憶體（[_collectGarbage]），再隔 [LaunchEntranceMotion.idle]，
-/// 整個畫面才照骨架換場（[SkeletonReveal]）的方式、以
-/// [LaunchEntranceMotion.grow] 長出骨架：書架、頁首
+/// 整個畫面才照骨架換場（[SkeletonReveal]）的方式與時長長出骨架：書架、頁首
 /// 的標題與兩側按鈕、底部分頁列（書架以外用 [LaunchSkeleton]）。長出時骨架
 /// 不呼吸、長到最深；長完、書也讀到了，就在靜止的畫面上一次準備好書架與
 /// 封面，把骨架畫面與換好的畫面各畫成一張圖、換回骨架，清掉建書架留下的
@@ -121,15 +120,12 @@ class LaunchEntranceMotion {
   _Timeline _timeline = _Timeline.background;
   _Reveal _reveal = _Reveal.none;
 
-  /// 骨架長出的時長：0.2 秒（使用者 2026-11-22 定的，ADR 0035）。只管開 App
-  /// 的進場；其他頁面的骨架長出與換場照 [SkeletonReveal]。
-  static const Duration grow = Duration(milliseconds: 200);
-
-  /// 開 App 的骨架呼吸由深到淺一次的時間；每個位置一口氣是它的兩倍，最右邊
-  /// 比最左邊晚半輪（由左而右・緩），所以整片呼完一口是它的三倍，0.2 秒
-  /// （使用者 2026-11-22 定的，ADR 0035）。閱讀器紙上與重新載入時的骨架
-  /// 照舊用 [AppMotion.skeletonPulse]。
-  static const Duration breath = Duration(microseconds: 200000 ~/ 3);
+  /// 開 App 的骨架呼吸由深到淺一次的時間；一口氣是它的兩倍（0.6 秒）。和
+  /// 長出對稱：長出時每個位置花 0.3 秒長好、右邊晚 0.3 秒，呼吸也是每個
+  /// 位置 0.3 秒變淺、右邊晚 0.3 秒（由左而右・緩的延遲是半輪）。使用者
+  /// 2026-10-24 定的；閱讀器紙上與重新載入時的骨架照舊用
+  /// [AppMotion.skeletonPulse]。
+  static const Duration breath = Duration(milliseconds: 300);
 
   /// 開 App 的骨架呼吸一輪的時長。
   static Duration get breathCycle => breath * 2;
@@ -350,9 +346,9 @@ class _LaunchEntranceState extends State<LaunchEntrance>
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_motion != null) return;
-    // 方式在第一次建畫面時定下來，播放中改設定不影響這一次。
+    // 方式與時長在第一次建畫面時定下來，播放中改設定不影響這一次。
     final reveal = SkeletonReveal.of(context);
-    _controller.duration = LaunchEntranceMotion.grow;
+    _controller.duration = reveal.duration;
     final motion = _motion = LaunchEntranceMotion._(
       _controller,
       sweep: reveal.sweeps,

@@ -273,7 +273,7 @@ void main() {
   ) async {
     await tester.pumpWidget(host(loading: true));
     await startGrowing(tester);
-    await tester.pump(LaunchEntranceMotion.grow ~/ 3);
+    await tester.pump(const Duration(milliseconds: 200));
     final growing = shelfSkeleton(tester);
     expect(growing.alphaAt(0), greaterThan(growing.alphaAt(1)));
     expect(
