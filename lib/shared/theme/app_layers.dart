@@ -19,11 +19,21 @@ class AppLayers {
   static const double cardGapDark = 15;
 
   /// 深色的玻璃列（頁首、分頁列）比卡片再亮一階；淺色玻璃與卡片同色，
-  /// 靠貼邊陰影浮起來。閱讀選單和閱讀底色的差距同頁面到卡片。
+  /// 靠貼邊陰影浮起來。
   static const double floatGapDark = 6;
+
+  /// 深色的閱讀選單比紙亮多少；淺色比紙暗 [cardGapLight]。使用者
+  /// 2026-11-22 在候選圖上選：「選單要和紙分得出來，對比要夠。淺色就選
+  /// 比較暗的，深色就選比較亮的。」原本深色同頁面到卡片的 15，選單看起來
+  /// 比 App 的彈出選單還暗。
+  static const double readerMenuGapDark = 27;
 
   static double cardGap(Brightness brightness) =>
       brightness == Brightness.dark ? cardGapDark : cardGapLight;
+
+  /// 閱讀選單和紙的明度差（[readerMenuGapDark]）。
+  static double readerMenuGap(Brightness brightness) =>
+      brightness == Brightness.dark ? readerMenuGapDark : cardGapLight;
 
   /// 淺色頁面的彩度是卡片的幾倍，色相同卡片。卡片色往字色混出來的頁面
   /// 彩度和卡片差不多，但暗了 12 就顯得灰褐；拉高彩度，頁面才像比卡片深
