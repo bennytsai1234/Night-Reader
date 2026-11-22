@@ -18,6 +18,9 @@ class PreferKey {
   /// 淺深共用一個風格時存的鍵；讀到就搬到 [lightStyle]、[darkStyle] 後刪掉。
   static const String sharedStyle = 'app_style';
 
+  /// 層次對比（[AppContrast.name]）。
+  static const String layerContrast = 'app_layer_contrast';
+
   /// 深色用純黑（bool，預設開）。
   static const String pureBlack = 'app_pure_black';
 

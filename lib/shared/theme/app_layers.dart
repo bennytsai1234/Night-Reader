@@ -28,6 +28,10 @@ class AppLayers {
   /// 比 App 的彈出選單還暗。
   static const double readerMenuGapDark = 27;
 
+  /// 對比調高時字色不動，底色往字的方向移；選單與面板卡片的底和選單上的
+  /// 字至少留這麼多明度差，到了就停（[StylePalette.withContrast]）。
+  static const double minTextGap = 45;
+
   static double cardGap(Brightness brightness) =>
       brightness == Brightness.dark ? cardGapDark : cardGapLight;
 

@@ -301,6 +301,26 @@ enum AppAccent {
   );
 }
 
+/// 層次對比（「外觀與主題 → 對比」）：分層的明度差乘上 [factor]，淺色、
+/// 深色一起調（[StylePalette.withContrast]）。使用者 2026-11-22 在候選圖上
+/// 定的四段，預設「標準」是 [AppLayers] 的原始數字（ADR 0077）。
+enum AppContrast {
+  low('低', 0.75),
+  standard('標準', 1),
+  high('高', 1.25),
+  higher('更高', 1.5);
+
+  const AppContrast(this.label, this.factor);
+
+  final String label;
+  final double factor;
+
+  static const AppContrast defaultContrast = AppContrast.standard;
+
+  static AppContrast fromStorage(String? value) => AppContrast.values
+      .firstWhere((c) => c.name == value, orElse: () => defaultContrast);
+}
+
 /// 一個風格在某個深淺下的完整配色。
 ///
 /// 以 [ThemeExtension] 掛在 App 主題上：閱讀器與選單一律經 [StylePalette.of]
@@ -323,6 +343,7 @@ class StylePalette extends ThemeExtension<StylePalette> {
     required this.readerText,
     required this.readerInfo,
     required this.highlight,
+    this.contrast = 1,
   });
 
   final Brightness brightness;
@@ -360,6 +381,10 @@ class StylePalette extends ThemeExtension<StylePalette> {
 
   /// 朗讀高亮與選字反白選「跟隨主題」時的顏色（實際以設定的深淺疊上）。
   final Color highlight;
+
+  /// 層次對比：分層的明度差乘上這個倍數（[AppContrast]、[withContrast]）；
+  /// 1 是 [AppLayers] 的原始數字。
+  final double contrast;
 
   /// 疊在主色上的勾勾與文字：紙白、墨色中對主色對比較高的一個。
   Color get onPrimary =>
@@ -406,7 +431,7 @@ class StylePalette extends ThemeExtension<StylePalette> {
     return copyWith(
       background: surface,
       surface: bar,
-      bar: AppLayers.step(bar, text, AppLayers.floatGapDark),
+      bar: AppLayers.step(bar, text, AppLayers.floatGapDark * contrast),
       textMuted: AppLayers.keepGap(textMuted, text, from: surface, to: bar),
       border: AppLayers.step(bar, text, borderGap.abs()),
     );
@@ -418,7 +443,7 @@ class StylePalette extends ThemeExtension<StylePalette> {
   StylePalette withText(StylePalette text) {
     if (text == this) return this;
     final paper = text.readerBackground;
-    final gap = AppLayers.readerMenuGap(brightness);
+    final gap = AppLayers.readerMenuGap(brightness) * contrast;
     return copyWith(
       readerBackground: paper,
       readerText: text.readerText,
@@ -431,6 +456,57 @@ class StylePalette extends ThemeExtension<StylePalette> {
               AppLayers.lightness(paper) +
                   (brightness == Brightness.dark ? gap : -gap),
             ),
+    );
+  }
+
+  /// 分層的明度差都乘上 [factor]（使用者 2026-11-22：「選單要和紙分得出來，
+  /// 對比要夠。淺色就選比較暗的，深色就選比較亮的。」所以調高是離底色更遠：
+  /// 淺色的頁面與閱讀選單往暗，深色的卡片、玻璃與閱讀選單往亮）。各層保留
+  /// 原本的色調；淺色以卡片為準、深色以頁面為準，紙不動，字色不動（深色
+  /// 的次要文字照原本的規則跟著卡片保持差距）。只套在原始數字的配色上。
+  StylePalette withContrast(double factor) {
+    assert(contrast == 1, '對比只套一次');
+    if (factor == 1) return this;
+    double l(Color c) => AppLayers.lightness(c);
+    Color at(Color tone, double lightness) =>
+        AppLayers.withLightness(tone, lightness.clamp(0, 100));
+    final dark = brightness == Brightness.dark;
+    final menuGap = l(readerMenu) - l(readerBackground);
+    // 字色不動：選單往字的方向移到和字只差 [AppLayers.minTextGap] 就停。
+    // 深色另外留出面板卡片再亮一階的空間。
+    final menuTarget = l(readerBackground) + menuGap * factor;
+    final readerMenuScaled = at(
+      readerMenu,
+      dark
+          ? math.min(
+              menuTarget,
+              l(text) - AppLayers.minTextGap - AppLayers.floatGapDark * factor,
+            )
+          : math.max(menuTarget, l(text) + AppLayers.minTextGap),
+    );
+    final borderGap = l(border) - l(surface);
+    if (!dark) {
+      return copyWith(
+        background: at(
+          background,
+          l(surface) - (l(surface) - l(background)) * factor,
+        ),
+        border: at(border, l(surface) + borderGap * factor),
+        readerMenu: readerMenuScaled,
+        contrast: factor,
+      );
+    }
+    final card = at(
+      surface,
+      l(background) + (l(surface) - l(background)) * factor,
+    );
+    return copyWith(
+      surface: card,
+      bar: at(bar, l(card) + (l(bar) - l(surface)) * factor),
+      border: at(border, l(card) + borderGap * factor),
+      textMuted: AppLayers.keepGap(textMuted, text, from: surface, to: card),
+      readerMenu: readerMenuScaled,
+      contrast: factor,
     );
   }
 
@@ -457,6 +533,7 @@ class StylePalette extends ThemeExtension<StylePalette> {
     Color? readerText,
     Color? readerInfo,
     Color? highlight,
+    double? contrast,
   }) {
     return StylePalette(
       brightness: brightness ?? this.brightness,
@@ -473,6 +550,7 @@ class StylePalette extends ThemeExtension<StylePalette> {
       readerText: readerText ?? this.readerText,
       readerInfo: readerInfo ?? this.readerInfo,
       highlight: highlight ?? this.highlight,
+      contrast: contrast ?? this.contrast,
     );
   }
 
@@ -494,7 +572,8 @@ class StylePalette extends ThemeExtension<StylePalette> {
       other.readerMenu == readerMenu &&
       other.readerText == readerText &&
       other.readerInfo == readerInfo &&
-      other.highlight == highlight;
+      other.highlight == highlight &&
+      other.contrast == contrast;
 
   @override
   int get hashCode => Object.hash(
@@ -512,6 +591,7 @@ class StylePalette extends ThemeExtension<StylePalette> {
     readerText,
     readerInfo,
     highlight,
+    contrast,
   );
 
   /// 換風格或深淺時不做漸變，在動畫中點一次切換：正文段落快取以文字色

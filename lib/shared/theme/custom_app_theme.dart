@@ -9,11 +9,12 @@ import 'app_tokens.dart';
 
 /// [style] 是這個深淺用的介面風格；[textStyle] 是正文（紙與字）另選的風格，
 /// null 是跟介面風格（[StylePalette.withText]）。[pureBlack] 只影響深色
-/// （「深色用純黑」）。
+/// （「深色用純黑」）；[contrast] 是層次對比（[StylePalette.withContrast]）。
 ThemeData buildAppTheme(
   AppStyle style,
   Brightness brightness, {
   AppStyle? textStyle,
+  AppContrast contrast = AppContrast.standard,
   GlassStrength glassStrength = GlassStrength.unspecified,
   AppAccent accent = AppAccent.theme,
   AppPageTransition pageTransition = AppPageTransition.slide,
@@ -26,6 +27,7 @@ ThemeData buildAppTheme(
       textStyle.paletteFor(brightness, accent, pureBlack: pureBlack),
     );
   }
+  colors = colors.withContrast(contrast.factor);
   // 淺色模式的提示訊息是深底，動作字取深色配色的主色才看得清楚。
   final inversePrimary = style
       .paletteFor(

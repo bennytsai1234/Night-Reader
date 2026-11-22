@@ -164,7 +164,7 @@ _Avoid_: AMOLED 模式、A屏黑、OLED 模式
 _Avoid_: 按鈕顏色、主題色（指使用者選的顏色時）、自訂色
 
 **分層**：
-頁面、卡片、玻璃、彈出層與閱讀選單之間靠底色的明度差分開，差距以 CIELAB 明度差（ΔL*）計、所有風格共用同一組數字（`AppLayers`）；不畫框線（docs/design/appearance.md「層次」）。
+頁面、卡片、玻璃、彈出層與閱讀選單之間靠底色的明度差分開，差距以 CIELAB 明度差（ΔL*）計、所有風格共用同一組數字（`AppLayers`），乘上「對比」選的倍數；不畫框線（docs/design/appearance.md「層次」）。
 _Avoid_: 層級、elevation、框線
 
 **彈出層**：

@@ -54,6 +54,9 @@ class ThemeSettingsProvider extends ChangeNotifier {
     lightTextStyle = _textStyleFromStorage(PreferKey.lightTextStyle);
     darkTextStyle = _textStyleFromStorage(PreferKey.darkTextStyle);
     pureBlack = _prefs.getBool(PreferKey.pureBlack) ?? defaultPureBlack;
+    contrast = AppContrast.fromStorage(
+      _prefs.getString(PreferKey.layerContrast),
+    );
     accent = AppAccent.fromStorage(_prefs.getString(PreferKey.appAccent));
     glassStrength = GlassStrength.fromStorage(
       _prefs.getString(PreferKey.glassStrength),
@@ -108,6 +111,9 @@ class ThemeSettingsProvider extends ChangeNotifier {
   /// 深色時頁面與閱讀紙一律純黑（[StylePalette.toPureBlack]）。
   late bool pureBlack;
 
+  /// 層次對比，淺色、深色一起調。
+  late AppContrast contrast;
+
   /// 開關、選取與強調按鈕的顏色；預設見 [AppAccent.defaultAccent]。
   late AppAccent accent;
 
@@ -134,13 +140,14 @@ class ThemeSettingsProvider extends ChangeNotifier {
       (brightness == Brightness.dark ? darkTextStyle : lightTextStyle) ??
       styleFor(brightness);
 
-  /// 這個深淺實際套用的配色（含強調色、純黑與正文風格）。
+  /// 這個深淺實際套用的配色（含強調色、純黑、正文風格與對比）。
   StylePalette paletteFor(Brightness brightness) => styleFor(brightness)
       .paletteFor(brightness, accent, pureBlack: pureBlack)
       .withText(
         textStyleFor(brightness)
             .paletteFor(brightness, accent, pureBlack: pureBlack),
-      );
+      )
+      .withContrast(contrast.factor);
 
   void setStyle(Brightness brightness, AppStyle value) {
     if (styleFor(brightness) == value) return;
@@ -167,6 +174,13 @@ class ThemeSettingsProvider extends ChangeNotifier {
       dark ? PreferKey.darkTextStyle : PreferKey.lightTextStyle,
       value.name,
     );
+    notifyListeners();
+  }
+
+  void setContrast(AppContrast value) {
+    if (contrast == value) return;
+    contrast = value;
+    _prefs.setString(PreferKey.layerContrast, value.name);
     notifyListeners();
   }
 
