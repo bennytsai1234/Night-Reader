@@ -14,6 +14,7 @@ import 'package:night_reader/shared/widgets/lists/app_font_picker_row.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 import 'package:night_reader/shared/widgets/glass/glass_segmented.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_labeled_row.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:night_reader/shared/widgets/skeleton/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
@@ -22,8 +23,9 @@ import 'package:provider/provider.dart';
 import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
-/// 外觀與主題：淺色與深色各用的風格、深色用純黑、強調色、深淺、玻璃效果、
-/// 換頁動畫、分頁列與介面字型。當下深淺用的風格決定 App 介面、閱讀正文與閱讀選單的配色。
+/// 外觀與主題：淺色與深色各用的介面風格、深色用純黑、對比、強調色、深淺、
+/// 玻璃效果、換頁動畫、分頁列與介面字型。當下深淺用的介面風格決定 App 介面
+/// 與閱讀選單的配色；正文另選時在閱讀器的「外觀與排版」選。
 /// 載入骨架的深淺、呼吸與換場不給選，固定用 `SkeletonLook`、
 /// `SkeletonReveal` 的預設。
 class AppearanceSettingsPage extends StatelessWidget {
@@ -45,6 +47,28 @@ class AppearanceSettingsPage extends StatelessWidget {
             children: [
               _styleGrid(context, themeSettings, Brightness.dark),
               _pureBlackRow(context, themeSettings),
+            ],
+          ),
+          GroupedSection(
+            children: [
+              GroupedLabeledRow(
+                label: '對比',
+                child: GlassSegmented<AppContrast>(
+                  expand: false,
+                  segments: [
+                    for (final contrast in AppContrast.values)
+                      GlassSegment(contrast, contrast.label),
+                  ],
+                  selected: themeSettings.contrast,
+                  // 和風格、純黑一樣，新配色從點擊處暈開；暈開中點回目前那一段
+                  // 就取消記下的那一次。
+                  onChanged: (contrast) => ThemeRevealScope.of(context)
+                      .run(change: () => themeSettings.setContrast(contrast)),
+                  onReselected: (contrast) =>
+                      ThemeRevealScope.of(context)
+                          .run(current: true, change: () {}),
+                ),
+              ),
             ],
           ),
           GroupedSection(

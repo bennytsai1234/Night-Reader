@@ -61,12 +61,12 @@ class ReaderMenuStyle {
         ? AppLayers.step(
             palette.readerMenu,
             palette.readerBackground,
-            AppLayers.cardGapLight,
+            AppLayers.cardGapLight * palette.contrast,
           )
         : AppLayers.step(
             palette.readerMenu,
             foreground,
-            AppLayers.floatGapDark,
+            AppLayers.floatGapDark * palette.contrast,
           );
     final lineGap =
         (AppLayers.lightness(palette.border) -

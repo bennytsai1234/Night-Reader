@@ -11,7 +11,11 @@ void main() {
   ];
 
   /// 受控用法：外層保存選取值，回傳每次 onChanged 的值。
-  Future<List<int>> pump(WidgetTester tester, {int initial = 0}) async {
+  Future<List<int>> pump(
+    WidgetTester tester, {
+    int initial = 0,
+    ValueChanged<int>? onReselected,
+  }) async {
     final changes = <int>[];
     var selected = initial;
     await tester.pumpWidget(
@@ -28,6 +32,7 @@ void main() {
                     changes.add(value);
                     setState(() => selected = value);
                   },
+                  onReselected: onReselected,
                 ),
               ),
             ),
@@ -63,6 +68,19 @@ void main() {
     await tester.tap(find.text('簡轉繁'));
     await tester.pumpAndSettle();
     expect(changes, isEmpty);
+  });
+
+  testWidgets('點了目前那一段，有給 onReselected 時回報給它', (tester) async {
+    final reselected = <int>[];
+    final changes = await pump(
+      tester,
+      initial: 1,
+      onReselected: reselected.add,
+    );
+    await tester.tap(find.text('簡轉繁'));
+    await tester.pumpAndSettle();
+    expect(changes, isEmpty);
+    expect(reselected, [1]);
   });
 
   testWidgets('從選取塊拖到最後一段，放開後選取該段', (tester) async {

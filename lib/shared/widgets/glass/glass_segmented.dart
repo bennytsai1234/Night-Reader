@@ -78,11 +78,16 @@ class GlassSegmented<T> extends StatefulWidget implements GroupedSkeletonItem {
     required this.onChanged,
     this.expand = true,
     this.dense = false,
+    this.onReselected,
   }) : assert(segments.length > 0);
 
   final List<GlassSegment<T>> segments;
   final T selected;
   final ValueChanged<T> onChanged;
+
+  /// 點了目前選中的那一段；呼叫端要知道「選回目前的設定」時給（例如暈開
+  /// 中取消記下的那一次，[ThemeRevealScope.run]）。
+  final ValueChanged<T>? onReselected;
 
   /// true 時撐滿可用寬度；false 時以最寬標籤決定等寬分段的寬度。
   final bool expand;
@@ -180,6 +185,8 @@ class _GlassSegmentedState<T> extends State<GlassSegmented<T>>
     if (segment.enabled && value != widget.selected) {
       AppHaptics.select();
       widget.onChanged(value);
+    } else if (segment.enabled) {
+      widget.onReselected?.call(value);
     }
     // 呼叫端沒有採用新值時，選取塊回到 [selected] 的位置。
     WidgetsBinding.instance.addPostFrameCallback((_) {

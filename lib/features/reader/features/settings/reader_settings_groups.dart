@@ -18,6 +18,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/lists/app_font_picker_row.dart';
 import 'package:night_reader/shared/widgets/glass/glass_segmented.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_labeled_row.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:night_reader/shared/widgets/skeleton/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/lists/number_stepper_row.dart';
@@ -260,7 +261,7 @@ class ReaderSettingsGroups {
   }) => _Watch<bool>(
     listenable: settings,
     select: select,
-    builder: (context, value) => _LabeledRow(
+    builder: (context, value) => GroupedLabeledRow(
       label: label,
       child: GlassSegmented<bool>(
         expand: false,
@@ -447,7 +448,7 @@ class ReaderSettingsGroups {
           _Watch<bool>(
             listenable: settings,
             select: () => settings.use24HourClock,
-            builder: (context, use24) => _LabeledRow(
+            builder: (context, use24) => GroupedLabeledRow(
               label: '時間',
               child: GlassSegmented<bool>(
                 expand: false,
@@ -463,7 +464,7 @@ class ReaderSettingsGroups {
           _Watch<int>(
             listenable: settings,
             select: () => settings.progressFractionDigits,
-            builder: (context, digits) => _LabeledRow(
+            builder: (context, digits) => GroupedLabeledRow(
               label: '全書進度',
               child: GlassSegmented<int>(
                 expand: false,
@@ -505,7 +506,7 @@ class ReaderSettingsGroups {
       _Watch<ReaderPageTurnSpeed>(
         listenable: settings,
         select: () => settings.pageTurnSpeed,
-        builder: (context, speed) => _LabeledRow(
+        builder: (context, speed) => GroupedLabeledRow(
           label: '捲動速度',
           child: GlassSegmented<ReaderPageTurnSpeed>(
             expand: false,
@@ -540,7 +541,7 @@ class ReaderSettingsGroups {
       _Watch<ReaderOrientation>(
         listenable: settings,
         select: () => settings.orientation,
-        builder: (context, orientation) => _LabeledRow(
+        builder: (context, orientation) => GroupedLabeledRow(
           label: '螢幕方向',
           child: GlassSegmented<ReaderOrientation>(
             expand: false,
@@ -1027,91 +1028,6 @@ class _ResetRow extends StatelessWidget implements GroupedSkeletonItem {
   @override
   Widget build(BuildContext context) =>
       Semantics(button: true, enabled: onPressed != null, child: _row);
-}
-
-/// 卡片內「左側標籤、右側控件」的一列。
-class _LabeledRow extends StatelessWidget implements GroupedSkeletonItem {
-  const _LabeledRow({required this.label, required this.child});
-
-  final String label;
-  final Widget child;
-
-  static const EdgeInsets _padding = EdgeInsets.symmetric(
-    horizontal: AppGrouped.rowPadding,
-    vertical: AppSpacing.xs,
-  );
-  static const double _minHeight = AppGrouped.rowMinHeight - AppSpacing.xs * 2;
-  static final TextStyle _labelStyle = AppTextStyles.bodyBase.copyWith(
-    height: 1.3,
-  );
-
-  /// 標籤靠左；控件照它本身的大小靠右，放不下時和 build 一樣等比縮小。
-  @override
-  GroupedItemShape skeletonShape(
-    BuildContext context, {
-    required double width,
-  }) {
-    final inner = width - _padding.horizontal;
-    final label = GroupedItemShape.text(
-      context,
-      this.label,
-      style: _labelStyle,
-      width: inner,
-    );
-    final control = groupedPartShape(child, context);
-    final room = inner - label.width! - AppSpacing.md;
-    final scale = math.min(1.0, room / control.width!);
-    final height = math.max(
-      _minHeight,
-      math.max(label.height, control.height * scale),
-    );
-    final controlLeft = inner - control.width! * scale;
-    final controlTop = (height - control.height * scale) / 2;
-    return GroupedItemShape(
-      height,
-      marks: [
-        ...label.marksAt(Offset(0, (height - label.height) / 2)),
-        for (final mark in control.marks)
-          SkeletonShape(
-            Rect.fromLTRB(
-              controlLeft + mark.rect.left * scale,
-              controlTop + mark.rect.top * scale,
-              controlLeft + mark.rect.right * scale,
-              controlTop + mark.rect.bottom * scale,
-            ),
-            radius: mark.radius * scale,
-          ),
-      ],
-    ).padded(_padding);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GroupedContent(
-      padding: _padding,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: _minHeight),
-        child: Row(
-          children: [
-            UiText(
-              label,
-              style: _labelStyle.copyWith(
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            // 窄螢幕放不下時整個控件等比縮小，不溢出卡片。
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: FittedBox(fit: BoxFit.scaleDown, child: child),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _InfoItemPickerRow extends StatelessWidget

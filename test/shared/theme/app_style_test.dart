@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/sync/settings_sync.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_style.dart';
 import 'package:night_reader/features/reader/features/settings/reader_highlight_style.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
@@ -219,6 +220,182 @@ void main() {
     }
   });
 
+  test('正文另選風格：紙、字、頁首頁尾與高亮照正文，介面照原風格，選單對著實際的紙拉開', () {
+    double l(Color c) => AppLayers.lightness(c);
+    for (final ui in AppStyle.values) {
+      for (final text in AppStyle.values) {
+        for (final (brightness, pureBlack) in const [
+          (Brightness.light, false),
+          (Brightness.dark, false),
+          (Brightness.dark, true),
+        ]) {
+          final reason =
+              '介面${ui.label}・正文${text.label}・${brightness.name}・純黑 $pureBlack';
+          final base = ui.paletteFor(
+            brightness,
+            AppAccent.defaultAccent,
+            pureBlack: pureBlack,
+          );
+          final words = text.paletteFor(
+            brightness,
+            AppAccent.defaultAccent,
+            pureBlack: pureBlack,
+          );
+          final palette = base.withText(words);
+          expect(
+            palette.readerBackground,
+            words.readerBackground,
+            reason: reason,
+          );
+          expect(palette.readerText, words.readerText, reason: reason);
+          expect(palette.readerInfo, words.readerInfo, reason: reason);
+          expect(palette.highlight, words.highlight, reason: reason);
+          expect(palette.background, base.background, reason: reason);
+          expect(palette.surface, base.surface, reason: reason);
+          expect(palette.text, base.text, reason: reason);
+          expect(palette.primary, base.primary, reason: reason);
+          final gap = l(palette.readerMenu) - l(palette.readerBackground);
+          expect(
+            brightness == Brightness.dark ? gap : -gap,
+            closeTo(AppLayers.readerMenuGap(brightness), 0.6),
+            reason: '$reason：淺色選單比紙暗、深色比紙亮',
+          );
+          if (ui == text) expect(palette, same(base), reason: reason);
+        }
+      }
+    }
+  });
+
+  test('對比四段：分層差距乘倍數，選單和紙分得開，字和底色留得夠', () {
+    double l(Color c) => AppLayers.lightness(c);
+    const tolerance = 0.6;
+    for (final contrast in AppContrast.values) {
+      final k = contrast.factor;
+      for (final ui in AppStyle.values) {
+        for (final text in [ui, AppStyle.plain, AppStyle.bamboo]) {
+          for (final (brightness, pureBlack) in const [
+            (Brightness.light, false),
+            (Brightness.dark, false),
+            (Brightness.dark, true),
+          ]) {
+            final reason =
+                '${contrast.label}・介面${ui.label}・正文${text.label}・'
+                '${brightness.name}・純黑 $pureBlack';
+            final dark = brightness == Brightness.dark;
+            final base = ui
+                .paletteFor(
+                  brightness,
+                  AppAccent.defaultAccent,
+                  pureBlack: pureBlack,
+                )
+                .withText(
+                  text.paletteFor(
+                    brightness,
+                    AppAccent.defaultAccent,
+                    pureBlack: pureBlack,
+                  ),
+                );
+            final palette = base.withContrast(k);
+            final menu = ReaderMenuStyle.fromPalette(palette);
+            expect(palette.contrast, k, reason: reason);
+            expect(palette.text, base.text, reason: '$reason：字色不動');
+            expect(
+              palette.readerBackground,
+              base.readerBackground,
+              reason: reason,
+            );
+            expect(
+              l(palette.surface) - l(palette.background),
+              // 原始配色寫死的色碼已和規則差半階以內，倍數照它乘。
+              closeTo((l(base.surface) - l(base.background)) * k, tolerance),
+              reason: '$reason：頁面到卡片',
+            );
+            if (dark) {
+              expect(
+                l(palette.bar) - l(palette.surface),
+                closeTo((l(base.bar) - l(base.surface)) * k, tolerance),
+                reason: '$reason：玻璃比卡片亮',
+              );
+            }
+            // 選單和紙：照倍數拉開，只在字的距離到底時停下，仍至少有「低」的差距。
+            final menuGap = dark
+                ? l(palette.readerMenu) - l(palette.readerBackground)
+                : l(palette.readerBackground) - l(palette.readerMenu);
+            final target = AppLayers.readerMenuGap(brightness) * k;
+            expect(
+              menuGap,
+              lessThanOrEqualTo(target + tolerance),
+              reason: reason,
+            );
+            expect(
+              menuGap,
+              greaterThanOrEqualTo(
+                AppLayers.readerMenuGap(brightness) * AppContrast.low.factor -
+                    tolerance,
+              ),
+              reason: '$reason：選單和紙分得開',
+            );
+            final textOnMenu = (l(menu.foreground) - l(palette.readerMenu))
+                .abs();
+            if (menuGap < target - tolerance) {
+              expect(
+                textOnMenu,
+                closeTo(
+                  AppLayers.minTextGap +
+                      (dark ? AppLayers.floatGapDark * k : 0),
+                  tolerance,
+                ),
+                reason: '$reason：選單停在字的距離到底時',
+              );
+            }
+            for (final (name, ink, ground, min) in [
+              (
+                '選單上的字',
+                menu.foreground,
+                palette.readerMenu,
+                AppLayers.minTextGap,
+              ),
+              (
+                '面板卡片上的字',
+                menu.foreground,
+                menu.backgroundElevated,
+                AppLayers.minTextGap,
+              ),
+              ('卡片上的字', palette.text, palette.surface, AppLayers.minTextGap),
+              // 次要文字：標準時最少 35，各段不低於 30。
+              ('選單上的次要文字', menu.mutedForeground, palette.readerMenu, 30.0),
+              (
+                '面板卡片上的次要文字',
+                menu.mutedForeground,
+                menu.backgroundElevated,
+                30.0,
+              ),
+              ('卡片上的次要文字', palette.textMuted, palette.surface, 30.0),
+            ]) {
+              expect(
+                (l(ink) - l(ground)).abs(),
+                greaterThanOrEqualTo(min - tolerance),
+                reason: '$reason：$name',
+              );
+            }
+          }
+        }
+      }
+    }
+  });
+
+  test('buildAppTheme 帶正文風格時掛上組合後的配色', () {
+    final theme = buildAppTheme(
+      AppStyle.paper,
+      Brightness.light,
+      textStyle: AppStyle.plain,
+    );
+    final palette = StylePalette.ofTheme(theme);
+    expect(palette.readerBackground, AppStyle.plain.light.readerBackground);
+    expect(palette.background, AppStyle.paper.light.background);
+    expect(theme.scaffoldBackgroundColor, AppStyle.paper.light.background);
+  });
+
   group('ThemeSettingsProvider', () {
     tearDown(() => GetIt.instance.reset());
 
@@ -253,6 +430,63 @@ void main() {
       expect(reopened.lightStyle, AppStyle.bamboo);
       expect(reopened.darkStyle, AppStyle.tea);
       expect(reopened.pureBlack, isFalse);
+    });
+
+    test('正文沒選過時跟介面風格；選過就分開，淺色、深色各自保存', () async {
+      final prefs = await register(<String, Object>{});
+      final provider = ThemeSettingsProvider();
+      expect(provider.textStyleFor(Brightness.light), AppStyle.kraft);
+      provider.setStyle(Brightness.light, AppStyle.tea);
+      expect(
+        provider.textStyleFor(Brightness.light),
+        AppStyle.tea,
+        reason: '沒選過正文時跟著介面風格換',
+      );
+
+      provider.setTextStyle(Brightness.light, AppStyle.plain);
+      provider.setStyle(Brightness.light, AppStyle.bamboo);
+      expect(provider.textStyleFor(Brightness.light), AppStyle.plain);
+      expect(provider.textStyleFor(Brightness.dark), AppStyle.plain);
+      expect(provider.darkTextStyle, isNull, reason: '深色的正文沒選過');
+      expect(prefs.getString(PreferKey.lightTextStyle), AppStyle.plain.name);
+      expect(prefs.containsKey(PreferKey.darkTextStyle), isFalse);
+      expect(
+        provider.paletteFor(Brightness.light).readerBackground,
+        AppStyle.plain.light.readerBackground,
+      );
+      expect(
+        provider.paletteFor(Brightness.light).background,
+        AppStyle.bamboo.light.background,
+      );
+
+      final reopened = ThemeSettingsProvider();
+      expect(reopened.lightTextStyle, AppStyle.plain);
+      expect(reopened.darkTextStyle, isNull);
+    });
+
+    test('正文風格與對比跟著設定同步', () {
+      expect(SettingsSync.keys, contains(PreferKey.lightTextStyle));
+      expect(SettingsSync.keys, contains(PreferKey.darkTextStyle));
+      expect(SettingsSync.keys, contains(PreferKey.layerContrast));
+    });
+
+    test('對比預設標準，存了就讀回，淺色、深色的配色一起換', () async {
+      final prefs = await register(<String, Object>{});
+      final provider = ThemeSettingsProvider();
+      expect(provider.contrast, AppContrast.standard);
+      final standard = provider.paletteFor(Brightness.dark);
+      expect(standard.contrast, 1);
+
+      provider.setContrast(AppContrast.higher);
+      expect(prefs.getString(PreferKey.layerContrast), AppContrast.higher.name);
+      expect(provider.paletteFor(Brightness.dark).contrast, 1.5);
+      expect(provider.paletteFor(Brightness.light).contrast, 1.5);
+      expect(
+        AppLayers.lightness(provider.paletteFor(Brightness.dark).surface),
+        greaterThan(AppLayers.lightness(standard.surface)),
+        reason: '深色調高往亮',
+      );
+      expect(ThemeSettingsProvider().contrast, AppContrast.higher);
     });
 
     test('淺深共用一個風格時選的，升級後兩邊都沿用，舊的鍵刪掉', () async {

@@ -261,7 +261,7 @@ void main() {
         );
         await step(
           'reader14',
-          '面板裡風格換成「竹綠」',
+          '面板裡正文風格換成「竹青」',
           () => tester.tap(find.text(AppStyle.bamboo.label)),
           until: _steady(() => true, frames: 60),
         );

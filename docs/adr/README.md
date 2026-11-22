@@ -38,7 +38,7 @@
 | [0015](0015-my-tab-rows-are-navigation-only.md) | 「我的」分頁只放入口，不放開關 |
 | [0020](0020-chosen-transition-everywhere.md) | 選定的換頁動畫用在每一種換頁，拖曳返回與點分頁也一樣 |
 | [0021](0021-covers-are-plain-images.md) | 封面只畫圖片，不做成像一本書 |
-| [0040](0040-day-and-night-styles-pure-black.md) | 淺色、深色各選一個風格，深色預設純黑（可關），風格精簡成六種 |
+| [0040](0040-day-and-night-styles-pure-black.md) | 淺色、深色各選一個風格，正文可另選，深色預設純黑（可關），風格精簡成六種 |
 
 ## 正文排版
 
@@ -54,6 +54,7 @@
 | [0074](0074-tab-bar-look-is-a-setting.md) | 主頁分頁列與搜尋鈕的樣子是外觀設定：撐滿、置中、置中加大搜尋鈕、撐滿加高四選一（使用者點名要選） |
 | [0075](0075-one-spacing-symmetric-and-header-mask.md) | 間距上下一樣、一頁一種間距（14）；頁首遮罩是實色加 14 淡出，頁首固定不藏 |
 | [0076](0076-no-small-text-outside-cards.md) | 卡片外不放小字：標籤拿掉、資料放進卡片第一列粗字、說明收成一列開面板、動作是卡片最後一列 |
+| [0077](0077-layer-contrast-is-a-setting.md) | 層次對比做成外觀設定：一個「對比」四段，分層差距乘倍數，調高是離底色更遠 |
 
 ## 書源與下載
 
