@@ -45,8 +45,10 @@ const double _thinLine = 4;
 
 /// [content] 底下排好的畫面量出來的形狀。
 SkeletonLayout contentLayoutOf(WidgetTester tester, Finder content) {
-  final root = tester.renderObject<RenderBox>(content);
-  final width = root.size.width;
+  final root = tester.renderObject(content);
+  final width = root is RenderBox
+      ? root.size.width
+      : (root as RenderSliver).constraints.crossAxisExtent;
   final marks = <Rect>[];
   // 分段控制整條軌道是一塊（和閱讀器面板的骨架一樣）。
   final segmented = [

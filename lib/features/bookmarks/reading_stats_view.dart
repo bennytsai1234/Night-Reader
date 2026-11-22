@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:night_reader/core/exception/user_error.dart';
@@ -26,11 +27,11 @@ import 'package:night_reader/core/chinese/ui_language.dart';
 /// 閱讀紀錄頁的「統計」（`BookmarksPage`）：頂端今天、本週、總計三格，下面
 /// 各書讀了多久，含有聲書的收聽時間（docs/design/screens.md）。
 class ReadingStatsView extends StatefulWidget {
-  const ReadingStatsView({super.key, this.memory});
+  const ReadingStatsView({super.key, required this.memory});
 
-  /// 上一次讀到的統計：閱讀紀錄頁切到別段再切回來時，先畫上一次的，讀完
-  /// 再換上（不閃載入圈）。
-  final ReadingStatsMemory? memory;
+  /// 讀好的統計：閱讀紀錄頁推入前就讀好（[ReadingStatsMemory.load]），點
+  /// 「統計」直接畫出來；每次顯示時再安靜地重讀一次，讀完才換上。
+  final ReadingStatsMemory memory;
 
   @override
   State<ReadingStatsView> createState() => _ReadingStatsViewState();
@@ -38,66 +39,29 @@ class ReadingStatsView extends StatefulWidget {
 
 typedef _Stats = ({List<_BookTime> records, int today, int week});
 
-/// [ReadingStatsView] 上一次讀到的統計，由放它的頁面留著。
+/// [ReadingStatsView] 最近一次讀統計的結果，由放它的頁面留著。
 class ReadingStatsMemory {
-  _Stats? _last;
-}
+  _Stats? _stats;
+  Object? _error;
 
-/// 一本書在所有手機上加起來讀了多久。
-typedef _BookTime = ({String bookName, int readTime, int lastRead});
-
-class _ReadingStatsViewState extends State<ReadingStatsView> {
-  late final ReadRecordDao _readRecordDao;
-  late Future<_Stats> _stats;
-
-  @override
-  void initState() {
-    super.initState();
-    _readRecordDao = getIt<ReadRecordDao>();
-    _stats = _remembered(_load());
-    ReadStatsSync.applied.addListener(_othersSynced);
-  }
-
-  @override
-  void dispose() {
-    ReadStatsSync.applied.removeListener(_othersSynced);
-    super.dispose();
-  }
-
-  bool _syncReloadPending = false;
-
-  /// 同步收到別台的統計：安靜地重讀，讀完才換上去（不閃載入圈）。被別的
-  /// 頁面蓋著時等露出來才讀，不疊在換頁動畫上（ADR 0018）。
-  Future<void> _othersSynced() async {
-    if (_syncReloadPending) return;
-    _syncReloadPending = true;
-    await TransitionSettled.uncovered(context);
-    _syncReloadPending = false;
-    if (!mounted) return;
+  /// 讀一次統計記下來；讀不到時記下錯誤，畫面顯示載入失敗。[keepLast] 時
+  /// 已經有統計就留著上一次的，只記日誌（同步後的重讀）。
+  Future<void> load({bool keepLast = false}) async {
     try {
-      final next = _remembered(_load());
-      await next;
-      if (mounted) {
-        setState(() {
-          _stats = next;
-        });
-      }
+      _stats = await _loadStats();
+      _error = null;
     } catch (error, stackTrace) {
-      AppLog.e('同步後重讀閱讀統計失敗', error: error, stackTrace: stackTrace);
+      AppLog.e('讀取閱讀統計失敗', error: error, stackTrace: stackTrace);
+      if (!keepLast || _stats == null) _error = error;
     }
   }
 
-  /// 讀好的統計記進 [ReadingStatsView.memory]。
-  Future<_Stats> _remembered(Future<_Stats> stats) => stats.then((value) {
-    widget.memory?._last = value;
-    return value;
-  });
-
   /// 這台的加上同步來的別台的（ADR 0039）。
-  Future<_Stats> _load() async {
+  static Future<_Stats> _loadStats() async {
+    final dao = getIt<ReadRecordDao>();
     final now = DateTime.now();
-    final records = await _readRecordDao.getAllShow();
-    final recent = await _readRecordDao.recentTotals(now);
+    final records = await dao.getAllShow();
+    final recent = await dao.recentTotals(now);
     final others = await _othersStats();
     final books = <String, _BookTime>{
       for (final record in records)
@@ -127,13 +91,53 @@ class _ReadingStatsViewState extends State<ReadingStatsView> {
   }
 
   /// 別台的統計讀不出來（檔壞了）就只顯示這台的。
-  Future<OtherDevicesStats> _othersStats() async {
+  static Future<OtherDevicesStats> _othersStats() async {
     try {
       return await ReadStatsSync.others();
     } catch (error, stackTrace) {
       AppLog.e('讀別台的閱讀統計失敗', error: error, stackTrace: stackTrace);
       return OtherDevicesStats.empty;
     }
+  }
+}
+
+/// 一本書在所有手機上加起來讀了多久。
+typedef _BookTime = ({String bookName, int readTime, int lastRead});
+
+class _ReadingStatsViewState extends State<ReadingStatsView> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_reload());
+    ReadStatsSync.applied.addListener(_othersSynced);
+  }
+
+  @override
+  void dispose() {
+    ReadStatsSync.applied.removeListener(_othersSynced);
+    super.dispose();
+  }
+
+  /// 重讀統計，讀完才換上（不閃載入圈）。
+  Future<void> _reload({bool keepLast = false}) async {
+    await widget.memory.load(keepLast: keepLast);
+    if (mounted) setState(() => _retrying = false);
+  }
+
+  /// 載入失敗後按了「重新載入」、還在讀：錯誤畫面留著，按鈕寫「重新載入中…」。
+  bool _retrying = false;
+
+  bool _syncReloadPending = false;
+
+  /// 同步收到別台的統計：安靜地重讀。被別的頁面蓋著時等露出來才讀，不疊在
+  /// 換頁動畫上（ADR 0018）。
+  Future<void> _othersSynced() async {
+    if (_syncReloadPending) return;
+    _syncReloadPending = true;
+    await TransitionSettled.uncovered(context);
+    _syncReloadPending = false;
+    if (!mounted) return;
+    await _reload(keepLast: true);
   }
 
   static Widget? _kindMark(String recordName) {
@@ -169,7 +173,7 @@ class _ReadingStatsViewState extends State<ReadingStatsView> {
     );
   }
 
-  /// 載入中、失敗、沒有紀錄時的畫面，放在頁首下面（同書籤、標註）。
+  /// 失敗、沒有紀錄時的畫面，放在頁首下面（同書籤、標註）。
   Widget _state(BuildContext context, Widget child) => Padding(
     padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
     child: child,
@@ -177,99 +181,87 @@ class _ReadingStatsViewState extends State<ReadingStatsView> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<_Stats>(
-      future: _stats,
-      initialData: widget.memory?._last,
-      builder: (context, snapshot) {
-        // 同步後換上重讀好的統計時，FutureBuilder 第一格仍是 waiting：
-        // 有上一次的資料就先照它畫，不閃一格轉圈。
-        if (snapshot.connectionState != ConnectionState.done &&
-            !snapshot.hasData) {
-          return _state(
-            context,
-            const Center(child: CircularProgressIndicator()),
-          );
-        }
+    final error = widget.memory._error;
+    if (error != null) {
+      return _state(
+        context,
+        AppStateView(
+          icon: Icons.error_outline,
+          title: '閱讀統計載入失敗',
+          description: userErrorReason(error),
+          tone: AppStateTone.error,
+          primaryAction: AppStateAction(
+            label: _retrying ? '重新載入中…' : '重新載入',
+            icon: Icons.refresh,
+            onPressed: _retrying
+                ? null
+                : () {
+                    setState(() => _retrying = true);
+                    unawaited(_reload());
+                  },
+          ),
+        ),
+      );
+    }
 
-        if (snapshot.hasError) {
-          return _state(
-            context,
-            AppStateView(
-              icon: Icons.error_outline,
-              title: '閱讀統計載入失敗',
-              description: userErrorReason(snapshot.error!),
-              tone: AppStateTone.error,
-              primaryAction: AppStateAction(
-                label: '重新載入',
-                icon: Icons.refresh,
-                onPressed: () {
-                  setState(() {
-                    _stats = _remembered(_load());
-                  });
-                },
-              ),
-            ),
-          );
-        }
+    // 推入前沒有先讀（只有直接放這個元件時）：讀完才畫。
+    final stats = widget.memory._stats;
+    if (stats == null) return const SizedBox.shrink();
+    final records = stats.records;
+    if (records.isEmpty) {
+      return _state(
+        context,
+        const AppStateView(icon: Icons.history_rounded, title: '沒有閱讀紀錄'),
+      );
+    }
 
-        final stats = snapshot.data!;
-        final records = stats.records;
-        if (records.isEmpty) {
-          return _state(
-            context,
-            const AppStateView(icon: Icons.history_rounded, title: '沒有閱讀紀錄'),
-          );
-        }
-
-        final total = records.fold<int>(0, (sum, r) => sum + r.readTime);
-        bool isListened(_BookTime record) =>
-            BookSourceKind.splitRecordName(record.bookName).kind ==
-            BookSourceKind.audio;
-        final read = [
-          for (final record in records)
-            if (!isListened(record)) record,
-        ];
-        final listened = [
-          for (final record in records)
-            if (isListened(record)) record,
-        ];
-        return GroupedListView(
+    final total = records.fold<int>(0, (sum, r) => sum + r.readTime);
+    bool isListened(_BookTime record) =>
+        BookSourceKind.splitRecordName(record.bookName).kind ==
+        BookSourceKind.audio;
+    final read = [
+      for (final record in records)
+        if (!isListened(record)) record,
+    ];
+    final listened = [
+      for (final record in records)
+        if (isListened(record)) record,
+    ];
+    return GroupedListView(
+      children: [
+        GroupedSection(
           children: [
+            GroupedContent(
+              child: _StatTiles([
+                _StatTile(label: '今天', seconds: stats.today),
+                _StatTile(label: '本週', seconds: stats.week),
+                _StatTile(label: '總計', seconds: total),
+              ]),
+            ),
+          ],
+        ),
+        // 收聽時間算進上面的合計，書分「閱讀」「收聽」兩組（使用者
+        // 2026-11-09 在候選圖上選，ADR 0055）；沒聽過有聲書時照舊一組。
+        if (listened.isEmpty)
+          GroupedSection(
+            children: [for (final record in read) _row(context, record)],
+          )
+        else ...[
+          if (read.isNotEmpty)
             GroupedSection(
               children: [
-                GroupedContent(
-                  child: _StatTiles([
-                    _StatTile(label: '今天', seconds: stats.today),
-                    _StatTile(label: '本週', seconds: stats.week),
-                    _StatTile(label: '總計', seconds: total),
-                  ]),
-                ),
+                const GroupedRow(title: '閱讀', heading: true),
+                for (final record in read) _row(context, record),
               ],
             ),
-            // 收聽時間算進上面的合計，書分「閱讀」「收聽」兩組（使用者
-            // 2026-11-09 在候選圖上選，ADR 0055）；沒聽過有聲書時照舊一組。
-            if (listened.isEmpty)
-              GroupedSection(
-                children: [for (final record in read) _row(context, record)],
-              )
-            else ...[
-              if (read.isNotEmpty)
-                GroupedSection(
-                  children: [
-                    const GroupedRow(title: '閱讀', heading: true),
-                    for (final record in read) _row(context, record),
-                  ],
-                ),
-              GroupedSection(
-                children: [
-                  const GroupedRow(title: '收聽', heading: true),
-                  for (final record in listened) _row(context, record),
-                ],
-              ),
+          GroupedSection(
+            children: [
+              const GroupedRow(title: '收聽', heading: true),
+              for (final record in listened) _row(context, record),
             ],
-          ],
-        );
-      },
+          ),
+        ],
+      ],
     );
   }
 

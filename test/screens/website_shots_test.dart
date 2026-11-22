@@ -24,6 +24,8 @@ import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 import 'package:night_reader/features/audiobook/audiobook_page.dart';
 import 'package:night_reader/features/audiobook/audiobook_player.dart';
+import 'package:night_reader/core/models/search/ai_find_record.dart';
+import 'package:night_reader/features/search/ai_find/ai_find_page.dart';
 import 'package:night_reader/features/source_manager/ai_repair/ai_repair_page.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:path/path.dart' as p;
@@ -420,6 +422,19 @@ final _shots = <_Shot>[
       await _passRealTime(t, 20, _ms(30));
     },
   ),
+  _Shot(
+    'ai-find',
+    steps: (t) async {
+      _push(
+        t,
+        MaterialPageRoute<void>(
+          builder: (_) => AiFindPage(record: _aiFindRecord()),
+        ),
+      );
+      await settle(t, _ms(1200));
+      await _passRealTime(t, 20, _ms(30));
+    },
+  ),
 ];
 
 void _push(WidgetTester tester, Route<void> route) => unawaited(
@@ -586,6 +601,65 @@ AiRepairSession _aiRepairSession() {
     apply: (_, _) async {},
     secrets: (_) async => const {},
     backups: AiRepairBackups(),
+  );
+}
+
+/// 一次找完的 AI 找書：一段描述，AI 交出的幾本與理由（封面用書架那幾張）。
+AiFindRecord _aiFindRecord() {
+  final covers = coverDirectory().path;
+  final picks = [
+    (
+      '霧港來信',
+      '林晚',
+      '懸疑,完結',
+      '86.4萬字',
+      '港口小鎮接連收到寄給死者的信，主角一封封追查寄信人。詳情寫已完結，第一章從碼頭的霧寫起，節奏慢、氣氛足，合「慢一點的懸疑」。',
+    ),
+    (
+      '山海舊聞錄',
+      '青衫客',
+      '古風,完結',
+      '132.7萬字',
+      '書生替縣衙抄錄怪談，抄著抄著發現每一則都是真事。古風、懸疑都對得上，簡介與章名看得出有收尾。',
+    ),
+    (
+      '長街燈火',
+      '周以寧',
+      '古風,懸疑,完結',
+      '58.1萬字',
+      '更夫在長街上撿到一盞不會熄的燈，一夜一案。篇幅短，一兩個週末讀得完；簡介沒寫感情線，有沒有不確定。',
+    ),
+    (
+      '夜航船記',
+      '沈默',
+      '古風,完結',
+      '204.5萬字',
+      '船上的說書人每晚講一個故事，串起一樁舊案。古風與懸疑都合，篇幅是這幾本裡最長的，想久讀的選這本。',
+    ),
+  ];
+  return AiFindRecord(
+    id: 'web',
+    description: '下雨天想看的古風懸疑，節奏慢一點、要已經完結的',
+    depth: 'normal',
+    createdAt: DateTime(2026, 11, 22, 21).millisecondsSinceEpoch,
+    outcome: AiFindOutcome.found,
+    summary: '書架上讀完的多是古風與推理，所以先搜「古風」「懸疑」「怪談」，再用「完結」篩，每本都看過詳情。',
+    tokens: 186000,
+    picks: [
+      for (final (i, (name, author, kind, words, reason)) in picks.indexed)
+        (
+          book: SearchBook(
+            bookUrl: 'https://www.night.example/book/$i',
+            name: name,
+            author: author,
+            kind: kind,
+            wordCount: words,
+            coverUrl: 'local://$covers${Platform.pathSeparator}${i + 1}.png',
+            origin: 'https://www.night.example',
+          ),
+          reason: reason,
+        ),
+    ],
   );
 }
 

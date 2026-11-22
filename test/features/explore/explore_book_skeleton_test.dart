@@ -8,39 +8,43 @@ import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 
 void main() {
-  testWidgets('長書名與最新章節的骨架空位對齊真實列高', (tester) async {
-    tester.view.physicalSize = const Size(393, 852) * 3;
-    tester.view.devicePixelRatio = 3;
-    addTearDown(tester.view.reset);
+  for (final scale in [1.0, 1.5]) {
+    testWidgets('長書名與最新章節的骨架空位對齊真實列高（系統字型 $scale 倍）', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      tester.view.physicalSize = const Size(393, 852) * 3;
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
 
-    final book = SearchBook(
-      bookUrl: 'https://book/long',
-      name: '很長很長很長很長很長很長很長很長很長很長的書名',
-      author: '長篇書的作者',
-      latestChapterTitle: '第一百九十九章 最後的旅程',
-      origin: 'https://source',
-    );
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildAppTheme(AppStyle.paper, Brightness.light),
-        home: Scaffold(
-          body: ListView(
-            children: [ExploreBookItem(book: book, isInBookshelf: true)],
+      final book = SearchBook(
+        bookUrl: 'https://book/long',
+        name: '很長很長很長很長很長很長很長很長很長很長的書名',
+        author: '長篇書的作者',
+        latestChapterTitle: '第一百九十九章 最後的旅程',
+        origin: 'https://source',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: Scaffold(
+            body: ListView(
+              children: [ExploreBookItem(book: book, isInBookshelf: true)],
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pump();
-    final finder = find.byType(ExploreBookItem);
-    final actualHeight = tester.getSize(finder).height;
-    final placeholderHeight = ExploreBookListSkeleton.rowHeightFor(
-      tester.element(finder),
-      book,
-      isInBookshelf: true,
-    );
-    expect(actualHeight, closeTo(placeholderHeight, 1));
-    expect(actualHeight, greaterThan(ExploreBookItem.coverHeight));
-  });
+      );
+      await tester.pump();
+      final finder = find.byType(ExploreBookItem);
+      final actualHeight = tester.getSize(finder).height;
+      final placeholderHeight = ExploreBookListSkeleton.rowHeightFor(
+        tester.element(finder),
+        book,
+        isInBookshelf: true,
+      );
+      expect(actualHeight, closeTo(placeholderHeight, 1));
+      expect(actualHeight, greaterThan(ExploreBookItem.coverHeight));
+    });
+  }
 
   testWidgets('書還沒到只畫封面，不畫長條', (tester) async {
     await tester.pumpWidget(

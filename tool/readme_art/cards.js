@@ -25,9 +25,10 @@ window.CARDS = {
     {"s": "local-toc", "h": "本地書", "p": "TXT、EPUB<br>匯入自動分章"},
     {"s": "sync-phone", "a": "devices:sync-phone,sync-tablet", "h": "多台同步", "p": "Google 雲端硬碟<br>或 WebDAV"}
   ]},
-  "sources": {"type": "row", "t": 1, "dim": 0.55, "w": 196, "moon": [430, -170], "items": [
+  "sources": {"type": "row", "t": 1, "dim": 0.55, "w": 196, "moon": [480, -200], "items": [
     {"s": "source-check", "h": "書源校驗", "p": "批次找出失效的書源<br>也能逐步除錯"},
-    {"s": "ai-repair", "h": "AI 修復", "p": "用自己的 AI 修好書源<br>校驗通過才換上"}
+    {"s": "ai-repair", "h": "AI 修復", "p": "用自己的 AI 修好書源<br>校驗通過才換上"},
+    {"s": "ai-find", "h": "AI 找書", "p": "寫一段想看的<br>AI 在書源裡找來推薦"}
   ], "note": ["夜讀不附書源", "網路上搜「Legado 書源」，在書源網站點「一鍵導入」就會打開夜讀"]},
 
   "download": {"type": "download"}

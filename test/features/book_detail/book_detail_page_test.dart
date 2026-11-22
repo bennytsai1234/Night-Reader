@@ -22,6 +22,8 @@ import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton_text.dart';
 
+import '../../support/skeleton_handoff.dart';
+
 /// 書籍資料要等 [gate] 打開才回來，用來停在載入中。
 class _FakeBookDao extends Fake implements BookDao {
   _FakeBookDao(this.book);
@@ -81,6 +83,8 @@ void main() {
     Book book, {
     Widget? home,
     Book? stored,
+    List<BookChapter>? chapters,
+    Brightness brightness = Brightness.light,
   }) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 3;
@@ -88,20 +92,23 @@ void main() {
     bookDao = _FakeBookDao(stored ?? book);
     register<BookDao>(bookDao);
     register<ChapterDao>(
-      _FakeChapterDao([
-        for (var i = 0; i < 40; i++)
-          BookChapter(
-            url: '$bookUrl/$i',
-            title: '第${i + 1}章',
-            bookUrl: bookUrl,
-            index: i,
-          ),
-      ]),
+      _FakeChapterDao(
+        chapters ??
+            [
+              for (var i = 0; i < 40; i++)
+                BookChapter(
+                  url: '$bookUrl/$i',
+                  title: '第${i + 1}章',
+                  bookUrl: bookUrl,
+                  index: i,
+                ),
+            ],
+      ),
     );
     register<BookSourceDao>(_FakeSourceDao());
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        theme: buildAppTheme(AppStyle.paper, brightness),
         home: home ?? BookDetailPage(book: book),
       ),
     );
@@ -222,46 +229,41 @@ void main() {
       expect(textIn(tocHeader, skeleton: false), findsOneWidget);
     });
 
-    testWidgets('each skeleton bar sits where its text lands', (tester) async {
-      await pumpDetail(tester, detailedBook());
-      await untilContentLaidOut(tester);
-
-      // 骨架照進頁時手上的書排：來源、最新章節，以及排在簡介之後的目錄
-      // 組標題，骨架與內容在同一個位置，換場時版面不跳。
-      for (final text in ['測試書源', '第40章 夜深', tocHeader]) {
-        final bar = tester.getRect(textIn(text, skeleton: true));
-        final content = tester.getRect(textIn(text, skeleton: false));
-        expect(bar.top, content.top, reason: text);
-        expect(bar.height, content.height, reason: text);
-        // 來源右側的書源狀態膠囊要載入後才知道寫什麼，橫向位置只對得上
-        // 其他列。
-        if (text != '測試書源') expect(bar.left, content.left, reason: text);
-      }
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('the skeleton keeps the entry book while the loaded one '
-        'is laid out under it', (tester) async {
+    testWidgets('when the data arrives the skeleton takes its shape a frame '
+        'before the content is laid out under it', (tester) async {
       // 從搜尋結果進來：手上的書只有一句簡介；資料庫裡的那本簡介長得多。
       final entry = bookWith()
         ..intro = '短簡介。'
         ..totalChapterNum = 40;
       await pumpDetail(tester, entry, stored: detailedBook());
-      final before = tester.getRect(textIn(tocHeader, skeleton: true)).top;
+      double skeletonTop() =>
+          tester.getRect(textIn(tocHeader, skeleton: true)).top;
+      final before = skeletonTop();
 
-      await untilContentLaidOut(tester);
-      expect(skeletonLayer(tester).presence.value, 1, reason: '換場還沒開始');
+      bookDao.gate.complete();
+      for (var frame = 0; frame < 100 && skeletonTop() == before; frame++) {
+        await tester.pump();
+      }
+      expect(skeletonTop(), greaterThan(before), reason: '簡介變長，目錄往下');
       expect(
-        tester.getRect(textIn(tocHeader, skeleton: true)).top,
-        before,
-        reason: '骨架整個蓋著時不先換成新資料的形狀',
+        textIn(tocHeader, skeleton: false),
+        findsNothing,
+        reason: '骨架變形的那一幀還不建內容',
       );
+      expect(skeletonLayer(tester).presence.value, 1);
 
-      // 換場途中骨架也照同一本書，只有透明度在變。
-      await tester.pump();
-      await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
-      expect(skeletonLayer(tester).presence.value, inExclusiveRange(0, 1));
-      expect(tester.getRect(textIn(tocHeader, skeleton: true)).top, before);
+      for (
+        var frame = 0;
+        frame < 100 && textIn(tocHeader, skeleton: false).evaluate().isEmpty;
+        frame++
+      ) {
+        await tester.pump();
+      }
+      expect(
+        tester.getRect(textIn(tocHeader, skeleton: false)).top,
+        skeletonTop(),
+      );
+      expect(skeletonLayer(tester).presence.value, 1, reason: '換場還沒開始');
       await tester.pumpAndSettle();
       expect(textIn(tocHeader, skeleton: true), findsNothing);
     });
@@ -282,6 +284,71 @@ void main() {
       expect(textIn(tocHeader, skeleton: false), findsOneWidget);
       await tester.pumpAndSettle();
     });
+  });
+
+  group('when the data arrives the skeleton first takes its shape', () {
+    /// 資料到了之後骨架的最後一種樣子和換上來的內容一條一條對得上（細節
+    /// 檢查同一套量法）；換場前那幾種是照進頁時手上的書猜的，不比。
+    Future<void> expectLastSkeletonMatches(WidgetTester tester) async {
+      final watch = await watchSkeletonHandoffs(
+        tester,
+        () async => bookDao.gate.complete(),
+      );
+      final slots = watch.toJson();
+      // 頁首的動作列與頁首以下那一段（清單式的換場）兩處都量得到。
+      expect(slots, hasLength(2));
+      for (final slot in slots) {
+        expect(slot['stuck'], isNull, reason: '${slot['place']}');
+        final last = (slot['snapshots']! as List).last as Map;
+        expect(last['problems'], isEmpty, reason: '${slot['place']}');
+      }
+    }
+
+    BookChapter chapter(int i, String title, {bool volume = false}) =>
+        BookChapter(
+          url: '$bookUrl/$i',
+          title: title,
+          bookUrl: bookUrl,
+          index: i,
+          isVolume: volume,
+          isVip: i == 4,
+        );
+
+    for (final brightness in Brightness.values) {
+      testWidgets('volumes, the current chapter and a paid one '
+          '(${brightness.name})', (tester) async {
+        final book = bookWith()
+          ..originName = '測試書源'
+          ..intro = '短簡介。'
+          ..chapterIndex = 3
+          ..totalChapterNum = 30;
+        await pumpDetail(
+          tester,
+          book,
+          brightness: brightness,
+          chapters: [
+            chapter(0, '第一卷 雨夜', volume: true),
+            for (var i = 1; i < 12; i++) chapter(i, '第$i章 ${'書頁' * (i % 4)}'),
+            chapter(12, '第二卷 晴天', volume: true),
+            for (var i = 13; i < 30; i++) chapter(i, '第$i章 聽雨'),
+          ],
+        );
+        await expectLastSkeletonMatches(tester);
+      });
+
+      testWidgets('a book from search whose stored copy has no intro '
+          '(${brightness.name})', (tester) async {
+        final entry = bookWith()
+          ..intro = '搜尋結果帶的簡介，' * 6
+          ..isInBookshelf = false;
+        final stored = bookWith()
+          ..intro = ''
+          ..latestChapterTitle = '第40章 夜深'
+          ..isInBookshelf = false;
+        await pumpDetail(tester, entry, stored: stored, brightness: brightness);
+        await expectLastSkeletonMatches(tester);
+      });
+    }
   });
 
   testWidgets('reading is a floating capsule the chapter list ends above', (
