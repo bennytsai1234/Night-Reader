@@ -22,8 +22,9 @@ import 'snapshot_sweep.dart';
 /// 底下的呼吸看這裡的 [LaunchEntranceMotion.breathing]，ADR 0035）；呼吸時
 /// 底下不做事。呼完收住、停在最深就換場：換場的 0.6 秒只把兩張圖照每個像素
 /// 的橫向位置混合（[SnapshotSweep]，ADR 0031），頁首、分頁列與書架照同一條
-/// 曲線由左而右換過去。長完時書還沒讀到，呼吸收住後才準備、拍圖，再隔
-/// [LaunchEntranceMotion.idle] 換場。動畫在動的每一格，主執行緒都不做別的事。
+/// 曲線由左而右換過去。那一口呼完書架還沒好時，照一般的節奏接著呼吸等它；
+/// 書還沒讀到的，等呼吸收住後才準備、拍圖，再隔 [LaunchEntranceMotion.idle]
+/// 換場。動畫在動的每一格，主執行緒都不做別的事。
 ///
 /// 包在主頁面外面；底下的頁首（`GlassNavHeader`）、分頁列與書架用
 /// [maybeOf] 取得進場的狀態。從主頁面推出去的頁面不在底下，不受影響。
@@ -66,8 +67,13 @@ enum _Timeline {
   /// 長完那一格畫完起：骨架靜止，書架到了就在底下準備、拍圖，再停 idle。
   grown,
 
-  /// 由左而右呼吸一口；停滿 [LaunchEntranceMotion.pause] 才收得住。
+  /// 由左而右呼吸一口（[LaunchEntranceMotion.breath]）；停滿
+  /// [LaunchEntranceMotion.pause] 就收住，每個位置把這一口呼完。
   breathing,
+
+  /// 那一口呼完了、書架還沒要換場：照一般的節奏（[Skeleton.breathCycle]）
+  /// 從整片最深接著呼吸，等書架。
+  waiting,
 
   /// 收住呼吸：每個位置把這一口呼完、停在最深。
   settling,
@@ -158,9 +164,9 @@ class LaunchEntranceMotion {
   /// 整段進場已經結束：之後才建的骨架照一般的節奏呼吸。
   bool get isFinished => _reveal == _Reveal.done;
 
-  /// 開始呼吸、停過 [pause] 時完成；系統要求減少動態時不停。
-  Future<void> get _paused => _pauseOver.future;
-  final Completer<void> _pauseOver = Completer<void>();
+  /// 開 App 那一口呼完（[_breatheOnce]）時完成；系統要求減少動態時不呼吸，
+  /// 直接完成。
+  final Completer<void> _firstBreath = Completer<void>();
 
   /// 整段進場結束時完成。
   Future<void> get finished => _finished.future;
@@ -268,9 +274,12 @@ class LaunchEntranceMotion {
   bool get breathSettled => _timeline == _Timeline.settled;
 
   Future<void> _settleBreath() async {
-    await _paused;
-    _timeline = _Timeline.settling;
-    await rest.settle();
+    await _firstBreath.future;
+    if (_timeline == _Timeline.waiting) {
+      // 正照一般的節奏等書架：把這一口呼完再停。
+      _timeline = _Timeline.settling;
+      await rest.settle();
+    }
     // 最後一個位置是在某一格的動畫階段停好的，那一格還沒畫：等它畫完、畫面
     // 真的靜止了，下一格才開始準備書架。不然建書架會擠進收住的最後一格。
     await SchedulerBinding.instance.endOfFrame;
@@ -299,6 +308,21 @@ class LaunchEntranceMotion {
   void _breathe() {
     _timeline = _Timeline.breathing;
     _breathing.value = true;
+  }
+
+  /// 開 App 那一口：開始呼吸停過 [pause] 時收住，每個位置把這一口呼完、
+  /// 停在最深。這時已經有人等著換場（[settleBreath]）就停著；還沒有的話
+  /// 書架還沒好，從整片最深照一般的節奏接著呼吸（[SkeletonRest.release]），
+  /// 起頭和換場後接著呼吸一樣接得上，不跳。
+  Future<void> _breatheOnce() async {
+    _timeline = _Timeline.settling;
+    await rest.settle();
+    if (_disposed) return;
+    if (_breathSettling == null) {
+      rest.release();
+      _timeline = _Timeline.waiting;
+    }
+    _firstBreath.complete();
   }
 
   bool _disposed = false;
@@ -370,7 +394,7 @@ class _LaunchEntranceState extends State<LaunchEntrance>
       _controller.value = 1;
       // 沒有長出與呼吸，也就沒有呼吸前的準備：書架到了直接換成內容。
       motion._breathe();
-      motion._pauseOver.complete();
+      motion._firstBreath.complete();
       return;
     }
     // 骨架長完，這一格整片重建：等它畫完，書架的資料已經到了就先準備書架、
@@ -393,7 +417,7 @@ class _LaunchEntranceState extends State<LaunchEntrance>
         _timer = Timer(LaunchEntranceMotion.idle, () {
           motion._breathe();
           _timer = Timer(LaunchEntranceMotion.pause, () {
-            if (!motion._pauseOver.isCompleted) motion._pauseOver.complete();
+            unawaited(motion._breatheOnce());
           });
         });
       });

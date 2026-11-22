@@ -456,6 +456,11 @@ void main() {
       addTearDown(tester.view.reset);
     }
 
+    /// 書架已經在等換場（[LaunchEntranceMotion.settleBreath]）：開 App 那一口
+    /// 呼完就停在最深，不接著照一般的節奏呼吸。下面收住骨架的測試在這種
+    /// 情況下看 [SkeletonRest]。
+    void awaitReveal() => unawaited(motion.settleBreath());
+
     /// 一格一格推進到開 App 的骨架長完、停過 idle、開始呼吸的那一格。
     Future<void> grow(WidgetTester tester) async {
       for (var i = 0; i < 100 && !motion.breathing.value; i++) {
@@ -525,17 +530,69 @@ void main() {
       );
       expect(previous.first, greaterThan(0), reason: '左邊先開始變淺');
       expect(previous.last, 0, reason: '右邊還沒輪到');
-      previous = await pumpSmoothly(tester, previous, cycleFrames);
+      // 呼完開 App 那一口，接著照一般的節奏呼吸。
+      previous = await pumpSmoothly(tester, previous, cycleFrames * 3);
       expect(previous.toSet(), hasLength(greaterThan(1)), reason: '照常由左而右呼吸');
+    });
+
+    testWidgets('a shelf not ready after the launch breath: the screen '
+        'breathes on at the normal pace from the deepest, without a jump, '
+        'and still settles for the reveal', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(host());
+      await grow(tester);
+      // 開 App 那一口（整片 [LaunchEntranceMotion.breath] 的三倍）呼完，
+      // 每一格都接得上，呼完那一格整片停在最深。
+      var previous = await sample(tester);
+      var deepest = false;
+      for (var i = 0; i < cycleFrames * 2 && !deepest; i++) {
+        previous = await pumpSmoothly(tester, previous, 1);
+        deepest = i > 0 && previous.every((red) => red == 0);
+      }
+      expect(deepest, isTrue, reason: '那一口呼完停在最深');
+      expect(motion.breathSettled, isFalse, reason: '沒人要換場，不算收住');
+      // 接著照一般的節奏呼吸：一格最多變一般節奏的 4/255（加一捨入），
+      // 左邊先開始變淺。
+      final normalFrames =
+          Skeleton.breathCycle.inMicroseconds ~/ frame.inMicroseconds;
+      for (var i = 0; i < normalFrames ~/ 4; i++) {
+        await tester.pump(frame);
+        final now = await sample(tester);
+        for (var j = 0; j < xs.length; j++) {
+          expect(
+            (now[j] - previous[j]).abs(),
+            lessThanOrEqualTo(5),
+            reason: '一般節奏第 $i 格 x=${xs[j]}',
+          );
+        }
+        previous = now;
+      }
+      expect(previous.first, greaterThan(0), reason: '照一般節奏接著呼吸');
+
+      // 書架好了：照一般的節奏收住，停在最深，不跳。
+      var settled = false;
+      unawaited(motion.settleBreath().then((_) => settled = true));
+      for (var i = 0; i < normalFrames * 2 && !settled; i++) {
+        await tester.pump(frame);
+        final now = await sample(tester);
+        for (var j = 0; j < xs.length; j++) {
+          expect((now[j] - previous[j]).abs(), lessThanOrEqualTo(5));
+        }
+        previous = now;
+      }
+      expect(settled, isTrue);
+      expect(await sample(tester), everyElement(0), reason: '收住停在最深');
+      expect(motion.breathSettled, isTrue);
     });
 
     testWidgets('finishes each position\'s breath and stops it at the '
         'deepest, without a jump', (tester) async {
       await setUpView(tester);
       await tester.pumpWidget(host());
+      awaitReveal();
       await grow(tester);
       // 呼吸到一半：左右兩端深淺不同，都還在變。
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(LaunchEntranceMotion.pause);
       var previous = await sample(tester);
       expect(previous.toSet(), hasLength(greaterThan(1)), reason: '由左而右呼吸');
 
@@ -600,6 +657,7 @@ void main() {
         'starts it from the deepest', (tester) async {
       await setUpView(tester);
       await tester.pumpWidget(host());
+      awaitReveal();
       await tester.pump(frame);
       var rested = false;
       unawaited(motion.rest.settle().then((_) => rested = true));
@@ -620,18 +678,22 @@ void main() {
       expect(previous.last, 0, reason: '右邊還沒輪到');
     });
 
-    for (final (label, restFrames) in [('early', 2), ('late', 26)]) {
+    for (final (label, restFrames) in [
+      ('early', 2),
+      ('late', cycleFrames * 2 ~/ 3),
+    ]) {
       testWidgets('releasing mid-rest ($label) finishes this breath at the '
           'deepest, then breathes again from the deepest without a jump', (
         tester,
       ) async {
         // 收住途中接著呼吸：已經停在最深的位置不跳回原本的明暗，進場的節奏
-        // （一輪 0.6 秒）換回一般節奏（1.6 秒）也不跳；要求收住的等待在
-        // 放開時就完成，之後不再回頭收住。
+        // 換回一般節奏（1.6 秒）也不跳；要求收住的等待在放開時就完成，之後
+        // 不再回頭收住。
         await setUpView(tester);
         await tester.pumpWidget(host());
+        awaitReveal();
         await grow(tester);
-        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(LaunchEntranceMotion.pause);
         var rested = false;
         unawaited(motion.rest.settle().then((_) => rested = true));
         var previous = await sample(tester);
@@ -725,7 +787,14 @@ void main() {
       expect(phase!.depthAt(0, SkeletonBreath.gentleSweep), 1, reason: '等它的進場');
 
       await tester.pumpWidget(app(second: true, moved: true));
-      for (var i = 0; i < 12; i++) {
+      // 搬進去時那邊可能正在收住開 App 那一口：收住途中出現的停在最深，
+      // 收住後照一般的節奏接著呼吸。
+      for (
+        var i = 0;
+        i < cycleFrames * 4 &&
+            phase!.depthAt(0, SkeletonBreath.gentleSweep) == 1;
+        i++
+      ) {
         await tester.pump(frame);
       }
       expect(
@@ -780,15 +849,17 @@ void main() {
         'does not stretch the rest', (tester) async {
       await setUpView(tester);
       await tester.pumpWidget(host());
+      awaitReveal();
       await grow(tester);
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(LaunchEntranceMotion.pause);
       var rested = false;
       unawaited(motion.rest.settle().then((_) => rested = true));
-      await tester.pump(const Duration(milliseconds: 480));
+      const into = LaunchEntranceMotion.breath;
+      await tester.pump(into);
 
       await tester.pumpWidget(host(second: true));
       expect(await sample(tester, row: 1), everyElement(0), reason: '一出現就最深');
-      var frames = 30;
+      var frames = into.inMicroseconds ~/ frame.inMicroseconds;
       while (!rested) {
         await tester.pump(frame);
         expect(++frames, lessThanOrEqualTo(cycleFrames), reason: '總共最多再呼一輪');
