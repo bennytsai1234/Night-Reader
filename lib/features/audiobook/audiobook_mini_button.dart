@@ -39,7 +39,7 @@ class AudiobookMiniButton extends StatefulWidget {
   /// 測試換成自己的播放器；平常是 [AudiobookPlayer.instance]。
   final AudiobookPlayer? player;
 
-  /// 分頁列收起時（整頁編輯）跟著沉下。
+  /// 分頁列收起時（整頁編輯）跟著往右滑出去，時長與曲線同分頁列沉下。
   final bool hidden;
 
   /// 圓鈕右緣離螢幕右邊多遠（和疊在主頁上的位置一樣）：滑出時要多移這一段
@@ -151,11 +151,23 @@ class _AudiobookMiniButtonState extends State<AudiobookMiniButton>
         ),
       ),
     );
+    // 分頁列收起與回來時跟著它滑，不直接消失（時長、曲線同 FloatingTabBar）。
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: widget.hidden ? 0 : 1),
+      duration: AppMotion.menu,
+      curve: widget.hidden ? Curves.easeInCubic : AppMotion.menuCurve,
+      child: button,
+      builder: (context, bar, child) => _slide(context, bar, child!),
+    );
+  }
+
+  /// [bar] 是分頁列露出多少（整頁編輯時滑到 0）。
+  Widget _slide(BuildContext context, double bar, Widget button) {
     return AnimatedBuilder(
       animation: _shown,
       child: button,
       builder: (context, child) {
-        final shown = widget.hidden ? 0.0 : _shown.value;
+        final shown = bar * _shown.value;
         // 準備那一段：畫在螢幕右緣外，看不到，但封面與玻璃都畫過一次。
         if (_preparing && shown <= 0) {
           return IgnorePointer(
@@ -165,7 +177,9 @@ class _AudiobookMiniButtonState extends State<AudiobookMiniButton>
             ),
           );
         }
-        if (shown <= 0) return const SizedBox.shrink();
+        // 播放停了才拿掉；只是跟著分頁列收起時留在元件樹裡、不畫（GlassSlide），
+        // 滑回來時不必整個重建封面與玻璃。
+        if (_shown.value <= 0) return const SizedBox.shrink();
         return IgnorePointer(
           ignoring: shown < 1,
           child: GlassSlide(

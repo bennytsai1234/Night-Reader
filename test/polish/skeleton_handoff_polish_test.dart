@@ -260,6 +260,11 @@ const _mineExempt = {
   'App 日誌': 'App 日誌沒有骨架，資料當下就有',
 };
 
+/// 書籍詳情的骨架先猜、資料到了先變形（`docs/design/loading.md`「說好沒有或
+/// 不一樣的骨架」）。
+const _detailExempt =
+    '書籍詳情的章名與書源狀態讀完才知道：骨架先照進頁時手上的書猜，資料到了先變成內容的形狀再換場（最後的樣子由 book_detail_page_test 比）';
+
 /// 情境清單，順序就是執行順序。
 final scenarios = <String, _Scenario>{
   'open-a': _Scenario('書架開書（A 組欄位）', _tapBook),
@@ -365,6 +370,7 @@ final scenarios = <String, _Scenario>{
     '書架長按「書籍詳情」',
     (t) => t.tap(find.text('書籍詳情')),
     before: _longPressBook,
+    exempt: _detailExempt,
   ),
   'explore': _Scenario(
     '點「發現」分頁',
@@ -381,6 +387,7 @@ final scenarios = <String, _Scenario>{
     '發現的書單點書進書籍詳情（書源要從網路抓）',
     (t) => t.tap(find.text('夜讀第0卷').first),
     before: _toExploreList,
+    exempt: _detailExempt,
   ),
   for (final row in const [
     '閱讀偏好',

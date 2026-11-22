@@ -37,9 +37,7 @@ import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';
 import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 import 'package:night_reader/shared/widgets/book/chapter_scrollbar.dart';
-import 'package:night_reader/shared/widgets/book/locked_chapter_icon.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
-import 'package:night_reader/shared/widgets/book/toc_volume_row.dart';
 
 import 'widgets/book_cover_ambience.dart';
 import 'widgets/book_detail_skeleton.dart';
@@ -47,10 +45,10 @@ import 'widgets/book_info_header.dart';
 import 'widgets/book_info_intro.dart';
 import 'widgets/book_info_toc_bar.dart';
 import 'widgets/book_read_capsule.dart';
+import 'widgets/book_toc_chapter_row.dart';
 import 'widgets/change_source_sheet.dart';
 
 import 'package:night_reader/core/chinese/chinese_display.dart';
-import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 import 'package:night_reader/features/settings/local_book_sync_dialog.dart'
     show formatMegabytes;
 
@@ -266,11 +264,15 @@ class _BookDetailPageState extends State<BookDetailPage> {
                     ],
                   ),
                 ),
-                // 骨架照這一輪載入開始時手上的書排；資料到了先在骨架底下排好
-                // 內容，再照骨架換場的設定換過去，骨架不跟著新資料變形。
+                // 載入中骨架照這一輪開始時手上的書排；資料到了骨架先照頁面
+                // 上的同一份資料變成內容的形狀，再在骨架底下排好內容，照骨架
+                // 換場的設定換過去。
                 SliverSkeletonSwitcher(
                   loading: loading,
-                  skeleton: BookDetailSkeleton(book: provider.skeletonBook),
+                  skeleton: BookDetailSkeleton(
+                    book: provider.skeletonBook,
+                    loaded: loading ? null : provider,
+                  ),
                   builder: (context) => _buildLoadedSlivers(context, provider),
                 ),
                 // 底部讓出浮動閱讀鈕（已含在 padding.bottom 裡）。
@@ -313,35 +315,18 @@ class _BookDetailPageState extends State<BookDetailPage> {
     Widget fadeIn(String key, Widget sliver) =>
         SliverFadeIn(key: ValueKey(key), sliver: sliver);
     return [
-      if ((provider.sourceIssueMessage ?? '').isNotEmpty)
-        fadeIn(
-          'source-issue',
-          SliverToBoxAdapter(
-            child: GroupedSection(
-              topGap: AppSpacing.xl,
-              children: [
-                GroupedRow(
-                  title: provider.sourceIssueMessage!,
-                  leading: const GroupedIconTile(
-                    Icons.warning_amber_rounded,
-                    tint: AppTint.tea,
-                  ),
-                  // 要登入才讀得到：點了去登入，登入完重新載入（ADR 0038）。
-                  value: provider.loginRequired ? '登入' : null,
-                  onTap: provider.loginRequired
-                      ? () => unawaited(_login(context, provider))
-                      : null,
-                ),
-              ],
-            ),
-          ),
-        ),
+      if (BookSourceIssue.of(
+            provider,
+            onLogin: () => unawaited(_login(context, provider)),
+          )
+          case final issue?)
+        fadeIn('source-issue', SliverToBoxAdapter(child: issue)),
       fadeIn(
         'details',
         SliverToBoxAdapter(
           child: BookInfoDetails(
             book: currentBook,
-            provider: provider,
+            statusChip: SourceStatusChip.of(provider),
             onShowSourceOptions: () => _showSourceOptions(context, currentBook),
           ),
         ),
@@ -399,57 +384,47 @@ class _BookDetailPageState extends State<BookDetailPage> {
           'toc',
           super_list.SuperSliverList(
             listController: _chapterListController,
-            delegate: SliverChildBuilderDelegate((ctx, i) {
-              final chapter = chapters[i];
-              final position = provider.displayPositionAt(i);
-              final volumes = provider.tocVolumes;
-              if (chapter.isVolume) {
-                return GroupedSliceItem(
-                  index: i,
-                  count: chapters.length,
-                  child: TocVolumeRow(
-                    title: ctx.zh(chapter.title),
-                    count: volumes.countOf(position),
-                    collapsed: provider.groupsVolumes
-                        ? provider.isVolumeCollapsed(position)
-                        : null,
-                    onToggle: () => provider.toggleVolume(position),
-                  ),
-                );
-              }
-              final isCurrent = chapter.index == currentBook.chapterIndex;
-              return GroupedSliceItem(
+            delegate: SliverChildBuilderDelegate(
+              (ctx, i) => GroupedSliceItem(
                 index: i,
                 count: chapters.length,
-                child: _ChapterRow(
-                  title: ctx.zh(chapter.title),
-                  indented:
-                      provider.groupsVolumes && volumes.volumeOf(position) >= 0,
-                  isCurrent: isCurrent,
-                  isLocked: chapter.isLocked,
-                  // 付費章節不開，只提示（ADR 0057）。
-                  onTap: chapter.isLocked
-                      ? () => ScaffoldMessenger.of(context)
-                          ..hideCurrentSnackBar()
-                          ..showSnackBar(
-                            const SnackBar(
-                              content: UiText(lockedChapterNotice),
-                            ),
-                          )
-                      : widget.fromReader
-                      ? () => Navigator.of(context).pop(chapter.url)
-                      : () => _navigateToReader(
-                          context,
-                          currentBook,
-                          ReaderOpenTarget.chapterStart(chapter.index),
-                          provider.allChapters,
-                        ),
+                child: bookTocRow(
+                  ctx,
+                  provider,
+                  i,
+                  onOpen: (chapter) =>
+                      _openChapter(context, provider, currentBook, chapter),
                 ),
-              );
-            }, childCount: chapters.length),
+              ),
+              childCount: chapters.length,
+            ),
           ),
         ),
     ];
+  }
+
+  /// 點了目錄的一章：付費章節不開，只提示（ADR 0057）；從閱讀器開的詳情
+  /// 帶章節回去，否則開閱讀器。
+  void _openChapter(
+    BuildContext context,
+    BookDetailProvider provider,
+    Book book,
+    BookChapter chapter,
+  ) {
+    if (chapter.isLocked) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: UiText(lockedChapterNotice)));
+    } else if (widget.fromReader) {
+      Navigator.of(context).pop(chapter.url);
+    } else {
+      _navigateToReader(
+        context,
+        book,
+        ReaderOpenTarget.chapterStart(chapter.index),
+        provider.allChapters,
+      );
+    }
   }
 
   Widget _buildLoadError(BuildContext context, BookDetailProvider provider) {
@@ -1201,58 +1176,4 @@ class _BookDetailPageState extends State<BookDetailPage> {
           child: ChangeCoverSheet(bookName: p.book.name, author: p.book.author),
         ),
       );
-}
-
-/// 目錄的一列：目前閱讀章節以主色標示，右側「目前」；付費還沒買的章節
-/// 右側鎖頭。
-class _ChapterRow extends StatelessWidget {
-  const _ChapterRow({
-    required this.title,
-    required this.indented,
-    required this.isCurrent,
-    required this.isLocked,
-    required this.onTap,
-  });
-
-  final String title;
-
-  /// 卷內的章往右縮一個字（目錄照卷分組時）。
-  final bool indented;
-  final bool isCurrent;
-  final bool isLocked;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return GroupedRow(
-      title: title,
-      translateTitle: false,
-      titleWidget: Padding(
-        padding: EdgeInsets.only(left: indented ? tocChapterIndent : 0),
-        child: DragOverflowText(
-          child: UiText(
-            title,
-            translate: false,
-            maxLines: 1,
-            style: AppTextStyles.bodyBase.copyWith(
-              height: 1.3,
-              color: isCurrent ? scheme.primary : scheme.onSurface,
-              fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
-            ),
-          ),
-        ),
-      ),
-      showChevron: false,
-      trailing: isCurrent
-          ? UiText(
-              '目前',
-              style: AppTextStyles.labelSm.copyWith(color: scheme.primary),
-            )
-          : isLocked
-          ? const LockedChapterIcon()
-          : null,
-      onTap: onTap,
-    );
-  }
 }

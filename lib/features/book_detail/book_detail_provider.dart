@@ -198,9 +198,9 @@ class BookDetailProvider extends ChangeNotifier {
 
   Book get book => _book;
 
-  /// 這一輪載入的骨架照哪本書排（DESIGN「書籍詳情」：照進頁時手上的書）。
-  /// 每次開始載入（[_init]）時記下一份，載入中與這一輪的換場播完前都照
-  /// 它：資料到了只換掉骨架底下的內容，骨架不先變成新資料的形狀。
+  /// 這一輪載入中的骨架照哪本書排（docs/design/screens.md「書籍詳情」：照
+  /// 進頁時手上的書）。每次開始載入（[_init]）時記下一份；資料到了之後骨架
+  /// 改照這頁的資料排（`BookDetailSkeleton.loaded`）。
   Book get skeletonBook => _skeletonBook;
   late Book _skeletonBook;
   List<BookChapter> get filteredChapters => _displayChapters;

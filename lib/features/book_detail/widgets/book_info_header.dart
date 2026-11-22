@@ -7,6 +7,7 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/skeleton/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 
 import '../book_detail_provider.dart';
@@ -247,37 +248,73 @@ class _ActionButton extends StatelessWidget {
 }
 
 /// 書源狀態小標籤（正常／異常），放在「來源」列右側。
-class SourceStatusChip extends StatelessWidget {
-  const SourceStatusChip({super.key, required this.provider});
+class SourceStatusChip extends StatelessWidget implements GroupedSkeletonItem {
+  const SourceStatusChip({
+    super.key,
+    required this.label,
+    required this.description,
+    required this.healthy,
+  });
 
-  final BookDetailProvider provider;
+  SourceStatusChip.of(BookDetailProvider provider, {Key? key})
+    : this(
+        key: key,
+        label: provider.sourceStatusLabel,
+        description: provider.sourceStatusDescription,
+        healthy: provider.sourceStatusIsHealthy,
+      );
+
+  final String label;
+  final String description;
+  final bool healthy;
+
+  static const EdgeInsets _padding = EdgeInsets.symmetric(
+    horizontal: AppSpacing.sm,
+    vertical: 2,
+  );
+  static final TextStyle _textStyle = AppTextStyles.labelXs.copyWith(
+    height: 1.3,
+    fontWeight: FontWeight.w600,
+  );
+
+  /// 整顆膠囊一塊。
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    final text = GroupedItemShape.textSize(
+      context,
+      UiLanguageText.convert(context, label),
+      style: _textStyle,
+      maxWidth: double.infinity,
+    );
+    final size = Size(
+      text.width + _padding.horizontal,
+      text.height + _padding.vertical,
+    );
+    return GroupedItemShape(
+      size.height,
+      width: size.width,
+      marks: [SkeletonShape(Offset.zero & size, radius: AppRadius.pillShape)],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final healthy = provider.sourceStatusIsHealthy;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final color = healthy
         ? (dark ? AppPalette.mossDark : AppPalette.moss)
         : (dark ? AppPalette.teaDark : AppPalette.tea);
     return Tooltip(
-      message: context.ui(provider.sourceStatusDescription),
+      message: context.ui(description),
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm,
-          vertical: 2,
-        ),
+        padding: _padding,
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.12),
           borderRadius: AppRadius.pillShape,
         ),
-        child: UiText(
-          provider.sourceStatusLabel,
-          style: AppTextStyles.labelXs.copyWith(
-            height: 1.3,
-            color: color,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        child: UiText(label, style: _textStyle.copyWith(color: color)),
       ),
     );
   }

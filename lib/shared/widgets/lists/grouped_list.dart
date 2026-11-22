@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderAbstractViewport;
+import 'package:flutter/rendering.dart'
+    show RenderAbstractViewport, ScrollCacheExtent;
 import 'package:flutter/scheduler.dart';
 
 import '../../../core/chinese/ui_language.dart';
@@ -30,7 +31,9 @@ export 'grouped_text_field_row.dart';
 /// 整個畫面一個元件），換頁的第一格不建任何一列；進場播完的下一格才在骨架
 /// 底下建：組標題與卡片外框先建，畫面裡的列一格一列（[CoverRevealSlot]），
 /// 都建好再照骨架換場換成內容
-/// （ADR 0029）。不是在進場中掛上的（分頁、已經在畫面上的頁面）直接建內容。
+/// （ADR 0029）。畫面下面三個畫面以內的列，換場播完的下一格趁畫面靜止一次
+/// 建好、留著（[_Prebuild]），手指捲過去時不必在那一幀整組建出來（ADR 0037
+/// 策略四）。不是在進場中掛上的（分頁、已經在畫面上的頁面）直接建內容。
 class GroupedListView extends StatelessWidget {
   const GroupedListView({
     super.key,
@@ -94,11 +97,18 @@ class GroupedListView extends StatelessWidget {
           ready: ready,
           padding: padding,
           background: AppChrome.of(context).groupedBackground,
-          builder: (context, items) => ListView(
-            controller: controller,
-            physics: physics,
-            padding: padding,
-            children: items,
+          // 包一層重畫邊界：畫面外的列建好時清單重新排版，畫面上的圖層照舊
+          // （[_Prebuild]）。
+          builder: (context, items) => RepaintBoundary(
+            child: _PrebuildCacheExtent(
+              builder: (context, cacheExtent) => ListView(
+                controller: controller,
+                physics: physics,
+                padding: padding,
+                scrollCacheExtent: cacheExtent,
+                children: items,
+              ),
+            ),
           ),
         ),
       ),
@@ -182,6 +192,15 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
   /// （換掉會讓內容重建）。
   _EntranceStage? _stage;
 
+  /// 整組在畫面外的列，換場播完才建。
+  final _Prebuild _prebuild = _Prebuild();
+
+  @override
+  void dispose() {
+    _prebuild.dispose();
+    super.dispose();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -255,7 +274,8 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
         child: widget.builder(context, widget.items),
       );
     }
-    return LayoutBuilder(
+    final fill = widget.fit != StackFit.loose;
+    final entrance = LayoutBuilder(
       builder: (context, constraints) {
         final padding = widget.padding;
         final shapes = _shapes(
@@ -265,11 +285,18 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
         );
         // 只有實際視窗裡的列排隊；面板不能借用整個螢幕的高度。
         final visible = <double>[];
+        // 每一項的第一列是整份清單的第幾列，先建好的列數照它設上限。
+        final firstRow = <int>[];
         var height = padding.top;
-        for (final shape in shapes) {
+        var rows = 0;
+        for (final (i, shape) in shapes.indexed) {
           visible.add(constraints.maxHeight - height);
           height += shape.height;
+          firstRow.add(rows);
+          final item = widget.items[i];
+          rows += item is GroupedSection ? item.children.length : 1;
         }
+        final prebuildRows = _Prebuild.rowsFor(constraints.maxHeight);
         height += padding.bottom;
         Widget skeleton = Padding(
           padding: EdgeInsets.only(left: padding.left, right: padding.right),
@@ -282,30 +309,57 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
         if (widget.fit == StackFit.loose) {
           skeleton = SizedBox(height: height, child: skeleton);
         }
-        return ColoredBox(
+        final content = ColoredBox(
           color: background,
-          child: SkeletonSwitcher(
-            fit: widget.fit,
-            loading: stage == _EntranceStage.entering || !widget.ready,
-            waitForCovers: CoverWait.brief,
-            backdrop: background,
-            // 不重建：換成內容的這一格已經畫好，骨架的樣子下次才用得到。
-            onRevealed: () => _stage = _EntranceStage.revealed,
-            skeleton: skeleton,
-            builder: (context) => widget.builder(context, [
-              for (final (i, item) in widget.items.indexed)
-                _GroupedListSlot(
-                  key: _slotKey(item),
-                  index: i,
-                  shape: shapes[i],
-                  visible: visible[i],
-                  item: item,
-                ),
-            ]),
+          child: _PrebuildScope(
+            prebuild: _prebuild,
+            child: SkeletonSwitcher(
+              fit: widget.fit,
+              loading: stage == _EntranceStage.entering || !widget.ready,
+              waitForCovers: CoverWait.brief,
+              backdrop: background,
+              // 不重建：換成內容的這一格已經畫好，骨架的樣子下次才用得到。
+              // 畫面外的列等換場收掉骨架的那一格畫完、畫面靜止了才建：
+              // 和收掉骨架擠在同一格，那一格畫面在變。
+              onRevealed: () {
+                _stage = _EntranceStage.revealed;
+                SchedulerBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  _prebuild.release();
+                  // 列建好的下一格，清單多建的範圍才縮回預設
+                  // （[_PrebuildCacheExtent]）：同一格縮的話，捲出範圍
+                  // 的項目先收起來，裡面的列要等捲回來才建。
+                  SchedulerBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _prebuild.settle();
+                  });
+                });
+              },
+              skeleton: skeleton,
+              builder: (context) => widget.builder(context, [
+                for (final (i, item) in widget.items.indexed)
+                  _GroupedListSlot(
+                    key: _slotKey(item),
+                    index: i,
+                    shape: shapes[i],
+                    visible: visible[i],
+                    // 面板一次排好整個內容，沒有畫面外才建這回事。
+                    prebuildRows: fill ? prebuildRows - firstRow[i] : 0,
+                    keepAlive: fill,
+                    item: item,
+                  ),
+              ]),
+            ),
           ),
         );
+        return fill ? RepaintBoundary(child: content) : content;
       },
     );
+    if (!fill) return entrance;
+    // 畫面外的列建好時，這裡的 LayoutBuilder 要重新排版（它底下的元件重建
+    // 都經過它），一路往上排到頁面、整頁重畫一次：把頁面撐滿的這一塊隔成
+    // 自己排版、自己重畫，底色另隔一層，清單之外的畫面一筆都不重畫
+    // （[_Prebuild]）。
+    return SizedBox.expand(child: RepaintBoundary(child: entrance));
   }
 }
 
@@ -314,8 +368,9 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
 /// 八列步進的組整組一起建，在電腦的 debug 模式要 50ms 以上。第一個畫面裡
 /// 的列，加上畫面底下清單本來就會先建好的那一段放得下的列數（[_queuedBelow]）
 /// 排隊：一組跨在畫面底邊時，緊接在下面的幾列不和露出來的那一列擠在同一格。
-/// 再往下的列（替換規則、下載佇列這類上百列的組）和組一起建、換場不等它們，
-/// 不然一列一格，兩百列要等三秒以上。
+/// 再往下的列換場不等它們（不然一列一格，兩百列的替換規則要等三秒以上）：
+/// 跨在畫面底邊的組和組一起建；整組在畫面外的，從清單頂端數 [prebuildRows]
+/// 列以內的換場播完才建（[_Prebuild]），再往下的（上百列的組）和組一起建。
 class _GroupedListSlot extends StatelessWidget {
   /// 跨在畫面底邊的組，畫面外還排隊的列數：清單在畫面底下先建好的那一段
   /// （[RenderAbstractViewport.defaultCacheExtent]）放得下幾列最矮的列。
@@ -328,51 +383,258 @@ class _GroupedListSlot extends StatelessWidget {
     required this.index,
     required this.shape,
     required this.visible,
+    required this.prebuildRows,
+    required this.keepAlive,
     required this.item,
   });
 
   final int index;
+
+  /// 頁面的清單：換場前掛上的項目捲出畫面也留著（[_KeepAlive]）。
+  final bool keepAlive;
   final GroupedItemShape shape;
 
   /// 這一項上緣到畫面底的距離；不到 0 時整項都在畫面外。
   final double visible;
+
+  /// 這一項從第一列算起，還有幾列換場播完才建（[_Prebuild]）；再往下的列
+  /// 和組一起建。
+  final int prebuildRows;
   final Widget item;
 
   @override
   Widget build(BuildContext context) {
+    final slot = _slot();
+    return keepAlive ? _KeepAlive(child: slot) : slot;
+  }
+
+  Widget _slot() {
     final item = this.item;
-    final rows = shape.rowHeights;
-    if (item is! GroupedSection ||
-        rows == null ||
-        rows.length != item.children.length) {
-      return CoverRevealSlot(
-        wait: visible > 0,
-        placeholder: SizedBox(height: shape.height),
+    if (item is! GroupedSection) {
+      return _EntranceSlot(
+        kind: visible > 0
+            ? _EntranceKind.queued
+            : prebuildRows > 0
+            ? _EntranceKind.deferred
+            : _EntranceKind.direct,
+        height: shape.height,
         child: item,
       );
     }
-    return item.withRows(_rows(item.children, rows));
-  }
-
-  List<Widget> _rows(List<Widget> children, List<double> heights) {
+    final children = item.children;
+    // 骨架只量到畫面底：再往下的組沒有每一列的高度，先照最矮的列佔位，
+    // 反正畫面上看不到。
+    final measured = shape.rowHeights;
+    final hasRows = measured != null && measured.length == children.length;
+    final heights = hasRows
+        ? measured
+        : List.filled(children.length, AppGrouped.rowMinHeight);
     final out = <Widget>[];
     var top = shape.card?.top ?? 0;
     var below = 0;
     for (var i = 0; i < children.length; i++) {
-      // 骨架只量到畫面底，再往下的列高度不知道，照列數算。
-      final wait = top < visible || below++ < _queuedBelow;
+      // 骨架只量到畫面底，再往下的列高度不知道，照列數算；沒量的組畫面上
+      // 有它就整組排隊。
+      final queued = hasRows
+          ? top < visible || below++ < _queuedBelow
+          : visible > 0;
       out.add(
-        CoverRevealSlot(
+        _EntranceSlot(
           key: _slotKey(children[i]),
-          placeholder: SizedBox(height: heights[i]),
-          wait: wait,
+          kind: queued
+              ? _EntranceKind.queued
+              : visible <= 0 && i < prebuildRows
+              ? _EntranceKind.deferred
+              : _EntranceKind.direct,
+          height: heights[i],
           child: children[i],
         ),
       );
       top += heights[i] + AppGlass.hairline;
     }
-    return out;
+    return item.withRows(out);
   }
+}
+
+/// 換場前掛上的清單項目捲出畫面也不拆掉：建好的列捲回來不必重建，一般的
+/// 設定頁整頁都是這種。換場後才掛上的（捲到三個畫面外才建的）和以前一樣
+/// 捲遠了就拆掉，上百項的清單不會整份一直留著。
+class _KeepAlive extends StatefulWidget {
+  const _KeepAlive({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+
+class _KeepAliveState extends State<_KeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  late final bool _keep = !(_PrebuildScope.maybeOf(context)?.released ?? true);
+
+  @override
+  bool get wantKeepAlive => _keep;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}
+
+/// 進場中的一列（或不是分組卡片的一項）怎麼建；第一次建時定下，之後清單
+/// 高度變了（鍵盤升降）也不換，列才不會被拆掉重建。
+enum _EntranceKind {
+  /// 換場前在骨架底下一格建一列（[CoverRevealSlot]）：畫面裡的列。
+  queued,
+
+  /// 換場播完的下一格才建（[_Prebuild]）：整組在畫面外的列。
+  deferred,
+
+  /// 直接建：換場後才掛上的，或在先建的列數上限之外的。
+  direct,
+}
+
+class _EntranceSlot extends StatefulWidget {
+  const _EntranceSlot({
+    super.key,
+    required this.kind,
+    required this.height,
+    required this.child,
+  });
+
+  /// 只看第一次建時的值。
+  final _EntranceKind kind;
+
+  /// 還沒建時佔的高度。
+  final double height;
+  final Widget child;
+
+  @override
+  State<_EntranceSlot> createState() => _EntranceSlotState();
+}
+
+class _EntranceSlotState extends State<_EntranceSlot> {
+  late _EntranceKind _kind = widget.kind;
+
+  /// 排著等換場播完的那一份。
+  _Prebuild? _waitingOn;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_kind != _EntranceKind.deferred) return;
+    final prebuild = _PrebuildScope.maybeOf(context);
+    if (prebuild == null || prebuild.released) {
+      _kind = _EntranceKind.direct;
+      return;
+    }
+    _waitingOn = prebuild..add(this);
+  }
+
+  @override
+  void dispose() {
+    _waitingOn?.remove(this);
+    super.dispose();
+  }
+
+  void _release() {
+    _waitingOn = null;
+    if (mounted) setState(() => _kind = _EntranceKind.direct);
+  }
+
+  @override
+  Widget build(BuildContext context) => switch (_kind) {
+    _EntranceKind.queued => CoverRevealSlot(
+      placeholder: SizedBox(height: widget.height),
+      child: widget.child,
+    ),
+    _EntranceKind.deferred => SizedBox(height: widget.height),
+    _EntranceKind.direct => widget.child,
+  };
+}
+
+/// 整組在畫面外的列，換場播完的下一格一次建好（ADR 0037 策略一、四：手指
+/// 動之前在靜止時先把會用到的列建好）。換場播完後畫面靜止，那一格再重也
+/// 看不出來；清單整個包一層重畫邊界（[GroupedListView]），畫面外的列長出來時
+/// 畫面上的圖層不變。換場前清單在畫面上下多建三個畫面的項目
+/// （[_PrebuildCacheExtent]），建好的留著（[_KeepAlive]），一般的設定頁整頁建好就
+/// 一直留著，捲過去、捲回來都不再建。換場後才出現的列（打開開關多出來的、
+/// 捲到三個畫面外才建的）直接建，和以前一樣。
+class _Prebuild {
+  /// 清單在畫面上下各留幾個畫面的列。
+  static const double _screens = 3;
+
+  /// 換場播完才建的列數上限：畫面加上下面三個畫面放得下幾列最矮的列，從
+  /// 清單頂端數。
+  static int rowsFor(double viewport) =>
+      ((_screens + 1) * viewport / AppGrouped.rowMinHeight).ceil();
+
+  final Set<_EntranceSlotState> _waiting = {};
+  bool _released = false;
+
+  /// 列都建好了：清單多建的範圍縮回預設（[_PrebuildCacheExtent]）。
+  final ValueNotifier<bool> _settled = ValueNotifier(false);
+
+  void settle() => _settled.value = true;
+
+  void dispose() => _settled.dispose();
+
+  /// 換場播完了：之後掛上的列直接建。
+  bool get released => _released;
+
+  void add(_EntranceSlotState slot) => _waiting.add(slot);
+
+  void remove(_EntranceSlotState slot) => _waiting.remove(slot);
+
+  /// 換場播完：等著的列下一格一起建。
+  void release() {
+    if (_released) return;
+    _released = true;
+    final waiting = _waiting.toList();
+    _waiting.clear();
+    for (final slot in waiting) {
+      slot._release();
+    }
+  }
+}
+
+/// 清單在畫面上下各建幾個畫面的項目：換場播完前多建三個畫面
+/// （[_Prebuild._screens]），換場前掛上的項目才排得進來；列建好之後縮回
+/// 預設，留著的項目在畫面外時不排版、不進無障礙樹，捲動每一幀的工作和以前
+/// 一樣。縮回時只重建清單本身：從 [_GroupedEntranceState] 重建的話，頁面
+/// 的 LayoutBuilder 會整頁重新排版、重畫。
+class _PrebuildCacheExtent extends StatelessWidget {
+  const _PrebuildCacheExtent({required this.builder});
+
+  final Widget Function(BuildContext context, ScrollCacheExtent? cacheExtent)
+  builder;
+
+  @override
+  Widget build(BuildContext context) {
+    final prebuild = _PrebuildScope.maybeOf(context);
+    if (prebuild == null) return builder(context, null);
+    return ValueListenableBuilder<bool>(
+      valueListenable: prebuild._settled,
+      builder: (context, settled, _) => builder(
+        context,
+        settled ? null : const ScrollCacheExtent.viewport(_Prebuild._screens),
+      ),
+    );
+  }
+}
+
+class _PrebuildScope extends InheritedWidget {
+  const _PrebuildScope({required this.prebuild, required super.child});
+
+  final _Prebuild prebuild;
+
+  static _Prebuild? maybeOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_PrebuildScope>()?.prebuild;
+
+  @override
+  bool updateShouldNotify(_PrebuildScope oldWidget) =>
+      !identical(prebuild, oldWidget.prebuild);
 }
 
 /// 包著 [child] 的那一層沿用它的 key（列有 key 時，增刪重排照樣對得上）；

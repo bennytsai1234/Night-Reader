@@ -38,15 +38,16 @@ import 'package:night_reader/core/chinese/ui_language.dart';
 /// 書不在手機上時用書名搜尋。往左滑刪除，提示可「復原」。標註可以匯出。
 /// 統計見 [ReadingStatsView]。
 ///
-/// 書籤、標註與每本書在這台的目錄在推入前讀好（[open]），骨架照真的內容
-/// 畫、排序照這台目錄的章（ADR 0029、0042）；之後資料表一變（閱讀器裡
-/// 新增、另一台同步過來）就跟著更新。
+/// 書籤、標註、每本書在這台的目錄與統計在推入前讀好（[open]），骨架照真的
+/// 內容畫、排序照這台目錄的章（ADR 0029、0042），點「統計」直接畫出統計；
+/// 之後資料表一變（閱讀器裡新增、另一台同步過來）就跟著更新。
 class BookmarksPage extends StatefulWidget {
   const BookmarksPage({
     super.key,
     required this.initial,
     this.initialHighlights = const [],
     this.tocs = const {},
+    this.stats,
   });
 
   final List<Bookmark> initial;
@@ -56,11 +57,16 @@ class BookmarksPage extends StatefulWidget {
   /// 那本書的書籤與標註照記下的章節序號排。
   final Map<String, List<BookChapter>> tocs;
 
+  /// 推入前讀好的統計；沒給時點「統計」才讀。
+  final ReadingStatsMemory? stats;
+
   static String keyOf(String bookName, String bookAuthor) =>
       '$bookName\t$bookAuthor';
 
-  /// 讀好書籤、標註與各本書的目錄再推入這一頁。
+  /// 讀好書籤、標註、各本書的目錄與統計再推入這一頁。
   static Future<void> open(BuildContext context) async {
+    final stats = ReadingStatsMemory();
+    final statsLoaded = stats.load();
     final items = await getIt<BookmarkDao>().getAll();
     final highlights = await getIt<HighlightDao>().getAll();
     final tocs = <String, List<BookChapter>>{};
@@ -76,6 +82,7 @@ class BookmarksPage extends StatefulWidget {
           ? const []
           : await getIt<ChapterDao>().getByBook(book.bookUrl);
     }
+    await statsLoaded;
     if (!context.mounted) return;
     await Navigator.push(
       context,
@@ -84,6 +91,7 @@ class BookmarksPage extends StatefulWidget {
           initial: items,
           initialHighlights: highlights,
           tocs: tocs,
+          stats: stats,
         ),
       ),
     );
@@ -130,7 +138,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
   StreamSubscription<List<Bookmark>>? _subscription;
   StreamSubscription<List<Highlight>>? _highlightSubscription;
   _Tab _tab = _Tab.bookmarks;
-  final _statsMemory = ReadingStatsMemory();
+  late final _stats = widget.stats ?? ReadingStatsMemory();
 
   @override
   void initState() {
@@ -324,7 +332,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
       body: switch (_tab) {
         _Tab.bookmarks => _buildBookmarks(context),
         _Tab.highlights => _buildHighlights(context),
-        _Tab.stats => ReadingStatsView(memory: _statsMemory),
+        _Tab.stats => ReadingStatsView(memory: _stats),
       },
     );
   }

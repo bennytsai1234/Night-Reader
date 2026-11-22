@@ -251,8 +251,9 @@ void main() {
     int fadeLayers(WidgetTester tester) =>
         tester.layers.whereType<OpacityLayer>().length;
 
-    /// 內容有三個 sliver，載入完成那一幀建第一個，再兩幀建完。
+    /// 內容有三個 sliver：載入完成那一幀只換骨架，之後一幀建一個，三幀建完。
     Future<void> finishBuilding(WidgetTester tester) async {
+      await tester.pump();
       await tester.pump();
       await tester.pump();
     }
@@ -265,7 +266,8 @@ void main() {
       expect(find.text('內容'), findsNothing);
 
       await tester.pumpWidget(host(reveal, loading: false));
-      // 內容一幀建一個 sliver：這一幀只有第一段，骨架照舊蓋著。
+      // 資料到的這一幀只換骨架、還不建內容（ADR 0018）；之後一幀建一個
+      // sliver，骨架照舊蓋著。
       expect(find.text('內容'), findsNothing);
       expect(find.byKey(const Key('bar')), findsOneWidget);
       await finishBuilding(tester);
