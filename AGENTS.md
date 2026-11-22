@@ -7,7 +7,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 | `README.md`、`CHANGELOG.md`、`PRIVACY.md` | 給讀者看的產品說明、正式版更新說明、隱私權政策（`PRIVACY.md` 和 App 的「隱私說明」一起改） |
 | `DESIGN.md` | 產品界線、設計原則、否決過的方向；各元件與畫面的規格照區域放在 `docs/design/`，改哪裡讀哪份 |
 | `GLOSSARY.md` | 和使用者討論時用的詞 |
-| `CODING_STANDARDS.md` | 寫碼規範，`codex-review` 依它審 |
+| `CODING_STANDARDS.md` | 寫碼規範，`review` 依它審 |
 | `docs/adr/` | 決定與理由、否決過什麼；索引在 `docs/adr/README.md` |
 | `docs/agents/` | 只在特定情況用到的做法與坑，下面寫明什麼時候讀哪份 |
 | `TODO.md` | 待辦清單：還沒做的事一條一行；開工後這次的步驟列在那條底下，做一步勾一步；做完刪掉 |
@@ -29,16 +29,23 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 書源、校驗、規則引擎該怎麼表現拿不準時，照 Legado 原始碼做（位置在 `docs/agents/environment.md`），不自己定標準；夜讀刻意不同的寫在 ADR。
 評估需求時考量所有讀者的需求與實際效益，不以使用者本人是否需要為取捨依據。
 
+## 開發設定
+
+- 快測：`tool/flutter_test.sh {target}`（`{target}` 是測試檔或資料夾，`--run-skipped -t …` 這類參數照接；錯誤一定印出，輸出整份看）
+- 合併前檢查：PR 的 CI（`.github/workflows/ci.yml`）
+- 高風險：`lib/core/database/`、`lib/core/backup/`、`lib/core/sync/`、`lib/core/storage/`、`lib/core/background_work/`、`lib/core/download/`、`lib/core/source_check/`、`lib/core/engine/`、`lib/core/ai_repair/`、`lib/core/ai_find/`、`lib/core/diagnostics/`
+- 不能改：`lib/**/*.g.dart`
+
 ## 驗證
 
-- CI（`.github/workflows/ci.yml`）在開 PR、PR 有新推送、推上 `beta` 時跑；做的途中推分支只是備份，不跑。本機只跑受影響的測試：在整個 `test/` grep 改到的類別與函式，改掉或拿掉的輸出文字也 grep 那段字本身（測試常直接比對它），引用到的檔都算（測試常放在別的資料夾，例如書源引擎的解析在 `test/core/engine/` 各處都有）。用 `tool/flutter_test.sh <測試路徑>`（`--run-skipped -t …` 這類參數照接）：錯誤一定印出、進度行與套件清單濾掉，輸出整份看。全套測試只在 CI 跑。
+- CI（`.github/workflows/ci.yml`）在開 PR、PR 有新推送、推上 `beta` 時跑；做的途中推分支只是備份，不跑。本機只跑受影響的測試（快測）：在整個 `test/` grep 改到的類別與函式，改掉或拿掉的輸出文字也 grep 那段字本身（測試常直接比對它），引用到的檔都算（測試常放在別的資料夾，例如書源引擎的解析在 `test/core/engine/` 各處都有）。全套測試只在 CI 跑。
 - 改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build`，產生的 `.g.dart` 一起提交。
 - 新增或改名 `lib/` 的檔後跑 `dart run tool/file_names.dart`，檢查檔名對得上主要類別（`CODING_STANDARDS.md`「命名」）；推送前的 hook 不跑它，CI 才跑。
 - 推送前的 hook 跑 `flutter analyze`，看 `pre-push:` 開頭那一行（通過是 `pre-push: analyze 通過（全套測試看 CI）`）；Git 會在它後面再印遠端訊息，只看最後幾行會漏掉。
 - 給使用者看畫面：小調整在模擬器上用開發模式跑分支、改了就熱重載，使用者在 T3 裝置面板即時看（`docs/agents/emulator.md`「開發模式」）；幾個候選並排、淺深一起看時用 `test/support/screenshot.dart` 畫成 PNG，對照整個 App 時重拍 `test/screens/`。模擬器只看版面，動畫順不順照下一條量。
 - 改到轉場、骨架換場、開 App 進場、跳章，或宣稱某段工作已離開主執行緒時，用 `tool/frame_budget_compare.sh` 量前後，表寫進 commit message。
 - 手機上的驗證是使用者的事，不要求、不提及，回報也不列。模擬器由 agent 自己用：發測試版前，與只有正式版才出錯時，做法在 `docs/agents/emulator.md`。
-- Flutter `3.47.2` 固定在 `ci.yml` 與 `android-release.yml`，升級時兩處一起改。`third_party/` 三個 fork 的修補紀錄在各自的 `PATCHES.md`。
+- Flutter `3.47.2` 固定在 `ci.yml` 與 `android-release.yml`，升級時兩處一起改。`third_party/` 各 fork 的修補紀錄在各自的 `PATCHES.md`。
 
 ## Git 與發版
 

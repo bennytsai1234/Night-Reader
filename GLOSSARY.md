@@ -29,7 +29,7 @@ _Avoid_: 更新日誌、changelog（指這個頁面時）、這次更新了什�
 _Avoid_: 更新日誌、commit 標題
 
 **原型**：
-為了讓使用者在幾個做法之間挑，用 `test/support/screenshot.dart` 畫出的候選圖，或 `prototype` 技能做的拋棄式分支。使用者選定後結果寫進 `DESIGN.md` 或 ADR 就固定，不做成設定（ADR 0030），原型分支刪掉。
+為了讓使用者在幾個做法之間挑，用 `test/support/screenshot.dart` 畫出的候選圖。使用者選定後結果寫進 `DESIGN.md` 或 ADR 就固定，不做成設定（ADR 0030）。
 _Avoid_: demo、mockup
 
 **自動巡檢**：
