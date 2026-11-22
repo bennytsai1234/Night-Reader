@@ -165,13 +165,22 @@ class GroupedRow extends StatelessWidget
       parts.add((textLeft, shape));
       textLeft += shape.width! + AppGrouped.iconGap;
     }
-    final title = GroupedItemShape.text(
-      context,
-      this.title,
-      style: _textStyle.copyWith(fontWeight: _titleWeight),
-      width: right - textLeft,
-      maxLines: maxTitleLines,
-    );
+    // 自訂的標題（目錄的章名：粗細、縮排不同）認得出來時照它畫的字排。
+    final title =
+        (titleWidget == null
+            ? null
+            : GroupedItemShape.maybeOf(
+                titleWidget!,
+                context: context,
+                width: right - textLeft,
+              )) ??
+        GroupedItemShape.text(
+          context,
+          this.title,
+          style: _textStyle.copyWith(fontWeight: _titleWeight),
+          width: right - textLeft,
+          maxLines: maxTitleLines,
+        );
     final hasSubtitle = subtitle != null && subtitle!.isNotEmpty;
     final subtitleShape = hasSubtitle
         ? GroupedItemShape.text(
