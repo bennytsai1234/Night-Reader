@@ -10,7 +10,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 | `CODING_STANDARDS.md` | 寫碼規範，`codex-review` 依它審 |
 | `docs/adr/` | 決定與理由、否決過什麼；索引在 `docs/adr/README.md` |
 | `docs/agents/` | 只在特定情況用到的做法與坑，下面寫明什麼時候讀哪份 |
-| `PLAN.md` | 想好了、還沒開工的計畫；開工時搬走 |
+| `TODO.md` | 待辦清單：還沒做的事一條一行；開工後這次的步驟列在那條底下，做一步勾一步；做完刪掉 |
 | `HANDOFF.md` | 對話之間接手用的交接，只在做到一半要換對話時才有（`handoff` 技能），做完就刪 |
 
 ## 和使用者的工作默契
