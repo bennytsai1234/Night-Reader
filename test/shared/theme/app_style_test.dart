@@ -74,7 +74,7 @@ void main() {
         }
         expect(
           (l(palette.readerMenu) - l(palette.readerBackground)).abs(),
-          closeTo(gap, tolerance),
+          closeTo(AppLayers.readerMenuGap(brightness), tolerance),
           reason: '閱讀選單和紙分開',
         );
         // 次要文字和閱讀選單的距離不比和卡片的近：選單底色移動時跟著移。
