@@ -24,6 +24,7 @@ import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
 import 'package:night_reader/features/reader/screen/reader_controller_host.dart';
 import 'package:night_reader/features/reader/screen/reader_chapter_info.dart';
 import 'package:night_reader/features/reader/screen/reader_change_source.dart';
+import 'package:night_reader/features/reader/screen/reader_borrow_chapter.dart';
 import 'package:night_reader/features/reader/screen/reader_menu_pages.dart';
 import 'package:night_reader/features/reader/screen/reader_source_remedy.dart';
 import 'package:night_reader/features/reader/use_cases/reader_page_coordinator.dart';
@@ -92,6 +93,14 @@ class _ReaderPageState extends State<ReaderPage>
     info: _chapterInfo,
   );
 
+  late final ReaderBorrowChapter _borrowChapter = ReaderBorrowChapter(
+    context: () => context,
+    mounted: () => mounted,
+    book: widget.book,
+    host: _host,
+    showNotice: _showNotice,
+  );
+
   /// 從閱讀選單開出去的頁面與面板（[ReaderMenuPages]）。
   late final ReaderMenuPages _menuPages = ReaderMenuPages(
     context: () => context,
@@ -114,8 +123,10 @@ class _ReaderPageState extends State<ReaderPage>
     host: _host,
     info: _chapterInfo,
     changeSource: _changeSource,
+    borrowChapter: _borrowChapter,
     showNotice: _showNotice,
     jumpToChapter: _jumpToChapterFromDrawer,
+    jumpToChapterAndWait: (index) => _coordinator.jumpToChapter(index),
     exit: _handleExitIntent,
     restoreMenuWhenUncovered: () => _menuPages.restoreMenuWhenUncovered(),
   );

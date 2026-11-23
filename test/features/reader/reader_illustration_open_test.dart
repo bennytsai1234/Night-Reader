@@ -58,6 +58,8 @@ void main() {
           '<img src="$src">',
           ...kParagraphs.skip(2),
         ].join('\n'),
+        // 換掉書庫已經放好的這一章。
+        replaceStored: true,
         saveChapterMetadata: false,
       );
     });

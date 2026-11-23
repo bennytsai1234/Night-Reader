@@ -61,26 +61,45 @@ class ReaderChapterContentStore {
     );
   }
 
-  Future<void> saveRawContent({
+  /// 存這一章的正文，存了是 true。[replaceStored] 是使用者明確要換掉的
+  /// （重新取得本章、單章借源）；其他是自動補抓，這一章已經有存好的正文
+  /// 時不蓋（[ReaderChapterContentDao.fillContent]，ADR 0080）。
+  Future<bool> saveRawContent({
     required Book book,
     required BookChapter chapter,
     required String content,
     bool saveChapterMetadata = true,
+    bool replaceStored = false,
   }) async {
-    if (content.isEmpty) return;
-    await _unlessLocked(chapter, () async {
-      if (saveChapterMetadata) {
-        await chapterDao.updateFetchedChapter(chapter);
-      }
-      await contentDao.saveContent(
-        contentKey: contentKeyFor(book: book, chapter: chapter),
+    if (content.isEmpty) return false;
+    return _unlessLocked(chapter, () async {
+      final contentKey = contentKeyFor(book: book, chapter: chapter);
+      final updatedAt = _now().millisecondsSinceEpoch;
+      if (replaceStored) {
+        await contentDao.saveContent(
+          contentKey: contentKey,
+          origin: book.origin,
+          bookUrl: book.bookUrl,
+          chapterUrl: chapter.url,
+          chapterIndex: chapter.index,
+          content: content,
+          updatedAt: updatedAt,
+        );
+      } else if (!await contentDao.fillContent(
+        contentKey: contentKey,
         origin: book.origin,
         bookUrl: book.bookUrl,
         chapterUrl: chapter.url,
         chapterIndex: chapter.index,
         content: content,
-        updatedAt: _now().millisecondsSinceEpoch,
-      );
+        updatedAt: updatedAt,
+      )) {
+        return false;
+      }
+      if (saveChapterMetadata) {
+        await chapterDao.updateFetchedChapter(chapter);
+      }
+      return true;
     });
   }
 
@@ -98,7 +117,7 @@ class ReaderChapterContentStore {
       if (existing != null &&
           existing.hasDisplayContent &&
           !existing.isFailed) {
-        return;
+        return false;
       }
       if (saveChapterMetadata) {
         await chapterDao.updateFetchedChapter(chapter);
@@ -112,6 +131,7 @@ class ReaderChapterContentStore {
         message: message,
         updatedAt: _now().millisecondsSinceEpoch,
       );
+      return true;
     });
   }
 
@@ -119,14 +139,14 @@ class ReaderChapterContentStore {
   /// 免費時存的正文也不被它蓋掉。以資料庫目前的目錄為準，閱讀器與下載手上
   /// 的章節可能是改付費之前的快照；判斷與寫入在同一個交易裡，中間不會被
   /// 換目錄。
-  Future<void> _unlessLocked(
+  Future<bool> _unlessLocked(
     BookChapter chapter,
-    Future<void> Function() save,
+    Future<bool> Function() save,
   ) {
     return chapterDao.transaction(() async {
       final current = await chapterDao.getByUrl(chapter.bookUrl, chapter.url);
-      if ((current ?? chapter).isLocked) return;
-      await save();
+      if ((current ?? chapter).isLocked) return false;
+      return save();
     });
   }
 

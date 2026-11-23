@@ -72,7 +72,9 @@ class ExportBookService {
               dir: await BookIllustrationStorage.dirFor(book),
             );
           }
-          await _chapterContentDao.saveContent(
+          // 補抓的期間使用者借來或重新取得的不蓋掉，匯出存著的那一份
+          // （ADR 0080）。
+          final filled = await _chapterContentDao.fillContent(
             contentKey: ReaderChapterContentDao.contentKey(
               origin: book.origin,
               bookUrl: book.bookUrl,
@@ -85,6 +87,17 @@ class ExportBookService {
             content: content,
             updatedAt: DateTime.now().millisecondsSinceEpoch,
           );
+          if (!filled) {
+            content =
+                await _chapterContentDao.getContent(
+                  contentKey: ReaderChapterContentDao.contentKey(
+                    origin: book.origin,
+                    bookUrl: book.bookUrl,
+                    chapterUrl: chapters[i].url,
+                  ),
+                ) ??
+                content;
+          }
         }
       }
       if (content != null) {

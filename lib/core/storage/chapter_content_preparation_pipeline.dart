@@ -120,6 +120,7 @@ class ChapterContentPreparationPipeline {
       chapterIndex: chapterIndex,
       chapter: chapter,
       sourceOverride: sourceOverride,
+      replaceStored: forceRefresh,
       saveChapterMetadata: saveChapterMetadata,
       maxAttempts: maxAttempts,
       cancelToken: cancelToken,
@@ -185,10 +186,14 @@ class ChapterContentPreparationPipeline {
     _inFlight.clear();
   }
 
+  /// [replaceStored]：使用者明確要重抓（[prepare] 的 forceRefresh），抓到
+  /// 就換掉存著的正文；否則是自動補抓，抓的期間這一章已經存好正文（例如
+  /// 使用者借來的，ADR 0080）就不蓋。
   Future<ChapterContentPreparationResult> _fetchAndStore({
     required int chapterIndex,
     required BookChapter chapter,
     required BookSource? sourceOverride,
+    required bool replaceStored,
     required bool saveChapterMetadata,
     required int maxAttempts,
     required CancelToken? cancelToken,
@@ -207,9 +212,10 @@ class ChapterContentPreparationPipeline {
         await _storeResult(
           chapter: chapter,
           result: result,
+          replaceStored: replaceStored,
           saveChapterMetadata: saveChapterMetadata,
         );
-        return result;
+        return await _keptResult(chapter, result, replaceStored);
       }
       // 等下一次重試期間取消了就不再試，什麼都不寫。
       await Future.any<Object?>([
@@ -223,9 +229,30 @@ class ChapterContentPreparationPipeline {
     await _storeResult(
       chapter: chapter,
       result: result,
+      replaceStored: replaceStored,
       saveChapterMetadata: saveChapterMetadata,
     );
-    return result;
+    return await _keptResult(chapter, result, replaceStored);
+  }
+
+  /// 自動補抓交出的是最後存著的那一份：抓的期間這一章已經存好正文（使用者
+  /// 借來或重新取得的，ADR 0080）時，晚到的這份沒存進去，抓失敗也一樣，
+  /// 交出存著的，下載、閱讀器與插圖才照同一份算。
+  Future<ChapterContentPreparationResult> _keptResult(
+    BookChapter chapter,
+    ChapterContentPreparationResult fetched,
+    bool replaceStored,
+  ) async {
+    final store = contentStore;
+    if (replaceStored || store == null || book.isLocal) return fetched;
+    final entry = await store.getContentEntry(book: book, chapter: chapter);
+    if (entry == null ||
+        !entry.hasDisplayContent ||
+        entry.isFailed ||
+        entry.content == fetched.content) {
+      return fetched;
+    }
+    return ChapterContentPreparationResult.ready(entry.content!);
   }
 
   Future<ChapterContentPreparationResult> _fetchOnce({
@@ -323,6 +350,7 @@ class ChapterContentPreparationPipeline {
   Future<void> _storeResult({
     required BookChapter chapter,
     required ChapterContentPreparationResult result,
+    required bool replaceStored,
     required bool saveChapterMetadata,
   }) async {
     final store = contentStore;
@@ -334,6 +362,7 @@ class ChapterContentPreparationPipeline {
         chapter: chapter,
         content: result.content,
         saveChapterMetadata: saveChapterMetadata,
+        replaceStored: replaceStored,
       );
       return;
     }
