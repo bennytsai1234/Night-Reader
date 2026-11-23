@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
@@ -308,10 +310,26 @@ void main() {
         aiRepairSystemPrompt,
         allOf(
           contains('規則裡寫死完整網址的'),
-          contains('誰把正文填進'),
-          contains('照抄成正文規則的 JS'),
+          contains('誰把內容填進'),
+          contains('照抄成規則的 JS'),
         ),
       );
+    });
+
+    test('the AI can look at a page after its script has run, and writes '
+        'that into the source only as a last resort', () {
+      // 2026-11-23：空殼網站 AI 只看得到第一次回來的空殼；開網頁抓讀者每章
+      // 都要等，使用者嫌太慢。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(
+          contains('"webView":true'),
+          contains('"webViewDelayTime"'),
+          contains('找不到資料從哪來時，才把 "webView":true 寫進'),
+        ),
+      );
+      final fetch = aiRepairTools.firstWhere((tool) => tool.name == 'fetch');
+      expect(jsonEncode(fetch.parameters), contains('webView'));
     });
 
     test('a whole site turned into another one is its own case, with why to '
