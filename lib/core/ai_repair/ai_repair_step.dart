@@ -5,6 +5,8 @@ enum AiRepairStepState { waiting, running, done, failed }
 const String aiRepairCheckStage = '校驗原本的書源';
 const String aiRepairFetchStage = '抓網頁';
 const String aiRepairVerifyStage = '校驗修好的書源';
+const String aiCreateSiteStage = '檢查網站';
+const String aiCreateFetchStage = '抓貼的網頁';
 
 /// 一步是哪一種：固定的一段（校驗、抓網頁）、AI 的一輪，或換一段新的對話
 /// 重新開始。修復頁把後兩種併成「AI 修改規則」一段，過程收在「經過」裡

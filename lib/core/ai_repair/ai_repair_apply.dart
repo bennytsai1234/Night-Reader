@@ -1,6 +1,9 @@
+import 'dart:math';
+
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
 
 import 'ai_repair_backups.dart';
@@ -44,6 +47,31 @@ Future<void> saveRepairedSource(
     repaired,
     previousUrl: moved ? original.bookSourceUrl : null,
   );
+}
+
+/// 存 AI 從空白建立的書源（[url] 是使用者貼的網址），加在書源最後。已經有
+/// 同一個網址，或同一個網站（[siteKey]）、同一類的書源時不存，不讓自動
+/// 合併替使用者挑留哪一個。
+Future<void> saveCreatedSource(BookSource created, String url) async {
+  final dao = getIt<BookSourceDao>();
+  final all = await dao.getAll();
+  final key = siteKey(created);
+  for (final other in all) {
+    if (other.bookSourceUrl == created.bookSourceUrl ||
+        (siteKey(other) == key &&
+            other.bookSourceType == created.bookSourceType)) {
+      throw AiRepairConflict('已經有同網站的書源「${other.bookSourceName}」，沒有存。');
+    }
+  }
+  final date = DateTime.now().toIso8601String().substring(0, 10);
+  created
+    ..bookSourceComment = '夜讀 AI 依 $url 建立（$date）'
+    ..enabled = true
+    ..enabledExplore = true
+    ..customOrder = all.isEmpty
+        ? 0
+        : all.map((source) => source.customOrder).reduce(max) + 1;
+  await BookSourceService().saveEditedSource(created);
 }
 
 /// 修好的書源存不進去：修的這段時間書源被刪掉或改過。
