@@ -29,12 +29,8 @@ _Avoid_: 更新日誌、changelog（指這個頁面時）、這次更新了什�
 _Avoid_: 更新日誌、commit 標題
 
 **原型**：
-為了讓使用者在幾個做法之間挑，用 `test/support/screenshot.dart` 畫出的候選圖。使用者選定後結果寫進 `DESIGN.md` 或 ADR 就固定，不做成設定（ADR 0030）。
+為了讓使用者在幾個做法之間挑，用 `test/support/screenshot.dart` 畫出的候選圖。使用者選定後結果寫進 `docs/design/`。
 _Avoid_: demo、mockup
-
-**試用開關**：
-使用者要日常用過才選得出來的視覺做法，在 App 裡暫時放的開關，名稱以「試用：」開頭；選定後把選中的做法寫進 `docs/design/`、拿掉開關（DESIGN.md 設計原則 6，ADR 0030）。
-_Avoid_: 實驗功能、beta 開關
 
 **自動巡檢**：
 ChatGPT 的兩個每日排程：一個看 `beta` 過去 24 小時的改動，一個輪一段舊程式（20 天一圈）；找到的問題寫成一份報告開成一個 GitHub issue，標上 `auto-audit`，由維護者再判斷要不要處理。規則在 `docs/agents/auto-audit.md`。

@@ -157,11 +157,11 @@ class _Library implements AiFindLibrary {
 }
 
 /// 一次呼叫好幾個工具的回覆：`(名稱, 參數)`。
-AiReply _calls(List<(String, Map<String, Object?>)> calls) => (
+AiReply _calls(List<(String, Map<String, Object?>)> calls) => AiReply(
   content: '',
   toolCalls: [
     for (final (i, (name, args)) in calls.indexed)
-      (id: 'call_$i', name: name, arguments: jsonEncode(args)),
+      AiToolCall(id: 'call_$i', name: name, arguments: jsonEncode(args)),
   ],
   reasoning: '',
   usage: (prompt: 1000, cached: 0, completion: 100, reasoning: 0),
@@ -706,7 +706,7 @@ void main() {
 
   test('the same search with another filter is not the same call', () {
     AiToolCall call(Map<String, Object?> args) =>
-        (id: 'c', name: 'search', arguments: jsonEncode(args));
+        AiToolCall(id: 'c', name: 'search', arguments: jsonEncode(args));
     expect(
       readAiFindCall(call({'keyword': '穿越', 'filter': '後宮'})).key,
       isNot(readAiFindCall(call({'keyword': '穿越', 'filter': '金庸'})).key),
@@ -971,9 +971,11 @@ void main() {
   test('arguments that are not JSON are dropped and the same conversation '
       'is sent again', () async {
     final ai = _Ai([
-      (
+      AiReply(
         content: '',
-        toolCalls: [(id: 'bad', name: 'search', arguments: '{"keyword">"x"}')],
+        toolCalls: [
+          AiToolCall(id: 'bad', name: 'search', arguments: '{"keyword">"x"}'),
+        ],
         reasoning: '',
         usage: null,
         firstData: Duration.zero,
@@ -986,7 +988,7 @@ void main() {
   });
 
   group('every way of not converging ends as unfinished', () {
-    AiReply noTool() => (
+    AiReply noTool() => AiReply(
       content: '我想想',
       toolCalls: const [],
       reasoning: '',
@@ -1055,6 +1057,7 @@ void main() {
 
   test('every tool says which arguments it needs', () {
     for (final tool in aiFindTools) {
+      if (tool.parameters.isEmpty) continue;
       final properties = tool.parameters['properties']! as Map;
       for (final name in tool.parameters['required']! as List) {
         expect(properties.keys, contains(name), reason: tool.name);
@@ -1168,6 +1171,65 @@ void main() {
         }
       },
     );
+
+    test('resuming with another service or model drops what only the old '
+        'service reads; the same service gets it back', () async {
+      final first = _calls([
+        ('search', {'keyword': '穿越'}),
+      ]);
+      final withData = AiReply(
+        content: first.content,
+        toolCalls: [
+          for (final call in first.toolCalls)
+            AiToolCall(
+              id: call.id,
+              name: call.name,
+              arguments: call.arguments,
+              extra: const {
+                'extra_content': {
+                  'google': {'thought_signature': 'sig'},
+                },
+              },
+            ),
+        ],
+        reasoning: '先搜',
+        reasoningDetails: const [
+          {'type': 'reasoning.encrypted', 'data': 'enc'},
+        ],
+        usage: first.usage,
+      );
+      final ai = _Ai([withData]);
+      final full = session(library(), ai);
+      final saved = <String>[];
+      full.onCheckpoint = saved.add;
+      await full.start();
+
+      // 第 2 輪開頭存的那份，對話裡有第 1 輪帶著服務資料的回覆。
+      Future<AiMessage> resumedReply(String label) async {
+        final next = _Ai([]);
+        final resumed = AiFindSession.restore(
+          saved[1],
+          library: library(),
+          ask: next.call,
+          serviceLabel: label,
+          log: AiRepairLog.find(
+            description: '爽文、穿越',
+            directory: () async => logs,
+          ),
+        );
+        sessions.add(resumed);
+        await resumed.start();
+        return next.seen.first.firstWhere((m) => m.role == 'assistant');
+      }
+
+      final same = await resumedReply('');
+      expect(same.reasoningDetails, isNotEmpty);
+      expect(same.toolCalls.single.extra, isNotEmpty);
+      final other = await resumedReply('api.deepseek.com · deepseek-flash');
+      expect(other.reasoningDetails, isEmpty);
+      expect(other.toolCalls.single.extra, isEmpty);
+      expect(other.reasoning, '先搜', reason: '思考文字各家都收，照留');
+    });
 
     test('pause stops the running search and leaves the find paused, not '
         'ended', () async {

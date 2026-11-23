@@ -97,12 +97,12 @@ AiReply _reply(String content) {
         name.startsWith('tool:') ||
         name.startsWith('submit:'),
   );
-  return (
+  return AiReply(
     content: isCall ? '' : content,
     toolCalls: [
       if (isCall)
         for (final (i, name) in calls.indexed)
-          (id: 'call_$i', name: name, arguments: '{}'),
+          AiToolCall(id: 'call_$i', name: name, arguments: '{}'),
     ],
     reasoning: '',
     usage: null,
@@ -248,7 +248,7 @@ void main() {
     await run((messages, _) async {
       seen.add(List.of(messages));
       final reply = _reply(seen.length == 1 ? 'tool:a' : 'submit:ok');
-      return (
+      return AiReply(
         content: reply.content,
         toolCalls: reply.toolCalls,
         reasoning: '第 ${seen.length} 輪的思考',
@@ -438,10 +438,29 @@ void main() {
       'wire format', () {
     const messages = [
       AiMessage.system('規則'),
-      AiMessage.assistant(
+      AiMessage(
+        'assistant',
         '',
-        toolCalls: [(id: 'c1', name: 'search', arguments: '{"q":"x"}')],
+        toolCalls: [
+          AiToolCall(
+            id: 'c1',
+            name: 'search',
+            arguments: '{"q":"x"}',
+            // 服務要原樣送回的資料，續跑時也要在（Gemini 的思考簽章）。
+            extra: {
+              'extra_content': {
+                'google': {'thought_signature': 'sig'},
+              },
+            },
+          ),
+        ],
         reasoning: '想一下',
+        reasoningDetails: [
+          {'type': 'reasoning.encrypted', 'data': 'enc'},
+        ],
+        responseItems: [
+          {'type': 'reasoning', 'encrypted_content': 'enc'},
+        ],
       ),
       AiMessage.tool('c1', '結果'),
     ];
@@ -454,6 +473,8 @@ void main() {
       expect(back.reasoning, message.reasoning);
       expect(back.toolCallId, message.toolCallId);
       expect(back.toolCalls, message.toolCalls);
+      expect(back.reasoningDetails, message.reasoningDetails);
+      expect(back.responseItems, message.responseItems);
     }
   });
 }
