@@ -11,6 +11,10 @@ import 'ai_repair_settings.dart';
 /// 結果，[toolCallId] 是它回應的那個呼叫）。AI 呼叫工具的那一句帶著
 /// [toolCalls]，話可以是空的；AI 說的話帶著它的思考 [reasoning]，原樣放回
 /// 對話（`agent-harness` 技能）：模型下一輪接著自己的推理，不用重想。
+///
+/// 服務另外附、規定要原樣送回的思考資料也帶著：[reasoningDetails] 是
+/// OpenRouter 的 `reasoning_details`，[responseItems] 是 OpenAI `responses`
+/// 那次回覆的全部輸出項目（含加密的思考）。
 final class AiMessage {
   const AiMessage(
     this.role,
@@ -18,6 +22,8 @@ final class AiMessage {
     this.toolCalls = const [],
     this.toolCallId,
     this.reasoning = '',
+    this.reasoningDetails = const [],
+    this.responseItems = const [],
   });
 
   const AiMessage.system(String content) : this('system', content);
@@ -30,23 +36,56 @@ final class AiMessage {
   const AiMessage.tool(String toolCallId, String content)
     : this('tool', content, toolCallId: toolCallId);
 
+  /// AI 的一次回覆，連同服務要原樣送回的資料。
+  AiMessage.reply(AiReply reply)
+    : this(
+        'assistant',
+        reply.content,
+        toolCalls: reply.toolCalls,
+        reasoning: reply.reasoning,
+        reasoningDetails: reply.reasoningDetails,
+        responseItems: reply.responseItems,
+      );
+
   final String role;
   final String content;
   final List<AiToolCall> toolCalls;
   final String? toolCallId;
   final String reasoning;
+  final List<Object?> reasoningDetails;
+  final List<Object?> responseItems;
+
+  /// 拿掉只有原本那個服務認得的資料（[reasoningDetails]、[responseItems]、
+  /// 工具呼叫的 [AiToolCall.extra]）：對話換給另一個服務接著問時用，話、
+  /// 思考文字與工具呼叫照留。
+  AiMessage get withoutServiceData => AiMessage(
+    role,
+    content,
+    toolCalls: [
+      for (final call in toolCalls)
+        AiToolCall(id: call.id, name: call.name, arguments: call.arguments),
+    ],
+    toolCallId: toolCallId,
+    reasoning: reasoning,
+  );
 
   /// 送給服務的樣子（OpenAI 的 `chat/completions`）。思考放在
-  /// `reasoning_content`（DeepSeek 的欄位；2026-11-12 OpenCode Go 的
-  /// deepseek-v4.1-flash 實測收）。
-  Map<String, Object?> toJson() => {
+  /// `reasoning_content`（DeepSeek 的欄位，OpenRouter 也認；2026-11-12
+  /// OpenCode Go 的 deepseek-v4.1-flash 實測收）。[withReasoning] 是對話裡有
+  /// 一則帶過思考：AI 的每則回覆都帶這個欄位，空的送空字串（DeepSeek 的思考
+  /// 模式每則都要，少了回 400）。
+  Map<String, Object?> toJson({bool withReasoning = false}) => {
     'role': role,
     'content': toolCalls.isNotEmpty && content.isEmpty ? null : content,
-    if (reasoning.isNotEmpty) 'reasoning_content': reasoning,
+    if (role == 'assistant' && (withReasoning || reasoning.isNotEmpty))
+      'reasoning_content': reasoning,
+    if (_detailsToSend case final details when details.isNotEmpty)
+      'reasoning_details': details,
     if (toolCalls.isNotEmpty)
       'tool_calls': [
         for (final call in toolCalls)
           {
+            ...call.extra,
             'id': call.id,
             'type': 'function',
             'function': {'name': call.name, 'arguments': call.arguments},
@@ -54,19 +93,62 @@ final class AiMessage {
       ],
     'tool_call_id': ?toolCallId,
   };
+
+  /// 送回的 `reasoning_details`：Anthropic 與 Gemini 的思考文字沒有簽章的
+  /// 不送（照 OpenRouter 官方的 AI SDK 套件：沒簽章的那家不收）。
+  List<Object?> get _detailsToSend => [
+    for (final detail in reasoningDetails)
+      if (!(detail is Map &&
+          detail['type'] == 'reasoning.text' &&
+          detail['signature'] == null &&
+          const {
+            'anthropic-claude-v1',
+            'google-gemini-v1',
+          }.contains(detail['format'])))
+        detail,
+  ];
 }
 
-/// AI 呼叫的一個工具：[arguments] 是服務原樣給的參數 JSON 字串。
-typedef AiToolCall = ({String id, String name, String arguments});
+/// AI 呼叫的一個工具：[arguments] 是服務原樣給的參數 JSON 字串，[extra] 是
+/// 服務在這個呼叫上多附的欄位（Gemini 的 `extra_content` 帶著思考簽章），
+/// 送回時原樣附上：Gemini 3 以上少了簽章回 400。
+final class AiToolCall {
+  const AiToolCall({
+    required this.id,
+    required this.name,
+    required this.arguments,
+    this.extra = const {},
+  });
 
-/// 給 AI 用的工具：名稱、做什麼與參數（JSON Schema）。
+  final String id;
+  final String name;
+  final String arguments;
+  final Map<String, Object?> extra;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AiToolCall &&
+      other.id == id &&
+      other.name == name &&
+      other.arguments == arguments &&
+      jsonEncode(other.extra) == jsonEncode(extra);
+
+  @override
+  int get hashCode => Object.hash(id, name, arguments, jsonEncode(extra));
+
+  @override
+  String toString() => 'AiToolCall($id, $name, $arguments, $extra)';
+}
+
+/// 給 AI 用的工具：名稱、做什麼與參數（JSON Schema；沒有參數是空的）。
 typedef AiTool = ({
   String name,
   String description,
   Map<String, Object?> parameters,
 });
 
-/// 送給服務的工具清單（OpenAI 的 `tools`）。
+/// 送給服務的工具清單（OpenAI `chat/completions` 的 `tools`）。沒有參數的
+/// 不送參數格式：OpenAI 的規格允許，沒列欄位的物件 Gemini 不收。
 List<Map<String, Object?>> aiToolsJson(List<AiTool> tools) => [
   for (final tool in tools)
     {
@@ -74,7 +156,7 @@ List<Map<String, Object?>> aiToolsJson(List<AiTool> tools) => [
       'function': {
         'name': tool.name,
         'description': tool.description,
-        'parameters': tool.parameters,
+        if (tool.parameters.isNotEmpty) 'parameters': tool.parameters,
       },
     },
 ];
@@ -84,14 +166,28 @@ List<Map<String, Object?>> aiToolsJson(List<AiTool> tools) => [
 typedef AiUsage = ({int prompt, int cached, int completion, int reasoning});
 
 /// 一次回覆：[content] 是回的話，[toolCalls] 是呼叫的工具，[reasoning] 是
-/// 服務送出的思考（沒有是空字串），[firstData] 是送出後多久收到第一段資料。
-typedef AiReply = ({
-  String content,
-  List<AiToolCall> toolCalls,
-  String reasoning,
-  AiUsage? usage,
-  Duration firstData,
-});
+/// 服務送出的思考（沒有是空字串），[reasoningDetails] 與 [responseItems] 是
+/// 服務要原樣送回的資料（[AiMessage]），[firstData] 是送出後多久收到第一段
+/// 資料。
+final class AiReply {
+  const AiReply({
+    required this.content,
+    this.toolCalls = const [],
+    this.reasoning = '',
+    this.reasoningDetails = const [],
+    this.responseItems = const [],
+    this.usage,
+    this.firstData = Duration.zero,
+  });
+
+  final String content;
+  final List<AiToolCall> toolCalls;
+  final String reasoning;
+  final List<Object?> reasoningDetails;
+  final List<Object?> responseItems;
+  final AiUsage? usage;
+  final Duration firstData;
+}
 
 /// AI 服務回了錯，或回的東西讀不懂；[message] 給使用者看。[retryable] 是
 /// 一時的狀況（連線中斷、HTTP 408／429／5xx），整件重跑可能就好。[usage]
@@ -138,10 +234,12 @@ typedef AiCallLimits = ({
   int repeatedSentences,
 });
 
-/// 呼叫使用者自己的 OpenAI 相容服務（`chat/completions`，ADR 0054），串流
-/// 接收：不串流時分不出是斷線還是還在生成。服務不理 `stream`、回整份 JSON
-/// 的也照收。不經過書源的網路設定（Cookie、書源的標頭、限流），送的只有
-/// 對話。
+/// 呼叫使用者自己的 OpenAI 相容服務（ADR 0054），串流接收：不串流時分不出
+/// 是斷線還是還在生成。服務不理 `stream`、回整份 JSON 的也照收。不經過書源
+/// 的網路設定（Cookie、書源的標頭、限流），送的只有對話。
+///
+/// 一般走 `chat/completions`；服務網址是 OpenAI 官方時走 `responses`
+/// （[usesResponses]）。
 class AiChatClient {
   AiChatClient(this.service, {Dio? dio})
     : _dio =
@@ -159,28 +257,34 @@ class AiChatClient {
   // 同一次 AI 修復共用，讓 OpenCode 將多輪對話路由到同一個 session。
   final String _opencodeSession = 'ses_${const Uuid().v4()}';
 
-  /// 送出的網址：服務網址後面接 `/chat/completions`；使用者已經填到這一段
-  /// 的照用。
-  static String endpoint(String baseUrl) {
+  /// 走 OpenAI 的 `responses`：GPT-6 Astra、GPT-6.1 Sol 在 `chat/completions`
+  /// 不能用工具（OpenAI 官方文件），`responses` 也把加密的思考交回來、下一輪
+  /// 原樣送回。只有 OpenAI 官方：其他相容服務多半只有 `chat/completions`。
+  static bool usesResponses(String baseUrl) =>
+      Uri.tryParse(_base(baseUrl))?.host == 'api.openai.com';
+
+  /// 服務網址去掉結尾的 `/` 與使用者多填的 `/chat/completions`、`/responses`。
+  static String _base(String baseUrl) {
     var url = baseUrl.trim();
     while (url.endsWith('/')) {
       url = url.substring(0, url.length - 1);
     }
-    return url.endsWith('/chat/completions') ? url : '$url/chat/completions';
+    for (final tail in const ['/chat/completions', '/responses']) {
+      if (url.endsWith(tail)) return url.substring(0, url.length - tail.length);
+    }
+    return url;
   }
+
+  /// 送出的網址：服務網址後面接 `/chat/completions`（OpenAI 官方接
+  /// `/responses`）；使用者已經填到這一段的不重複接。
+  static String endpoint(String baseUrl) =>
+      '${_base(baseUrl)}/${usesResponses(baseUrl) ? 'responses' : 'chat/completions'}';
 
   /// 服務列出的模型（OpenAI 相容的 `GET 服務網址/models`），照服務給的順序；
   /// AI 服務頁的模型選單用。不用金鑰也列得出的服務（OpenCode Go）照樣送
   /// 金鑰，各家都認。
   Future<List<String>> listModels() async {
-    var base = service.baseUrl.trim();
-    while (base.endsWith('/')) {
-      base = base.substring(0, base.length - 1);
-    }
-    if (base.endsWith('/chat/completions')) {
-      base = base.substring(0, base.length - '/chat/completions'.length);
-    }
-    final uri = Uri.tryParse('$base/models');
+    final uri = Uri.tryParse('${_base(service.baseUrl)}/models');
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
       throw const AiServiceException('服務網址不對');
     }
@@ -223,9 +327,9 @@ class AiChatClient {
   /// 服務出了狀況，收下來只會佔滿記憶體。
   static const int maxResponseBytes = 2 * 1024 * 1024;
 
-  /// 送出 [messages]，傳回 AI 回的話、呼叫的工具與思考。給了 [tools] 時
-  /// 每次回覆都要呼叫工具（`tool_choice: required`）：模型照它訓練時的方式
-  /// 呼叫工具，服務解析好再交給我們（ADR 0054）。[limits] 沒給時用
+  /// 送出 [messages]，傳回 AI 回的話、呼叫的工具與思考。給了 [tools] 時帶上
+  /// 工具清單，要不要呼叫由模型決定（不送 `tool_choice`，ADR 0054）：模型照
+  /// 它訓練時的方式呼叫工具，服務解析好再交給我們。[limits] 沒給時用
   /// [AiAgentKnobs.call]。
   ///
   /// 不送 `temperature`（用模型預設）與 `max_tokens`（OpenAI 的新模型只認
@@ -247,9 +351,11 @@ class AiChatClient {
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
       throw const AiServiceException('服務網址不對，要以 https:// 開頭');
     }
+    final responses = usesResponses(service.baseUrl);
     final watch = Stopwatch()..start();
     final reader = _StreamReader(
       bounds,
+      responses: responses,
       promptChars: messages.fold(
         0,
         (sum, m) =>
@@ -296,18 +402,9 @@ class AiChatClient {
       try {
         response = await _dio.postUri<ResponseBody>(
           uri,
-          data: {
-            'model': service.model,
-            'messages': [for (final message in messages) message.toJson()],
-            if (tools.isNotEmpty) ...{
-              'tools': aiToolsJson(tools),
-              'tool_choice': 'required',
-            },
-            'stream': true,
-            // 串流時用量只在要了才給（OpenAI、DeepSeek）；修復頁的 AI 用量靠它。
-            'stream_options': {'include_usage': true},
-            if (service.effort.isNotEmpty) 'reasoning_effort': service.effort,
-          },
+          data: responses
+              ? _responsesBody(messages, tools)
+              : _chatBody(messages, tools),
           options: Options(
             headers: {
               if (service.apiKey.isNotEmpty)
@@ -381,16 +478,27 @@ class AiChatClient {
           retryable: true,
         );
       }
+      // `responses` 的回覆以結束事件為準：沒收到就斷的，工具呼叫與要送回的
+      // 項目都可能不完整，同連線中斷（Codex 審查）。
+      if (responses && !reader.ended) {
+        throw AiServiceException(
+          'AI 服務的連線中斷了',
+          retryable: true,
+          usage: reader.estimate,
+        );
+      }
       if (reader.runaway case final reason?) throw reason;
       final content = reader.content.toString();
       final toolCalls = reader.toolCalls;
       if (content.trim().isEmpty && toolCalls.isEmpty) {
         throw const AiEmptyReply();
       }
-      return (
+      return AiReply(
         content: content,
         toolCalls: toolCalls,
         reasoning: reader.reasoning.toString(),
+        reasoningDetails: reader.reasoningDetails,
+        responseItems: reader.responseItems,
         usage: reader.usage,
         firstData: firstData ?? watch.elapsed,
       );
@@ -404,6 +512,87 @@ class AiChatClient {
     }
   }
 
+  /// `chat/completions` 的請求。
+  Map<String, Object?> _chatBody(List<AiMessage> messages, List<AiTool> tools) {
+    final withReasoning = messages.any(
+      (m) => m.role == 'assistant' && m.reasoning.isNotEmpty,
+    );
+    return {
+      'model': service.model,
+      'messages': [
+        for (final message in messages)
+          message.toJson(withReasoning: withReasoning),
+      ],
+      if (tools.isNotEmpty) 'tools': aiToolsJson(tools),
+      'stream': true,
+      // 串流時用量只在要了才給（OpenAI、DeepSeek）；修復頁的 AI 用量靠它。
+      'stream_options': {'include_usage': true},
+      if (service.effort.isNotEmpty) 'reasoning_effort': service.effort,
+    };
+  }
+
+  /// OpenAI `responses` 的請求：不存在 OpenAI 那邊（`store: false`），每輪送
+  /// 整段對話；思考加密交回、原樣送回。工具不用嚴格模式：嚴格模式要每個
+  /// 物件都列出全部欄位、全部必填，夜讀的參數多半可以不給。
+  Map<String, Object?> _responsesBody(
+    List<AiMessage> messages,
+    List<AiTool> tools,
+  ) => {
+    'model': service.model,
+    'input': responsesInput(messages),
+    if (tools.isNotEmpty)
+      'tools': [
+        for (final tool in tools)
+          {
+            'type': 'function',
+            'name': tool.name,
+            'description': tool.description,
+            'parameters': tool.parameters.isEmpty
+                ? const {'type': 'object', 'properties': <String, Object?>{}}
+                : tool.parameters,
+            'strict': false,
+          },
+      ],
+    'stream': true,
+    'store': false,
+    'include': ['reasoning.encrypted_content'],
+    if (service.effort.isNotEmpty) 'reasoning': {'effort': service.effort},
+  };
+
+  /// 對話換成 `responses` 的輸入項目：AI 的回覆有原本的輸出項目就照樣送回
+  /// （順序不動，加密的思考也在裡面），沒有的照話與工具呼叫組出來。
+  static List<Map<String, Object?>> responsesInput(List<AiMessage> messages) =>
+      [
+        for (final message in messages)
+          ...switch (message.role) {
+            'assistant' when message.responseItems.isNotEmpty => [
+              for (final item in message.responseItems)
+                if (item is Map<String, Object?>) item,
+            ],
+            'assistant' => [
+              if (message.content.isNotEmpty)
+                {'role': 'assistant', 'content': message.content},
+              for (final call in message.toolCalls)
+                {
+                  'type': 'function_call',
+                  'call_id': call.id,
+                  'name': call.name,
+                  'arguments': call.arguments,
+                },
+            ],
+            'tool' => [
+              {
+                'type': 'function_call_output',
+                'call_id': message.toolCallId,
+                'output': message.content,
+              },
+            ],
+            final role => [
+              {'role': role, 'content': message.content},
+            ],
+          },
+      ];
+
   static Object? _json(List<int> bytes) {
     try {
       return jsonDecode(utf8.decode(bytes, allowMalformed: true));
@@ -412,24 +601,26 @@ class AiChatClient {
     }
   }
 
-  /// 回應裡的用量；沒有的欄位當 0。
+  /// 回應裡的用量；沒有的欄位當 0。`chat/completions` 與 `responses` 的
+  /// 欄位名不同，兩種都認。
   static AiUsage usageOf(Object? data) {
     int read(Object? value) => value is num ? value.toInt() : 0;
+    Object? inner(Object? map, String key) => map is Map ? map[key] : null;
     final usage = switch (data) {
       {'usage': final Map<String, dynamic> usage} => usage,
       _ => const <String, dynamic>{},
     };
-    final prompt = usage['prompt_tokens_details'];
-    final completion = usage['completion_tokens_details'];
     return (
-      prompt: read(usage['prompt_tokens']),
+      prompt: read(usage['prompt_tokens'] ?? usage['input_tokens']),
       cached: read(
         usage['prompt_cache_hit_tokens'] ??
-            (prompt is Map ? prompt['cached_tokens'] : null),
+            inner(usage['prompt_tokens_details'], 'cached_tokens') ??
+            inner(usage['input_tokens_details'], 'cached_tokens'),
       ),
-      completion: read(usage['completion_tokens']),
+      completion: read(usage['completion_tokens'] ?? usage['output_tokens']),
       reasoning: read(
-        completion is Map ? completion['reasoning_tokens'] : null,
+        inner(usage['completion_tokens_details'], 'reasoning_tokens') ??
+            inner(usage['output_tokens_details'], 'reasoning_tokens'),
       ),
     );
   }
@@ -516,21 +707,44 @@ abstract final class AiAgentKnobs {
       '卡住連續 $stallLimit 次重跑、思考原樣放回對話';
 }
 
+/// 接收中的一個工具呼叫：編號與名稱用換的（服務每段都重送時不會接成
+/// `fetchfetch`），參數用接的，同 OpenAI 官方套件。
+final class _Call {
+  String id = '';
+  String name = '';
+  final StringBuffer arguments = StringBuffer();
+  final Map<String, Object?> extra = {};
+}
+
 /// 讀 `text/event-stream`：每行 `data: {...}`，`[DONE]` 結束。邊讀邊數輸出
 /// 的字與重複的句子，失控時記下原因（[runaway]），呼叫的地方停掉連線。
+/// [responses] 是 OpenAI `responses` 的事件（每筆資料帶 `type`），否則是
+/// `chat/completions` 的片段。
 final class _StreamReader implements Sink<String> {
-  _StreamReader(this.limits, {required this.promptChars});
+  _StreamReader(
+    this.limits, {
+    required this.responses,
+    required this.promptChars,
+  });
 
   final AiCallLimits limits;
+  final bool responses;
 
   /// 送出的對話共幾字，估用量用（[estimate]）。
   final int promptChars;
   final StringBuffer content = StringBuffer();
   final StringBuffer reasoning = StringBuffer();
 
-  /// 工具呼叫照 `index` 一段一段接起來：id、名稱與參數。
-  final Map<int, ({StringBuffer id, StringBuffer name, StringBuffer arguments})>
-  _calls = {};
+  /// 工具呼叫照收到的順序；[_byIndex] 是服務標的第幾個（`chat/completions`
+  /// 的 `index`、`responses` 的 `output_index`）。
+  final List<_Call> _calls = [];
+  final Map<int, _Call> _byIndex = {};
+
+  /// OpenRouter 的 `reasoning_details`，照它的官方套件接起來。
+  final List<Map<String, Object?>> reasoningDetails = [];
+
+  /// `responses` 的輸出項目，照 `output_index`。
+  final Map<int, Map<String, Object?>> _items = {};
   AiUsage? usage;
   String? error;
   AiRunaway? runaway;
@@ -539,30 +753,40 @@ final class _StreamReader implements Sink<String> {
   final Set<String> _seen = {};
   int _repeats = 0;
 
+  /// `responses` 收到了結束事件（完成、沒完成或失敗）或整份回應。
+  bool ended = false;
+
   bool get hasOutput =>
       content.isNotEmpty || reasoning.isNotEmpty || _calls.isNotEmpty;
 
-  /// 呼叫的工具，照服務給的順序。
+  /// 呼叫的工具，照收到的順序。服務沒給編號的（Gemini 曾經給空的）補一個：
+  /// 工具結果要照編號接回去。
   List<AiToolCall> get toolCalls => [
-    for (final index in _calls.keys.toList()..sort())
-      (
-        id: _calls[index]!.id.toString(),
-        name: _calls[index]!.name.toString(),
-        arguments: _calls[index]!.arguments.toString(),
+    for (final call in _calls)
+      AiToolCall(
+        id: call.id.isNotEmpty
+            ? call.id
+            : (call.id = 'call_${const Uuid().v4()}'),
+        name: call.name,
+        arguments: call.arguments.toString(),
+        extra: Map.unmodifiable(call.extra),
       ),
   ];
 
+  List<Object?> get responseItems => [
+    for (final index in _items.keys.toList()..sort()) _items[index],
+  ];
+
   int get _argumentChars =>
-      _calls.values.fold(0, (sum, call) => sum + call.arguments.length);
+      _calls.fold(0, (sum, call) => sum + call.arguments.length);
 
   /// 思考、回覆與工具呼叫各自的最後 1,000 字，分開標出來：看得出失控出在
   /// 哪一段。
   String get tail {
     String last(String text) =>
         text.length <= 1000 ? text : text.substring(text.length - 1000);
-    final calls = [
-      for (final call in toolCalls) '${call.name} ${call.arguments}',
-    ].join('\n');
+    final calls = [for (final call in _calls) '${call.name} ${call.arguments}']
+        .join('\n');
     return [
       if (reasoning.isNotEmpty) '思考的最後一段：\n${last('$reasoning')}',
       if (content.isNotEmpty) '回覆的最後一段：\n${last('$content')}',
@@ -616,11 +840,28 @@ final class _StreamReader implements Sink<String> {
     } on FormatException {
       return;
     }
-    _chunk(json);
+    if (json is! Map) return;
+    if (responses) {
+      _event(json);
+    } else {
+      _chunk(json);
+    }
   }
 
-  void _chunk(Object? json) {
+  /// 整份 JSON 的回應（服務不理 `stream`）。
+  void whole(Object? json) {
     if (json is! Map) return;
+    if (responses) {
+      _completed(json, whole: true);
+      return;
+    }
+    if (json['usage'] is Map) usage = AiChatClient.usageOf(json);
+    _chunk({...json, 'usage': null});
+  }
+
+  // ---- chat/completions ----
+
+  void _chunk(Map<dynamic, dynamic> json) {
     if (json['error'] case final Object failure) {
       error = switch (failure) {
         {'message': final String message} => message,
@@ -637,12 +878,17 @@ final class _StreamReader implements Sink<String> {
       // DeepSeek 的 reasoning_content、OpenRouter 的 reasoning。
       final thought = delta['reasoning_content'] ?? delta['reasoning'];
       if (thought is String && thought.isNotEmpty) _out(reasoning, thought);
+      if (delta['reasoning_details'] case final List<Object?> details) {
+        for (final detail in details) {
+          if (detail is Map) _detail(detail);
+        }
+      }
       final said = delta['content'];
       if (said is String && said.isNotEmpty) _out(content, said);
       final calls = delta['tool_calls'];
       if (calls is List) {
-        for (final (position, call) in calls.indexed) {
-          if (call is Map) _callPiece(call, position);
+        for (final call in calls) {
+          if (call is Map) _callPiece(call);
         }
       }
     }
@@ -651,31 +897,187 @@ final class _StreamReader implements Sink<String> {
     }
   }
 
-  /// 整份 JSON 的回應（服務不理 `stream`）。
-  void whole(Object? json) {
-    if (json is Map && json['usage'] is Map) usage = AiChatClient.usageOf(json);
-    _chunk(json is Map ? {...json, 'usage': null} : json);
-  }
-
-  /// 一段工具呼叫：串流時每段帶 `index`；整份回應的沒有，照位置。參數只數
-  /// 字數（輸出上限），不數重複的句子。
-  void _callPiece(Map<dynamic, dynamic> call, int position) {
-    final index = call['index'] is int ? call['index'] as int : position;
-    final into = _calls.putIfAbsent(
-      index,
-      () =>
-          (id: StringBuffer(), name: StringBuffer(), arguments: StringBuffer()),
-    );
-    if (call['id'] case final String id) into.id.write(id);
-    final function = call['function'];
-    if (function is Map) {
-      if (function['name'] case final String name) into.name.write(name);
-      if (function['arguments'] case final String arguments) {
-        into.arguments.write(arguments);
+  /// 一段工具呼叫。有 `index` 的照它（同一個位置來了另一個編號就是新的
+  /// 呼叫）；沒有的（Gemini 曾經不給）看編號，新
+  /// 編號是新的呼叫；編號也沒有時，帶名稱的是新的呼叫（後續的片段只帶參數），
+  /// 其他接在最後一個後面。參數只數字數（輸出上限），不數重複的句子。
+  void _callPiece(Map<dynamic, dynamic> call) {
+    final index = call['index'];
+    final id = call['id'] is String ? call['id'] as String : '';
+    final function = call['function'] is Map ? call['function'] as Map : null;
+    final name = function?['name'] is String ? function!['name'] as String : '';
+    final into = switch (index) {
+      // 同一個位置換了編號是新的呼叫：有的服務每個呼叫都標 0。
+      final int index
+          when id.isEmpty ||
+              _byIndex[index] == null ||
+              _byIndex[index]!.id.isEmpty ||
+              _byIndex[index]!.id == id =>
+        _byIndex.putIfAbsent(index, _newCall),
+      final int index => _byIndex[index] = _newCall(),
+      _ when id.isNotEmpty =>
+        _calls.where((c) => c.id == id).firstOrNull ?? _newCall(),
+      _
+          when name.isNotEmpty &&
+              (_calls.isEmpty || _calls.last.name.isNotEmpty) =>
+        _newCall(),
+      _ => _calls.lastOrNull ?? _newCall(),
+    };
+    if (id.isNotEmpty) into.id = id;
+    if (name.isNotEmpty) into.name = name;
+    if (function?['arguments'] case final String arguments) {
+      into.arguments.write(arguments);
+    }
+    for (final MapEntry(:key, :value) in call.entries) {
+      if (key is String &&
+          !const {'index', 'id', 'type', 'function'}.contains(key)) {
+        into.extra[key] = value;
       }
     }
     _checkLength();
   }
+
+  _Call _newCall() {
+    final call = _Call();
+    _calls.add(call);
+    return call;
+  }
+
+  /// OpenRouter 的一段 `reasoning_details`：照它官方 AI SDK 套件的接法，不看
+  /// `index`，看種類：思考文字接在最後一個還沒簽章的思考文字後面，簽章與格式
+  /// 補上；摘要接在最後一個摘要後面；加密的各自一筆。
+  void _detail(Map<dynamic, dynamic> piece) {
+    final detail = {
+      for (final MapEntry(:key, :value) in piece.entries)
+        if (key is String) key: value,
+    };
+    final last = reasoningDetails.lastOrNull;
+    switch (detail['type']) {
+      case 'reasoning.text'
+          when last != null &&
+              last['type'] == 'reasoning.text' &&
+              last['signature'] == null:
+        last['text'] = '${last['text'] ?? ''}${detail['text'] ?? ''}';
+        for (final key in const ['signature', 'format', 'id']) {
+          if (detail[key] != null) last[key] ??= detail[key];
+        }
+      case 'reasoning.summary'
+          when last != null && last['type'] == 'reasoning.summary':
+        last['summary'] = '${last['summary'] ?? ''}${detail['summary'] ?? ''}';
+      default:
+        reasoningDetails.add(detail);
+    }
+  }
+
+  // ---- responses ----
+
+  /// `responses` 的一個串流事件。
+  void _event(Map<dynamic, dynamic> json) {
+    final position = json['output_index'] is int
+        ? json['output_index'] as int
+        : 0;
+    switch (json['type']) {
+      case 'response.output_text.delta':
+        if (json['delta'] case final String delta) _out(content, delta);
+      case 'response.reasoning_summary_text.delta' ||
+          'response.reasoning_text.delta':
+        if (json['delta'] case final String delta) _out(reasoning, delta);
+      case 'response.output_item.added':
+        if (json['item'] case final Map<dynamic, dynamic> item
+            when item['type'] == 'function_call') {
+          _responseCall(position, item);
+        }
+      case 'response.function_call_arguments.delta':
+        if (json['delta'] case final String delta) {
+          _byIndex.putIfAbsent(position, _newCall).arguments.write(delta);
+          _checkLength();
+        }
+      case 'response.output_item.done':
+        if (json['item'] case final Map<dynamic, dynamic> item) {
+          _item(position, item);
+        }
+      case 'response.completed' || 'response.incomplete' || 'response.failed':
+        if (json['response'] case final Map<dynamic, dynamic> response) {
+          _completed(response, whole: false);
+        }
+      case 'error':
+        error = switch (json) {
+          {'message': final String message} => message,
+          {'error': {'message': final String message}} => message,
+          _ => '$json',
+        };
+    }
+  }
+
+  /// 一個工具呼叫開始了（或整份回應裡的一個）：`call_id` 是工具結果要接回
+  /// 的編號。
+  _Call _responseCall(int position, Map<dynamic, dynamic> item) {
+    final call = _byIndex.putIfAbsent(position, _newCall);
+    if (item['call_id'] case final String id when id.isNotEmpty) call.id = id;
+    if (item['name'] case final String name when name.isNotEmpty) {
+      call.name = name;
+    }
+    return call;
+  }
+
+  /// 一個完整的輸出項目：原樣留著送回（加密的思考以這裡的為準，開始時的
+  /// 可能不完整）；工具呼叫的參數以這裡的為準。[whole] 是整份回應：話與
+  /// 思考沒有串流片段，從項目裡讀。
+  void _item(int position, Map<dynamic, dynamic> item, {bool whole = false}) {
+    _items[position] = {
+      for (final MapEntry(:key, :value) in item.entries)
+        if (key is String) key: value,
+    };
+    switch (item['type']) {
+      case 'function_call':
+        final call = _responseCall(position, item);
+        if (item['arguments'] case final String arguments) {
+          call.arguments
+            ..clear()
+            ..write(arguments);
+          _checkLength();
+        }
+      case 'message' when whole:
+        for (final part
+            in item['content'] is List ? item['content'] as List : const []) {
+          if (part case {'type': 'output_text', 'text': final String text}) {
+            _out(content, text);
+          }
+        }
+      case 'reasoning' when whole:
+        for (final part
+            in item['summary'] is List ? item['summary'] as List : const []) {
+          if (part case {'text': final String text}) _out(reasoning, text);
+        }
+    }
+  }
+
+  /// 回應結束（或整份回應）：用量、沒完成的原因、錯誤。帶著的輸出項目
+  /// 是完整的一份，以它為準（串流時蓋過一路收到的項目）。
+  void _completed(Map<dynamic, dynamic> response, {required bool whole}) {
+    ended = true;
+    if (response['usage'] is Map) usage = AiChatClient.usageOf(response);
+    if (response['output'] case final List output when output.isNotEmpty) {
+      _calls.clear();
+      _byIndex.clear();
+      _items.clear();
+      for (final (position, item) in output.indexed) {
+        if (item is Map) _item(position, item, whole: whole);
+      }
+    }
+    if (response['error'] case {'message': final String message}) {
+      error = message;
+    }
+    if (response['incomplete_details'] case {'reason': final reason}) {
+      if (reason == 'max_output_tokens') {
+        runaway ??= AiRunaway('AI 回覆碰到服務的單次輸出上限', tail: tail, usage: estimate);
+      } else {
+        error ??= 'AI 回覆沒有完成（$reason）';
+      }
+    }
+  }
+
+  // ---- 兩種共用 ----
 
   void _checkLength() {
     if (content.length + reasoning.length + _argumentChars >

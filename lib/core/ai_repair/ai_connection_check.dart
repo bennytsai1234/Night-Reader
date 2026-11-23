@@ -33,8 +33,8 @@ Future<void> verifyAiToolConnection(AiChatClient client) async {
 
   // 模型可能在同一輪呼叫多次；每個呼叫都要驗證並回覆，才能繼續對話。
   for (final call in first.toolCalls) {
-    if (call.id.isEmpty || call.name != tool.name) {
-      throw const AiServiceException('模型回傳的工具名稱或呼叫 ID 不正確');
+    if (call.name != tool.name) {
+      throw const AiServiceException('模型回傳的工具名稱不正確');
     }
     try {
       final args = jsonDecode(call.arguments);
@@ -48,17 +48,18 @@ Future<void> verifyAiToolConnection(AiChatClient client) async {
 
   // 驗證值只出現在工具結果，不能讓模型只憑前面的提示詞回答成功。
   final nonce = const Uuid().v4();
-  final second = await client.complete([
-    ...opening,
-    AiMessage.assistant(
-      first.content,
-      toolCalls: first.toolCalls,
-      reasoning: first.reasoning,
-    ),
-    for (final call in first.toolCalls)
-      AiMessage.tool(call.id, jsonEncode({'nonce': nonce})),
-    const AiMessage.user('請只回覆剛才工具結果中的 nonce 原值，不加引號或說明。'),
-  ]);
+  final second = await client.complete(
+    [
+      ...opening,
+      AiMessage.reply(first),
+      for (final call in first.toolCalls)
+        AiMessage.tool(call.id, jsonEncode({'nonce': nonce})),
+      const AiMessage.user('請只回覆剛才工具結果中的 nonce 原值，不加引號或說明。'),
+      // 帶著同一份工具清單：對話裡有工具呼叫時，有的服務（Anthropic）規定請求
+      // 也要帶工具清單；這一步不呼叫工具。
+    ],
+    tools: const [tool],
+  );
   if (second.toolCalls.isNotEmpty || second.content.trim() != nonce) {
     throw const AiServiceException('模型沒有正確讀取工具結果，工具呼叫往返未通過');
   }
