@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -9,6 +10,8 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
+import 'package:night_reader/core/models/reading/highlight.dart';
+import 'package:night_reader/features/reader/text_view/overlay/highlight_marks.dart';
 import 'package:night_reader/features/reader/features/auto_page/reader_auto_page_controller.dart';
 import 'package:night_reader/features/reader/features/tts/reader_tts_highlight.dart';
 import 'package:night_reader/features/reader/text_view/core/progress_snapshot.dart';
@@ -16,6 +19,8 @@ import 'package:night_reader/features/reader/text_view/core/text_view_types.dart
 import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
 import 'package:night_reader/features/reader/text_view/overlay/loading_veil.dart';
 import 'package:night_reader/features/reader/text_view/overlay/reader_skeleton_page.dart';
+import 'package:night_reader/features/reader/text_view/overlay/reader_text_selection_layer.dart';
+import 'package:night_reader/features/reader/text_view/overlay/selection_service.dart';
 import 'package:night_reader/features/reader/text_view/overlay/tts_highlight_overlay.dart';
 import 'package:night_reader/features/reader/text_view/text/text_preprocessor.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
@@ -188,6 +193,8 @@ void main() {
     ReaderTtsHighlight? ttsHighlight,
     ReaderSkeletonPageStore? skeletonPages,
     ValueNotifier<ProgressSnapshot?>? progress,
+    bool textSelectionEnabled = false,
+    ValueListenable<List<ReaderHighlightMark>>? highlights,
   }) async {
     tester.view.physicalSize = _viewport;
     tester.view.devicePixelRatio = 1;
@@ -206,6 +213,8 @@ void main() {
           style: _style,
           viewportController: viewport,
           ttsHighlight: ttsHighlight,
+          textSelectionEnabled: textSelectionEnabled,
+          highlights: highlights,
           bookUrl: skeletonPages == null ? null : 'http://interaction.test',
           skeletonPages: skeletonPages,
           progressListenable: progress,
@@ -1653,6 +1662,278 @@ void main() {
         expect(after[i].bottom, closeTo(previous[i].bottom - step, 0.01));
         expect(after[i].left, previous[i].left);
         expect(after[i].right, previous[i].right);
+      }
+    }
+  });
+
+  testWidgets('a selection drags into the next paragraphs and scrolls past '
+      'the bottom edge', (tester) async {
+    // 原生斷詞不在，長按只選一個字。
+    const segmenter = MethodChannel('com.inkpage.reader/word_segmenter');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      segmenter,
+      (_) async => null,
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        segmenter,
+        null,
+      ),
+    );
+    // 朗讀高亮只拿來找第一段字在畫面上的位置。
+    await pumpReader(
+      tester,
+      textSelectionEnabled: true,
+      ttsHighlight: const ReaderTtsHighlight(
+        chapterIndex: 0,
+        sentenceStart: 10,
+        sentenceEnd: 12,
+      ),
+    );
+    await settle(tester);
+    final word = tester
+        .widget<TtsHighlightOverlay>(find.byType(TtsHighlightOverlay))
+        .sentence
+        .first;
+    final layer = tester.widget<ReaderTextSelectionLayer>(
+      find.byType(ReaderTextSelectionLayer),
+    );
+    final service = layer.selection;
+    final height = tester.getSize(find.byType(ReaderTextSelectionLayer)).height;
+
+    // 放開時事件的時間要過了長按門檻，才不會被當成點正文、收掉選取。
+    const held = Duration(milliseconds: 600);
+    final press = await tester.startGesture(
+      Offset((word.left + word.right) / 2, (word.top + word.bottom) / 2),
+    );
+    await tester.pump(held);
+    await press.up(timeStamp: held);
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    final selected = service.selection;
+    expect(selected, isNotNull);
+    expect(selected!.text, isNot(contains('\n')));
+    final end = layer.paintFor(selected, height).endBox!;
+
+    final gesture = await tester.startGesture(
+      Offset(end.right + 8, end.bottom + 12),
+    );
+    await gesture.moveBy(const Offset(0, 20));
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, 160));
+    await tester.pump();
+    final across = service.selection!;
+    expect(across.text, contains('\n\n'), reason: '拉到下面幾段');
+    expect(across.inParagraphs.pieces.length, greaterThan(1));
+    expect(across.range.start, selected.range.start);
+
+    final position = scrollPosition(tester);
+    final before = position.pixels;
+    await gesture.moveTo(Offset(end.right + 8, height + 15));
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(position.pixels, greaterThan(before), reason: '拖出下緣時正文往下捲');
+    final scrolled = service.selection!;
+    expect(scrolled.range.end, greaterThan(across.range.end));
+    expect(scrolled.range.start, selected.range.start);
+    expect(layer.paintFor(scrolled, height).endBox, isNotNull);
+
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 16));
+    final rested = position.pixels;
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(position.pixels, rested, reason: '放開就停');
+    expect(service.selection?.range, scrolled.range, reason: '選取留著');
+  });
+
+  testWidgets('dragging past the bottom edge stops scrolling at the end of '
+      'the chapter', (tester) async {
+    const segmenter = MethodChannel('com.inkpage.reader/word_segmenter');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      segmenter,
+      (_) async => null,
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        segmenter,
+        null,
+      ),
+    );
+    // 一章 30 段，從倒數幾段開始讀；朗讀高亮只拿來找那裡的字。
+    const start = 800;
+    await pumpReader(
+      tester,
+      // 章末是兩個單位的字（表情符號）。
+      customRuntime: _makeRuntime(
+        paragraphs: 30,
+        contentLoader: (_, chapter) =>
+            Future<String?>.value('${chapter.content}😀'),
+        initialLocation: const ReaderLocation(
+          chapterIndex: 0,
+          charOffset: start,
+        ),
+      ),
+      textSelectionEnabled: true,
+      ttsHighlight: const ReaderTtsHighlight(
+        chapterIndex: 0,
+        sentenceStart: start + 2,
+        sentenceEnd: start + 4,
+      ),
+    );
+    await settle(tester);
+    final word = tester
+        .widget<TtsHighlightOverlay>(find.byType(TtsHighlightOverlay))
+        .sentence
+        .first;
+    final layer = tester.widget<ReaderTextSelectionLayer>(
+      find.byType(ReaderTextSelectionLayer),
+    );
+    final height = tester.getSize(find.byType(ReaderTextSelectionLayer)).height;
+    const held = Duration(milliseconds: 600);
+    final press = await tester.startGesture(
+      Offset((word.left + word.right) / 2, (word.top + word.bottom) / 2),
+    );
+    await tester.pump(held);
+    await press.up(timeStamp: held);
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    final selected = layer.selection.selection!;
+    final end = layer.paintFor(selected, height).endBox!;
+    final gesture = await tester.startGesture(
+      Offset(end.right + 8, end.bottom + 12),
+    );
+    await gesture.moveBy(const Offset(0, 20));
+    await tester.pump();
+    await gesture.moveTo(Offset(end.right + 8, height + 20));
+    final position = scrollPosition(tester);
+    for (var i = 0; i < 300; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    final stopped = position.pixels;
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(position.pixels, stopped, reason: '章末已經在畫面上，不再捲');
+    expect(
+      layer.paintFor(layer.selection.selection!, height).chapterEndBelow,
+      lessThanOrEqualTo(0),
+      reason: '這一章的最後一行整行在畫面上',
+    );
+    // 手指往右拖到行尾外，選到這一章最後一個字。
+    await gesture.moveTo(Offset(390, height + 20));
+    await tester.pump();
+    expect(
+      layer.selection.selection!.range.end,
+      ReaderTextSelection.bodyRangeOf(selected.blocks).end,
+    );
+    await gesture.up();
+    await tester.pump();
+  });
+
+  testWidgets('releasing a handle during a page turn lets the turn finish', (
+    tester,
+  ) async {
+    const segmenter = MethodChannel('com.inkpage.reader/word_segmenter');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      segmenter,
+      (_) async => null,
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        segmenter,
+        null,
+      ),
+    );
+    await pumpReader(
+      tester,
+      textSelectionEnabled: true,
+      ttsHighlight: const ReaderTtsHighlight(
+        chapterIndex: 0,
+        sentenceStart: 10,
+        sentenceEnd: 12,
+      ),
+    );
+    await settle(tester);
+    final position = scrollPosition(tester);
+    final pageDistance = await plainPageDistance(tester);
+    position.jumpTo(0);
+    await settle(tester);
+    final word = tester
+        .widget<TtsHighlightOverlay>(find.byType(TtsHighlightOverlay))
+        .sentence
+        .first;
+    final layer = tester.widget<ReaderTextSelectionLayer>(
+      find.byType(ReaderTextSelectionLayer),
+    );
+    final height = tester.getSize(find.byType(ReaderTextSelectionLayer)).height;
+    const held = Duration(milliseconds: 600);
+    final press = await tester.startGesture(
+      Offset((word.left + word.right) / 2, (word.top + word.bottom) / 2),
+    );
+    await tester.pump(held);
+    await press.up(timeStamp: held);
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    final end = layer.paintFor(layer.selection.selection!, height).endBox!;
+    final gesture = await tester.startGesture(
+      Offset(end.right + 8, end.bottom + 12),
+    );
+    await gesture.moveBy(const Offset(0, 20));
+    await tester.pump();
+    // 拖到下緣自動捲一下，再回到中間。
+    await gesture.moveTo(Offset(end.right + 8, height - 5));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await gesture.moveTo(Offset(end.right + 8, height / 2));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(position.pixels, greaterThan(0), reason: '自動捲過');
+
+    // 音量鍵翻頁，翻到一半放開把手。
+    final start = position.pixels;
+    final turn = viewport.moveToNextPage!();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 16));
+    await gesture.up();
+    await settle(tester);
+    expect(await turn, isTrue);
+    expect(position.pixels, closeTo(start + pageDistance, 1));
+  });
+
+  testWidgets('a highlight several screens long is drawn on every screen '
+      'while scrolling through it', (tester) async {
+    final highlights = ValueNotifier<List<ReaderHighlightMark>>(const [
+      (
+        id: 1,
+        location: ReaderLocation(chapterIndex: 0, charOffset: 10),
+        length: 2000,
+        color: HighlightColor.amber,
+        style: HighlightStyle.fill,
+      ),
+    ]);
+    addTearDown(highlights.dispose);
+    await pumpReader(tester, highlights: highlights);
+    await settle(tester);
+    final position = scrollPosition(tester);
+    for (var screen = 0; screen < 8; screen++) {
+      final boxes = tester
+          .widget<HighlightMarksOverlay>(find.byType(HighlightMarksOverlay))
+          .items
+          .single
+          .boxes;
+      final visible = boxes.where((box) => box.bottom > 0 && box.top < 600);
+      expect(
+        visible.length,
+        greaterThan(10),
+        reason: '第 $screen 屏每一行都畫著（捲到 ${position.pixels}）',
+      );
+      position.jumpTo(position.pixels + 550);
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
       }
     }
   });

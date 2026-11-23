@@ -655,6 +655,30 @@ bool _isCjkRune(int? rune) {
       (rune >= 0x20000 && rune <= 0x323AF);
 }
 
+/// 一章正文在替換規則全部套用之後、排版整理之前的樣子（見
+/// [ReaderContentTransformer.ruleStageParagraphs]）。
+///
+/// - [text]：接在既有規則之後的新規則看到的整章字，原樣（插圖記號、換行都在）。
+/// - [paragraphs]：每一段拿掉插圖記號後的字，和 `ReaderContent.paragraphs`
+///   一一對應，拿來和畫面上的字逐字對齊。
+/// - [spans]：每一段在 [text] 裡的範圍，與 [paragraphs] 裡每個字在 [text]
+///   裡的起訖（`charStarts`、`charEnds`）。
+/// - [markers]：插圖記號在 [text] 裡的位置，由小到大。
+typedef RuleStageText = ({
+  String text,
+  List<String> paragraphs,
+  List<RuleStageSpan> spans,
+  List<int> markers,
+});
+
+/// 一段在 [RuleStageText.text] 裡的範圍與每個字的起訖（見 [RuleStageText]）。
+typedef RuleStageSpan = ({
+  int start,
+  int end,
+  List<int> charStarts,
+  List<int> charEnds,
+});
+
 class ReaderContentTransformer {
   const ReaderContentTransformer();
 
@@ -751,11 +775,12 @@ class ReaderContentTransformer {
     return <String, Object?>{'displayTitle': displayTitle, 'content': content};
   }
 
-  /// 這一章正文的每一段在替換規則全部套用之後、排版整理之前的樣子，和
-  /// [ReaderContent.paragraphs] 一一對應。接在既有規則之後的新規則看到的
-  /// 就是這些字（選字「隱藏」用它找原文）。在另一個 isolate 處理，整章跑
-  /// 規則的正規表示式不佔畫面執行緒。
-  static Future<List<String>> ruleStageParagraphs({
+  /// 這一章正文在替換規則全部套用之後、排版整理之前的樣子：每一段和
+  /// [ReaderContent.paragraphs] 一一對應，加上每兩段之間的字（見
+  /// [RuleStageText]）。接在既有規則之後的新規則看到的就是這些字（選字
+  /// 「隱藏」「替換」用它找原文）。在另一個 isolate 處理，整章跑規則的
+  /// 正規表示式不佔畫面執行緒。
+  static Future<RuleStageText> ruleStageParagraphs({
     required Book book,
     required BookChapter chapter,
     required String rawContent,
@@ -773,7 +798,7 @@ class ReaderContentTransformer {
     return Isolate.run(() => _ruleStageParagraphsInBackground(args));
   }
 
-  static List<String> _ruleStageParagraphsInBackground(
+  static RuleStageText _ruleStageParagraphsInBackground(
     Map<String, Object?> args,
   ) {
     final bookName = args['bookName'] as String? ?? '';
@@ -792,27 +817,71 @@ class ReaderContentTransformer {
         (unit) => IllustrationMarkers.placeholderIndex(unit, count) == null,
       ),
     );
+    final text = _applyRules(
+      bookName: bookName,
+      bookOrigin: bookOrigin,
+      chapterTitle: chapterTitle,
+      rawContent: extracted.text,
+      rules: rules,
+      titleRules: _titleRulesOf(rules, bookName, bookOrigin),
+      useReplaceRules: useReplaceRules,
+      reSegmentEnabled: args['reSegmentEnabled'] as bool? ?? true,
+    );
+    // 換行統一成 \n 之後的每個位置在 [text] 裡的位置（\r\n 算一個換行）。
+    final normalizedAt = <int>[];
+    for (var i = 0; i < text.length; i += 1) {
+      normalizedAt.add(i);
+      if (text.codeUnitAt(i) == 0x0D &&
+          i + 1 < text.length &&
+          text.codeUnitAt(i + 1) == 0x0A) {
+        i += 1;
+      }
+    }
+    normalizedAt.add(text.length);
     final repaired = SemanticParagraphFormatter.repairWithSources(
-      _applyRules(
-        bookName: bookName,
-        bookOrigin: bookOrigin,
-        chapterTitle: chapterTitle,
-        rawContent: extracted.text,
-        rules: rules,
-        titleRules: _titleRulesOf(rules, bookName, bookOrigin),
-        useReplaceRules: useReplaceRules,
-        reSegmentEnabled: args['reSegmentEnabled'] as bool? ?? true,
-      ).replaceAll('\r\n', '\n').replaceAll('\r', '\n'),
+      text.replaceAll('\r\n', '\n').replaceAll('\r', '\n'),
     );
     // 排版整理逐行處理、不增減行；整理後是空白或只有插圖的行不成段
-    // （[ReaderContent.fromRaw]）。被段落修復接起來的段，原文保留原本的
-    // 換行：新規則接在既有規則之後、段落修復之前套用，看到的是那樣的字。
+    // （[ReaderContent.fromRaw]）。段落修復把各行分組，組與組用一個換行接
+    // 回去就是換行統一後的整章字；被接起來的段保留原本的換行。
     final shown = normalizeTypography(repaired.lines.join('\n')).split('\n');
-    return <String>[
-      for (var i = 0; i < shown.length; i += 1)
-        if (_paragraphOf(withoutPlaceholders(shown[i])).isNotEmpty)
-          withoutPlaceholders(repaired.sources[i]),
-    ];
+    final paragraphs = <String>[];
+    final spans = <RuleStageSpan>[];
+    var cursor = 0;
+    for (var i = 0; i < shown.length; i += 1) {
+      final source = repaired.sources[i];
+      final start = cursor;
+      cursor += source.length + 1;
+      if (_paragraphOf(withoutPlaceholders(shown[i])).isEmpty) continue;
+      final kept = StringBuffer();
+      final charStarts = <int>[];
+      final charEnds = <int>[];
+      for (var k = 0; k < source.length; k += 1) {
+        final unit = source.codeUnitAt(k);
+        if (IllustrationMarkers.placeholderIndex(unit, count) != null) continue;
+        kept.writeCharCode(unit);
+        charStarts.add(normalizedAt[start + k]);
+        charEnds.add(normalizedAt[start + k + 1]);
+      }
+      paragraphs.add(kept.toString());
+      spans.add((
+        start: normalizedAt[start],
+        end: normalizedAt[start + source.length],
+        charStarts: charStarts,
+        charEnds: charEnds,
+      ));
+    }
+    return (
+      text: text,
+      paragraphs: paragraphs,
+      spans: spans,
+      markers: [
+        for (var i = 0; i < text.length; i += 1)
+          if (IllustrationMarkers.placeholderIndex(text.codeUnitAt(i), count) !=
+              null)
+            i,
+      ],
+    );
   }
 
   static List<ReplaceRule> _rulesFrom(Map<String, Object?> args) {

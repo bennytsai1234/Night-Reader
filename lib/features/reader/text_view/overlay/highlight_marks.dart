@@ -5,7 +5,8 @@ import 'package:night_reader/features/reader/text_view/core/text_view_types.dart
 import 'package:night_reader/features/reader/session/reader_location.dart';
 
 /// 正文裡一個標註：[location] 是開頭（章節序號已經對到這台的目錄，章內
-/// 第幾個字還要照那一章目前的正文解析），往後畫 [length] 個字。
+/// 第幾個字還要照那一章目前的正文解析），往後畫 [length] 個字，段落分隔
+/// 不算。
 typedef ReaderHighlightMark = ({
   int id,
   ReaderLocation location,

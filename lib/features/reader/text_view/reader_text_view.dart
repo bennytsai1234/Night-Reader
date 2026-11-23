@@ -102,12 +102,12 @@ class ReaderTextView extends StatefulWidget {
   /// 開著時也不能選字（[controlsVisible]）。
   final bool textSelectionEnabled;
 
-  /// 選字選單的「隱藏」：把選到的字（連同所在段落與段內位置）交給上層
-  /// 新增替換規則；沒給就不顯示這個按鈕。
+  /// 選字選單的「隱藏」：把選到的字照段落切開（每段的字與段內位置）交給
+  /// 上層新增替換規則；沒給就不顯示這個按鈕。
   final ValueChanged<ParagraphSelection>? onHideText;
 
-  /// 選字選單的「替換」：把選到的字（連同所在段落與段內位置）交給上層，
-  /// 打開替換規則的編輯畫面；沒給就不顯示這個按鈕。
+  /// 選字選單的「替換」：把選到的字照段落切開交給上層，打開替換規則的
+  /// 編輯畫面；沒給就不顯示這個按鈕。
   final ValueChanged<ParagraphSelection>? onReplaceText;
 
   /// 選字選單的「書籤」：在選到的字那一句的開頭留一個書籤
@@ -175,6 +175,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     pipeline: () => _pipeline,
     documentIndex: _documentIndex,
     scrollOffset: _effectiveScrollOffset,
+    viewportHeight: () => _viewportSize.height,
   );
 
   /// 還原已經排好、原生捲動位置還沒套上時要停的錨點。位置不存成數字，
@@ -1597,14 +1598,17 @@ class _ReaderTextViewState extends State<ReaderTextView>
           child: ReaderTextSelectionLayer(
             selection: _touch.selection,
             repaint: controller,
-            boxesFor: _touch.boxesFor,
+            paintFor: _touch.paintFor,
             caretAt: _touch.caretAt,
+            autoScrollBy: _viewportCommands.selectionScrollBy,
+            onAutoScrollEnd: () =>
+                unawaited(_viewportCommands.settleAfterSelectionScroll()),
             onHide: widget.onHideText == null
                 ? null
-                : (selection) => widget.onHideText!(selection.inParagraph),
+                : (selection) => widget.onHideText!(selection.inParagraphs),
             onReplace: widget.onReplaceText == null
                 ? null
-                : (selection) => widget.onReplaceText!(selection.inParagraph),
+                : (selection) => widget.onReplaceText!(selection.inParagraphs),
             onBookmark: widget.onBookmarkText == null
                 ? null
                 : (selection) => widget.onBookmarkText!(selection.asBookmark),
