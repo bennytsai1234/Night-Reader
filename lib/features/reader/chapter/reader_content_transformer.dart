@@ -655,6 +655,12 @@ bool _isCjkRune(int? rune) {
       (rune >= 0x20000 && rune <= 0x323AF);
 }
 
+/// 一章正文在替換規則全部套用之後、排版整理之前的樣子（見
+/// [ReaderContentTransformer.ruleStageParagraphs]）。[paragraphs] 和
+/// `ReaderContent.paragraphs` 一一對應；[gaps] 的第 i 個是第 i 段與第 i + 1
+/// 段之間的字：一個換行，原文有空行時連空行一起。插圖的記號不在裡面。
+typedef RuleStageText = ({List<String> paragraphs, List<String> gaps});
+
 class ReaderContentTransformer {
   const ReaderContentTransformer();
 
@@ -751,11 +757,12 @@ class ReaderContentTransformer {
     return <String, Object?>{'displayTitle': displayTitle, 'content': content};
   }
 
-  /// 這一章正文的每一段在替換規則全部套用之後、排版整理之前的樣子，和
-  /// [ReaderContent.paragraphs] 一一對應。接在既有規則之後的新規則看到的
-  /// 就是這些字（選字「隱藏」用它找原文）。在另一個 isolate 處理，整章跑
-  /// 規則的正規表示式不佔畫面執行緒。
-  static Future<List<String>> ruleStageParagraphs({
+  /// 這一章正文在替換規則全部套用之後、排版整理之前的樣子：每一段和
+  /// [ReaderContent.paragraphs] 一一對應，加上每兩段之間的字（見
+  /// [RuleStageText]）。接在既有規則之後的新規則看到的就是這些字（選字
+  /// 「隱藏」「替換」用它找原文）。在另一個 isolate 處理，整章跑規則的
+  /// 正規表示式不佔畫面執行緒。
+  static Future<RuleStageText> ruleStageParagraphs({
     required Book book,
     required BookChapter chapter,
     required String rawContent,
@@ -773,7 +780,7 @@ class ReaderContentTransformer {
     return Isolate.run(() => _ruleStageParagraphsInBackground(args));
   }
 
-  static List<String> _ruleStageParagraphsInBackground(
+  static RuleStageText _ruleStageParagraphsInBackground(
     Map<String, Object?> args,
   ) {
     final bookName = args['bookName'] as String? ?? '';
@@ -807,12 +814,23 @@ class ReaderContentTransformer {
     // 排版整理逐行處理、不增減行；整理後是空白或只有插圖的行不成段
     // （[ReaderContent.fromRaw]）。被段落修復接起來的段，原文保留原本的
     // 換行：新規則接在既有規則之後、段落修復之前套用，看到的是那樣的字。
+    // 段落之間是規則看到的字裡夾在兩段原文中間的那些：換行，加上不成段的
+    // 行（空行、只有插圖的行）。
     final shown = normalizeTypography(repaired.lines.join('\n')).split('\n');
-    return <String>[
-      for (var i = 0; i < shown.length; i += 1)
-        if (_paragraphOf(withoutPlaceholders(shown[i])).isNotEmpty)
-          withoutPlaceholders(repaired.sources[i]),
-    ];
+    final paragraphs = <String>[];
+    final gaps = <String>[];
+    StringBuffer? gap;
+    for (var i = 0; i < shown.length; i += 1) {
+      final source = withoutPlaceholders(repaired.sources[i]);
+      if (_paragraphOf(withoutPlaceholders(shown[i])).isEmpty) {
+        gap?.write('$source\n');
+        continue;
+      }
+      if (gap != null) gaps.add(gap.toString());
+      paragraphs.add(source);
+      gap = StringBuffer('\n');
+    }
+    return (paragraphs: paragraphs, gaps: gaps);
   }
 
   static List<ReplaceRule> _rulesFrom(Map<String, Object?> args) {

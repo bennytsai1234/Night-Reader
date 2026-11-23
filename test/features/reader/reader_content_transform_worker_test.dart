@@ -118,7 +118,11 @@ void main() {
           rawContent: raw,
           enabledRules: const [],
         );
-        expect(sources, hasLength(document.paragraphs.length), reason: raw);
+        expect(
+          sources.paragraphs,
+          hasLength(document.paragraphs.length),
+          reason: raw,
+        );
       }
     },
   );

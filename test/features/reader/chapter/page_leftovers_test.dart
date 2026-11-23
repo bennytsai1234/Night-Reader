@@ -98,7 +98,7 @@ void main() {
 
       expect(await shown(raw, title: '第一章 夜雨'), ['前文。', '想隱藏的廣告。']);
       expect(
-        await ReaderContentTransformer.ruleStageParagraphs(
+        (await ReaderContentTransformer.ruleStageParagraphs(
           book: book,
           chapter: BookChapter(
             url: 'u',
@@ -107,7 +107,7 @@ void main() {
           ),
           rawContent: raw,
           enabledRules: const [],
-        ),
+        )).paragraphs,
         ['前文。', '想隱藏的廣告。'],
       );
     },

@@ -186,6 +186,13 @@ final class ViewportCommands {
       ..ensureCharRangeVisible = _ensureCharRangeVisible;
   }
 
+  /// 連續捲動推一下（同自動翻頁）：量位置、補排版，不存進度；捲不動時
+  /// 回傳 false。拖選字的把手到正文區外時用。
+  Future<bool> continuousScrollBy(double delta) => _continuousScrollBy(delta);
+
+  /// 停在目前的位置、記下閱讀位置（同閱讀器的「停住捲動」）。
+  Future<void> settleScroll() => _settleScroll();
+
   /// 拆掉 [attach] 接上的；別人已經換上的不動。
   void detach(ReaderViewportController? controller) {
     if (controller == null) return;

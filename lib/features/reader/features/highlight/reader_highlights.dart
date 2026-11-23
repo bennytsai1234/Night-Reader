@@ -53,7 +53,8 @@ class ReaderHighlights extends ValueNotifier<List<Highlight>> {
               highlight,
               chapterIndex: chapterIndexIn(highlight, chapters),
             ),
-            length: highlight.quote.length,
+            // 段落分隔不算：分段和畫的時候不同也畫到同一段字的結尾。
+            length: highlight.quote.replaceAll('\n', '').length,
             color: highlight.color,
             style: highlight.style,
           ),

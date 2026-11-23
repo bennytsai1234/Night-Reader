@@ -17,7 +17,7 @@ import 'selection_service.dart';
 /// 長按插圖打開大圖、長按字選一個詞，拖選取的把手。
 ///
 /// 正文層（`ReaderTextView`）把手勢接過來（[handleTapUp]、
-/// [handleLongPressStart]），選字圖層照 [selection]、[boxesFor]、[caretAt]
+/// [handleLongPressStart]），選字圖層照 [selection]、[paintFor]、[caretAt]
 /// 畫；跳章、蓋紙、開始拖動時正文層呼叫 [clear]。排版與捲動位置透過建構時
 /// 給的查詢讀。
 final class ReaderTextTouch {
@@ -59,7 +59,8 @@ final class ReaderTextTouch {
   /// 別處，舊結果作廢。
   int _selectionRequest = 0;
 
-  /// 拖把手時 viewport 座標 [point] 在選取段落內最近的游標位置。
+  /// 拖把手時 viewport 座標 [point] 最近的游標位置（見
+  /// [TextGeometry.caretAt]）。
   int? caretAt(ReaderTextSelection selection, Offset point) {
     final scrollOffset = _scrollOffset();
     if (scrollOffset == null) return null;
@@ -69,21 +70,60 @@ final class ReaderTextTouch {
     );
   }
 
-  /// 選取在 viewport 上的字形框，每條視覺行一個。
-  List<LineBox> boxesFor(ReaderTextSelection selection) {
-    if (!_pipeline().geometry.isSelectionCurrent(selection)) {
+  /// 選取在高 [viewportHeight] 的 viewport 上要畫的東西：只算看得到的那
+  /// 一段，兩端另外照開頭、結尾那個字找（選取跨好幾屏時，畫面外的段落排版
+  /// 可能已經丟掉）。
+  SelectionPaint paintFor(
+    ReaderTextSelection selection,
+    double viewportHeight,
+  ) {
+    const nothing = (boxes: <LineBox>[], startBox: null, endBox: null);
+    final geometry = _pipeline().geometry;
+    if (!geometry.isSelectionCurrent(selection)) {
       // 章節重新切分、換內容或樣式換代後，舊 offset 不再對應畫面。
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_mounted() && identical(this.selection.selection, selection)) {
           clear();
         }
       });
-      return const <LineBox>[];
+      return nothing;
     }
-    return _marks.lineBoxes(
-      selection.chapterIndex,
-      selection.range.start,
-      selection.range.end,
+    final scroll = _scrollOffset();
+    if (scroll == null) return nothing;
+    List<LineBox> within(int start, int end) => [
+      for (final box in geometry.lineBoxesWithin(
+        selection.chapterIndex,
+        start,
+        end,
+        top: scroll,
+        bottom: scroll + viewportHeight,
+      ))
+        LineBox(
+          left: box.left,
+          top: box.top - scroll,
+          right: box.right,
+          bottom: box.bottom - scroll,
+        ),
+    ];
+    final range = selection.range;
+    final text = selection.blocks.displayText;
+    // 開頭、結尾那個字是表情符號這類兩個單位的字時，兩個單位一起量。
+    final firstEnd =
+        range.start + 2 <= range.end &&
+            (text.codeUnitAt(range.start) & 0xFC00) == 0xD800
+        ? range.start + 2
+        : range.start + 1;
+    final lastStart =
+        range.end - 2 >= range.start &&
+            (text.codeUnitAt(range.end - 1) & 0xFC00) == 0xDC00
+        ? range.end - 2
+        : range.end - 1;
+    final starts = within(range.start, firstEnd);
+    final ends = within(lastStart, range.end);
+    return (
+      boxes: within(range.start, range.end),
+      startBox: starts.isEmpty ? null : starts.first,
+      endBox: ends.isEmpty ? null : ends.last,
     );
   }
 
@@ -156,7 +196,6 @@ final class ReaderTextTouch {
       ReaderTextSelection(
         blocks: hit.blocks,
         epoch: epoch,
-        paragraph: hit.paragraph,
         range: ChapterTextRange(
           hit.paragraph.start + word.start,
           hit.paragraph.start + word.end,

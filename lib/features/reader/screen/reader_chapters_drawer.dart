@@ -23,6 +23,7 @@ import 'package:night_reader/shared/widgets/book/toc_volume_row.dart';
 import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
+import 'package:night_reader/core/models/reading/excerpt_text.dart';
 
 /// 閱讀器左側的面板：「目錄」「書籤」「標註」三個分頁，頂端的分段切換。
 class ReaderChaptersDrawer extends StatefulWidget {
@@ -498,7 +499,9 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
             itemCount: rows.length,
             itemBuilder: (context, index) {
               final (:bookmark, :chapter) = rows[index];
-              final excerpt = context.zh(bookmark.excerpt);
+              final excerpt = context.zh(
+                withSingleLineBreaks(bookmark.excerpt),
+              );
               return SwipeActions(
                 key: ValueKey(bookmark.id),
                 enabled: widget.onBookmarkDelete != null,
@@ -603,7 +606,7 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
                     GroupedRow(
                       leading: HighlightColorBar(color: highlight.color),
                       translateTitle: false,
-                      title: context.zh(highlight.quote),
+                      title: context.zh(withSingleLineBreaks(highlight.quote)),
                       maxTitleLines: 3,
                       // 章名一行，有備忘時接在下面（最多兩行）。
                       translateSubtitle: false,

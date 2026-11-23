@@ -258,17 +258,18 @@ class ReaderPageCoordinator {
   /// 選字選單的「隱藏」：新增一條把這段字換成空白的替換規則，套用到所有
   /// 書、排在既有規則之後，重新排版後提示可以復原。規則用這一段在既有規則
   /// 套用之後的原文：畫面上的字經過排版整理與繁簡轉換，直接用常對不到
-  /// （見 [sourceRangeOf]）。
+  /// （見 [selectionSourceOf]）。跨段時連段落之間的換行一起比對（同 Legado）。
   Future<void> hideText(ParagraphSelection selection) async {
     final source = await _selectionSource(selection, action: '隱藏');
     if (source == null) return;
     final (:replaceDao, :pattern, paragraph: _) = source;
+    final name = _ruleNameOf(pattern);
     final int id;
     try {
       final rules = await replaceDao.getAll();
       id = await replaceDao.insert(
         ReplaceRule(
-          name: pattern,
+          name: name,
           group: _hiddenTextGroup,
           pattern: pattern,
           replacement: '',
@@ -284,14 +285,14 @@ class ReaderPageCoordinator {
     await _reloadAfterRule(
       replaceDao,
       id,
-      done: '已隱藏「$pattern」',
+      done: '已隱藏「$name」',
       notReloaded: '已新增隱藏規則，但正文沒有更新',
     );
   }
 
   /// 選字選單的「替換」：找原文的方法同「隱藏」，打開替換規則的編輯畫面、
   /// 原文先填好（不是正則、套用到所有書、放在「選字替換」分組），使用者填
-  /// 要換成的字；即時測試先放那一段的原文。存了就重新排版，提示可以復原；
+  /// 要換成的字；即時測試先放選到的那幾段原文。存了就重新排版，提示可以復原；
   /// 取消就不新增。
   Future<void> replaceText(
     BuildContext context,
@@ -305,7 +306,7 @@ class ReaderPageCoordinator {
       context,
       constraints: ReaderMenuSheet.constraintsFor(context, _host.settings),
       rule: ReplaceRule(
-        name: pattern,
+        name: _ruleNameOf(pattern),
         group: _replacedTextGroup,
         pattern: pattern,
         isRegex: false,
@@ -330,8 +331,9 @@ class ReaderPageCoordinator {
     );
   }
 
-  /// 選到的字在既有規則套用之後的原文（[sourceRangeOf]），與它所在那一段的
-  /// 原文；找不到或這本書關了替換規則時提示原因、傳回 null。
+  /// 選到的字在既有規則套用之後的原文，與選到的那幾段的原文
+  /// （[selectionSourceOf]）；找不到或這本書關了替換規則時提示原因、傳回
+  /// null。
   Future<({ReplaceRuleDao replaceDao, String pattern, String paragraph})?>
   _selectionSource(
     ParagraphSelection selection, {
@@ -354,8 +356,8 @@ class ReaderPageCoordinator {
         chapterDao: _host.dependencies.chapterDao,
         contentDao: contentDao,
       ).getRawContent(book: book, chapter: chapter);
-      final paragraphs = raw == null
-          ? const <String>[]
+      final stage = raw == null
+          ? null
           : await ReaderContentTransformer.ruleStageParagraphs(
               book: book,
               chapter: chapter,
@@ -365,25 +367,15 @@ class ReaderPageCoordinator {
                 book.origin,
               ),
             );
-      final source = selection.paragraphIndex < paragraphs.length
-          ? paragraphs[selection.paragraphIndex]
-          : null;
-      final range = source == null
-          ? null
-          : sourceRangeOf(
-              source: source,
-              shown: selection.paragraph,
-              start: selection.start,
-              end: selection.end,
-            );
-      if (source == null || range == null) {
+      final found = stage == null ? null : selectionSourceOf(selection, stage);
+      if (found == null) {
         _showNotice('找不到這段字的原文，沒有$action');
         return null;
       }
       return (
         replaceDao: replaceDao,
-        pattern: source.substring(range.start, range.end),
-        paragraph: source,
+        pattern: found.pattern,
+        paragraph: found.paragraphs,
       );
     } catch (error, stackTrace) {
       AppLog.e('$action選字時找原文失敗', error: error, stackTrace: stackTrace);
@@ -391,6 +383,10 @@ class ReaderPageCoordinator {
       return null;
     }
   }
+
+  /// 規則的名稱與提示裡的段落分隔換成一個空格。
+  static String _ruleNameOf(String pattern) =>
+      pattern.replaceAll(RegExp(r'\s*\n\s*'), ' ');
 
   /// 新增了規則 [id]：重新排版，提示可以復原。規則已經存進去了，重排失敗也
   /// 留著復原，不然只能到替換規則裡刪。

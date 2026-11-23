@@ -1,3 +1,50 @@
+import 'package:night_reader/features/reader/chapter/reader_content_transformer.dart';
+import 'package:night_reader/features/reader/text_view/overlay/selection_service.dart';
+
+/// 選到的字（照段落切開的 [selection]）在替換規則全部套用之後的原文
+/// [pattern]，與選到的那幾段的原文 [paragraphs]；有一段對不齊時傳回 null。
+///
+/// 每段照選取位置逐字對齊取出（[sourceRangeOf]）。跨段時段與段之間放規則
+/// 看到的那兩段之間的字（[RuleStageText.gaps]：換行，原文有空行時連空行），
+/// 新規則接在既有規則之後才比對得到（同 Legado，規則連換行一起比對）。
+({String pattern, String paragraphs})? selectionSourceOf(
+  ParagraphSelection selection,
+  RuleStageText stage,
+) {
+  final pieces = selection.pieces;
+  if (pieces.isEmpty) return null;
+  final pattern = StringBuffer();
+  final paragraphs = StringBuffer();
+  for (var i = 0; i < pieces.length; i += 1) {
+    final piece = pieces[i];
+    final index = piece.paragraphIndex;
+    if (index >= stage.paragraphs.length) return null;
+    final source = stage.paragraphs[index];
+    final range = sourceRangeOf(
+      source: source,
+      shown: piece.paragraph,
+      start: piece.start,
+      end: piece.end,
+    );
+    if (range == null) return null;
+    final last = i == pieces.length - 1;
+    if (!last && index >= stage.gaps.length) return null;
+    final gap = last ? '' : stage.gaps[index];
+    pattern
+      ..write(
+        source.substring(
+          i == 0 ? range.start : 0,
+          last ? range.end : source.length,
+        ),
+      )
+      ..write(gap);
+    paragraphs
+      ..write(source)
+      ..write(gap);
+  }
+  return (pattern: pattern.toString(), paragraphs: paragraphs.toString());
+}
+
 /// 畫面上一段正文 [shown] 裡選到的 [start]–[end]，在同一段的原文 [source]
 /// 裡是哪個範圍。
 ///

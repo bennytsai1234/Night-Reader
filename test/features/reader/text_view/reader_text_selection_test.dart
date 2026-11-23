@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/features/reader/chapter/reader_illustration.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 import 'package:night_reader/features/reader/text_view/overlay/selection_service.dart';
 import 'package:night_reader/features/reader/text_view/overlay/reader_text_selection_layer.dart';
@@ -168,20 +169,18 @@ void main() {
   });
 
   group('ReaderTextSelection.moveEdge', () {
-    ReaderTextSelection selection() {
-      final chapter = _chapter();
-      final paragraph = chapter.sourceParagraphRange(
-        const BlockKey(chapterIndex: 0, blockIndex: 1),
-      )!;
-      // 選「城門」。
-      final start = chapter.displayText.indexOf('城門');
+    ReaderTextSelection select(String text, {ChapterBlocks? blocks}) {
+      final chapter = blocks ?? _chapter();
+      final start = chapter.displayText.indexOf(text);
       return ReaderTextSelection(
         blocks: chapter,
         epoch: LayoutEpoch.initial,
-        paragraph: paragraph,
-        range: ChapterTextRange(start, start + 2),
+        range: ChapterTextRange(start, start + text.length),
       );
     }
+
+    // 選「城門」。
+    ReaderTextSelection selection() => select('城門');
 
     test('拖動一端延伸選取，複製取 displayText', () {
       final base = selection();
@@ -190,13 +189,115 @@ void main() {
       expect(moved.edge, SelectionEdge.end);
     });
 
-    test('拖出段落時夾在段落邊界', () {
+    test('可以拖到別段，到這一章正文的頭尾停住，章名不算', () {
       final base = selection();
+      final display = base.blocks.displayText;
       final before = base.moveEdge(SelectionEdge.start, 0);
-      expect(before.selection.range.start, base.paragraph.start);
+      expect(before.selection.range.start, display.indexOf('天色'));
       final after = base.moveEdge(SelectionEdge.end, 1 << 20);
-      expect(after.selection.range.end, base.paragraph.end);
-      expect(after.selection.text, '城門即將關閉。');
+      expect(after.selection.range.end, display.length);
+      expect(after.selection.text, '城門即將關閉。\n\n他快步走過長街。');
+    });
+
+    test('落在段落分隔上時往字那邊靠', () {
+      final base = selection();
+      final display = base.blocks.displayText;
+      // 結尾拖到下一段的開頭：停在上一段的最後一個字後面。
+      final end = base.moveEdge(SelectionEdge.end, display.indexOf('他快步'));
+      expect(end.selection.text, '城門即將關閉。');
+      // 開頭拖到上一段的結尾後面：從下一段的第一個字開始。
+      final second = select('長街');
+      final start = second.moveEdge(
+        SelectionEdge.start,
+        display.indexOf('關閉。') + 3,
+      );
+      expect(start.selection.text, '他快步走過長街');
+    });
+
+    test('兩端之間只剩段落分隔時，留下拖動那一側最近的一個字', () {
+      final display = _chapter().displayText;
+      final first = select('他');
+      // 結尾往上拖到上一段的結尾：越過開頭、成為開頭，留上一段最後一個字。
+      final up = first.moveEdge(SelectionEdge.end, display.indexOf('關閉。') + 3);
+      expect(up.selection.text, '。');
+      expect(up.edge, SelectionEdge.start);
+      final last = select('。', blocks: _chapter());
+      // 開頭往下拖到下一段的開頭：越過結尾、成為結尾，留下一段第一個字。
+      final down = last.moveEdge(SelectionEdge.start, display.indexOf('他'));
+      expect(down.selection.text, '他');
+      expect(down.edge, SelectionEdge.end);
+    });
+
+    test('留一個字時不拆開兩個單位的字', () {
+      const title = '章';
+      const body = '甲😀乙';
+      const display = '$title\n\n$body';
+      final chapter = ChapterBlocks(
+        chapterIndex: 0,
+        title: title,
+        displayText: display,
+        contentHash: 'emoji',
+        blocks: [
+          _block(0, title, 0, paragraph: -1, isTitle: true),
+          _block(1, body, title.length + 2),
+        ],
+      );
+      final emoji = display.indexOf('😀');
+      final base = ReaderTextSelection(
+        blocks: chapter,
+        epoch: LayoutEpoch.initial,
+        range: ChapterTextRange(emoji, emoji + 2),
+      );
+      expect(
+        base.moveEdge(SelectionEdge.start, emoji + 2).selection.text,
+        '😀',
+      );
+      expect(base.moveEdge(SelectionEdge.end, emoji).selection.text, '😀');
+    });
+
+    test('照段落切開交給隱藏與替換，跨過插圖時標出來', () {
+      final cross = select('城門').moveEdge(SelectionEdge.end, 1 << 20);
+      final parts = cross.selection.inParagraphs;
+      expect(parts.chapterIndex, 0);
+      expect(parts.crossesIllustration, isFalse);
+      expect(parts.pieces, [
+        (paragraphIndex: 0, paragraph: '天色漸暗，城門即將關閉。', start: 5, end: 12),
+        (paragraphIndex: 1, paragraph: '他快步走過長街。', start: 0, end: 8),
+      ]);
+
+      final chapter = _chapter();
+      final second = chapter.displayText.indexOf('他快步');
+      final withPicture = ChapterBlocks(
+        chapterIndex: 0,
+        title: chapter.title,
+        displayText: chapter.displayText,
+        contentHash: chapter.contentHash,
+        blocks: [
+          for (final block in chapter.blocks)
+            if (block.blockIndex < 3) block,
+          ChapterBlock(
+            key: const BlockKey(chapterIndex: 0, blockIndex: 3),
+            text: '',
+            charRange: ChapterTextRange(second, second),
+            sourceParagraphIndex: 1,
+            illustration: const ReaderIllustration(
+              offset: 0,
+              src: 'a.png',
+              path: 'a.png',
+              pixelWidth: 10,
+              pixelHeight: 10,
+            ),
+          ),
+          _block(4, '他快步走過長街。', second, paragraph: 1),
+        ],
+      );
+      expect(select('城門', blocks: withPicture).crossesIllustration, isFalse);
+      final across = select(
+        '城門',
+        blocks: withPicture,
+      ).moveEdge(SelectionEdge.end, 1 << 20).selection;
+      expect(across.crossesIllustration, isTrue);
+      expect(across.inParagraphs.pieces, hasLength(2));
     });
 
     test('越過另一端時兩端互換，拖動中的一端跟著換', () {
@@ -278,9 +379,6 @@ void main() {
           ReaderTextSelection(
             blocks: chapter,
             epoch: LayoutEpoch.initial,
-            paragraph: chapter.sourceParagraphRange(
-              const BlockKey(chapterIndex: 0, blockIndex: 1),
-            )!,
             range: ChapterTextRange(start, start + 2),
           ),
         );
@@ -290,7 +388,8 @@ void main() {
           home: ReaderTextSelectionLayer(
             selection: service,
             repaint: service,
-            boxesFor: (_) => <LineBox>[box],
+            paintFor: (_, _) =>
+                (boxes: <LineBox>[box], startBox: box, endBox: box),
             caretAt: (_, _) => null,
             onHide: onHide,
             onReplace: onReplace,
@@ -354,7 +453,6 @@ void main() {
         ReaderTextSelection(
           blocks: current.blocks,
           epoch: current.epoch,
-          paragraph: current.paragraph,
           range: ChapterTextRange(current.range.start, current.range.end - 1),
         ),
       );
@@ -485,13 +583,10 @@ void main() {
       await tester.pump();
 
       expect(hidden?.text, '城門');
-      expect(hidden?.inParagraph, (
-        chapterIndex: 0,
-        paragraphIndex: 0,
-        paragraph: '天色漸暗，城門即將關閉。',
-        start: 5,
-        end: 7,
-      ));
+      expect(hidden?.inParagraphs.crossesIllustration, isFalse);
+      expect(hidden?.inParagraphs.pieces, [
+        (paragraphIndex: 0, paragraph: '天色漸暗，城門即將關閉。', start: 5, end: 7),
+      ]);
       expect(service.active, isFalse);
     });
 
@@ -526,9 +621,10 @@ void main() {
       await tester.tap(find.text('替換'));
       await tester.pump();
       expect(service.active, isFalse);
-      expect(replaced?.inParagraph.paragraph, '天色漸暗，城門即將關閉。');
-      expect(replaced?.inParagraph.start, 5);
-      expect(replaced?.inParagraph.end, 7);
+      final piece = replaced?.inParagraphs.pieces.single;
+      expect(piece?.paragraph, '天色漸暗，城門即將關閉。');
+      expect(piece?.start, 5);
+      expect(piece?.end, 7);
     });
 
     testWidgets('「書籤」排在隱藏後面，按下在選到的字開頭留書籤並收起選取', (tester) async {
@@ -618,7 +714,6 @@ void main() {
       final highlight = ReaderTextSelection(
         blocks: chapter,
         epoch: LayoutEpoch.initial,
-        paragraph: ChapterTextRange(start, start + body.length),
         range: ChapterTextRange(start, start + body.length),
       ).asHighlight;
       expect(highlight.quote, '雨停了。');
@@ -627,7 +722,6 @@ void main() {
       final blank = ReaderTextSelection(
         blocks: chapter,
         epoch: LayoutEpoch.initial,
-        paragraph: ChapterTextRange(start, start + body.length),
         range: ChapterTextRange(start, start + 2),
       ).asHighlight;
       expect(blank.quote, isEmpty, reason: '全是空白不畫');
@@ -652,7 +746,6 @@ void main() {
       ReaderTextSelection select(String from, String to) => ReaderTextSelection(
         blocks: chapter,
         epoch: LayoutEpoch.initial,
-        paragraph: ChapterTextRange(start, start + body.length),
         range: ChapterTextRange(
           display.indexOf(from),
           display.indexOf(to) + to.length,

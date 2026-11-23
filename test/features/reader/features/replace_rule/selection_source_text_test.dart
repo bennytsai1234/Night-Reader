@@ -87,8 +87,8 @@ void main() {
       rawContent: raw,
       enabledRules: rules,
     );
-    expect(sources, hasLength(before.length));
-    final source = sources[paragraph];
+    expect(sources.paragraphs, hasLength(before.length));
+    final source = sources.paragraphs[paragraph];
     final range = sourceRangeOf(
       source: source,
       shown: line,
@@ -104,6 +104,106 @@ void main() {
     );
     return shown(raw, title: title, rules: [...rules, rule], convert: convert);
   }
+
+  /// 從第 [from] 段的 [fromText] 開頭選到第 [to] 段的 [toText] 結尾，隱藏後
+  /// 重排（同 Legado，規則連段落之間的換行一起比對）。
+  Future<List<String>> hideAcross(
+    String raw, {
+    required int from,
+    required String fromText,
+    required int to,
+    required String toText,
+  }) async {
+    const title = '第一章';
+    final before = await shown(raw, title: title);
+    final start = before[from].indexOf(fromText);
+    final end = before[to].indexOf(toText) + toText.length;
+    expect(start, isNonNegative);
+    expect(end, greaterThanOrEqualTo(toText.length));
+    final stage = await ReaderContentTransformer.ruleStageParagraphs(
+      book: book,
+      chapter: BookChapter(url: 'c', title: title),
+      rawContent: raw,
+      enabledRules: const [],
+    );
+    final found = selectionSourceOf((
+      chapterIndex: 0,
+      pieces: [
+        for (var i = from; i <= to; i += 1)
+          (
+            paragraphIndex: i,
+            paragraph: before[i],
+            start: i == from ? start : 0,
+            end: i == to ? end : before[i].length,
+          ),
+      ],
+      crossesIllustration: false,
+    ), stage);
+    expect(found, isNotNull);
+    final rule = ReplaceRule(
+      pattern: found!.pattern,
+      replacement: '',
+      isRegex: false,
+      order: 99,
+    );
+    return shown(raw, title: title, rules: [rule]);
+  }
+
+  test('跨段選取連段落之間的換行一起比對，選到的幾段整個不見', () async {
+    expect(
+      await hideAcross(
+        '前文。\n廣告一。\n廣告二。\n後文。',
+        from: 1,
+        fromText: '廣告一。',
+        to: 2,
+        toText: '廣告二。',
+      ),
+      ['前文。', '後文。'],
+    );
+  });
+
+  test('原文段落之間有空行時，連空行一起比對', () async {
+    expect(
+      await hideAcross(
+        '前文。\n\n廣告一。\n\n\n廣告二。\n後文。',
+        from: 1,
+        fromText: '廣告一。',
+        to: 2,
+        toText: '廣告二。',
+      ),
+      ['前文。', '後文。'],
+    );
+  });
+
+  test('只選到前一段的後半和後一段的前半時，剩下的兩半接成一段', () async {
+    expect(
+      await hideAcross(
+        '甲說了一句。\n乙回了一句。\n丙走了。',
+        from: 0,
+        fromText: '一句。',
+        to: 1,
+        toText: '乙回',
+      ),
+      ['甲說了了一句。', '丙走了。'],
+    );
+  });
+
+  test('跨三段時中間那段整段比對', () async {
+    final found = selectionSourceOf(
+      (
+        chapterIndex: 0,
+        pieces: [
+          (paragraphIndex: 0, paragraph: '甲乙', start: 1, end: 2),
+          (paragraphIndex: 1, paragraph: '丙丁', start: 0, end: 2),
+          (paragraphIndex: 2, paragraph: '戊己', start: 0, end: 1),
+        ],
+        crossesIllustration: false,
+      ),
+      (paragraphs: ['甲乙', '丙丁', '戊己'], gaps: ['\n', '\n\n']),
+    );
+    expect(found?.pattern, '乙\n丙丁\n\n戊');
+    expect(found?.paragraphs, '甲乙\n丙丁\n\n戊己');
+  });
 
   test('半形標點與中文之間的空白排版後不同，仍刪得掉', () async {
     expect(

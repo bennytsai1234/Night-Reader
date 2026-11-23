@@ -112,21 +112,27 @@ final class ReaderMarkGeometry {
           !identical(cached.blocks, blocks) ||
           cached.revision != revision) {
         final range = _highlightRangeIn(mark, blocks);
-        final world = pipeline.geometry.lineBoxes(
+        final world = pipeline.geometry.lineBoxesChecked(
           mark.location.chapterIndex,
           range.start,
           range.end,
         );
         // 那一段還沒排好：這次不畫、不記，排好後文件索引換版再算。
-        if (world.isEmpty) continue;
-        cached = (
+        if (world.boxes.isEmpty) continue;
+        final computed = (
           mark: mark,
           blocks: blocks,
           revision: revision,
           range: range,
-          boxes: world,
+          boxes: world.boxes,
         );
-        _highlightBoxes[mark.id] = cached;
+        // 跨好幾屏的標註有幾段還沒排好時先畫排好的，不記；下一幀再算。
+        if (world.complete) {
+          _highlightBoxes[mark.id] = computed;
+        } else {
+          _highlightBoxes.remove(mark.id);
+        }
+        cached = computed;
       }
       paints.add((
         boxes: [for (final box in cached.boxes) _scrolled(box, scroll)],
@@ -177,7 +183,8 @@ final class ReaderMarkGeometry {
   }
 
   /// 標註在那一章正文裡的範圍：開頭照錨點找回（正文變了照前後原文），往
-  /// 後畫記下的那麼長，不超出那一章。
+  /// 後數記下的那麼多個字，段落分隔不算（分段和畫的時候不同也畫到同一段
+  /// 字的結尾），不超出那一章。
   static ChapterTextRange _highlightRangeIn(
     ReaderHighlightMark mark,
     ChapterBlocks blocks,
@@ -188,10 +195,13 @@ final class ReaderMarkGeometry {
       displayText: text,
       contentHash: blocks.contentHash,
     ).clamp(0, text.length - 1).toInt();
-    return ChapterTextRange(
-      start,
-      math.min(text.length, start + math.max(1, mark.length)),
-    );
+    var end = start;
+    var remaining = math.max(1, mark.length);
+    while (end < text.length && remaining > 0) {
+      if (text.codeUnitAt(end) != 0x0A) remaining--;
+      end++;
+    }
+    return ChapterTextRange(start, end);
   }
 
   static LineBox _scrolled(LineBox box, double scroll) => LineBox(
