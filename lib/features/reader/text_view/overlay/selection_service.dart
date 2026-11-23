@@ -18,10 +18,11 @@ typedef ParagraphPiece = ({
 });
 
 /// 選取照正文段落切開（見 [ReaderTextSelection.inParagraphs]），交給上層
-/// 對回原文。[pieces] 照先後排、段落序號相連；[crossesIllustration] 是選取
-/// 中間夾著插圖。
+/// 對回原文。[contentHash] 是選取時畫面上那份正文的身分；[pieces] 照先後
+/// 排、段落序號相連；[crossesIllustration] 是選取中間夾著插圖。
 typedef ParagraphSelection = ({
   int chapterIndex,
+  String contentHash,
   List<ParagraphPiece> pieces,
   bool crossesIllustration,
 });
@@ -145,6 +146,7 @@ final class ReaderTextSelection {
     flush();
     return (
       chapterIndex: chapterIndex,
+      contentHash: blocks.contentHash,
       pieces: pieces,
       crossesIllustration: crossesIllustration,
     );

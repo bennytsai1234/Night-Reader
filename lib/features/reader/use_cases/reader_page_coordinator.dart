@@ -333,7 +333,9 @@ class ReaderPageCoordinator {
 
   /// 選到的字在既有規則套用之後的原文，與選到的那幾段的原文
   /// （[selectionSourceOf]）；找不到或這本書關了替換規則時提示原因、傳回
-  /// null。
+  /// null。原文用排出畫面上那份正文的同一份（[ReaderChapterRepository
+  /// .rawContentOf]）：存著的正文可能已經換過（單章借源、重新取得本章），
+  /// 畫面還沒換，照位置對齊會對到別的字。
   Future<({ReplaceRuleDao replaceDao, String pattern, String paragraph})?>
   _selectionSource(
     ParagraphSelection selection, {
@@ -341,9 +343,9 @@ class ReaderPageCoordinator {
   }) async {
     final book = _host.book;
     final replaceDao = _host.dependencies.replaceDao;
-    final contentDao = _host.dependencies.readerChapterContentDao;
-    final chapter = _host.runtime?.chapterAt(selection.chapterIndex);
-    if (replaceDao == null || contentDao == null || chapter == null) {
+    final runtime = _host.runtime;
+    final chapter = runtime?.chapterAt(selection.chapterIndex);
+    if (replaceDao == null || runtime == null || chapter == null) {
       _showNotice('無法$action這段字');
       return null;
     }
@@ -352,10 +354,10 @@ class ReaderPageCoordinator {
       return null;
     }
     try {
-      final raw = await ReaderChapterContentStore(
-        chapterDao: _host.dependencies.chapterDao,
-        contentDao: contentDao,
-      ).getRawContent(book: book, chapter: chapter);
+      final raw = runtime.repository.rawContentOf(
+        selection.chapterIndex,
+        selection.contentHash,
+      );
       final stage = raw == null
           ? null
           : await ReaderContentTransformer.ruleStageParagraphs(

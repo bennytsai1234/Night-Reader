@@ -130,6 +130,7 @@ void main() {
     );
     final found = selectionSourceOf((
       chapterIndex: 0,
+      contentHash: 'h',
       pieces: [
         for (var i = from; i <= to; i += 1)
           (
@@ -238,6 +239,7 @@ void main() {
         (paragraphIndex: index, paragraph: text, start: start, end: end);
     final across = selectionSourceOf((
       chapterIndex: 0,
+      contentHash: 'h',
       pieces: [piece(0, '前文。', 1, 3), piece(1, '後文。', 0, 1)],
       crossesIllustration: false,
     ), stage);
@@ -245,6 +247,7 @@ void main() {
     expect(across?.paragraphs, '前文。\n\n後文。', reason: '即時測試不放插圖記號');
     final inside = selectionSourceOf((
       chapterIndex: 0,
+      contentHash: 'h',
       pieces: [piece(1, '後文。', 0, 2)],
       crossesIllustration: false,
     ), stage);
