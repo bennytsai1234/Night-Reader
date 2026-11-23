@@ -818,6 +818,48 @@ void main() {
       await tts.stop();
     });
 
+    testWidgets('does not count down while the chapter to read loads', (
+      tester,
+    ) async {
+      final second = Completer<void>();
+      await open({0: '甲。', 1: '乙。'}, gates: {1: second});
+      moveTo(1);
+      await tts.sleepTimer.choose(SleepTimerOption.minutes15);
+      unawaited(tts.startFromVisibleLocation());
+      await elapse(tester, const Duration(minutes: 5));
+
+      expect(tts.phase, ReaderTtsPhase.reading);
+      expect(engine.spoken, isEmpty);
+      expect(tts.sleepTimer.remaining, isNull);
+
+      second.complete();
+      await tester.pump();
+      expect(engine.spoken, ['乙。']);
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 15));
+      await tts.stop();
+    });
+
+    testWidgets('stops counting down while the next chapter loads', (
+      tester,
+    ) async {
+      final second = Completer<void>();
+      await open({0: '甲。', 1: '乙。'}, gates: {1: second});
+      await tts.sleepTimer.choose(SleepTimerOption.minutes15);
+      await tts.startFromVisibleLocation();
+      await elapse(tester, const Duration(minutes: 5));
+
+      engine.complete();
+      await elapse(tester, const Duration(minutes: 5));
+      expect(tts.phase, ReaderTtsPhase.reading);
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 10));
+
+      second.complete();
+      await tester.pump();
+      expect(engine.spoken.last, '乙。');
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 10));
+      await tts.stop();
+    });
+
     testWidgets('keeps counting down across chapters', (tester) async {
       await open({0: '甲。', 1: '乙。'});
       await tts.sleepTimer.choose(SleepTimerOption.minutes15);
