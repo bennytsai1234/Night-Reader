@@ -28,8 +28,8 @@ BookSource _source({
 );
 
 void main() {
-  test('every website problem the check finds is removable, but a broken '
-      'check run is not', () {
+  test('every website problem and a check that broke midway are removable, '
+      'while a partly broken source is kept', () {
     final unstable = _source()
       ..addHealthGroups(upstreamHealth(unstableSourceGroupTag));
     expect(unstable.runtimeHealth.label, unstableSourceGroupTag);
@@ -52,10 +52,28 @@ void main() {
       expect(source.isCleanupCandidate, isTrue, reason: tag);
     }
 
-    // 夜讀自己的校驗流程出錯，不算書源的問題。
+    // 校驗跑到一半意外出錯，判不出是哪一種，也建議移除。
     final quarantined = _source(url: 'https://quarantine.test')
       ..addHealthGroups(upstreamHealth(quarantineSourceGroupTag));
-    expect(quarantined.isCleanupCandidate, isFalse);
+    expect(quarantined.runtimeHealth.label, quarantineSourceGroupTag);
+    expect(quarantined.isCleanupCandidate, isTrue);
+
+    // 正文失效也帶「已隔離」，但照正文失效算：留著交 AI 修，不建議移除。
+    final contentBroken = _source(url: 'https://content.test')
+      ..addHealthGroups(
+        const SourceRuntimeHealth(
+          category: SourceHealthCategory.contentBroken,
+          label: contentBrokenSourceGroupTag,
+          description: '',
+          allowsSearch: false,
+          allowsReading: false,
+          cleanupCandidate: false,
+          quarantined: true,
+        ),
+      );
+    expect(contentBroken.groupTags, contains(quarantineSourceGroupTag));
+    expect(contentBroken.runtimeHealth.label, contentBrokenSourceGroupTag);
+    expect(contentBroken.isCleanupCandidate, isFalse);
   });
 
   test('the kind follows the source type only', () {
