@@ -849,6 +849,7 @@ void main() {
       await elapse(tester, const Duration(minutes: 5));
 
       engine.complete();
+      await tester.pump();
       await elapse(tester, const Duration(minutes: 5));
       expect(tts.phase, ReaderTtsPhase.reading);
       expect(tts.sleepTimer.remaining, const Duration(minutes: 10));
