@@ -580,7 +580,8 @@ const String _method =
 
 /// 改規則的參數：蓋到目前的書源上的欄位。欄位逐一列出：沒列欄位的物件
 /// Gemini 不收（「should be non-empty for OBJECT type」），列出來 AI 也不會
-/// 寫成書源沒有的欄位。
+/// 寫成書源沒有的欄位。排序、開關這類照原本留著的（[_keptFromOriginal]）
+/// AI 看不到，不列。
 final Map<String, Object?> _patch = {
   'type': 'object',
   'description':
@@ -588,15 +589,16 @@ final Map<String, Object?> _patch = {
       '沒寫的項目照舊，值給空字串就拿掉那一項。只寫要改的欄位。',
   'properties': {
     for (final MapEntry(:key, :value) in _sourceDefaults.entries)
-      key: switch (_ruleFields[key]) {
-        final items? => {
-          'type': 'object',
-          'properties': {
-            for (final item in items) item: const {'type': 'string'},
+      if (!_keptFromOriginal.contains(key))
+        key: switch (_ruleFields[key]) {
+          final items? => {
+            'type': 'object',
+            'properties': {
+              for (final item in items) item: const {'type': 'string'},
+            },
           },
+          _ => {'type': value is int ? 'integer' : 'string'},
         },
-        _ => {'type': value is int ? 'integer' : 'string'},
-      },
   },
 };
 

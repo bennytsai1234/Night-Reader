@@ -763,6 +763,34 @@ void main() {
       ]);
     });
 
+    test(
+      'two calls both marked index 0 with different ids stay apart',
+      () async {
+        final service = _Stream([
+          for (final (id, page) in [('c1', 1), ('c2', 2)])
+            _event(
+              piece({
+                'tool_calls': [
+                  {
+                    'index': 0,
+                    'id': id,
+                    'function': {'name': 'read', 'arguments': '{"page":$page}'},
+                  },
+                ],
+              }),
+            ),
+        ]);
+
+        final reply = await _client(service)
+            .complete([const AiMessage.user('hi')]);
+
+        expect(reply.toolCalls, [
+          const AiToolCall(id: 'c1', name: 'read', arguments: '{"page":1}'),
+          const AiToolCall(id: 'c2', name: 'read', arguments: '{"page":2}'),
+        ]);
+      },
+    );
+
     test('OpenRouter: reasoning details are put together like its SDK does '
         'and go back on the reply', () async {
       final service = _Stream([

@@ -871,7 +871,8 @@ final class _StreamReader implements Sink<String> {
     }
   }
 
-  /// 一段工具呼叫。有 `index` 的照它；沒有的（Gemini 曾經不給）看編號，新
+  /// 一段工具呼叫。有 `index` 的照它（同一個位置來了另一個編號就是新的
+  /// 呼叫）；沒有的（Gemini 曾經不給）看編號，新
   /// 編號是新的呼叫；編號也沒有時，帶名稱的是新的呼叫（後續的片段只帶參數），
   /// 其他接在最後一個後面。參數只數字數（輸出上限），不數重複的句子。
   void _callPiece(Map<dynamic, dynamic> call) {
@@ -880,7 +881,14 @@ final class _StreamReader implements Sink<String> {
     final function = call['function'] is Map ? call['function'] as Map : null;
     final name = function?['name'] is String ? function!['name'] as String : '';
     final into = switch (index) {
-      final int index => _byIndex.putIfAbsent(index, _newCall),
+      // 同一個位置換了編號是新的呼叫：有的服務每個呼叫都標 0。
+      final int index
+          when id.isEmpty ||
+              _byIndex[index] == null ||
+              _byIndex[index]!.id.isEmpty ||
+              _byIndex[index]!.id == id =>
+        _byIndex.putIfAbsent(index, _newCall),
+      final int index => _byIndex[index] = _newCall(),
       _ when id.isNotEmpty =>
         _calls.where((c) => c.id == id).firstOrNull ?? _newCall(),
       _
