@@ -49,28 +49,7 @@ void main() {
     });
 
     test('一句話跨好幾行、收引號打反時，不接下一段', () {
-      expect(
-        SemanticParagraphFormatter.repair(
-          '“從來只有我走，\n沒有人可以叫我走，今天我就要走！“\n她拉開門，又回頭看了一眼。',
-        ),
-        '“從來只有我走，沒有人可以叫我走，今天我就要走！“\n她拉開門，又回頭看了一眼。',
-      );
-    });
-
-    test('上一行停在逗號、頓號、分號時接下一行', () {
-      expect(SemanticParagraphFormatter.repair('他推開門，\n走了進去。'), '他推開門，走了進去。');
-      expect(SemanticParagraphFormatter.repair('桌上有筆、\n紙和墨。'), '桌上有筆、紙和墨。');
-      expect(SemanticParagraphFormatter.repair('天黑了；\n他還沒回來。'), '天黑了；他還沒回來。');
-      expect(SemanticParagraphFormatter.repair('他說,\n走吧。'), '他說,走吧。');
-    });
-
-    test('半形逗號後面接英數字時不接，空格不會黏掉', () {
-      const source = 'He said hello,\nworld.';
-      expect(SemanticParagraphFormatter.repair(source), source);
-    });
-
-    test('停在字上、沒有標點的行不接', () {
-      const source = '他推開門走了\n進去，屋裡一片漆黑。';
+      const source = '“從來只有我走，\n沒有人可以叫我走，今天我就要走！“\n她拉開門，又回頭看了一眼。';
       expect(SemanticParagraphFormatter.repair(source), source);
     });
 

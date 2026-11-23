@@ -1,9 +1,9 @@
 /// 把書源存錯的換行接回去（ADR 0073）。
 ///
 /// 網路書、TXT 與 EPUB 的正文裡，一個換行通常就是一段。這裡只接有明確
-/// 排版證據的換行：收尾標點被折到下一行開頭、開頭標點或逗號、頓號、分號
-/// 留在上一行結尾、成對的「……」「——」被折開，以及高度一致的固定欄寬
-/// 硬折行。空白行與只有插圖的行一律是段落邊界。
+/// 排版證據的換行：收尾標點被折到下一行開頭、開頭標點留在上一行結尾、
+/// 成對的「……」「——」被折開，以及高度一致的固定欄寬硬折行。空白行與
+/// 只有插圖的行一律是段落邊界。
 ///
 /// 在排版整理（`normalizeTypography`）之前跑，落單的彎引號接回句子後才
 /// 轉得對方向。只刪接縫的換行與兩側空白，不補標點、不改字。
@@ -11,9 +11,6 @@ abstract final class SemanticParagraphFormatter {
   /// 不會出現在段首的標點（不含引號，引號另外判斷）。
   static const String _noParagraphStart = '，。、；：！？）】》〉〕｝';
   static const String _noParagraphEnd = '（【《〈〔｛';
-
-  /// 句中停頓的標點：上一行停在這裡時句子還沒完。
-  static const String _midSentencePause = '，、；,;';
 
   /// 單層引號；其餘的「」“” 是雙層，兩層各自配對。
   static const String _singleQuotes = '『』‘’';
@@ -121,12 +118,6 @@ abstract final class SemanticParagraphFormatter {
       return !_isStandalonePunctuation(right);
     }
     if (_noParagraphEnd.contains(last)) return true;
-    // 一段話不會停在逗號、頓號、分號上。半形的後面接英數字時不接，接起來
-    // 會黏掉字詞間的空格。
-    if (_midSentencePause.contains(last)) {
-      final halfWidth = last == ',' || last == ';';
-      return !(halfWidth && _isLatinLetterOrDigit(first.codeUnitAt(0)));
-    }
     if (_splitsPair(left, right, '…') || _splitsPair(left, right, '—')) {
       return true;
     }

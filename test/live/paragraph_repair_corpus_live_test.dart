@@ -117,9 +117,6 @@ String _ruleOf(String left, String right) {
       (l.endsWith('—') && r.startsWith('—'))) {
     return 'split-pair';
   }
-  if (l.isNotEmpty && '，、；,;'.contains(l[l.length - 1])) {
-    return 'pause-end';
-  }
   return 'fixed-width';
 }
 

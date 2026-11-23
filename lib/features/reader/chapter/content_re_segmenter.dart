@@ -102,18 +102,12 @@ abstract final class ContentReSegmenter {
     // 預分段：”“ 切成 ”\n“；”。“ 切成 ”。\n“；”。xxx 切成 ”。\nxxx。
     p = String.fromCharCodes(buffer)
         .replaceAll(RegExp('["”“]+\\s*["”“]+'), '”\n“')
-        .replaceAllMapped(
-          RegExp('["”“]+(？。！?!~)["”“]+'),
-          (m) => '”${m[1]}\n“',
-        )
+        .replaceAllMapped(RegExp('["”“]+(？。！?!~)["”“]+'), (m) => '”${m[1]}\n“')
         .replaceAllMapped(
           RegExp('["”“]+(？。！?!~)([^"”“])'),
           (m) => '”${m[1]}\n${m[2]}',
         )
-        .replaceAllMapped(
-          RegExp('([$_sentencesSay])[.。]'),
-          (m) => '${m[1]}。\n',
-        )
+        .replaceAllMapped(RegExp('([$_sentencesSay])[.。]'), (m) => '${m[1]}。\n')
         .split('\n');
     final lines = StringBuffer();
     for (final s in p) {
@@ -558,7 +552,13 @@ abstract final class ContentReSegmenter {
 
   /// 到最近一個符合 [key] 的字的距離（不是下標）；[inOrder] 為 false 時從
   /// 尾端往前算。
-  static int _seekIndex(String str, String key, int from, int to, bool inOrder) {
+  static int _seekIndex(
+    String str,
+    String key,
+    int from,
+    int to,
+    bool inOrder,
+  ) {
     if (str.length - from < 1) return -1;
     var i = from > 0 ? from : 0;
     var t = str.length;
@@ -573,8 +573,7 @@ abstract final class ContentReSegmenter {
     return -1;
   }
 
-  static bool _match(String rule, int unit) =>
-      rule.codeUnits.contains(unit);
+  static bool _match(String rule, int unit) => rule.codeUnits.contains(unit);
 
   /// 句末標點；引號可能判斷錯，不含引號。
   static const String _sentencesEnd = '？。！?!~';
