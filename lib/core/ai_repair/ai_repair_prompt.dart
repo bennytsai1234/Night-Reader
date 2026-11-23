@@ -160,11 +160,13 @@ bool _headerReadable(String header) {
   }
 }
 
-/// 書源 JSON 的欄位（Legado 3.0 格式，[BookSource.toJson]）。
-final Set<String> _sourceFields = BookSource.fromJson(const {
+/// 書源 JSON 的欄位與預設值（Legado 3.0 格式，[BookSource.toJson]）。
+final Map<String, dynamic> _sourceDefaults = BookSource.fromJson(const {
   'bookSourceUrl': '',
   'bookSourceName': '',
-}).toJson().keys.toSet();
+}).toJson();
+
+final Set<String> _sourceFields = _sourceDefaults.keys.toSet();
 
 /// 每個規則物件可以寫的項目。
 final Map<String, Set<String>> _ruleFields = {
@@ -516,7 +518,7 @@ const String _rules =
 書源是 Legado 3.0（閱讀 App）格式的 JSON，夜讀照同樣的規則解析。
 - bookSourceType：0 小說（正文是成段文字）、1 有聲（正文是音訊網址）、2 漫畫（正文是圖片網址）。照抓到的正文判斷，不照名稱猜。規則裡用 book.type = … 逐本書設定類型的書源（聚合源，正文是哪一類看登入表單選的模式）不改類型。
   - 正文怎樣算抓到（試抓與校驗都照這個）：小說去掉圖片後至少 $chapterTextMinRunes 字，整章只有圖不算；漫畫至少一張圖；有聲至少一個網址。校驗也照抓到的正文改類型：去掉圖片與網址後至少 ${ChapterContentKind.novelMinRunes} 字是小說，至少 ${ChapterContentKind.comicMinImages} 張圖、不到 ${ChapterContentKind.comicMaxRunes} 字是漫畫，其他照書源原本的類型。
-- 規則語法照 Legado：JSOUP Default（class.xxx.0@tag.a@href）、CSS（@css:）、XPath（//）、JSONPath（\$.）、正則替換（##正則##替換）、<js></js> 與 @js:、{{ }} 內嵌、@put／@get。一條規則只取一組 ##正則##替換：再接第三個 ## 是只換第一個，後面的段不會套用。@css: 只看整條規則最前面，拿掉之後才照 ||、&&、%% 分段，每一段都是 CSS，段中間再寫 @css: 會被當成選擇器的一部分。網址規則可以接 ,{"method":"POST","body":"...","charset":"gbk"}。
+- 規則語法照 Legado：JSOUP Default（class.xxx.0@tag.a@href）、CSS（@css:）、XPath（//）、JSONPath（\$.）、正則替換（##正則##替換）、<js></js> 與 @js:、{{ }} 內嵌、@put／@get。一條規則只取一組 ##正則##替換：再接第三個 ## 是只換第一個，後面的段不會套用。@css: 只看整條規則最前面，拿掉之後才照 ||、&&、%% 分段，每一段都是 CSS，段中間再寫 @css: 會被當成選擇器的一部分。網址規則可以接 ,{"method":"POST","body":"...","charset":"gbk"}；接 "webView":true 時夜讀在看不到的瀏覽器裡開這一頁，網頁載完等 1 秒、拿到網頁的程式跑完後的樣子，"webViewDelayTime":毫秒 再多等。
 - 目錄或一章正文分成好幾頁時，用 ruleToc.nextTocUrl、ruleContent.nextContentUrl 寫抓「下一頁」網址的規則（例如 a#next@href），夜讀照它一頁一頁抓下去、接成完整的目錄或一章。
 - 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、book、source；key、page 只有網址規則（searchUrl、exploreUrl 這類）的 JS 有，解析規則（bookList 這類）的 JS 沒有。
   - result 是這條規則前一段的結果。書單裡每本書的欄位規則（name、bookUrl 這類）直接用 JS 時，result 是這本書那一塊網頁元素（接成字串是它的 HTML），java.getString(規則) 也在這一塊裡找。
@@ -562,8 +564,10 @@ const String _method =
 - 這個網站做不到書源要的某一段，或慢到超過校驗的時限時（回應那一行寫了花幾秒，超時的訊息寫了時限），別的網域與版本可能做得到：開場列出的、網頁裡寫到的，或書源註解（bookSourceComment）裡寫的同一套網站（鏡像、新網域、姊妹站），以及同一個網站的電腦版（www.）與手機版（m.）。電腦版與手機版常是不同的程式，同一段的網址與快慢都不一樣。不自己猜新網域；換成 www. 或 m. 開頭不算猜。
 - 先拿同一本書到那裡看同一段，做得到就換書源網址的開頭（bookSourceUrl）、規則照舊直接 test，沒過再看是哪一段要改。規則裡寫死完整網址的（以 http 開頭的 searchUrl、exploreUrl 這類），換網域時一起改，夜讀只換書源網址開頭；只有一段換到另一版時，那一段抓到的書籍網址要轉成書源其他段用的那一版。
 
-### 正文是頁面程式填進去的
-- 正文頁抓到的字很少、頁面裡有程式時：先用 find 找誰把正文填進容器（innerHTML、document.write、initTxt 這類），用 read 的 raw 讀那段程式。資料在頁內的（base64、十六進位、替換表）照它的寫法解，例如 java.base64Decode；資料在別的網址的，用 java.ajax 抓那個網址。把它照抄成正文規則的 JS，用 parse 在那一頁確認，再 test。
+### 內容是頁面程式填進去的
+- 書單、詳情、目錄或正文抓到的是空殼（容器是空的、字很少、頁面裡有程式）時：fetch 的網址後面接 ,{"webView":true} 看程式跑完的網頁，確認內容長什麼樣、在哪個容器；還是空的就加 "webViewDelayTime" 多等幾秒。
+- 規則先寫成直接抓資料：用 find 找誰把內容填進容器（innerHTML、document.write、initTxt、fetch、XMLHttpRequest 這類），用 read 的 raw 讀那段程式。資料在頁內的（base64、十六進位、替換表）照它的寫法解，例如 java.base64Decode；資料在別的網址的，用 java.ajax 抓那個網址。把它照抄成規則的 JS，用 parse 在那一頁確認，再 test。
+- 找不到資料從哪來時，才把 "webView":true 寫進那一段的網址（搜尋寫在 searchUrl，目錄、正文寫在抓到的網址後面）：讀者每次搜尋、每一章都要多等網頁跑完，是最後的做法。
 
 ### 搜尋
 - 試抓與校驗搜尋用的關鍵字是書源的 ruleSearch.checkKeyWord，沒寫時是開場除錯紀錄寫的那個（「開始搜尋關鍵字」）。站上搜不到這個詞，或這個詞的結果多到網站要很久才回時，把 checkKeyWord 改成站上確實有的書名（首頁、排行列出的）再 test，不用為這個詞改搜尋規則。
@@ -576,12 +580,28 @@ const String _method =
 - 一個書源最多 ${AiAgentKnobs.maxRounds} 輪（每次回覆算一輪），用完算沒修完；每一步都要有目的，把想確認什麼寫在 note。
 ''';
 
-/// 改規則的參數：蓋到目前的書源上的欄位。
-const Map<String, Object?> _patch = {
+/// 改規則的參數：蓋到目前的書源上的欄位。欄位逐一列出：沒列欄位的物件
+/// Gemini 不收（「should be non-empty for OBJECT type」），列出來 AI 也不會
+/// 寫成書源沒有的欄位。排序、開關這類照原本留著的（[_keptFromOriginal]）
+/// AI 看不到，不列。
+final Map<String, Object?> _patch = {
   'type': 'object',
   'description':
       '要改的欄位，蓋到目前的書源上：規則物件（ruleSearch 這類）逐項蓋，'
       '沒寫的項目照舊，值給空字串就拿掉那一項。只寫要改的欄位。',
+  'properties': {
+    for (final MapEntry(:key, :value) in _sourceDefaults.entries)
+      if (!_keptFromOriginal.contains(key))
+        key: switch (_ruleFields[key]) {
+          final items? => {
+            'type': 'object',
+            'properties': {
+              for (final item in items) item: const {'type': 'string'},
+            },
+          },
+          _ => {'type': value is int ? 'integer' : 'string'},
+        },
+  },
 };
 
 const Map<String, Object?> _note = {
@@ -613,7 +633,8 @@ final List<AiTool> aiRepairTools = [
           'type': 'string',
           'description':
               '網址，照書源網址規則的寫法：可以是相對書源網址的路徑，可以接 '
-              ',{"method":"POST","body":"..."}；{{key}} 是試抓用的關鍵字。要看書源'
+              ',{"method":"POST","body":"..."}，接 ,{"webView":true} 看網頁的'
+              '程式跑完後的樣子；{{key}} 是試抓用的關鍵字。要看書源'
               '搜尋實際拿到什麼，直接用書源的 searchUrl。',
         },
         'note': _note,
@@ -773,6 +794,8 @@ List<AiMessage> aiRepairOpening({
 const String aiRepairSystemPrompt =
     '你是夜讀的書源修復員：書源壞了，你要查出原因、改好規則，再用試抓證明修好了；'
     '或拿出證據說明修不好。也要判斷書源的類型。\n'
+    '每次回覆都呼叫工具：修好用 submit 交出、修不好用 give_up 放棄，這兩個是'
+    '唯一的結束方式。\n'
     '每一輪都要等你回覆，輪數越少越好：互不相依的查詢放在同一次回覆一起呼叫，'
     '同一個問題的各種寫法（不同網域、www. 或 m.、GET 或 POST、參數、關鍵字）'
     '一次全部送出；要看前一個結果才算得出網址或參數的，才留到下一次。\n\n'

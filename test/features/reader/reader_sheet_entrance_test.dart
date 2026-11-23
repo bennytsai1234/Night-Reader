@@ -73,6 +73,8 @@ void main() {
           chapter: chapter,
           content: [longParagraph, ...kParagraphs].join('\n'),
           saveChapterMetadata: false,
+          // 換掉書庫已經放好的這一章。
+          replaceStored: true,
         );
       }
     });

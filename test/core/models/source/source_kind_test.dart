@@ -28,24 +28,35 @@ BookSource _source({
 );
 
 void main() {
-  test(
-    'confirmed website instability is removable while a lone timeout is not',
-    () {
-      final unstable = _source()
-        ..addHealthGroups(upstreamHealth(unstableSourceGroupTag));
-      final timeout = _source(url: 'https://slow.test')
-        ..addHealthGroups(upstreamHealth(timeoutSourceGroupTag));
+  test('every website problem the check finds is removable, but a broken '
+      'check run is not', () {
+    final unstable = _source()
+      ..addHealthGroups(upstreamHealth(unstableSourceGroupTag));
+    expect(unstable.runtimeHealth.label, unstableSourceGroupTag);
+    expect(unstable.isCleanupCandidate, isTrue);
+    expect(unstable.isQuarantined, isTrue);
+    expect(unstable.isSearchEnabledByRuntime, isFalse);
+    expect(unstable.isReadingEnabledByRuntime, isFalse);
+    unstable.removeInvalidGroups();
+    expect(unstable.isCleanupCandidate, isFalse);
 
-      expect(unstable.runtimeHealth.label, unstableSourceGroupTag);
-      expect(unstable.isCleanupCandidate, isTrue);
-      expect(unstable.isQuarantined, isTrue);
-      expect(unstable.isSearchEnabledByRuntime, isFalse);
-      expect(unstable.isReadingEnabledByRuntime, isFalse);
-      expect(timeout.isCleanupCandidate, isFalse);
-      unstable.removeInvalidGroups();
-      expect(unstable.isCleanupCandidate, isFalse);
-    },
-  );
+    // 沒通過校驗的都建議移除或交給 AI 修（ADR 0081）。
+    for (final tag in [
+      siteBrokenSourceGroupTag,
+      upstreamBlockedSourceGroupTag,
+      timeoutSourceGroupTag,
+    ]) {
+      final source = _source(url: 'https://$tag.test')
+        ..addHealthGroups(upstreamHealth(tag));
+      expect(source.runtimeHealth.label, tag);
+      expect(source.isCleanupCandidate, isTrue, reason: tag);
+    }
+
+    // 夜讀自己的校驗流程出錯，不算書源的問題。
+    final quarantined = _source(url: 'https://quarantine.test')
+      ..addHealthGroups(upstreamHealth(quarantineSourceGroupTag));
+    expect(quarantined.isCleanupCandidate, isFalse);
+  });
 
   test('the kind follows the source type only', () {
     expect(_source(type: 0).sourceKind, BookSourceKind.novel);

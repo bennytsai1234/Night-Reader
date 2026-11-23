@@ -6,9 +6,11 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/features/comic_reader/comic_reader_page.dart';
 import 'package:night_reader/features/comic_reader/comic_strip_view.dart';
+import 'package:night_reader/features/reader/features/settings/comic_paper_tint.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'comic_test_pages.dart';
@@ -59,12 +61,16 @@ void main() {
     }
   }
 
-  Future<void> open(WidgetTester tester) async {
+  Future<void> open(
+    WidgetTester tester, {
+    Brightness brightness = Brightness.light,
+  }) async {
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(brightness: brightness),
         home: ComicReaderPage(
           book: book.copyWith(),
           initialChapters: chapters,
@@ -105,5 +111,64 @@ void main() {
     expect(saved.chapterIndex, 1);
     expect(saved.charOffset, 3);
     expect(saved.durChapterTitle, '第2話');
+  });
+
+  /// 畫面上已經畫出來的漫畫圖各乘上什麼顏色。
+  Set<Color?> pageTints(WidgetTester tester) => {
+    for (final image in tester.widgetList<RawImage>(find.byType(RawImage)))
+      image.color,
+  };
+
+  testWidgets('深色時照選的紙色染每張圖，淺色時照原色', (tester) async {
+    await getIt<SharedPreferences>().setString(
+      PreferKey.comicPaperTint,
+      ComicPaperTint.warmGray.name,
+    );
+    await open(tester, brightness: Brightness.dark);
+    expect(find.byType(RawImage), findsWidgets);
+    expect(pageTints(tester), {ComicPaperTint.warmGray.color});
+    expect(
+      tester
+          .widgetList<RawImage>(find.byType(RawImage))
+          .map((image) => image.colorBlendMode)
+          .toSet(),
+      {BlendMode.modulate},
+    );
+
+    await open(tester);
+    expect(find.byType(RawImage), findsWidgets);
+    expect(pageTints(tester), {null});
+  });
+
+  testWidgets('漫畫偏好選了紙色，圖跟著換、記下來；淺色時那一排灰掉', (tester) async {
+    Future<void> openPreferences() async {
+      await tester.tapAt(const Offset(200, 400));
+      await tester.pump(const Duration(milliseconds: 400));
+      await settle(tester);
+      await tester.tap(find.text('漫畫偏好').hitTestable());
+      await settle(tester);
+    }
+
+    await open(tester, brightness: Brightness.dark);
+    expect(pageTints(tester), {null});
+    await openPreferences();
+    expect(find.text('深色時的紙色'), findsOneWidget);
+    await tester.tap(find.text('宣紙'));
+    await settle(tester);
+    expect(pageTints(tester), {ComicPaperTint.xuan.color});
+    expect(
+      getIt<SharedPreferences>().getString(PreferKey.comicPaperTint),
+      ComicPaperTint.xuan.name,
+    );
+
+    await open(tester);
+    await openPreferences();
+    await tester.tap(find.text('深灰'), warnIfMissed: false);
+    await settle(tester);
+    expect(
+      getIt<SharedPreferences>().getString(PreferKey.comicPaperTint),
+      ComicPaperTint.xuan.name,
+    );
+    expect(pageTints(tester), {null});
   });
 }

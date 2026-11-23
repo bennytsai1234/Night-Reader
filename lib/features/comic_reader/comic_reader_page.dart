@@ -45,11 +45,13 @@ import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/lists/number_stepper_row.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_section.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:night_reader/shared/theme/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 
 import 'comic_page_source.dart';
+import 'comic_paper_tint_row.dart';
 import 'comic_progress_sync.dart';
 import 'comic_reader_menu.dart';
 import 'comic_strip_model.dart';
@@ -439,6 +441,13 @@ class _ComicReaderPageState extends State<ComicReaderPage>
             _settings.setAutoPageSpeed(speed);
             if (_autoScrolling.value) _strip.setAutoScroll(speed);
           },
+        ),
+        GroupedSection(
+          header: '深色時的紙色',
+          margin: EdgeInsets.zero,
+          children: [
+            GroupedContent(child: ComicPaperTintRow(settings: _settings)),
+          ],
         ),
       ],
     ),
@@ -836,6 +845,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
               webUrlOpener: (url) => unawaited(_openWeb(url)),
               remedyFor: (error) =>
                   SourceFailureRemedy.of(error.toString(), _source),
+              pageTint: dark ? _settings.comicPaperTint.color : null,
             ),
           ),
           Positioned(

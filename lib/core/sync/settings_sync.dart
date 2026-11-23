@@ -86,6 +86,7 @@ class SettingsSync extends SyncKind {
     PreferKey.readerMaxDim,
     PreferKey.readerHighlightColor,
     PreferKey.readerHighlightStrength,
+    PreferKey.comicPaperTint,
     PreferKey.showAddToShelfAlert,
     // 朗讀
     PreferKey.readerTtsSpeedMultiplier,
