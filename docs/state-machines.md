@@ -561,7 +561,7 @@ ADR 0055 的播放器（`lib/features/audiobook/audiobook_player.dart`），讀�
 | 搜尋頁 `lib/features/search/search_provider.dart` | `_holdingResults`、`_attached`、`_entered`、`_disposed` |
 | 換源 `lib/features/book_detail/source/book_detail_change_source_provider.dart` | `isSearching`，配 `_activeSearchId` 判斷哪一輪還有效 |
 
-`TODO.md` 寫的 `search_provider.dart` 的 `_isSearching`、`_retrying`，#433 搬進 `SearchRun`，成了上表的 `isSearching`、`_retrying`。
+待辦清單寫的 `search_provider.dart` 的 `_isSearching`、`_retrying`，#433 搬進 `SearchRun`，成了上表的 `isSearching`、`_retrying`。
 
 「這次搜尋在哪一段」散在四個布林值：送出後還在存紀錄是 `_pending && isSearching`，照條件搜是 `_choosing` 到選好書源為止，重試是 `_retrying`，讀回還沒合併是 `_unmerged`；暫停是 `isSearching` 留著、等 `markPaused` 才放下。頁面再把搜尋頁與背景那件的旗標拼成畫面：進度那一列與頁首「結束」看 `isSearching || isBackgroundPaused`（四處），「暫停」看 `isInBackground && !isBackgroundPausing && !isBackgroundStopping`，文字照 `isBackgroundPausing`、`isBackgroundStopping`、`isBackgroundPaused` 的先後挑。
 

@@ -66,7 +66,7 @@ QuickJS 中斷 API：`JS_SetInterruptHandler(runtime, handler, opaque)`（回傳
 
 目前已完成程式路徑、已有回歸測試、QuickJS Dart FFI 封裝與上游原生碼審閱。沒有可用的 Flutter/Dart SDK 及可用 Android 裝置執行環境；GitHub 連線只足夠讀檔和建立研究分支，無法在此直接跑上述原型與量測。因此「timeout 在 Android 0.3.6 無效」目前是**待驗證的高優先假設**，不是實測結論。
 
-本文不改 `TODO.md`、ADR、App 程式或測試，不開 PR。取得實測再決定是否進入修正階段。
+本文不改 `PLAN.md`、ADR、App 程式或測試，不開 PR。取得實測再決定是否進入修正階段。
 
 ## 實作
 
