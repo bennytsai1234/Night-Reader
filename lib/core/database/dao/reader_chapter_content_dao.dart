@@ -221,6 +221,31 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// 這一章還沒有存好的正文時才存（之前只存了失敗的照蓋），存了是 true。
+  /// 閱讀器預載、書架自動下載、匯出補抓這類自動補抓用它：抓的期間使用者
+  /// 借來或重新取得的正文，不被晚到的結果蓋掉（ADR 0080）。
+  Future<bool> fillContent({
+    required String contentKey,
+    required String origin,
+    required String bookUrl,
+    required String chapterUrl,
+    required int chapterIndex,
+    required String content,
+    required int updatedAt,
+  }) => transaction(() async {
+    if (await hasReadyContent(contentKey: contentKey)) return false;
+    await saveContent(
+      contentKey: contentKey,
+      origin: origin,
+      bookUrl: bookUrl,
+      chapterUrl: chapterUrl,
+      chapterIndex: chapterIndex,
+      content: content,
+      updatedAt: updatedAt,
+    );
+    return true;
+  });
+
   Future<void> saveFailure({
     required String contentKey,
     required String origin,
