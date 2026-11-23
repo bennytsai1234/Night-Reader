@@ -5,6 +5,7 @@ import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/book_storage_service.dart';
 import 'package:night_reader/core/sync/settings_sync.dart';
+import 'package:night_reader/shared/shelf_trial.dart';
 
 import 'provider/bookshelf_provider_base.dart';
 import 'provider/bookshelf_logic_mixin.dart';
@@ -29,7 +30,16 @@ class BookshelfProvider extends BookshelfProviderBase
     _bookshelfSub = AppEventBus()
         .onName(AppEventBus.upBookshelf)
         .listen((_) => _reloadSoon());
+    _switchedSub = AppEventBus()
+        .onName(AppEventBus.bookSwitched)
+        .listen(_bookSwitched);
     SettingsSync.applied.addListener(_settingsSynced);
+  }
+
+  void _bookSwitched(AppEvent event) {
+    if (event.data case final BookSwitchedEvent switched) {
+      ShelfTrial.bookSwitched(switched);
+    }
   }
 
   void _reloadSoon() {
@@ -49,6 +59,7 @@ class BookshelfProvider extends BookshelfProviderBase
 
   final BookStorageService _bookStorageService;
   StreamSubscription<AppEvent>? _bookshelfSub;
+  StreamSubscription<AppEvent>? _switchedSub;
 
   /// 建立時的第一次讀取做完（讀不到也算）。開 App 的進場等它才開始長骨架
   /// （`LaunchEntrance.prepared`）；不等 [loaded]：之後的重讀（例如背景下載
@@ -185,6 +196,7 @@ class BookshelfProvider extends BookshelfProviderBase
   @override
   void dispose() {
     _bookshelfSub?.cancel();
+    _switchedSub?.cancel();
     SettingsSync.applied.removeListener(_settingsSynced);
     super.dispose();
   }

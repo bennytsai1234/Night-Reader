@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:provider/provider.dart';
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/source_switch/source_switch_service.dart';
@@ -30,6 +31,13 @@ typedef OnSelectSource = Future<ChangeSourceOutcome> Function(
   SourceToc? toc,
 );
 
+/// 換到 [selected]：準備好、寫進資料庫，回傳換好的結果。網站搜不到、抓不到
+/// 時丟 [isSourceSwitchUnavailable] 認得的錯，面板寫出原因、留著讓人選別的。
+typedef SwitchToSource = Future<PreparedSourceSwitch> Function(
+  SearchBook selected,
+  SourceToc? toc,
+);
+
 enum _SourceFilter { checkAuthor, excludeFarWordCount }
 
 class ChangeSourceSheet extends StatelessWidget {
@@ -50,6 +58,50 @@ class ChangeSourceSheet extends StatelessWidget {
          detailProvider != null || onSelectSource != null,
          'ChangeSourceSheet 需要 detailProvider 或 onSelectSource 其中之一',
        );
+
+  /// 閱讀器、漫畫閱讀器與有聲書播放器的換源：打開清單，選了一個就由
+  /// [switchTo] 換源，回傳換好的結果，沒換成是 null。換源途中關掉清單
+  /// （返回、點遮罩、下拉）不會取消這次換源：等它做完才回傳，呼叫端照樣
+  /// 換到新書源，畫面不會停在已經換掉的舊書源（同 Legado，換源視窗關了
+  /// 換源照樣做完）。
+  static Future<PreparedSourceSwitch?> showForSwitch({
+    required BuildContext context,
+    required Book book,
+    required SwitchToSource switchTo,
+    BoxConstraints? constraints,
+  }) async {
+    Future<PreparedSourceSwitch?>? latest;
+    await AppBottomSheet.showCustom<void>(
+      context: context,
+      constraints: constraints,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ChangeSourceSheet(
+        book: book,
+        onSelectSource: (selected, toc) {
+          final switching = switchTo(selected, toc);
+          // 失敗由面板寫出原因（認不得的錯往上報），這裡只等它結束。
+          latest = switching.then<PreparedSourceSwitch?>(
+            (prepared) => prepared,
+            onError: (_) => null,
+          );
+          return switching.then(
+            (prepared) => (
+              success: true,
+              message: '已切換到 ${prepared.source.bookSourceName}',
+            ),
+            onError: (Object error, StackTrace stackTrace) {
+              if (!isSourceSwitchUnavailable(error)) {
+                Error.throwWithStackTrace(error, stackTrace);
+              }
+              return (success: false, message: failureMessage('換源', error));
+            },
+          );
+        },
+      ),
+    );
+    return latest;
+  }
 
   @override
   Widget build(BuildContext context) {

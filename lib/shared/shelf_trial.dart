@@ -2,6 +2,7 @@
 // 開關與書架「整理」選單裡的那一項，只留選中的做法。書架順序（預設封面的天空顏色）
 // 也記在這裡。
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 abstract final class ShelfTrial {
@@ -25,6 +26,17 @@ abstract final class ShelfTrial {
   static void setShelfOrder(List<String> shown) {
     _order = {for (var i = 0; i < shown.length; i++) shown[i]: i};
     _total = shown.length;
+  }
+
+  /// 書換了書源、網址跟著換了（[BookSwitchedEvent]）：書架被蓋著時要露出來
+  /// 才重讀，這之前新網址先沿用舊網址的位置，換源後重開的播放器封面才不會
+  /// 變成中間的顏色。
+  static void bookSwitched(BookSwitchedEvent event) {
+    final index = _order[event.fromBookUrl];
+    if (index == null) return;
+    final order = Map.of(_order)..remove(event.fromBookUrl);
+    order[event.toBookUrl] = index;
+    _order = order;
   }
 
   /// 這本書在書架上的位置，0 是最上面、1 是最下面；不在書架上時是 null。
