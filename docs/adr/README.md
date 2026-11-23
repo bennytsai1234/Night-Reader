@@ -48,6 +48,7 @@
 | [0019](0019-justify-by-spreading-residual-into-letter-spacing.md) | 左右對齊把湊不滿一格的空隙攤進字距 |
 | [0026](0026-kinsoku-spreads-into-the-pulled-line.md) | 換行做避頭尾，被拉字的那一行把空隙攤進字距（取代 0005） |
 | [0073](0073-repair-source-paragraph-breaks.md) | 正文排版前修復有明確線索的錯誤換行，保留真正的段落邊界 |
+| [0078](0078-per-book-re-segment.md) | 每本書可以打開「重新分段」（預設關），照 Legado 重排正文：長段用固定亂數拆、英文空格留著、插圖是邊界 |
 | [0006](0006-tap-page-turn-scrolls-one-screen.md) | 點擊翻頁就是捲動一屏，不做分頁模式 |
 | [0043](0043-reader-weight-title-and-info-size-are-settings.md) | 正文粗細、章節標題粗細與對齊、頁首頁尾字級是閱讀設定（使用者點名要調，不照「選定即固定」） |
 | [0045](0045-fonts-downloaded-on-pick.md) | 正文與介面字型可選（系統、思源宋體、霞鶩文楷），選了才下載、核對 SHA-256；英數字照舊用系統字型 |
