@@ -326,6 +326,9 @@ class ReaderChapterRepository {
     await ensureChapters();
     final safeIndex = _normalizeChapterIndex(chapterIndex);
     final previousCache = Map<int, ReaderContent>.from(_contentCache);
+    final previousRaw = Map<int, ({String contentHash, String raw})>.from(
+      _rawContents,
+    );
     final previousSource = _source;
     final previousRules = _enabledRules;
     final previousRulesRevision = _rulesRevision;
@@ -361,6 +364,9 @@ class ReaderChapterRepository {
         _contentCache
           ..clear()
           ..addAll(previousCache);
+        _rawContents
+          ..clear()
+          ..addAll(previousRaw);
         _contentInFlight.clear();
         _materializedContentIdentities
           ..clear()

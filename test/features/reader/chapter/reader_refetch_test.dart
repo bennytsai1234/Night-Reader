@@ -109,6 +109,8 @@ void main() {
     );
 
     expect(repository.cachedContent(0), same(before));
+    // 選字「隱藏」「替換」照樣找得到畫面上那份正文的原文。
+    expect(repository.rawContentOf(0, before.contentHash), '只抓到一半的正文');
     // 存著的正文也沒有被失敗蓋掉，下次開書照樣讀得到。
     site.body = '不該被讀到';
     final reopened = await repository.reloadContent(0);
