@@ -14,6 +14,7 @@ import 'package:night_reader/core/source_check/source_check_isolate.dart';
 import 'agent_loop.dart';
 import 'ai_chat_client.dart';
 import 'ai_repair_apply.dart';
+import 'ai_create_prompt.dart';
 import 'ai_repair_backups.dart';
 import 'ai_repair_defaults.dart';
 import 'ai_repair_log.dart';
@@ -26,6 +27,7 @@ import 'repair_agent.dart';
 import 'repair_rule_tools.dart';
 import 'repair_verdict.dart';
 import 'opening_facts.dart';
+import 'site_check.dart';
 import 'source_probe.dart';
 
 /// 一個書源修完的結果。
@@ -33,9 +35,13 @@ enum AiRepairOutcome { repaired, failed }
 
 /// 一個書源的修復：做過的步驟與結果。
 class AiRepairJob {
-  AiRepairJob(this.original);
+  AiRepairJob(this.original, {this.create});
 
+  /// 修的書源；從空白建立時是只有網址開頭的空白書源（[aiCreateBlankSource]）。
   final BookSource original;
+
+  /// 從空白建立書源時使用者貼的網址與樣本書名；修書源是 null。
+  final AiCreateRequest? create;
   final List<AiRepairStep> steps = [];
   AiRepairOutcome? outcome;
 
@@ -129,6 +135,12 @@ typedef AiRepairFetcher = Future<AiPage> Function(
 /// [aiRepairTools]。
 typedef AiRepairAsker = AgentAsk;
 
+/// 檢查一個網站（[checkSite]）。
+typedef AiSiteChecker = Future<SiteCheck> Function(
+  BookSource source,
+  CancelToken cancelToken,
+);
+
 /// 整批修復剛校驗過原本的書源：修復頁沿用，不再校驗一次；`result` 是 null
 /// 表示那次校驗逾時。
 typedef AiRepairPriorCheck = ({SourceCheckIsolateResult? result});
@@ -156,24 +168,36 @@ class AiRepairSession extends ChangeNotifier {
     this._priorCheck,
     void Function(AiUsage usage)? onUsage,
     Future<Directory> Function()? logDirectory,
-  }) : job = AiRepairJob(source),
+    AiCreateRequest? create,
+    AiSiteChecker? siteCheck,
+  }) : job = AiRepairJob(source, create: create),
        log = AiRepairLog(
          sourceName: source.bookSourceName,
          sourceUrl: source.bookSourceUrl,
          directory: logDirectory,
        ),
-       _check = check ?? AiRepairDefaults.check,
+       _check =
+           check ??
+           (create == null
+               ? AiRepairDefaults.check
+               : AiRepairDefaults.checkAll),
        _probe = probe ?? AiRepairDefaults.probe,
        _fetchPage = fetchPage ?? AiRepairDefaults.fetchPage,
        _parsePage = parsePage ?? AiRepairDefaults.parsePage,
        _runJs = runJs ?? AiRepairDefaults.runJs,
        _copy = copy ?? AiRepairDefaults.copy,
        _secretsOf = secrets ?? aiRepairSecretsOf,
+       _siteCheck =
+           siteCheck ??
+           ((source, cancelToken) =>
+               checkSite(source, cancelToken: cancelToken)),
        _backups = backups ?? AiRepairBackups.instance {
     _apply =
         apply ??
-        (repaired, original) =>
-            saveRepairedSource(repaired, original, backups: _backups);
+        (create != null
+            ? (created, _) => saveCreatedSource(created, create.url)
+            : (repaired, original) =>
+                  saveRepairedSource(repaired, original, backups: _backups));
     _onUsage = onUsage;
     _ask = ask ?? (service == null ? null : AiRepairDefaults.ask(service!));
   }
@@ -201,6 +225,7 @@ class AiRepairSession extends ChangeNotifier {
   final RepairPages _pages = RepairPages();
   final Future<void> Function(String text) _copy;
   final Future<Set<String>> Function(BookSource source) _secretsOf;
+  final AiSiteChecker _siteCheck;
   final AiRepairBackups _backups;
   late final Future<void> Function(BookSource repaired, BookSource original)
   _apply;
@@ -388,7 +413,9 @@ class AiRepairSession extends ChangeNotifier {
     }
     if (text.length > aiRepairMaxReplyLength) return '貼回的內容太長';
     final json = pastedSourceJson(text);
-    final candidate = json == null ? null : candidateOrNull(job.original, json);
+    final candidate = json == null
+        ? null
+        : candidateOrNull(job.original, json, creating: job.create != null);
     if (candidate == null) return '讀不出書源 JSON';
     job.awaitingPaste = false;
     final pending = Completer<void>();
@@ -432,8 +459,9 @@ class AiRepairSession extends ChangeNotifier {
     await _refreshSecrets(job);
     log
       ..redact = ((text) => _redact(job, text))
-      ..header(_serviceText, prompt: aiRepairPromptVersion);
+      ..header(_serviceText, prompt: _promptVersion);
     if (_halting) return;
+    if (job.create case final request?) return _create(job, request);
 
     final checkStep = _addStep(job, aiRepairCheckStage);
     log.section(aiRepairCheckStage);
@@ -512,6 +540,57 @@ class AiRepairSession extends ChangeNotifier {
     await _converse(job, numbered);
   }
 
+  /// 從空白建立書源：檢查網站、抓使用者貼的那一頁，交給 AI 從空白寫。網站
+  /// 不在了就不問 AI。
+  Future<void> _create(AiRepairJob job, AiCreateRequest request) async {
+    final siteStep = _addStep(job, aiCreateSiteStage);
+    log.section(aiCreateSiteStage);
+    final site = await _guard(() => _siteCheck(job.original, _cancelToken));
+    if (_halting || site == null) return;
+    final siteText = '${_siteVerdictLabel(site.verdict)}：${site.detail}';
+    final gone = site.verdict == SiteVerdict.gone;
+    _finish(siteStep, siteText, failed: gone);
+    log.both(siteText);
+    if (gone) {
+      _fail(job, '網站失效：${site.detail}');
+      return;
+    }
+    job._checkResult = siteText;
+
+    final fetchStep = _addStep(job, aiCreateFetchStage);
+    log.section(aiCreateFetchStage);
+    final watch = Stopwatch()..start();
+    final page = await _guard(
+      () => _fetchPage(job.original, request.url, _cancelToken),
+    );
+    if (_halting || page == null) return;
+    final probe = SourceProbeReport(
+      logs: const [],
+      requests: page.lines,
+      pages: page.pages,
+    );
+    job._firstProbe = probe;
+    final numbered = withPageIds(_pages, probe);
+    _finish(fetchStep, request.url);
+    _logProbe('${AiRepairLog.seconds(watch)}：${request.url}', probe);
+    if (usesClipboard) {
+      _fail(job, '還沒設定 AI 服務');
+      return;
+    }
+    await _converse(job, numbered);
+  }
+
+  static String _siteVerdictLabel(SiteVerdict verdict) => switch (verdict) {
+    SiteVerdict.alive => '網站在',
+    SiteVerdict.gone => '網站失效',
+    SiteVerdict.unreachable => '首頁連不上',
+    SiteVerdict.moved => '首頁轉到別的網域',
+    SiteVerdict.blocked => '首頁要驗證才放行',
+  };
+
+  String get _promptVersion =>
+      job.create == null ? aiRepairPromptVersion : aiCreatePromptVersion;
+
   /// 和 AI 來回（ADR 0054）：交給和任務無關的迴圈（[runAgent]），書源修復
   /// 的開場、指令與驗收在 [RepairAgent]。對話照原樣一路接下去，前面的內容
   /// 不改寫：AI 要靠前面看過的網頁推下一步，開頭不變也讓服務的快取打得中。
@@ -584,7 +663,7 @@ class AiRepairSession extends ChangeNotifier {
       'outcome': job.outcome?.name,
       'unfixable': job.confirmedUnfixable,
       'why': job.giveUpWhy,
-      'promptVersion': aiRepairPromptVersion,
+      'promptVersion': _promptVersion,
       ...stats.toMap(),
     };
     log.full('$aiRepairStatsMarker${jsonEncode(row)}');
@@ -611,8 +690,11 @@ class AiRepairSession extends ChangeNotifier {
     bool probeSucceeded = false,
     bool last = true,
   }) async {
-    final step = _addStep(job, aiRepairVerifyStage);
-    log.section(aiRepairVerifyStage);
+    final stage = job.create == null
+        ? aiRepairVerifyStage
+        : aiCreateVerifyStage;
+    final step = _addStep(job, stage);
+    log.section(stage);
     final checkWatch = Stopwatch()..start();
     var checked = await _guard(() => _check(candidate, _cancelToken));
     if (_halting) return null;
@@ -643,6 +725,14 @@ class AiRepairSession extends ChangeNotifier {
     if (checked != null && !usable(checked)) {
       log.both(checked.diagnostics.join('\n\n'));
     }
+    if (_createStopReason(job, checked) case final why?) {
+      _finish(step, checkText, failed: true);
+      job
+        ..confirmedUnfixable = true
+        ..giveUpWhy = why;
+      _fail(job, '${aiGiveUpLabels[why]}。校驗：$checkText');
+      return null;
+    }
     if (checked == null || !usable(checked)) {
       _finish(step, checkText, failed: true);
       if (!last) {
@@ -658,7 +748,8 @@ class AiRepairSession extends ChangeNotifier {
     // 網站時好時壞：原本校驗時沒回內容，規則沒改再校驗就過了。偶爾通過不算
     // 能用（網站不穩定＝修不好，使用者 2026-11-16），不存回去當成沒問題。
     if (job._beforeUnreachable case final before?
-        when changedParts(job.original, candidate).isEmpty) {
+        when job.create == null &&
+            changedParts(job.original, candidate).isEmpty) {
       _finish(step, checkText);
       job
         ..confirmedUnfixable = true
@@ -689,8 +780,13 @@ class AiRepairSession extends ChangeNotifier {
     _finish(step, checkText);
     // 交出的規則和原本一樣（2026-11-13 品书楼：AI 查過每一段都沒問題）：照樣
     // 存回去拿掉舊的標記，但不說修好了。
-    final unchanged = changedParts(job.original, candidate).isEmpty;
-    final result = unchanged ? 'AI 查過，沒有要改的規則；重新校驗沒有問題' : '修好了，已套用';
+    final unchanged =
+        job.create == null && changedParts(job.original, candidate).isEmpty;
+    final result = job.create != null
+        ? '建立好了，已加入書源'
+        : unchanged
+        ? 'AI 查過，沒有要改的規則；重新校驗沒有問題'
+        : '修好了，已套用';
     final explanation = [
       if (unchanged) 'AI 查過，沒有要改的規則',
       if (note.isNotEmpty) 'AI：$note',
@@ -702,6 +798,24 @@ class AiRepairSession extends ChangeNotifier {
     _logOutcome('$result${note.isEmpty ? '' : '\nAI：$note'}');
     _notify();
     return null;
+  }
+
+  /// 建立書源時，校驗判成付費、要登入或要網頁驗證：照「一看到就放棄」直接
+  /// 結束，不再退回給 AI（ADR 0082）；傳回放棄的原因（[aiGiveUpLabels] 的
+  /// key），其他是 null。
+  static String? _createStopReason(
+    AiRepairJob job,
+    SourceCheckIsolateResult? checked,
+  ) {
+    if (job.create == null || checked == null || checked.isHealthy) return null;
+    return switch (BookSource.fromJson(checked.updatedSourceJson)
+        .runtimeHealth
+        .category) {
+      SourceHealthCategory.paid => 'paid',
+      SourceHealthCategory.loginRequired => 'login',
+      SourceHealthCategory.verificationRequired => 'human_check',
+      _ => null,
+    };
   }
 
   /// 送給 AI、寫進紀錄的文字都經過這裡：開始時讀到的秘密、修復途中重讀

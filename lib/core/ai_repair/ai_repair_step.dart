@@ -1,10 +1,15 @@
 /// 一步的狀態：還沒開始、做著、做完、失敗。
 enum AiRepairStepState { waiting, running, done, failed }
 
-/// 修復的固定幾段：修復頁一段一列，AI 的輪併成中間的「AI 修改規則」。
+/// 修復的固定幾段：修復頁一段一列，AI 的輪併成中間的「AI 修改規則」；從空白
+/// 建立書源是「檢查網站、抓貼的網頁、AI 寫規則、校驗寫好的書源」。
 const String aiRepairCheckStage = '校驗原本的書源';
 const String aiRepairFetchStage = '抓網頁';
 const String aiRepairVerifyStage = '校驗修好的書源';
+const String aiCreateSiteStage = '檢查網站';
+const String aiCreateFetchStage = '抓貼的網頁';
+const String aiCreateWriteStage = 'AI 寫規則';
+const String aiCreateVerifyStage = '校驗寫好的書源';
 
 /// 一步是哪一種：固定的一段（校驗、抓網頁）、AI 的一輪，或換一段新的對話
 /// 重新開始。修復頁把後兩種併成「AI 修改規則」一段，過程收在「經過」裡

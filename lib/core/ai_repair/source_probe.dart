@@ -5,6 +5,7 @@ import 'package:drift/isolate.dart';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/network/error_text.dart';
 import 'package:night_reader/core/network/request_log.dart';
@@ -26,6 +27,7 @@ class SourceProbeReport {
     this.timedOut = false,
     this.contentUsable,
     this.unjoinedNextPage,
+    this.contentAmount,
   });
 
   /// 除錯紀錄，`(狀態, 訊息)`；狀態同 [DebugLog.state]。
@@ -45,6 +47,7 @@ class SourceProbeReport {
     timedOut: timedOut,
     contentUsable: contentUsable,
     unjoinedNextPage: unjoinedNextPage,
+    contentAmount: contentAmount,
   );
 
   /// 整段試抓超過時間被停下。
@@ -63,6 +66,10 @@ class SourceProbeReport {
   /// 抓到的正文只抓了第一頁時，同一章下一頁的網址；沒有、或沒走到正文是
   /// null。和書源校驗同一個判斷（[chapterCutAtFirstPage]）。
   final String? unjoinedNextPage;
+
+  /// 漫畫、有聲的正文抓到多少（「54 張圖」「3 個音訊網址」，照書源校驗判斷
+  /// 的類別）；小說或沒走到正文是 null，照字數寫（[contentLength]）。
+  final String? contentAmount;
 
   /// 一路抓到正文了，而且照書源校驗的判斷算抓到了（[contentUsable]）。
   bool get succeeded =>
@@ -97,9 +104,10 @@ class SourceProbeReport {
       if (state == -1) return _clean(message);
     }
     if (contentLength case final length?) {
+      final amount = contentAmount ?? '$length 字';
       return contentUsable == false
-          ? '正文 $length 字，書源校驗不算抓到（去掉圖片與網址後字太少，或沒有圖、網址）'
-          : '正文 $length 字';
+          ? '正文 $amount，書源校驗不算抓到（去掉圖片與網址後字太少，或沒有圖、網址）'
+          : '正文 $amount';
     }
     return '沒有抓到正文';
   }
@@ -197,12 +205,14 @@ Future<SourceProbeReport> probeSource(
     (int, String)? failure,
     bool? contentUsable,
     String? unjoinedNextPage,
+    String? contentAmount,
   }) => SourceProbeReport(
     logs: [...logs, ?failure],
     requests: [...requests],
     pages: [...pages],
     timedOut: timedOut,
     contentUsable: contentUsable,
+    contentAmount: contentAmount,
     unjoinedNextPage: unjoinedNextPage,
   );
 
@@ -224,6 +234,7 @@ Future<SourceProbeReport> probeSource(
               timedOut: outcome.timedOut,
               contentUsable: outcome.contentUsable,
               unjoinedNextPage: outcome.unjoinedNextPage,
+              contentAmount: outcome.contentAmount,
             ),
           ),
           onError: (Object error, StackTrace stack) {
@@ -246,6 +257,7 @@ typedef _ProbeOutcome = ({
   bool timedOut,
   bool? contentUsable,
   String? unjoinedNextPage,
+  String? contentAmount,
 });
 
 /// 在 worker 裡跑的試抓；只捕捉書源與關鍵字的資料（`CODING_STANDARDS.md`）。
@@ -285,6 +297,9 @@ Future<_ProbeOutcome> Function(CancelToken) _probeTask(
     contentUsable: content == null
         ? null
         : sourceContentUsable(content.source, content.book, content.content),
+    contentAmount: content == null
+        ? null
+        : contentAmountText(content.source, content.book, content.content),
     unjoinedNextPage: content == null
         ? null
         : chapterCutAtFirstPage(
@@ -457,4 +472,15 @@ String _withoutExcerpt(String line) {
   if (!line.trimLeft().startsWith('←')) return line;
   final colon = line.indexOf('：', line.indexOf('←'));
   return colon < 0 ? line : '${line.substring(0, colon)}（內容沒放進開場）';
+}
+
+/// 漫畫、有聲的正文抓到多少，照書源校驗判斷的類別（[chapterKindShownBy]）：
+/// 「54 張圖」「3 個音訊網址」；小說是 null（照字數寫）。
+String? contentAmountText(BookSource source, Book book, String content) {
+  final shape = ChapterContentShape.of(content);
+  return switch (chapterKindShownBy(source, book, content)) {
+    BookSourceKind.comic => '${shape.images} 張圖',
+    BookSourceKind.audio => '${shape.urls} 個音訊網址',
+    _ => null,
+  };
 }

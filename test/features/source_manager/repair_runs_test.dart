@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/ai_repair/ai_create_prompt.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/source_check/source_check_isolate.dart';
@@ -916,6 +917,39 @@ void main() {
       );
       expect(runs.current, isNull);
       expect(file.closed, isTrue);
+    });
+
+    test('a paused source creation comes back with its address; going on '
+        'starts it over from the pasted page', () async {
+      final file = _MemoryFile(
+        jsonEncode({
+          'version': 1,
+          'kind': 'create',
+          'url': 'https://site.example/category.html',
+          'sampleTitle': '夜行',
+        }),
+      );
+      final reopened = <AiCreateRequest>[];
+      await restorePausedRepair(
+        file: file,
+        runs: runs,
+        load: (_) async => const [],
+        reopenCreate: (request) async {
+          reopened.add(request);
+          return null;
+        },
+        work: work,
+      );
+      final run = runs.current! as SingleRepairRun;
+      expect(run.isPaused, isTrue);
+      expect(run.creating, isTrue);
+      expect(run.status.title, 'AI 建立書源 · site.example');
+
+      await run.resume();
+      expect(reopened.single, (
+        url: 'https://site.example/category.html',
+        sampleTitle: '夜行',
+      ));
     });
   });
 

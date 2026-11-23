@@ -25,8 +25,35 @@ abstract final class AiRepairDefaults {
   static Future<SourceCheckIsolateResult?> check(
     BookSource source,
     CancelToken cancelToken,
+  ) async => _check(source, cancelToken, await _config());
+
+  /// 建立書源的校驗（ADR 0082）：每一段都驗，不照使用者在校驗設定關掉的
+  /// 段：從空白寫的書源，關掉的那一段可能根本沒有規則。關鍵字與時限照設定。
+  static Future<SourceCheckIsolateResult?> checkAll(
+    BookSource source,
+    CancelToken cancelToken,
   ) async {
     final config = await _config();
+    return _check(
+      source,
+      cancelToken,
+      SourceCheckConfig(
+        keyword: config.keyword,
+        timeoutSeconds: config.timeoutSeconds,
+        checkSearch: true,
+        checkDiscovery: true,
+        checkInfo: true,
+        checkCategory: true,
+        checkContent: true,
+      ),
+    );
+  }
+
+  static Future<SourceCheckIsolateResult?> _check(
+    BookSource source,
+    CancelToken cancelToken,
+    SourceCheckConfig config,
+  ) async {
     final handle = await spawnSourceCheck(
       source,
       config.forIsolate,

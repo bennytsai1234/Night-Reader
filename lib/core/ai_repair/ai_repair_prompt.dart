@@ -418,7 +418,12 @@ Map<String, dynamic> _withoutEmpty(Map<String, dynamic> json) {
 /// 分組、排序、開關、權重與註解。網址只接受換開頭（[siteMovedUrl]）：網站
 /// 搬家、或只有 https、沒有 www 的那個開頭能用時。改完還是聚合源的，類型也
 /// 照原本的（ADR 0056）。規則真的改了才記新的更新時間（[rulesChanged]）。
-BookSource candidateFrom(BookSource original, Map<String, dynamic> json) {
+/// [creating]（從空白建立書源）時名稱照 AI 寫的站名，沒寫照原本的。
+BookSource candidateFrom(
+  BookSource original,
+  Map<String, dynamic> json, {
+  bool creating = false,
+}) {
   final base = BookSource.fromJson(original.toJson())..removeErrorComment();
   final candidate = BookSource.fromJson(json);
   if (candidate.isAggregateSource) {
@@ -429,7 +434,10 @@ BookSource candidateFrom(BookSource original, Map<String, dynamic> json) {
       original.bookSourceUrl,
       json['bookSourceUrl'] as String?,
     )
-    ..bookSourceName = original.bookSourceName
+    ..bookSourceName = switch (json['bookSourceName']) {
+      final String name when creating && name.trim().isNotEmpty => name.trim(),
+      _ => original.bookSourceName,
+    }
     ..bookSourceGroup = original.bookSourceGroup
     ..bookSourceComment = base.bookSourceComment
     ..customOrder = original.customOrder
@@ -513,7 +521,10 @@ Map<String, Object?> _flatten(Map<String, dynamic> json, [String prefix = '']) {
   return out;
 }
 
-const String _rules =
+const String _rules = '$aiSourceRules$_repairIdentity';
+
+/// 書源格式與規則語法：修書源與建立書源共用。
+const String aiSourceRules =
     '''
 書源是 Legado 3.0（閱讀 App）格式的 JSON，夜讀照同樣的規則解析。
 - bookSourceType：0 小說（正文是成段文字）、1 有聲（正文是音訊網址）、2 漫畫（正文是圖片網址）。照抓到的正文判斷，不照名稱猜。規則裡用 book.type = … 逐本書設定類型的書源（聚合源，正文是哪一類看登入表單選的模式）不改類型。
@@ -528,16 +539,25 @@ const String _rules =
   - 變數與 Cookie：java.put(名稱, 值)、java.get(名稱)；cookie.getCookie(網址)、cookie.setCookie(網址, 值)。
   - 沒有 Android 的類別（android.util.Base64 這類）。字串是 JS 字串：長度是 .length，不是 Java 的 .length()。報「TypeError: not a function」多半是把回應物件當字串用（少了 .body()）、對字串呼叫 Java 的方法，或用了這裡沒有的函式。
 - enabledCookieJar（Cookie 罐）：1 時網站回的 Cookie 存下來，這個書源之後的請求都帶上，網站靠工作階段 Cookie 記住驗證、登入或搜尋狀態時要開；0 時網站回的 Cookie 不存，每個請求都像第一次來（請求紀錄會寫出沒存的 Cookie）。cookie.setCookie 存的兩種都帶。
-- 名稱、分組這些不用改，夜讀會照原本的；只改需要改的規則，其他照原樣留著。網站搬了家，或只有某個開頭（https、有沒有 www、新網域）連得上時，可以改 bookSourceUrl 的開頭（https://網域），後面的部分夜讀照原本的；書架上用這個書源的書會跟著搬。
 ''';
 
-const String _method =
-    '''
+/// 修書源才有的一條：名稱、分組照原本的，網址只換開頭。
+const String _repairIdentity =
+    '- 名稱、分組這些不用改，夜讀會照原本的；只改需要改的規則，其他照原樣留著。網站搬了家，或只有某個開頭（https、有沒有 www、新網域）連得上時，可以改 bookSourceUrl 的開頭（https://網域），後面的部分夜讀照原本的；書架上用這個書源的書會跟著搬。\n';
+
+const String _method = '$_methodOpening$aiSourceMethod';
+
+const String _methodOpening = '''
 ## 怎麼查
 
 ### 先看開場
 - 開場有書源、送來修的原因（上一次校驗的結論）、這次校驗的結果與試抓。先看哪一段失敗、網站實際回了什麼：網站回了正常的內容、規則卻抓不到（例如「未獲取到書籍」但回應裡有書單），問題在解析規則，網址與參數照舊；網站回的是錯誤、提示、驗證頁或轉址程式，照下面「網站回的不是內容時」查。
 
+''';
+
+/// 查網站與寫規則的做法：修書源與建立書源共用（從「用哪個工具」起）。
+const String aiSourceMethod =
+    '''
 ### 用哪個工具
 - 每個抓到的網頁都有頁碼（頁 N），整頁存在夜讀這邊；回給你的只是精簡後的開頭。後面的內容用 read 讀；要知道某段文字在哪、它的選擇器怎麼寫，用 find；要看程式、<head> 與所有屬性，用 read 的 raw。
 - 要確認規則在一頁上解析得對不對，用 parse：不連網站，網站在限流時也能用。

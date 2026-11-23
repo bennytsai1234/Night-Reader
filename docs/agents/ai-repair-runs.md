@@ -21,6 +21,10 @@
 
    要一輪一輪給使用者看某一件時，`dart run tool/ai_repair_view.dart <紀錄.txt> <輸出.html>` 轉成可以點開的頁面，放進對話。
 
+## AI 建立書源
+
+同一套材料與做法（ADR 0082）。一件是一個網址：`test/live/source_create_live_test.dart`，`NR_URL` 給網址、`NR_TITLE` 選填樣本書名，服務的環境變數同上，跑法寫在檔頭。紀錄放主資料夾的 `.local/ai-create/runs/<日期-名稱>/`，對照用的手寫書源放 `.local/ai-create/`；評估表一樣用 `tool/ai_repair_table.dart`。案件取自使用者匯出檔裡校驗沒問題的網站，加上付費（起點、晉江）與要登入的網站，看它一看到就放棄。
+
 ## 夜讀的對應
 
 照技能第 5 步評過程與歸因時，夜讀的正式系統是書源引擎與校驗，agent 以外的方法是 curl 與 Legado 原始碼：

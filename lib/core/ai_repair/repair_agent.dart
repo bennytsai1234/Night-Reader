@@ -5,6 +5,7 @@ import 'package:night_reader/core/models/source/book_source.dart';
 
 import 'agent_loop.dart';
 import 'ai_chat_client.dart';
+import 'ai_create_prompt.dart';
 import 'ai_repair_log.dart';
 import 'ai_repair_prompt.dart';
 import 'ai_repair_session.dart';
@@ -71,9 +72,11 @@ SourceProbeReport withPageIds(RepairPages pages, SourceProbeReport probe) =>
       timedOut: probe.timedOut,
       contentUsable: probe.contentUsable,
       unjoinedNextPage: probe.unjoinedNextPage,
+      contentAmount: probe.contentAmount,
     );
 
-/// AI 修一個書源這件事（[AgentTask]）：開場是書源、校驗結果與試抓，指令是
+/// AI 修一個書源這件事（[AgentTask]）：開場是書源、校驗結果與試抓（從空白
+/// 建立時是空白的書源、網站檢查與貼的那一頁，[aiCreateOpening]），指令是
 /// [AiRepairCommand]，交出與放棄由這裡驗收。工具的結果寫進紀錄、遮掉秘密
 /// 後交給迴圈接進對話。
 final class RepairAgent implements AgentTask<AiRepairCommand> {
@@ -129,6 +132,9 @@ final class RepairAgent implements AgentTask<AiRepairCommand> {
 
   BookSource get _original => _job.original;
 
+  /// 從空白建立書源（[AiRepairJob.create]），不是修一個壞掉的。
+  bool get _creating => _job.create != null;
+
   /// 不連網站的指令做完：步驟的副標與紀錄。
   void _local(AiRepairStep step, String title, String reply) {
     _host.finish(step, title);
@@ -155,14 +161,26 @@ final class RepairAgent implements AgentTask<AiRepairCommand> {
   String redact(String text) => _host.redact(text);
 
   @override
-  List<AiMessage> opening() => aiRepairOpening(
-    source: _original,
-    checkResult: _checkResult,
-    probe: _openingProbe,
-    mixedAnswers: _openingMixed ??= _answers.record(
+  List<AiMessage> opening() {
+    final mixed = _openingMixed ??= _answers.record(
       '$_checkResult\n${_firstProbe.requests.join('\n')}',
-    ),
-  );
+    );
+    if (_job.create case final request?) {
+      return aiCreateOpening(
+        source: _original,
+        request: request,
+        siteCheck: _checkResult,
+        page: _openingProbe,
+        mixedAnswers: mixed,
+      );
+    }
+    return aiRepairOpening(
+      source: _original,
+      checkResult: _checkResult,
+      probe: _openingProbe,
+      mixedAnswers: mixed,
+    );
+  }
 
   @override
   void restart(int attempt, String why) {
@@ -277,7 +295,7 @@ final class RepairAgent implements AgentTask<AiRepairCommand> {
   (Map<String, dynamic>, BookSource)? _candidateOf(AiChange change) {
     if (aiChangeProblem(change) != null) return null;
     final json = applyAiChange(_current, change);
-    final candidate = candidateOrNull(_original, json);
+    final candidate = candidateOrNull(_original, json, creating: _creating);
     return candidate == null ? null : (json, candidate);
   }
 
@@ -334,7 +352,9 @@ final class RepairAgent implements AgentTask<AiRepairCommand> {
       case AiFetch(:final url):
         step.detail = '看網頁 $url…';
         _host.notify();
-        final base = candidateOrNull(_original, _current) ?? _original;
+        final base =
+            candidateOrNull(_original, _current, creating: _creating) ??
+            _original;
         final watch = Stopwatch()..start();
         final page = await _host.guard(
           (cancelToken) => _fetchPage(base, url, cancelToken),
@@ -376,7 +396,9 @@ final class RepairAgent implements AgentTask<AiRepairCommand> {
         }
         final BookSource source;
         if (change == null) {
-          source = candidateOrNull(_original, _current) ?? _original;
+          source =
+              candidateOrNull(_original, _current, creating: _creating) ??
+              _original;
         } else {
           final parsed = _candidateOf(change);
           if (parsed == null) {
@@ -396,7 +418,9 @@ final class RepairAgent implements AgentTask<AiRepairCommand> {
         _local(step, '解析頁 $page（$stage）', reply);
         return _answer(reply);
       case AiJs(:final code):
-        final source = candidateOrNull(_original, _current) ?? _original;
+        final source =
+            candidateOrNull(_original, _current, creating: _creating) ??
+            _original;
         final pages = {
           for (final match in RegExp(r'page\(\s*(\d+)\s*\)').allMatches(code))
             if (_pages[int.parse(match.group(1)!)] case final page?)

@@ -58,11 +58,15 @@ const Set<SourceHealthCategory> _discoveryOnly = {
   SourceHealthCategory.discoveryContentBroken,
 };
 
-/// AI 回的書源照原本的身分組起來；欄位的型別或數值不對（例如超出範圍的
-/// 數字）時是 null，當成讀不懂。
-BookSource? candidateOrNull(BookSource original, Map<String, dynamic> json) {
+/// AI 回的書源照原本的身分組起來（[creating] 見 [candidateFrom]）；欄位的
+/// 型別或數值不對（例如超出範圍的數字）時是 null，當成讀不懂。
+BookSource? candidateOrNull(
+  BookSource original,
+  Map<String, dynamic> json, {
+  bool creating = false,
+}) {
   try {
-    return candidateFrom(original, json);
+    return candidateFrom(original, json, creating: creating);
   } catch (error) {
     AppLog.d('AI 回的書源讀不出來: $error');
     return null;
