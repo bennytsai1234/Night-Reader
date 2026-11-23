@@ -1172,6 +1172,65 @@ void main() {
       },
     );
 
+    test('resuming with another service or model drops what only the old '
+        'service reads; the same service gets it back', () async {
+      final first = _calls([
+        ('search', {'keyword': '穿越'}),
+      ]);
+      final withData = AiReply(
+        content: first.content,
+        toolCalls: [
+          for (final call in first.toolCalls)
+            AiToolCall(
+              id: call.id,
+              name: call.name,
+              arguments: call.arguments,
+              extra: const {
+                'extra_content': {
+                  'google': {'thought_signature': 'sig'},
+                },
+              },
+            ),
+        ],
+        reasoning: '先搜',
+        reasoningDetails: const [
+          {'type': 'reasoning.encrypted', 'data': 'enc'},
+        ],
+        usage: first.usage,
+      );
+      final ai = _Ai([withData]);
+      final full = session(library(), ai);
+      final saved = <String>[];
+      full.onCheckpoint = saved.add;
+      await full.start();
+
+      // 第 2 輪開頭存的那份，對話裡有第 1 輪帶著服務資料的回覆。
+      Future<AiMessage> resumedReply(String label) async {
+        final next = _Ai([]);
+        final resumed = AiFindSession.restore(
+          saved[1],
+          library: library(),
+          ask: next.call,
+          serviceLabel: label,
+          log: AiRepairLog.find(
+            description: '爽文、穿越',
+            directory: () async => logs,
+          ),
+        );
+        sessions.add(resumed);
+        await resumed.start();
+        return next.seen.first.firstWhere((m) => m.role == 'assistant');
+      }
+
+      final same = await resumedReply('');
+      expect(same.reasoningDetails, isNotEmpty);
+      expect(same.toolCalls.single.extra, isNotEmpty);
+      final other = await resumedReply('api.deepseek.com · deepseek-flash');
+      expect(other.reasoningDetails, isEmpty);
+      expect(other.toolCalls.single.extra, isEmpty);
+      expect(other.reasoning, '先搜', reason: '思考文字各家都收，照留');
+    });
+
     test('pause stops the running search and leaves the find paused, not '
         'ended', () async {
       final lib = _Library({})..searchGate = Completer<void>();

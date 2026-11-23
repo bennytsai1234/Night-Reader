@@ -105,7 +105,14 @@ class AiFindSession extends ChangeNotifier {
         for (final round in read<List<Object?>>('rounds'))
           AiRepairStep.fromJson(round, kind: AiRepairStepKind.round),
       ])
-      .._resume = AgentCheckpoint.fromJson(read<Map<String, Object?>>('loop'))
+      .._resume = switch (AgentCheckpoint.fromJson(
+        read<Map<String, Object?>>('loop'),
+      )) {
+        // 暫停後換了服務或模型：舊服務專用的思考資料不送給新的（Codex 審查）。
+        final resume when json['serviceLabel'] != serviceLabel =>
+          resume.withoutServiceData(),
+        final resume => resume,
+      }
       .._agentState = read<Map<String, Object?>>('agent');
     return session;
   }

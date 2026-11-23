@@ -1075,6 +1075,56 @@ void main() {
       ]);
     });
 
+    test('a stream that ends before the response is done is a broken '
+        'connection, not a call to run', () async {
+      await expectLater(
+        _client(
+          _Stream([
+            event({
+              'type': 'response.output_item.added',
+              'output_index': 0,
+              'item': {...callItem, 'arguments': ''},
+            }),
+            event({
+              'type': 'response.function_call_arguments.delta',
+              'output_index': 0,
+              'delta': '{"url":"/"}',
+            }),
+          ]),
+          baseUrl: base,
+        ).complete([const AiMessage.user('hi')]),
+        throwsA(
+          isA<AiServiceException>()
+              .having((e) => e.retryable, 'retryable', isTrue)
+              .having((e) => e.message, 'message', contains('中斷')),
+        ),
+      );
+    });
+
+    test('the output the done response carries is the one kept', () async {
+      final reply = await _client(
+        _Stream([
+          event({
+            'type': 'response.output_item.added',
+            'output_index': 0,
+            'item': {...callItem, 'arguments': ''},
+          }),
+          event({
+            'type': 'response.completed',
+            'response': {
+              'output': [reasoningItem, callItem],
+            },
+          }),
+        ]),
+        baseUrl: base,
+      ).complete([const AiMessage.user('hi')]);
+
+      expect(reply.responseItems, [reasoningItem, callItem]);
+      expect(reply.toolCalls, [
+        const AiToolCall(id: 'call_1', name: 'fetch', arguments: '{"url":"/"}'),
+      ]);
+    });
+
     test('running out of output is a runaway; a failed response is an '
         'error', () async {
       await expectLater(

@@ -103,6 +103,21 @@ final class AgentCheckpoint {
   /// [AgentStats.toMap] 的樣子。
   final Map<String, Object?> stats;
 
+  /// 對話換給另一個服務接著問：拿掉只有原本那個服務認得的資料
+  /// （[AiMessage.withoutServiceData]），其他照舊。
+  AgentCheckpoint withoutServiceData() => AgentCheckpoint(
+    attempt: attempt,
+    round: round,
+    messages: [for (final message in messages) message.withoutServiceData],
+    noCommand: noCommand,
+    badCommand: badCommand,
+    rejections: rejections,
+    stalls: stalls,
+    calls: calls,
+    lastResult: lastResult,
+    stats: stats,
+  );
+
   Map<String, Object?> toJson() => {
     'attempt': attempt,
     'round': round,

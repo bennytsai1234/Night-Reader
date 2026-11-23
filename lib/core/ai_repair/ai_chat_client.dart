@@ -55,6 +55,20 @@ final class AiMessage {
   final List<Object?> reasoningDetails;
   final List<Object?> responseItems;
 
+  /// 拿掉只有原本那個服務認得的資料（[reasoningDetails]、[responseItems]、
+  /// 工具呼叫的 [AiToolCall.extra]）：對話換給另一個服務接著問時用，話、
+  /// 思考文字與工具呼叫照留。
+  AiMessage get withoutServiceData => AiMessage(
+    role,
+    content,
+    toolCalls: [
+      for (final call in toolCalls)
+        AiToolCall(id: call.id, name: call.name, arguments: call.arguments),
+    ],
+    toolCallId: toolCallId,
+    reasoning: reasoning,
+  );
+
   /// 送給服務的樣子（OpenAI 的 `chat/completions`）。思考放在
   /// `reasoning_content`（DeepSeek 的欄位，OpenRouter 也認；2026-11-12
   /// OpenCode Go 的 deepseek-v4.1-flash 實測收）。[withReasoning] 是對話裡有
@@ -464,6 +478,15 @@ class AiChatClient {
           retryable: true,
         );
       }
+      // `responses` 的回覆以結束事件為準：沒收到就斷的，工具呼叫與要送回的
+      // 項目都可能不完整，同連線中斷（Codex 審查）。
+      if (responses && !reader.ended) {
+        throw AiServiceException(
+          'AI 服務的連線中斷了',
+          retryable: true,
+          usage: reader.estimate,
+        );
+      }
       if (reader.runaway case final reason?) throw reason;
       final content = reader.content.toString();
       final toolCalls = reader.toolCalls;
@@ -729,6 +752,9 @@ final class _StreamReader implements Sink<String> {
   String _sentence = '';
   final Set<String> _seen = {};
   int _repeats = 0;
+
+  /// `responses` 收到了結束事件（完成、沒完成或失敗）或整份回應。
+  bool ended = false;
 
   bool get hasOutput =>
       content.isNotEmpty || reasoning.isNotEmpty || _calls.isNotEmpty;
@@ -1026,13 +1052,17 @@ final class _StreamReader implements Sink<String> {
     }
   }
 
-  /// 回應結束（或整份回應）：用量、沒完成的原因、錯誤；整份回應的輸出項目
-  /// 在這裡讀。
+  /// 回應結束（或整份回應）：用量、沒完成的原因、錯誤。帶著的輸出項目
+  /// 是完整的一份，以它為準（串流時蓋過一路收到的項目）。
   void _completed(Map<dynamic, dynamic> response, {required bool whole}) {
+    ended = true;
     if (response['usage'] is Map) usage = AiChatClient.usageOf(response);
-    if (whole && response['output'] is List) {
-      for (final (position, item) in (response['output'] as List).indexed) {
-        if (item is Map) _item(position, item, whole: true);
+    if (response['output'] case final List output when output.isNotEmpty) {
+      _calls.clear();
+      _byIndex.clear();
+      _items.clear();
+      for (final (position, item) in output.indexed) {
+        if (item is Map) _item(position, item, whole: whole);
       }
     }
     if (response['error'] case {'message': final String message}) {
