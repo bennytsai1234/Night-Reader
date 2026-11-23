@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -16,6 +17,7 @@ import 'package:night_reader/features/reader/text_view/core/text_view_types.dart
 import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
 import 'package:night_reader/features/reader/text_view/overlay/loading_veil.dart';
 import 'package:night_reader/features/reader/text_view/overlay/reader_skeleton_page.dart';
+import 'package:night_reader/features/reader/text_view/overlay/reader_text_selection_layer.dart';
 import 'package:night_reader/features/reader/text_view/overlay/tts_highlight_overlay.dart';
 import 'package:night_reader/features/reader/text_view/text/text_preprocessor.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
@@ -188,6 +190,7 @@ void main() {
     ReaderTtsHighlight? ttsHighlight,
     ReaderSkeletonPageStore? skeletonPages,
     ValueNotifier<ProgressSnapshot?>? progress,
+    bool textSelectionEnabled = false,
   }) async {
     tester.view.physicalSize = _viewport;
     tester.view.devicePixelRatio = 1;
@@ -206,6 +209,7 @@ void main() {
           style: _style,
           viewportController: viewport,
           ttsHighlight: ttsHighlight,
+          textSelectionEnabled: textSelectionEnabled,
           bookUrl: skeletonPages == null ? null : 'http://interaction.test',
           skeletonPages: skeletonPages,
           progressListenable: progress,
@@ -1655,6 +1659,88 @@ void main() {
         expect(after[i].right, previous[i].right);
       }
     }
+  });
+
+  testWidgets('a selection drags into the next paragraphs and scrolls past '
+      'the bottom edge', (tester) async {
+    // 原生斷詞不在，長按只選一個字。
+    const segmenter = MethodChannel('com.inkpage.reader/word_segmenter');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      segmenter,
+      (_) async => null,
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        segmenter,
+        null,
+      ),
+    );
+    // 朗讀高亮只拿來找第一段字在畫面上的位置。
+    await pumpReader(
+      tester,
+      textSelectionEnabled: true,
+      ttsHighlight: const ReaderTtsHighlight(
+        chapterIndex: 0,
+        sentenceStart: 10,
+        sentenceEnd: 12,
+      ),
+    );
+    await settle(tester);
+    final word = tester
+        .widget<TtsHighlightOverlay>(find.byType(TtsHighlightOverlay))
+        .sentence
+        .first;
+    final layer = tester.widget<ReaderTextSelectionLayer>(
+      find.byType(ReaderTextSelectionLayer),
+    );
+    final service = layer.selection;
+    final height = tester.getSize(find.byType(ReaderTextSelectionLayer)).height;
+
+    // 放開時事件的時間要過了長按門檻，才不會被當成點正文、收掉選取。
+    const held = Duration(milliseconds: 600);
+    final press = await tester.startGesture(
+      Offset((word.left + word.right) / 2, (word.top + word.bottom) / 2),
+    );
+    await tester.pump(held);
+    await press.up(timeStamp: held);
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    final selected = service.selection;
+    expect(selected, isNotNull);
+    expect(selected!.text, isNot(contains('\n')));
+    final end = layer.paintFor(selected, height).endBox!;
+
+    final gesture = await tester.startGesture(
+      Offset(end.right + 8, end.bottom + 12),
+    );
+    await gesture.moveBy(const Offset(0, 20));
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, 160));
+    await tester.pump();
+    final across = service.selection!;
+    expect(across.text, contains('\n\n'), reason: '拉到下面幾段');
+    expect(across.inParagraphs.pieces.length, greaterThan(1));
+    expect(across.range.start, selected.range.start);
+
+    final position = scrollPosition(tester);
+    final before = position.pixels;
+    await gesture.moveTo(Offset(end.right + 8, height + 15));
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(position.pixels, greaterThan(before), reason: '拖出下緣時正文往下捲');
+    final scrolled = service.selection!;
+    expect(scrolled.range.end, greaterThan(across.range.end));
+    expect(scrolled.range.start, selected.range.start);
+    expect(layer.paintFor(scrolled, height).endBox, isNotNull);
+
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 16));
+    final rested = position.pixels;
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(position.pixels, rested, reason: '放開就停');
+    expect(service.selection?.range, scrolled.range, reason: '選取留著');
   });
 
   testWidgets('stopping auto-scroll does not cancel the finger on the text', (

@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader/chapter/reader_illustration.dart';
+import 'package:night_reader/core/models/reading/highlight.dart';
+import 'package:night_reader/features/reader/session/reader_location.dart';
+import 'package:night_reader/features/reader/text_view/overlay/highlight_marks.dart';
+import 'package:night_reader/features/reader/text_view/overlay/reader_mark_layers.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 import 'package:night_reader/features/reader/text_view/overlay/selection_service.dart';
 import 'package:night_reader/features/reader/text_view/overlay/reader_text_selection_layer.dart';
@@ -758,6 +762,289 @@ void main() {
 
       final long = select('長街', '燈還').asBookmark;
       expect(long.excerpt, '他快步走過長街，回到書鋪。燈還');
+    });
+  });
+
+  group('跨段的標註', () {
+    ReaderHighlightMark mark(int start, String quote) => (
+      id: 1,
+      location: ReaderLocation(chapterIndex: 0, charOffset: start),
+      length: quote.replaceAll('\n', '').length,
+      color: HighlightColor.amber,
+      style: HighlightStyle.fill,
+    );
+
+    ChapterBlocks chapterOf(List<String> paragraphs) {
+      const title = '章';
+      final display = '$title\n\n${paragraphs.join('\n\n')}';
+      var offset = title.length + 2;
+      return ChapterBlocks(
+        chapterIndex: 0,
+        title: title,
+        displayText: display,
+        contentHash: 'h',
+        blocks: [
+          _block(0, title, 0, paragraph: -1, isTitle: true),
+          for (var i = 0; i < paragraphs.length; i++)
+            _block(
+              i + 1,
+              paragraphs[i],
+              (offset += i == 0 ? 0 : paragraphs[i - 1].length + 2),
+              paragraph: i,
+            ),
+        ],
+      );
+    }
+
+    test('正文沒變時畫到記下的那段字的結尾', () {
+      final blocks = chapterOf(['甲乙丙', '丁戊']);
+      final display = blocks.displayText;
+      final start = display.indexOf('乙');
+      final range = ReaderMarkGeometry.highlightRangeIn(
+        mark(start, '乙丙\n\n丁'),
+        blocks,
+      );
+      expect(display.substring(range.start, range.end), '乙丙\n\n丁');
+    });
+
+    test('分段和畫的時候不同時，段落分隔不算，仍畫到同一段字的結尾', () {
+      final start = '章\n\n'.length + 1;
+      // 畫的時候是兩段，現在接成一段。
+      final joined = chapterOf(['甲乙丙丁戊']);
+      final range = ReaderMarkGeometry.highlightRangeIn(
+        mark(start, '乙丙\n\n丁'),
+        joined,
+      );
+      expect(joined.displayText.substring(range.start, range.end), '乙丙丁');
+      // 畫的時候是一段，現在切成三段。
+      final split = chapterOf(['甲乙', '丙', '丁戊']);
+      final again = ReaderMarkGeometry.highlightRangeIn(
+        mark(start, '乙丙丁'),
+        split,
+      );
+      expect(
+        split.displayText.substring(again.start, again.end),
+        '乙\n\n丙\n\n丁',
+      );
+    });
+  });
+
+  group('跨段選取', () {
+    const box = LineBox(left: 100, top: 500, right: 140, bottom: 520);
+
+    Future<SelectionService> pumpLayer(
+      WidgetTester tester, {
+      ChapterBlocks? blocks,
+      String from = '城門',
+      String to = '城門',
+      SelectionPaint Function()? paint,
+      int? Function(Offset point)? caretAt,
+      Future<bool> Function(double delta)? autoScrollBy,
+      VoidCallback? onAutoScrollEnd,
+      ValueChanged<ReaderTextSelection>? onHide,
+      ValueChanged<ReaderTextSelection>? onReplace,
+    }) async {
+      final chapter = blocks ?? _chapter();
+      final display = chapter.displayText;
+      final service = SelectionService()
+        ..select(
+          ReaderTextSelection(
+            blocks: chapter,
+            epoch: LayoutEpoch.initial,
+            range: ChapterTextRange(
+              display.indexOf(from),
+              display.indexOf(to) + to.length,
+            ),
+          ),
+        );
+      addTearDown(service.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReaderTextSelectionLayer(
+            selection: service,
+            repaint: service,
+            paintFor: (_, _) =>
+                paint?.call() ??
+                (boxes: const <LineBox>[box], startBox: box, endBox: box),
+            caretAt: (_, point) => caretAt?.call(point),
+            autoScrollBy: autoScrollBy,
+            onAutoScrollEnd: onAutoScrollEnd,
+            onHide: onHide,
+            onReplace: onReplace,
+            highlightColor: Colors.amber,
+            child: const SizedBox.expand(),
+          ),
+        ),
+      );
+      return service;
+    }
+
+    /// 按住結尾的把手（在那一行下緣右邊）、越過觸控門檻開始拖。
+    Future<TestGesture> grabEnd(WidgetTester tester) async {
+      final gesture = await tester.startGesture(
+        Offset(box.right + 8, box.bottom + 12),
+      );
+      await gesture.moveBy(const Offset(0, 20));
+      await tester.pump();
+      return gesture;
+    }
+
+    testWidgets('複製時段落之間只換一行', (tester) async {
+      final copied = <Object?>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') copied.add(call.arguments);
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await pumpLayer(tester, to: '長街');
+      await tester.tap(find.text('複製'));
+      await tester.pump();
+      expect(copied, [
+        {'text': '城門即將關閉。\n他快步走過長街'},
+      ]);
+    });
+
+    testWidgets('跨過插圖時「隱藏」「替換」灰掉，按了不收掉選取', (tester) async {
+      final chapter = _chapter();
+      final second = chapter.displayText.indexOf('他快步');
+      final withPicture = ChapterBlocks(
+        chapterIndex: 0,
+        title: chapter.title,
+        displayText: chapter.displayText,
+        contentHash: chapter.contentHash,
+        blocks: [
+          for (final block in chapter.blocks)
+            if (block.blockIndex < 3) block,
+          ChapterBlock(
+            key: const BlockKey(chapterIndex: 0, blockIndex: 3),
+            text: '',
+            charRange: ChapterTextRange(second, second),
+            sourceParagraphIndex: 1,
+            illustration: const ReaderIllustration(
+              offset: 0,
+              src: 'a.png',
+              path: 'a.png',
+              pixelWidth: 10,
+              pixelHeight: 10,
+            ),
+          ),
+          _block(4, '他快步走過長街。', second, paragraph: 1),
+        ],
+      );
+      var calls = 0;
+      final service = await pumpLayer(
+        tester,
+        blocks: withPicture,
+        to: '長街',
+        onHide: (_) => calls++,
+        onReplace: (_) => calls++,
+      );
+      await tester.tap(find.text('隱藏'));
+      await tester.tap(find.text('替換'));
+      await tester.pump();
+      expect(calls, 0);
+      expect(service.active, isTrue);
+    });
+
+    testWidgets('把手拖出正文區下緣時正文往下捲，超出越多越快，放開就停並記下位置', (tester) async {
+      final deltas = <double>[];
+      var settled = 0;
+      final display = _chapter().displayText;
+      await pumpLayer(
+        tester,
+        caretAt: (_) => display.indexOf('關閉'),
+        autoScrollBy: (delta) async {
+          deltas.add(delta);
+          return true;
+        },
+        onAutoScrollEnd: () => settled++,
+      );
+      final height = tester
+          .getSize(find.byType(ReaderTextSelectionLayer))
+          .height;
+      final gesture = await grabEnd(tester);
+      expect(deltas, isEmpty, reason: '還在正文區裡不捲');
+
+      await gesture.moveTo(Offset(box.right + 8, height + 5));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(deltas, isNotEmpty);
+      final slow = deltas.last;
+      expect(slow, greaterThan(0));
+      // 超出 5，每秒 5 × 30。
+      expect(slow, closeTo(5 * 30 * 0.016, 0.01));
+
+      await gesture.moveTo(Offset(box.right + 8, height + 200));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      // 超出的距離最多算到 20。
+      expect(deltas.last, closeTo(20 * 30 * 0.016, 0.01));
+
+      await gesture.up();
+      await tester.pump(const Duration(milliseconds: 16));
+      final count = deltas.length;
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(deltas, hasLength(count), reason: '放開就停');
+      expect(settled, 1);
+    });
+
+    testWidgets('拖到這一章的章末就不再捲', (tester) async {
+      final deltas = <double>[];
+      final service = await pumpLayer(
+        tester,
+        caretAt: (_) => 1 << 20,
+        autoScrollBy: (delta) async {
+          deltas.add(delta);
+          return true;
+        },
+      );
+      final height = tester
+          .getSize(find.byType(ReaderTextSelectionLayer))
+          .height;
+      final gesture = await grabEnd(tester);
+      await gesture.moveTo(Offset(box.right + 8, height + 10));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(service.selection!.range.end, _chapter().displayText.length);
+      expect(deltas, isEmpty);
+      await gesture.up();
+    });
+
+    testWidgets('拖著的那一端一時沒有框（還沒排好、捲出畫面）時拖曳不中斷', (tester) async {
+      var hideEnd = false;
+      var caret = 0;
+      final display = _chapter().displayText;
+      final service = await pumpLayer(
+        tester,
+        paint: () => (
+          boxes: const <LineBox>[box],
+          startBox: box,
+          endBox: hideEnd ? null : box,
+        ),
+        caretAt: (_) => display.indexOf('即將') + caret,
+      );
+      final gesture = await grabEnd(tester);
+      hideEnd = true;
+      caret = 1;
+      await gesture.moveBy(const Offset(0, 10));
+      await tester.pump();
+      caret = 3;
+      await gesture.moveBy(const Offset(0, 10));
+      await tester.pump();
+      expect(service.selection!.text, '城門即將關');
+      await gesture.up();
+      await tester.pump();
     });
   });
 }
