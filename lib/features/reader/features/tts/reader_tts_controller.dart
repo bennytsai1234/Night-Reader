@@ -277,6 +277,8 @@ class ReaderTtsController extends ChangeNotifier
   /// 念 [speaking] 那一句。
   Future<void> _speak(_Speaking speaking) async {
     _state = speaking;
+    // 從載入換到念一句時倒數才開始走；面板看起來都是朗讀中，不用通知。
+    _syncSleepTimer();
     try {
       await _tts.speak(ReaderTtsSpeechText.prepare(speaking.segment.text));
     } catch (error, stackTrace) {
@@ -380,15 +382,18 @@ class ReaderTtsController extends ChangeNotifier
   @override
   void notifyListeners() {
     if (_disposed) return;
-    final phase = this.phase;
-    sleepTimer.sync(
-      active: phase != ReaderTtsPhase.idle,
-      running: phase == ReaderTtsPhase.reading,
-    );
+    _syncSleepTimer();
     // 定時的監聽者可能在上面同步改了階段，系統播放資訊照當下的。
     _syncSystemPlayback();
     super.notifyListeners();
   }
+
+  /// 定時只算在念一句的時間：載入要念的那一章（等書源、經過沒有正文的章）
+  /// 時面板仍是朗讀中，倒數停住，和有聲書等資料時一樣。
+  void _syncSleepTimer() => sleepTimer.sync(
+    active: phase != ReaderTtsPhase.idle,
+    running: _state is _Speaking,
+  );
 
   /// 正在念或暫停中：把正在念的章、這本書與做得到的按鈕交給系統播放資訊；
   /// 停了就收掉。
