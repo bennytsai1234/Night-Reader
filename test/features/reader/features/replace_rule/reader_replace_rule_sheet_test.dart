@@ -31,7 +31,11 @@ void main() {
     }
   }
 
-  Future<void> openSheet(WidgetTester tester) async {
+  Future<void> openSheet(
+    WidgetTester tester, {
+    Book? book,
+    Future<void> Function()? onReload,
+  }) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -40,10 +44,12 @@ void main() {
         theme: buildAppTheme(AppStyle.paper, Brightness.light),
         home: Scaffold(
           body: ReaderReplaceRuleSheet(
-            book: Book(bookUrl: 'https://b.test/1', origin: 'https://b.test'),
+            book:
+                book ??
+                Book(bookUrl: 'https://b.test/1', origin: 'https://b.test'),
             bookDao: BookDao(db),
             replaceDao: dao,
-            onReload: () async {},
+            onReload: onReload ?? () async {},
           ),
         ),
       ),
@@ -99,5 +105,21 @@ void main() {
     await tester.pump();
     expect(find.text('規則「回溯」執行超過 200 毫秒，已停止'), findsOneWidget);
     expect(find.text('執行測試'), findsOneWidget);
+  });
+
+  testWidgets('「本書重新分段」存進這本書、照新的設定重載正文', (tester) async {
+    final book = Book(bookUrl: 'https://b.test/1', origin: 'https://b.test');
+    var reloads = 0;
+    await openSheet(tester, book: book, onReload: () async => reloads++);
+
+    await tester.tap(find.text('本書重新分段'));
+    await settle(tester);
+
+    expect(book.getReSegment(), isTrue);
+    expect(reloads, 1);
+    final saved = await tester.runAsync(
+      () => BookDao(db).getByUrl('https://b.test/1'),
+    );
+    expect(saved?.getReSegment(), isTrue);
   });
 }

@@ -65,6 +65,7 @@ class ReaderReplaceRuleSheet extends StatefulWidget {
 
 class _ReaderReplaceRuleSheetState extends State<ReaderReplaceRuleSheet> {
   late bool _useReplaceRule;
+  late bool _reSegment;
 
   /// 「管理規則」右側的規則數。讀到時只有那一列聽它重建：常在面板滑入途中
   /// 讀到，通知整個面板會在那一格重建全部的列、重算骨架（ADR 0029 做法 3）。
@@ -83,6 +84,7 @@ class _ReaderReplaceRuleSheetState extends State<ReaderReplaceRuleSheet> {
   void initState() {
     super.initState();
     _useReplaceRule = widget.book.getUseReplaceRule();
+    _reSegment = widget.book.getReSegment();
     unawaited(_reloadEnabledRules());
     unawaited(_fillTestSample());
   }
@@ -122,36 +124,57 @@ class _ReaderReplaceRuleSheetState extends State<ReaderReplaceRuleSheet> {
     for (final rule in await widget.replaceDao.getAll()) rule.toJson(),
   ]);
 
-  Future<void> _setUseReplaceRule(bool value) async {
-    if (_updatingToggle) return;
-    final previous = _useReplaceRule;
-    setState(() {
-      _updatingToggle = true;
+  Future<void> _setUseReplaceRule(bool value) => _setBookToggle(
+    value,
+    previous: _useReplaceRule,
+    apply: (value) {
       _useReplaceRule = value;
       (widget.book.readConfig ??= ReadConfig()).useReplaceRule = value;
+    },
+    action: '更新替換規則設定',
+  );
+
+  Future<void> _setReSegment(bool value) => _setBookToggle(
+    value,
+    previous: _reSegment,
+    apply: (value) {
+      _reSegment = value;
+      (widget.book.readConfig ??= ReadConfig()).reSegment = value;
+    },
+    action: '更新重新分段設定',
+  );
+
+  /// 這本書的開關：存進書、照新的設定重載正文；失敗時改回 [previous]。
+  Future<void> _setBookToggle(
+    bool value, {
+    required bool previous,
+    required void Function(bool value) apply,
+    required String action,
+  }) async {
+    if (_updatingToggle) return;
+    setState(() {
+      _updatingToggle = true;
+      apply(value);
     });
     try {
       await widget.bookDao.upsert(widget.book);
       await widget.onReload();
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _useReplaceRule = previous;
-        (widget.book.readConfig ??= ReadConfig()).useReplaceRule = previous;
-      });
+      setState(() => apply(previous));
       try {
         await widget.bookDao.upsert(widget.book);
       } catch (rollbackError, rollbackStack) {
         AppLog.e(
-          '替換規則設定 rollback 持久化失敗: $rollbackError',
+          '$action rollback 持久化失敗: $rollbackError',
           error: rollbackError,
           stackTrace: rollbackStack,
         );
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: UiText(failureMessage('更新替換規則設定', error))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: UiText(failureMessage(action, error))));
     } finally {
       if (mounted) setState(() => _updatingToggle = false);
     }
@@ -242,6 +265,15 @@ class _ReaderReplaceRuleSheetState extends State<ReaderReplaceRuleSheet> {
               title: '本書套用替換規則',
               value: _useReplaceRule,
               onChanged: _updatingToggle ? null : _setUseReplaceRule,
+            ),
+            GroupedSwitchRow(
+              leading: const GroupedIconTile(
+                Icons.wrap_text_rounded,
+                tint: AppTint.moss,
+              ),
+              title: '本書重新分段',
+              value: _reSegment,
+              onChanged: _updatingToggle ? null : _setReSegment,
             ),
             GroupedRow(
               leading: const GroupedIconTile(

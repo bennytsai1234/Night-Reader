@@ -91,6 +91,12 @@ final class ReaderMenuPages {
           enabled: !isLocal,
         ),
         AppSheetAction(
+          label: '重新分段',
+          icon: Icons.wrap_text_rounded,
+          value: _ReaderMoreAction.reSegment,
+          selected: _host.book.getReSegment(),
+        ),
+        AppSheetAction(
           label: '登入',
           icon: Icons.login_rounded,
           value: _ReaderMoreAction.login,
@@ -116,6 +122,9 @@ final class ReaderMenuPages {
       case _ReaderMoreAction.refetchChapter:
         _host.menu.dismissControls();
         await _remedy.refetchCurrentChapter();
+      case _ReaderMoreAction.reSegment:
+        _host.menu.dismissControls();
+        await _toggleReSegment();
       case _ReaderMoreAction.login:
         if (loginSource != null) {
           await _remedy.login(loginSource, ticket: _departMenu());
@@ -209,6 +218,34 @@ final class ReaderMenuPages {
       AppLog.e('套用替換規則失敗', error: error, stackTrace: stackTrace);
       _showNotice(failureMessage('套用替換規則', error));
     }
+  }
+
+  /// 「更多」的「重新分段」：切換這本書的開關、存起來，照新的設定重載正文
+  /// （ADR 0078）；替換規則面板的同一個開關看的也是這本書的設定。
+  Future<void> _toggleReSegment() async {
+    final book = _host.book;
+    final config = book.readConfig ??= ReadConfig();
+    final enabled = !config.reSegment;
+    config.reSegment = enabled;
+    try {
+      await _host.dependencies.bookDao.upsert(book);
+      await _host.runtime?.reloadContentPreservingLocation();
+    } catch (error, stackTrace) {
+      AppLog.e('更新重新分段設定失敗', error: error, stackTrace: stackTrace);
+      config.reSegment = !enabled;
+      try {
+        await _host.dependencies.bookDao.upsert(book);
+      } catch (rollbackError, rollbackStack) {
+        AppLog.e(
+          '更新重新分段設定 rollback 持久化失敗: $rollbackError',
+          error: rollbackError,
+          stackTrace: rollbackStack,
+        );
+      }
+      if (_mounted()) _showNotice(failureMessage('更新重新分段設定', error));
+      return;
+    }
+    if (_mounted()) _showNotice(enabled ? '已打開重新分段' : '已關閉重新分段');
   }
 
   void menusHidden() => _menuDeparture.menusHidden();
@@ -372,6 +409,7 @@ Future<({int index, List<BookChapter>? latest})?> resolveDetailChapter({
 enum _ReaderMoreAction {
   changeSource,
   refetchChapter,
+  reSegment,
   login,
   bookDetail,
   globalSettings,
