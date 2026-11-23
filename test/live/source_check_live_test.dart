@@ -14,7 +14,8 @@
 /// - `NR_PARALLEL=<n>`：整批跑時同時校驗 n 個書源（每個在自己的 isolate），
 ///   全部算成一個測試；沒給時一個書源一個測試、依序跑。
 /// - `NR_OUT=<檔案>`：每個書源的結果另外寫成一行 JSON 接在檔案後面（名稱、
-///   網址、是否通過、階段、訊息、日誌），給整批統計用。
+///   網址、是否通過、階段、訊息、日誌、診斷），給整批統計用；診斷和手機的
+///   `source-check.log` 同一種，每個問題一段，附這一段的請求與網站回應的開頭。
 ///
 /// 和 App 一樣經 [spawnSourceCheck] 在書源 isolate 裡校驗：規則 JS 要等網路
 /// 的呼叫（`java.ajax` 這類）只能在那裡跑（ADR 0034）。App 的資料夾指到一個
@@ -139,6 +140,7 @@ void main() {
       'stage': result?.stage ?? 'timeout',
       'message': result?.message ?? '整體超過 3 分鐘',
       'logs': result?.logs ?? const <String>[],
+      'diagnostics': result?.diagnostics ?? const <String>[],
     };
     debugPrint(
       '##### $name => '
