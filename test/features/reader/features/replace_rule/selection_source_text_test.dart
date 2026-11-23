@@ -9,6 +9,7 @@ import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/features/reader/chapter/reader_content.dart';
 import 'package:night_reader/features/reader/chapter/reader_content_transformer.dart';
 import 'package:night_reader/features/reader/features/replace_rule/selection_source_text.dart';
+import 'package:night_reader/features/reader/text_view/overlay/selection_service.dart';
 
 /// 選字「隱藏」的契約：用真的內容轉換流程排出畫面上的段落，選其中一段的
 /// 字，找回原文建成規則接在既有規則之後，再排一次，那一段只少了選到的字，
@@ -113,9 +114,10 @@ void main() {
     required String fromText,
     required int to,
     required String toText,
+    List<ReplaceRule> rules = const <ReplaceRule>[],
   }) async {
     const title = '第一章';
-    final before = await shown(raw, title: title);
+    final before = await shown(raw, title: title, rules: rules);
     final start = before[from].indexOf(fromText);
     final end = before[to].indexOf(toText) + toText.length;
     expect(start, isNonNegative);
@@ -124,7 +126,7 @@ void main() {
       book: book,
       chapter: BookChapter(url: 'c', title: title),
       rawContent: raw,
-      enabledRules: const [],
+      enabledRules: rules,
     );
     final found = selectionSourceOf((
       chapterIndex: 0,
@@ -140,13 +142,14 @@ void main() {
       crossesIllustration: false,
     ), stage);
     expect(found, isNotNull);
+    expect(found!.crossesIllustration, isFalse);
     final rule = ReplaceRule(
-      pattern: found!.pattern,
+      pattern: found.pattern,
       replacement: '',
       isRegex: false,
       order: 99,
     );
-    return shown(raw, title: title, rules: [rule]);
+    return shown(raw, title: title, rules: [...rules, rule]);
   }
 
   test('跨段選取連段落之間的換行一起比對，選到的幾段整個不見', () async {
@@ -189,20 +192,64 @@ void main() {
   });
 
   test('跨三段時中間那段整段比對', () async {
-    final found = selectionSourceOf(
-      (
-        chapterIndex: 0,
-        pieces: [
-          (paragraphIndex: 0, paragraph: '甲乙', start: 1, end: 2),
-          (paragraphIndex: 1, paragraph: '丙丁', start: 0, end: 2),
-          (paragraphIndex: 2, paragraph: '戊己', start: 0, end: 1),
-        ],
-        crossesIllustration: false,
+    expect(
+      await hideAcross(
+        '甲乙。\n丙丁。\n\n戊己。\n庚。',
+        from: 0,
+        fromText: '乙。',
+        to: 2,
+        toText: '戊',
       ),
-      (paragraphs: ['甲乙', '丙丁', '戊己'], gaps: ['\n', '\n\n']),
+      ['甲己。', '庚。'],
     );
-    expect(found?.pattern, '乙\n丙丁\n\n戊');
-    expect(found?.paragraphs, '甲乙\n丙丁\n\n戊己');
+  });
+
+  test('既有規則換出 \\r\\n 時，跨段的規則照規則看到的換行比對', () async {
+    expect(
+      await hideAcross(
+        '前文。分隔後文。\n再一段。',
+        rules: [
+          ReplaceRule(
+            pattern: '分隔',
+            replacement: '\r\n',
+            isRegex: false,
+            order: 1,
+          ),
+        ],
+        from: 0,
+        fromText: '文。',
+        to: 1,
+        toText: '後文',
+      ),
+      ['前。', '再一段。'],
+    );
+  });
+
+  test('插圖沒顯示時，選到的字中間夾著插圖也認得出來', () async {
+    const raw = '前文。\n<img src="a.png">\n後文。';
+    final stage = await ReaderContentTransformer.ruleStageParagraphs(
+      book: book,
+      chapter: BookChapter(url: 'c', title: '第一章'),
+      rawContent: raw,
+      enabledRules: const [],
+    );
+    expect(stage.paragraphs, ['前文。', '後文。']);
+    ParagraphPiece piece(int index, String text, int start, int end) =>
+        (paragraphIndex: index, paragraph: text, start: start, end: end);
+    final across = selectionSourceOf((
+      chapterIndex: 0,
+      pieces: [piece(0, '前文。', 1, 3), piece(1, '後文。', 0, 1)],
+      crossesIllustration: false,
+    ), stage);
+    expect(across?.crossesIllustration, isTrue);
+    expect(across?.paragraphs, '前文。\n\n後文。', reason: '即時測試不放插圖記號');
+    final inside = selectionSourceOf((
+      chapterIndex: 0,
+      pieces: [piece(1, '後文。', 0, 2)],
+      crossesIllustration: false,
+    ), stage);
+    expect(inside?.crossesIllustration, isFalse);
+    expect(inside?.pattern, '後文');
   });
 
   test('半形標點與中文之間的空白排版後不同，仍刪得掉', () async {

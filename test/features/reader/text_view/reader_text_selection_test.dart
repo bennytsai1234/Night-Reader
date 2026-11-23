@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -396,8 +398,8 @@ void main() {
               boxes: <LineBox>[box],
               startBox: box,
               endBox: box,
-              chapterStartShown: false,
-              chapterEndShown: false,
+              chapterStartAbove: null,
+              chapterEndBelow: null,
             ),
             caretAt: (_, _) => null,
             onHide: onHide,
@@ -844,7 +846,8 @@ void main() {
       String to = '城門',
       SelectionPaint Function()? paint,
       int? Function(Offset point)? caretAt,
-      Future<bool> Function(double delta)? autoScrollBy,
+      Future<bool> Function(double delta, bool Function() isWanted)?
+      autoScrollBy,
       VoidCallback? onAutoScrollEnd,
       ValueChanged<ReaderTextSelection>? onHide,
       ValueChanged<ReaderTextSelection>? onReplace,
@@ -874,8 +877,8 @@ void main() {
                   boxes: const <LineBox>[box],
                   startBox: box,
                   endBox: box,
-                  chapterStartShown: false,
-                  chapterEndShown: false,
+                  chapterStartAbove: null,
+                  chapterEndBelow: null,
                 ),
             caretAt: (_, point) => caretAt?.call(point),
             autoScrollBy: autoScrollBy,
@@ -910,8 +913,8 @@ void main() {
           ],
           startBox: null,
           endBox: null,
-          chapterStartShown: false,
-          chapterEndShown: false,
+          chapterStartAbove: null,
+          chapterEndBelow: null,
         ),
       );
       final screen = tester.getRect(find.byType(ReaderTextSelectionLayer));
@@ -999,7 +1002,7 @@ void main() {
       await pumpLayer(
         tester,
         caretAt: (_) => display.indexOf('關閉'),
-        autoScrollBy: (delta) async {
+        autoScrollBy: (delta, _) async {
           deltas.add(delta);
           return true;
         },
@@ -1036,13 +1039,81 @@ void main() {
       expect(settled, 1);
     });
 
+    testWidgets('捲到這一章最後一行整行露出為止，不多捲', (tester) async {
+      final deltas = <double>[];
+      await pumpLayer(
+        tester,
+        paint: () => (
+          boxes: const <LineBox>[box],
+          startBox: box,
+          endBox: box,
+          chapterStartAbove: null,
+          chapterEndBelow: 2,
+        ),
+        caretAt: (_) => null,
+        autoScrollBy: (delta, _) async {
+          deltas.add(delta);
+          return true;
+        },
+      );
+      final height = tester
+          .getSize(find.byType(ReaderTextSelectionLayer))
+          .height;
+      final gesture = await grabEnd(tester);
+      await gesture.moveTo(Offset(box.right + 8, height + 10));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(deltas, isNotEmpty);
+      expect(deltas.every((delta) => delta <= 2), isTrue, reason: '$deltas');
+      await gesture.up();
+    });
+
+    testWidgets('放開時還在排隊的那一下捲動作廢，做完才記閱讀位置', (tester) async {
+      final pending = <Completer<bool>>[];
+      final wanted = <bool Function()>[];
+      var settled = 0;
+      await pumpLayer(
+        tester,
+        caretAt: (_) => null,
+        autoScrollBy: (delta, isWanted) {
+          wanted.add(isWanted);
+          final done = Completer<bool>();
+          pending.add(done);
+          return done.future;
+        },
+        onAutoScrollEnd: () => settled++,
+      );
+      final height = tester
+          .getSize(find.byType(ReaderTextSelectionLayer))
+          .height;
+      final gesture = await grabEnd(tester);
+      await gesture.moveTo(Offset(box.right + 8, height));
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(pending, hasLength(1), reason: '一次只排一下');
+      expect(wanted.single(), isTrue);
+      pending.single.complete(true);
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(pending, hasLength(2));
+
+      await gesture.up();
+      await tester.pump();
+      expect(wanted.last(), isFalse, reason: '放開後排隊的那一下不捲');
+      expect(settled, 0, reason: '最後一下還沒做完');
+      pending.last.complete(false);
+      await tester.pump();
+      expect(settled, 1);
+    });
+
     testWidgets('拖到正文區上緣往裡 40 以內時正文往上捲', (tester) async {
       final deltas = <double>[];
       final display = _chapter().displayText;
       await pumpLayer(
         tester,
         caretAt: (_) => display.indexOf('天色'),
-        autoScrollBy: (delta) async {
+        autoScrollBy: (delta, _) async {
           deltas.add(delta);
           return true;
         },
@@ -1065,11 +1136,11 @@ void main() {
           boxes: const <LineBox>[box],
           startBox: box,
           endBox: box,
-          chapterStartShown: false,
-          chapterEndShown: true,
+          chapterStartAbove: null,
+          chapterEndBelow: 0,
         ),
         caretAt: (_) => 1 << 20,
-        autoScrollBy: (delta) async {
+        autoScrollBy: (delta, _) async {
           deltas.add(delta);
           return true;
         },
@@ -1097,8 +1168,8 @@ void main() {
           boxes: const <LineBox>[box],
           startBox: box,
           endBox: hideEnd ? null : box,
-          chapterStartShown: false,
-          chapterEndShown: false,
+          chapterStartAbove: null,
+          chapterEndBelow: null,
         ),
         caretAt: (_) => display.indexOf('即將') + caret,
       );

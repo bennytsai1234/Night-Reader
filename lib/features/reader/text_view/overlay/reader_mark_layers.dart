@@ -135,14 +135,16 @@ final class ReaderMarkGeometry {
       }
       // 跨好幾屏的標註有幾段的排版不在手上（畫面外丟掉了）時，記下的框
       // 缺了那幾段；每幀只算畫面上看得到的那一段，捲回來的段落照樣畫到。
+      // 排齊的照記下的框，只畫畫面上的那幾行。
+      final bottom = scroll + _viewportHeight();
       final boxes = cached.complete
-          ? cached.boxes
+          ? cached.boxes.where((box) => box.bottom > scroll && box.top < bottom)
           : pipeline.geometry.lineBoxesWithin(
               mark.location.chapterIndex,
               cached.range.start,
               cached.range.end,
               top: scroll,
-              bottom: scroll + _viewportHeight(),
+              bottom: bottom,
             );
       paints.add((
         boxes: [for (final box in boxes) _scrolled(box, scroll)],

@@ -51,10 +51,13 @@ final class ReaderTextSelectionLayer extends StatefulWidget {
   /// viewport 上一點最近的游標位置（章內 offset）。
   final int? Function(ReaderTextSelection selection, Offset point) caretAt;
 
-  /// 把正文捲 delta（往下讀為正）；捲不動時回傳 false。沒給就不自動捲動。
-  final Future<bool> Function(double delta)? autoScrollBy;
+  /// 把正文捲 delta（往下讀為正）；輪到它時 isWanted 不成立（這次拖曳已經
+  /// 結束、選取收掉）就不捲。捲不動時回傳 false。沒給就不自動捲動。
+  final Future<bool> Function(double delta, bool Function() isWanted)?
+  autoScrollBy;
 
-  /// 自動捲動過的拖曳結束了：正文停在這裡，記下閱讀位置。
+  /// 自動捲動過的拖曳結束了（最後一下捲動也做完）：沒有別的操作接手時，
+  /// 正文停在這裡、記下閱讀位置。
   final VoidCallback? onAutoScrollEnd;
 
   /// 選單的「隱藏」：用選到的字新增一條換成空白的替換規則（例如藏掉廣
@@ -123,6 +126,12 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer>
   Duration _lastTick = Duration.zero;
   bool _scrollInFlight = false;
   bool _autoScrolled = false;
+
+  /// 拖曳結束時最後一下捲動還沒做完：做完再記閱讀位置。
+  bool _settleAfterScroll = false;
+
+  /// 每次拖曳換號；排隊中的捲動只在同一次拖曳還在時才做。
+  int _drag = 0;
 
   @override
   void initState() {
@@ -233,6 +242,7 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer>
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onPanStart: (details) => setState(() {
+          _drag += 1;
           _dragEdge = edge;
           _draggedHandle = edge;
           _dragPoint = Offset(caretX, (box.top + box.bottom) / 2);
@@ -324,40 +334,55 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer>
       _autoScroll.stop();
       return;
     }
-    // 這一章的第一行或最後一行已經整行在畫面上：選取到不了別章，不再捲。
-    final paint = _lastPaint;
-    if (paint != null &&
-        ((overDrag < 0 && paint.chapterStartShown) ||
-            (overDrag > 0 && paint.chapterEndShown))) {
-      return;
-    }
     if (_scrollInFlight) return;
-    final delta =
+    var delta =
         overDrag *
         _autoScrollVelocityScalar *
         dt.inMicroseconds /
         Duration.microsecondsPerSecond;
+    // 捲到這一章的第一行或最後一行整行在畫面上為止：選取到不了別章。
+    final room = overDrag < 0
+        ? _lastPaint?.chapterStartAbove
+        : _lastPaint?.chapterEndBelow;
+    if (room != null) {
+      if (room <= 0) return;
+      delta = overDrag < 0 ? math.max(delta, -room) : math.min(delta, room);
+    }
     if (delta == 0) return;
     _scrollInFlight = true;
+    final drag = _drag;
     unawaited(
-      scrollBy(delta).then((moved) {
-        _scrollInFlight = false;
-        if (!mounted || _dragEdge == null) return;
-        if (moved) _autoScrolled = true;
-        _applyDrag();
-      }),
+      scrollBy(delta, () => mounted && _drag == drag && _dragEdge != null).then(
+        (moved) {
+          _scrollInFlight = false;
+          if (!mounted) return;
+          if (_drag == drag && _dragEdge != null) {
+            if (moved) _autoScrolled = true;
+            _applyDrag();
+          } else if (_settleAfterScroll) {
+            _settleAfterScroll = false;
+            widget.onAutoScrollEnd?.call();
+          }
+        },
+      ),
     );
   }
 
   void _resetDrag({required bool settle}) {
     _autoScroll.stop();
+    _drag += 1;
     _dragEdge = null;
     _draggedHandle = null;
     _dragPoint = null;
     _finger = null;
     final scrolled = _autoScrolled;
     _autoScrolled = false;
-    if (settle && scrolled) widget.onAutoScrollEnd?.call();
+    if (!settle || !scrolled) return;
+    if (_scrollInFlight) {
+      _settleAfterScroll = true;
+    } else {
+      widget.onAutoScrollEnd?.call();
+    }
   }
 
   void _endDrag() {

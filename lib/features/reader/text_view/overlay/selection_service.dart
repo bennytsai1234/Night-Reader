@@ -44,13 +44,14 @@ typedef SelectionHighlight = ({
 
 /// 選取在 viewport 上要畫的東西：看得到的那一段的字形框（每條視覺行一個）、
 /// 開頭與結尾那個字的行框（不在畫面上或那一段還沒排好時是 null），以及這一
-/// 章正文的第一行、最後一行是不是整行在畫面上（自動捲動到這裡就停）。
+/// 章正文的頂端還在 viewport 上緣上面多遠、底端還在下緣下面多遠（0 或負的
+/// 是已經整個露出來；還沒排到時是 null）：自動捲動最多捲到這裡。
 typedef SelectionPaint = ({
   List<LineBox> boxes,
   LineBox? startBox,
   LineBox? endBox,
-  bool chapterStartShown,
-  bool chapterEndShown,
+  double? chapterStartAbove,
+  double? chapterEndBelow,
 });
 
 /// 正文上的一段選取。offset 是章內 displayText 的 UTF-16 位置；可以跨段，
@@ -78,8 +79,11 @@ final class ReaderTextSelection {
   /// 選到的字，照正文原樣（段落之間空一行）。
   String get text => blocks.displayText.substring(range.start, range.end);
 
-  /// 選取能延伸到的範圍：這一章第一段正文的開頭到最後一段的結尾。
-  ChapterTextRange get bounds => bodyRangeOf(blocks);
+  /// 選取能延伸到的範圍：這一章第一段正文的開頭到最後一段的結尾。拖把手
+  /// 時每一下都要用，同一份章節內容只算一次。
+  ChapterTextRange get bounds => _bodies[blocks] ??= bodyRangeOf(blocks);
+
+  static final Expando<ChapterTextRange> _bodies = Expando();
 
   /// [blocks] 的正文（章名、插圖不算）從第一段開頭到最後一段結尾；沒有
   /// 正文時是空範圍。

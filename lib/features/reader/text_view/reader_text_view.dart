@@ -1600,8 +1600,9 @@ class _ReaderTextViewState extends State<ReaderTextView>
             repaint: controller,
             paintFor: _touch.paintFor,
             caretAt: _touch.caretAt,
-            autoScrollBy: _viewportCommands.continuousScrollBy,
-            onAutoScrollEnd: () => unawaited(_viewportCommands.settleScroll()),
+            autoScrollBy: _viewportCommands.selectionScrollBy,
+            onAutoScrollEnd: () =>
+                unawaited(_viewportCommands.settleAfterSelectionScroll()),
             onHide: widget.onHideText == null
                 ? null
                 : (selection) => widget.onHideText!(selection.inParagraphs),

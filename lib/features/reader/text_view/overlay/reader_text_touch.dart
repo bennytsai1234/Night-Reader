@@ -81,8 +81,8 @@ final class ReaderTextTouch {
       boxes: <LineBox>[],
       startBox: null,
       endBox: null,
-      chapterStartShown: false,
-      chapterEndShown: false,
+      chapterStartAbove: null,
+      chapterEndBelow: null,
     );
     final geometry = _pipeline().geometry;
     if (!geometry.isSelectionCurrent(selection)) {
@@ -126,19 +126,23 @@ final class ReaderTextTouch {
         : range.end - 1;
     final starts = within(range.start, firstEnd);
     final ends = within(lastStart, range.end);
+    // 這一章正文的頭尾照文件索引裡第一塊、最後一塊的位置量，不查字形。
     final body = selection.bounds;
-    final first = body.isEmpty
-        ? const <LineBox>[]
-        : within(body.start, body.start + 1);
-    final last = body.isEmpty
-        ? const <LineBox>[]
-        : within(body.end - 1, body.end);
+    final blocks = selection.blocks;
+    final top = body.isEmpty
+        ? null
+        : _documentIndex.topOf(blocks.blockForCharOffset(body.start).key);
+    final bottom = body.isEmpty
+        ? null
+        : _documentIndex.bottomOf(blocks.blockForCharOffset(body.end - 1).key);
     return (
       boxes: within(range.start, range.end),
       startBox: starts.isEmpty ? null : starts.first,
       endBox: ends.isEmpty ? null : ends.last,
-      chapterStartShown: first.isNotEmpty && first.first.top >= 0,
-      chapterEndShown: last.isNotEmpty && last.last.bottom <= viewportHeight,
+      chapterStartAbove: top == null ? null : scroll - top,
+      chapterEndBelow: bottom == null
+          ? null
+          : bottom - (scroll + viewportHeight),
     );
   }
 

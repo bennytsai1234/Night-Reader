@@ -2,47 +2,50 @@ import 'package:night_reader/features/reader/chapter/reader_content_transformer.
 import 'package:night_reader/features/reader/text_view/overlay/selection_service.dart';
 
 /// 選到的字（照段落切開的 [selection]）在替換規則全部套用之後的原文
-/// [pattern]，與選到的那幾段的原文 [paragraphs]；有一段對不齊時傳回 null。
+/// [pattern]，與選到的那幾段的原文 [paragraphs]（插圖記號拿掉）；有一段
+/// 對不齊時傳回 null。[crossesIllustration] 是原文在選到的字中間夾著插圖
+/// 記號（插圖沒顯示時畫面上看不出來）：寫成規則會把插圖一起藏掉。
 ///
-/// 每段照選取位置逐字對齊取出（[sourceRangeOf]）。跨段時段與段之間放規則
-/// 看到的那兩段之間的字（[RuleStageText.gaps]：換行，原文有空行時連空行），
-/// 新規則接在既有規則之後才比對得到（同 Legado，規則連換行一起比對）。
-({String pattern, String paragraphs})? selectionSourceOf(
-  ParagraphSelection selection,
-  RuleStageText stage,
-) {
+/// 每段照選取位置逐字對齊（[sourceRangeOf]），再從規則看到的整章字
+/// （[RuleStageText.text]）原樣取出開頭到結尾那一截：跨段時段與段之間的
+/// 換行、空行原樣在裡面，新規則接在既有規則之後才比對得到（同 Legado，
+/// 規則連換行一起比對）。
+({String pattern, String paragraphs, bool crossesIllustration})?
+selectionSourceOf(ParagraphSelection selection, RuleStageText stage) {
   final pieces = selection.pieces;
   if (pieces.isEmpty) return null;
-  final pattern = StringBuffer();
-  final paragraphs = StringBuffer();
+  int? from;
+  int? to;
   for (var i = 0; i < pieces.length; i += 1) {
     final piece = pieces[i];
     final index = piece.paragraphIndex;
     if (index >= stage.paragraphs.length) return null;
-    final source = stage.paragraphs[index];
     final range = sourceRangeOf(
-      source: source,
+      source: stage.paragraphs[index],
       shown: piece.paragraph,
       start: piece.start,
       end: piece.end,
     );
     if (range == null) return null;
-    final last = i == pieces.length - 1;
-    if (!last && index >= stage.gaps.length) return null;
-    final gap = last ? '' : stage.gaps[index];
-    pattern
-      ..write(
-        source.substring(
-          i == 0 ? range.start : 0,
-          last ? range.end : source.length,
-        ),
-      )
-      ..write(gap);
-    paragraphs
-      ..write(source)
-      ..write(gap);
+    final span = stage.spans[index];
+    if (i == 0) from = span.charStarts[range.start];
+    if (i == pieces.length - 1) to = span.charEnds[range.end - 1];
   }
-  return (pattern: pattern.toString(), paragraphs: paragraphs.toString());
+  if (from == null || to == null || to <= from) return null;
+  final first = stage.spans[pieces.first.paragraphIndex];
+  final last = stage.spans[pieces.last.paragraphIndex];
+  final markers = stage.markers.toSet();
+  final paragraphs = StringBuffer();
+  for (var k = first.start; k < last.end; k += 1) {
+    if (!markers.contains(k)) {
+      paragraphs.writeCharCode(stage.text.codeUnitAt(k));
+    }
+  }
+  return (
+    pattern: stage.text.substring(from, to),
+    paragraphs: paragraphs.toString(),
+    crossesIllustration: stage.markers.any((at) => from! <= at && at < to!),
+  );
 }
 
 /// 畫面上一段正文 [shown] 裡選到的 [start]–[end]，在同一段的原文 [source]

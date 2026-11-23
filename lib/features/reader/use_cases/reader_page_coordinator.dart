@@ -372,6 +372,10 @@ class ReaderPageCoordinator {
         _showNotice('找不到這段字的原文，沒有$action');
         return null;
       }
+      if (found.crossesIllustration) {
+        _showNotice('選到的字中間有插圖，沒有$action');
+        return null;
+      }
       return (
         replaceDao: replaceDao,
         pattern: found.pattern,
