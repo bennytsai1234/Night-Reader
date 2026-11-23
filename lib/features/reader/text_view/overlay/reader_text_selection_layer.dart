@@ -16,7 +16,7 @@ import 'package:night_reader/features/reader/text_view/overlay/selection_service
 ///
 /// 疊在 [child]（正文與它的點擊／長按手勢）之上、作為兄弟節點：按把手或
 /// 選單不會落到正文的點擊層而被當成「取消選取」。座標一律是正文 viewport
-/// 本地座標，幾何換算由閱讀畫面提供。把手拖出正文區上下緣時正文自己捲
+/// 本地座標，幾何換算由閱讀畫面提供。把手拖到正文區上下緣時正文自己捲
 /// （[autoScrollBy]），選取跟著延伸到這一章的章首或章末為止。
 final class ReaderTextSelectionLayer extends StatefulWidget {
   const ReaderTextSelectionLayer({
@@ -84,8 +84,13 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer>
   static const double _selectionAlpha = 0.35;
   static const String _webSearchUrl = 'https://www.google.com/search?q=';
 
-  // 以下照 Flutter 內建選字（`Scrollable` 的選取與 `EdgeDraggingAutoScroller`）：
-  // 手指超出正文區的距離最多算到這麼多，乘上速度係數就是每秒捲多少。
+  /// 手指進到正文區上下緣往裡這麼多就開始自動捲：正文區外面常常只剩頁首
+  /// 頁尾那一條，關掉頁首頁尾時幾乎沒有，等手指拖出正文區才捲會捲不動。
+  static const double _autoScrollZone = 40;
+
+  // 速度照 Flutter 內建選字（`Scrollable` 的選取與 `EdgeDraggingAutoScroller`）：
+  // 推進的距離最多算到這麼多，乘上速度係數就是每秒捲多少。手指在 [_autoScrollZone]
+  // 裡從內緣走到正文區邊上，推進的距離從 0 漲到最多。
   static const double _overDragMax = 20;
   static const double _autoScrollVelocityScalar = 30;
 
@@ -296,14 +301,16 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer>
     unawaited(HapticFeedback.selectionClick());
   }
 
-  /// 手指超出正文區上緣（負）或下緣（正）多少，最多算到 [_overDragMax]。
+  /// 手指往上緣（負）或下緣（正）推進多少：進到 [_autoScrollZone] 才算，
+  /// 到正文區邊上（或拖出去）時是 [_overDragMax]。
   double _overDrag() {
     final finger = _finger;
     if (finger == null) return 0;
-    if (finger.dy < 0) return -math.min(-finger.dy, _overDragMax);
-    if (finger.dy > _viewportHeight) {
-      return math.min(finger.dy - _viewportHeight, _overDragMax);
-    }
+    const scale = _overDragMax / _autoScrollZone;
+    final up = _autoScrollZone - finger.dy;
+    if (up > 0) return -math.min(up * scale, _overDragMax);
+    final down = finger.dy - (_viewportHeight - _autoScrollZone);
+    if (down > 0) return math.min(down * scale, _overDragMax);
     return 0;
   }
 

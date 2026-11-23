@@ -992,7 +992,7 @@ void main() {
       expect(service.active, isTrue);
     });
 
-    testWidgets('把手拖出正文區下緣時正文往下捲，超出越多越快，放開就停並記下位置', (tester) async {
+    testWidgets('把手拖到正文區下緣往裡 40 以內時正文往下捲，越靠邊越快，放開就停並記下位置', (tester) async {
       final deltas = <double>[];
       var settled = 0;
       final display = _chapter().displayText;
@@ -1009,23 +1009,23 @@ void main() {
           .getSize(find.byType(ReaderTextSelectionLayer))
           .height;
       final gesture = await grabEnd(tester);
-      expect(deltas, isEmpty, reason: '還在正文區裡不捲');
+      expect(deltas, isEmpty, reason: '離下緣還遠，不捲');
 
-      await gesture.moveTo(Offset(box.right + 8, height + 5));
+      await gesture.moveTo(Offset(box.right + 8, height - 30));
       for (var i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 16));
       }
       expect(deltas, isNotEmpty);
       final slow = deltas.last;
       expect(slow, greaterThan(0));
-      // 超出 5，每秒 5 × 30。
+      // 進到往裡 40 那條線之後 10：推進 10 × 20 / 40 = 5，每秒 5 × 30。
       expect(slow, closeTo(5 * 30 * 0.016, 0.01));
 
       await gesture.moveTo(Offset(box.right + 8, height + 200));
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 16));
       }
-      // 超出的距離最多算到 20。
+      // 拖出正文區也最多算到 20。
       expect(deltas.last, closeTo(20 * 30 * 0.016, 0.01));
 
       await gesture.up();
@@ -1034,6 +1034,27 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(deltas, hasLength(count), reason: '放開就停');
       expect(settled, 1);
+    });
+
+    testWidgets('拖到正文區上緣往裡 40 以內時正文往上捲', (tester) async {
+      final deltas = <double>[];
+      final display = _chapter().displayText;
+      await pumpLayer(
+        tester,
+        caretAt: (_) => display.indexOf('天色'),
+        autoScrollBy: (delta) async {
+          deltas.add(delta);
+          return true;
+        },
+      );
+      final gesture = await grabEnd(tester);
+      await gesture.moveTo(Offset(box.right + 8, 0));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(deltas, isNotEmpty);
+      expect(deltas.last, closeTo(-20 * 30 * 0.016, 0.01));
+      await gesture.up();
     });
 
     testWidgets('這一章的最後一行整行在畫面上時就不再捲', (tester) async {
