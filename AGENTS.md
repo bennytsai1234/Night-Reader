@@ -47,6 +47,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - **開分支加 `--no-track`**：這台的 `push.default=upstream`，從 `origin/beta` 開的分支沒加會直接推進 `beta`。
 - **新 worktree 的 sqlite3**：公司網路會改掉 sqlite3 套件下載的 `sqlite3.dll`，雜湊核對不過就建不起來。`.githooks/post-checkout` 會從主資料夾複製核對過的一份；建置仍報雜湊不符時，手動複製主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-*\` 裡最新的那份到 worktree 的同一個位置。
 - 碰到這些情況先讀對應的文件：
+  - 使用者說「處理巡檢」、處理標 `auto-audit` 的 issue：`docs/agents/audit-triage.md`
   - 判斷掉幀是誰造成的、某件工作佔不佔主執行緒：`docs/agents/main-thread.md`
   - 幾個旗標互相牽動、要改成狀態機：`docs/state-machines.md`「做法」，做完在那裡加一列
   - 連手機、拿崩潰日誌或書源、在手機上量效能：`docs/agents/phone.md`
