@@ -20,10 +20,10 @@ bool chapterBorrowable(BookChapter chapter) => chapterIsDownloadable(chapter);
 ///
 /// 同一章分頁的停止點用借的書源目錄的下一章（最後一章用第一章，同引擎沒給
 /// 停點時的做法），不拿主書源的。插圖用借的書源抓進這本書的插圖資料夾；
-/// 連不上的照現狀留給書架自動下載補。正文要讀得到（同換源）；寫進去之前
-/// 再看一次主書源這一章還在目錄裡、沒有改成付費章節、[cancelToken] 沒有
-/// 取消。傳回存進去的正文；借不成丟 [AppException]（書源搜不到、抓不到時
-/// 照書源工作原本丟的）。
+/// 連不上的照現狀留給書架自動下載補。正文要讀得到（同換源）；寫進去的
+/// 同一個交易裡再看一次主書源這一章還在目錄裡、沒有改成付費章節、
+/// [cancelToken] 沒有取消。傳回存進去的正文；借不成丟 [AppException]
+/// （書源搜不到、抓不到時照書源工作原本丟的）。
 Future<String> borrowChapter({
   required Book book,
   required BookChapter chapter,
@@ -62,25 +62,29 @@ Future<String> borrowChapter({
     );
     if (pending > 0) await BookIllustrationStorage.markUnfetched(book);
   }
-  if (cancelToken?.cancelError case final cancelled?) throw cancelled;
-  final current = await chapterDao.getByUrl(book.bookUrl, chapter.url);
-  if (current == null) {
-    throw SourceException('這一章已經不在目錄裡', sourceUrl: book.origin);
-  }
-  final saved =
-      await ReaderChapterContentStore(
-        chapterDao: chapterDao,
-        contentDao: contentDao,
-      ).saveRawContent(
-        book: book,
-        chapter: current,
-        content: content,
-        // 主書源目錄的章名、字數這類不改。
-        saveChapterMetadata: false,
-        replaceStored: true,
-      );
-  if (!saved) throw LockedChapterException();
-  return content;
+  // 取消、這一章還在不在目錄、是不是付費章節，和寫入在同一個交易裡看：
+  // 中間不會被關面板、換目錄插進來。
+  return chapterDao.transaction(() async {
+    if (cancelToken?.cancelError case final cancelled?) throw cancelled;
+    final current = await chapterDao.getByUrl(book.bookUrl, chapter.url);
+    if (current == null) {
+      throw SourceException('這一章已經不在目錄裡', sourceUrl: book.origin);
+    }
+    final saved =
+        await ReaderChapterContentStore(
+          chapterDao: chapterDao,
+          contentDao: contentDao,
+        ).saveRawContent(
+          book: book,
+          chapter: current,
+          content: content,
+          // 主書源目錄的章名、字數這類不改。
+          saveChapterMetadata: false,
+          replaceStored: true,
+        );
+    if (!saved) throw LockedChapterException();
+    return content;
+  });
 }
 
 String _stopAt(List<BookChapter> chapters, int index) {

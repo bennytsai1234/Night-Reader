@@ -3,26 +3,58 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/source_switch/source_switch_service.dart';
+import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
 import 'package:night_reader/features/book_detail/widgets/borrow_chapter_toc.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 
-/// 借源清單一打開就搜尋；這裡不給結果，讀書源一直等著，清單留在搜尋中。
-class _PendingSourceDao extends Fake implements BookSourceDao {
+/// 借的書源：書源管理裡只有它。
+class _SourceDao extends Fake implements BookSourceDao {
+  _SourceDao(this.source);
+
+  final BookSource source;
+
   @override
-  Future<List<BookSource>> getEnabled() => Completer<List<BookSource>>().future;
+  Future<BookSource?> getByUrl(String url) async =>
+      url == source.bookSourceUrl ? source : null;
 }
 
 class _FakeSearchBookDao extends Fake implements SearchBookDao {}
+
+/// 借的書源的詳情與目錄。
+class _LenderSite extends BookSourceService {
+  _LenderSite(this.book, this.chapters);
+
+  final Book book;
+  final List<BookChapter> chapters;
+
+  @override
+  Future<Book> getBookInfo(
+    BookSource source,
+    Book book, {
+    CancelToken? cancelToken,
+  }) async => this.book;
+
+  @override
+  Future<List<BookChapter>> getChapterList(
+    BookSource source,
+    Book book, {
+    int? chapterLimit,
+    int? pageConcurrency,
+    CancelToken? cancelToken,
+    bool requireComplete = false,
+  }) async => chapters;
+}
 
 void main() {
   final book = Book(
@@ -40,6 +72,7 @@ void main() {
   final source = BookSource(
     bookSourceUrl: 'https://lender.example',
     bookSourceName: '借的書源',
+    loginUrl: 'https://lender.example/login',
   );
   final lenderBook = Book(
     bookUrl: 'https://lender.example/book',
@@ -58,17 +91,40 @@ void main() {
   );
 
   group('借源面板', () {
-    setUp(() {
-      GetIt.instance
-        ..registerSingleton<BookSourceDao>(_PendingSourceDao())
-        ..registerSingleton<SearchBookDao>(_FakeSearchBookDao());
-    });
-    tearDown(() => GetIt.instance.reset());
+    final candidate = SearchBook(
+      bookUrl: lenderBook.bookUrl,
+      name: '夜雨听书',
+      author: book.author,
+      origin: source.bookSourceUrl,
+      originName: source.bookSourceName,
+    );
 
-    Future<Future<BookSource?>> open(
+    setUp(() {
+      ChangeSourceSheet.createProvider = (book) =>
+          BookDetailChangeSourceProvider(
+              book,
+              service: _LenderSite(lenderBook, toc.chapters),
+              sourceDao: _SourceDao(source),
+              searchBookDao: _FakeSearchBookDao(),
+              autoStart: false,
+            )
+            // 主書源寫繁體、借的書源寫簡體：搜尋照同一本書篩過，照樣列出。
+            ..allResults = [candidate]
+            ..filteredResults = [candidate]
+            ..status = '搜尋完成';
+    });
+    tearDown(() => ChangeSourceSheet.createProvider = null);
+
+    /// 打開借源面板、點借的書源、點它目錄的第二章。
+    Future<Future<BookSource?>> pickChapter(
       WidgetTester tester,
       BorrowFromSource borrowFrom,
     ) async {
+      // 手機的直式畫面：面板佔四分之三高。
+      tester.view
+        ..physicalSize = const Size(1080, 2400)
+        ..devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
       late Future<BookSource?> shown;
       await tester.pumpWidget(
         app(
@@ -86,39 +142,70 @@ void main() {
         ),
       );
       await tester.tap(find.text('借源'));
-      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
       expect(find.text('單章借源'), findsOneWidget);
-      return shown;
-    }
 
-    Future<void> borrow(WidgetTester tester, CancelToken cancelToken) {
-      final sheet = tester.widget<ChangeSourceSheet>(
-        find.byType(ChangeSourceSheet),
-      );
-      return sheet.borrow!.borrowFrom(source, toc, 1, cancelToken);
+      await tester.tap(find.text('借的書源'));
+      await tester.pumpAndSettle();
+      // 估計的那一章照目錄的「目前」標出來。
+      expect(find.text('目前'), findsOneWidget);
+      await tester.tap(find.text('第二章'));
+      await tester.pump();
+      return shown;
     }
 
     Future<void> dismiss(WidgetTester tester) async {
       tester.state<NavigatorState>(find.byType(Navigator)).pop();
-      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
       expect(find.byType(ChangeSourceSheet), findsNothing);
     }
 
-    testWidgets('借好了交回借的書源', (tester) async {
-      final shown = await open(tester, (_, _, _, _) async {});
-      await borrow(tester, CancelToken());
-      await dismiss(tester);
+    testWidgets('點一章就借，借好了面板收起、交回借的書源', (tester) async {
+      final picks = <int>[];
+      final shown = await pickChapter(tester, (from, toc, index, _) async {
+        expect(from, same(source));
+        picks.add(index);
+      });
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(picks, [1]);
+      expect(find.byType(ChangeSourceSheet), findsNothing);
       expect(await shown, same(source));
     });
 
-    testWidgets('借不成、沒借就關掉，交回 null', (tester) async {
-      final shown = await open(
+    testWidgets('借的書源要登入：原因與「登入」寫在面板裡、點得到', (tester) async {
+      final shown = await pickChapter(
         tester,
-        (_, _, _, _) async => throw StateError('抓不到'),
+        (_, _, _, _) async => throw LoginCheckException('正文需要登入後閱讀'),
       );
-      await expectLater(borrow(tester, CancelToken()), throwsStateError);
+      await tester.pump();
+
+      expect(find.textContaining('需要登入'), findsOneWidget);
+      expect(
+        find.widgetWithText(TextButton, '登入').hitTestable(),
+        findsOneWidget,
+      );
       await dismiss(tester);
       expect(await shown, isNull);
+    });
+
+    testWidgets('借的途中按返回：當下就取消，晚到的結果不會再關一次', (tester) async {
+      final borrowing = Completer<void>();
+      late CancelToken token;
+      final shown = await pickChapter(tester, (_, _, _, cancelToken) {
+        token = cancelToken;
+        return borrowing.future;
+      });
+
+      tester.state<NavigatorState>(find.byType(Navigator)).pop();
+      expect(token.isCancelled, isTrue);
+      borrowing.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ChangeSourceSheet), findsNothing);
+      // 底下那一頁還在。
+      expect(find.text('借源'), findsOneWidget);
+      expect(await shown, same(source));
     });
   });
 

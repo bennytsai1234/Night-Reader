@@ -215,7 +215,7 @@ class ChapterContentPreparationPipeline {
           replaceStored: replaceStored,
           saveChapterMetadata: saveChapterMetadata,
         );
-        return result;
+        return await _keptResult(chapter, result, replaceStored);
       }
       // 等下一次重試期間取消了就不再試，什麼都不寫。
       await Future.any<Object?>([
@@ -232,7 +232,27 @@ class ChapterContentPreparationPipeline {
       replaceStored: replaceStored,
       saveChapterMetadata: saveChapterMetadata,
     );
-    return result;
+    return await _keptResult(chapter, result, replaceStored);
+  }
+
+  /// 自動補抓交出的是最後存著的那一份：抓的期間這一章已經存好正文（使用者
+  /// 借來或重新取得的，ADR 0080）時，晚到的這份沒存進去，抓失敗也一樣，
+  /// 交出存著的，下載、閱讀器與插圖才照同一份算。
+  Future<ChapterContentPreparationResult> _keptResult(
+    BookChapter chapter,
+    ChapterContentPreparationResult fetched,
+    bool replaceStored,
+  ) async {
+    final store = contentStore;
+    if (replaceStored || store == null || book.isLocal) return fetched;
+    final entry = await store.getContentEntry(book: book, chapter: chapter);
+    if (entry == null ||
+        !entry.hasDisplayContent ||
+        entry.isFailed ||
+        entry.content == fetched.content) {
+      return fetched;
+    }
+    return ChapterContentPreparationResult.ready(entry.content!);
   }
 
   Future<ChapterContentPreparationResult> _fetchOnce({

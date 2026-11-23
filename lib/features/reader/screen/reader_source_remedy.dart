@@ -11,6 +11,7 @@ import 'package:night_reader/features/reader/screen/reader_borrow_chapter.dart';
 import 'package:night_reader/features/reader/screen/reader_chapter_info.dart';
 import 'package:night_reader/features/reader/screen/reader_change_source.dart';
 import 'package:night_reader/features/reader/screen/reader_controller_host.dart';
+import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/session/reader_runtime.dart';
 import 'package:night_reader/features/reader/use_cases/reader_page_coordinator.dart';
 import 'package:night_reader/features/reader/session/reader_state.dart';
@@ -130,9 +131,11 @@ final class ReaderSourceRemedy {
         ),
         // 開不起來的那一章（ADR 0080）；本地書、還沒有目錄、付費章節灰著。
         OutlinedButton.icon(
-          onPressed: _canBorrow(runtime, runtime.unavailableChapterIndex)
-              ? () => unawaited(_borrowUnavailable(runtime))
-              : null,
+          onPressed: switch (runtime.unavailableLocation) {
+            final failed? when _canBorrow(runtime, failed.chapterIndex) =>
+              () => unawaited(_borrowUnavailable(runtime, failed)),
+            _ => null,
+          },
           icon: const Icon(Icons.content_paste_go_rounded),
           label: const UiText('單章借源'),
         ),
@@ -151,12 +154,19 @@ final class ReaderSourceRemedy {
     return chapter != null && chapterBorrowable(chapter);
   }
 
-  /// 開書失敗的「單章借源」：借好照「重試」重開。
-  Future<void> _borrowUnavailable(ReaderRuntime runtime) => _borrowChapter.show(
-    runtime.unavailableChapterIndex,
+  /// 開書失敗的「單章借源」：借開不起來的那一章，借好在那個位置重開；
+  /// 開在那一章才算換好。
+  Future<void> _borrowUnavailable(
+    ReaderRuntime runtime,
+    ReaderLocation failed,
+  ) => _borrowChapter.show(
+    failed.chapterIndex,
     apply: () async {
-      await _retryReader(runtime);
-      return !runtime.disposed && runtime.state.hasStableWorld;
+      if (runtime.disposed) return false;
+      await runtime.openBook(at: failed);
+      return !runtime.disposed &&
+          runtime.state.hasStableWorld &&
+          runtime.state.visibleLocation.chapterIndex == failed.chapterIndex;
     },
   );
 
