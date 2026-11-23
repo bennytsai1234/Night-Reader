@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
-import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/source_switch/source_switch_service.dart';
@@ -320,38 +319,23 @@ class _AudiobookPageState extends State<AudiobookPage> {
           DownloadService().quiesceForSourceSwitch(oldBook),
       assetRetirer: BookCoverStorageService().handoffSourceSwitchAssets,
     );
-    PreparedSourceSwitch? done;
-    await AppBottomSheet.showCustom<void>(
+    final prepared = await ChangeSourceSheet.showForSwitch(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => ChangeSourceSheet(
-        book: book,
-        onSelectSource: (candidate, toc) async {
-          try {
-            await _player.saveProgress();
-            final prepared = await service.prepareSwitch(
-              book,
-              candidate,
-              targetChapterIndex: book.chapterIndex,
-              targetChapterTitle: book.durChapterTitle,
-              toc: toc,
-            );
-            await service.commitSwitch(book, prepared);
-            AppEventBus().fire(AppEventBus.upBookshelf);
-            done = prepared;
-            return (
-              success: true,
-              message: '已切換到 ${prepared.source.bookSourceName}',
-            );
-          } catch (error) {
-            if (!isSourceSwitchUnavailable(error)) rethrow;
-            return (success: false, message: failureMessage('換源', error));
-          }
-        },
-      ),
+      book: book,
+      switchTo: (candidate, toc) async {
+        await _player.saveProgress();
+        final prepared = await service.prepareSwitch(
+          book,
+          candidate,
+          targetChapterIndex: book.chapterIndex,
+          targetChapterTitle: book.durChapterTitle,
+          toc: toc,
+        );
+        await service.commitSwitch(book, prepared);
+        AppEventBus().fire(AppEventBus.upBookshelf);
+        return prepared;
+      },
     );
-    final prepared = done;
     if (prepared == null || !context.mounted) return;
     await _player.stop();
     if (!context.mounted) return;

@@ -10,7 +10,6 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
-import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
@@ -44,7 +43,6 @@ import 'package:night_reader/shared/navigation/status_bar.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/lists/number_stepper_row.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
@@ -506,22 +504,12 @@ class _ComicReaderPageState extends State<ComicReaderPage>
   /// 換源：清單只列漫畫源（ADR 0053）；選好後先抓目標那一話確認有圖，
   /// 再換掉書與目錄，用新書源重開閱讀器，接著讀同一話同一張。
   Future<void> _showChangeSource() async {
-    PreparedSourceSwitch? prepared;
-    await AppBottomSheet.showCustom<void>(
+    final done = await ChangeSourceSheet.showForSwitch(
       context: context,
       constraints: ReaderMenuSheet.constraintsFor(context, _settings),
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => ChangeSourceSheet(
-        book: _book,
-        onSelectSource: (candidate, toc) => _switchSource(
-          candidate,
-          toc: toc,
-          onSuccess: (done) => prepared = done,
-        ),
-      ),
+      book: _book,
+      switchTo: _switchSource,
     );
-    final done = prepared;
     if (!mounted || done == null) return;
     unawaited(
       Navigator.of(context).pushReplacement(
@@ -530,44 +518,37 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     );
   }
 
-  Future<ChangeSourceOutcome> _switchSource(
-    SearchBook candidate, {
+  Future<PreparedSourceSwitch> _switchSource(
+    SearchBook candidate,
     SourceToc? toc,
-    required void Function(PreparedSourceSwitch prepared) onSuccess,
-  }) async {
+  ) async {
     final service = SourceSwitchService(
       operationQuiescer: (oldBook) =>
           DownloadService().quiesceForSourceSwitch(oldBook),
       assetRetirer: BookCoverStorageService().handoffSourceSwitchAssets,
     );
-    try {
-      await _flush();
-      final location = _progress.value;
-      final title = _titleOf(location.chapterIndex);
-      final prepared = await service.prepareSwitch(
-        _book.copyWith(
-          chapterIndex: location.chapterIndex,
-          durChapterTitle: title,
-          charOffset: location.pageIndex,
-        ),
-        candidate,
-        targetChapterIndex: location.chapterIndex,
-        targetChapterTitle: title.isEmpty ? null : title,
-        toc: toc,
-      );
-      // 換源時文字書照字的位置對，漫畫沒有字：對到同名的那一話就接著同一
-      // 張（新書源張數不同時，開書時夾在範圍內）。
-      prepared.migratedBook.charOffset = prepared.targetChapter.title == title
-          ? location.pageIndex
-          : 0;
-      await service.commitSwitch(_book, prepared);
-      AppEventBus().fire(AppEventBus.upBookshelf);
-      onSuccess(prepared);
-      return (success: true, message: '已切換到 ${prepared.source.bookSourceName}');
-    } catch (error) {
-      if (!isSourceSwitchUnavailable(error)) rethrow;
-      return (success: false, message: failureMessage('換源', error));
-    }
+    await _flush();
+    final location = _progress.value;
+    final title = _titleOf(location.chapterIndex);
+    final prepared = await service.prepareSwitch(
+      _book.copyWith(
+        chapterIndex: location.chapterIndex,
+        durChapterTitle: title,
+        charOffset: location.pageIndex,
+      ),
+      candidate,
+      targetChapterIndex: location.chapterIndex,
+      targetChapterTitle: title.isEmpty ? null : title,
+      toc: toc,
+    );
+    // 換源時文字書照字的位置對，漫畫沒有字：對到同名的那一話就接著同一
+    // 張（新書源張數不同時，開書時夾在範圍內）。
+    prepared.migratedBook.charOffset = prepared.targetChapter.title == title
+        ? location.pageIndex
+        : 0;
+    await service.commitSwitch(_book, prepared);
+    AppEventBus().fire(AppEventBus.upBookshelf);
+    return prepared;
   }
 
   /// 刪掉這一話下載好的與抓到一半的圖，照書源重抓。
