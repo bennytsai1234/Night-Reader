@@ -218,6 +218,9 @@ class PreferKey {
 
   /// 朗讀高亮的深淺（不透明度）。
   static const String readerHighlightStrength = 'reader_highlight_strength';
+
+  /// 漫畫閱讀器深色時的紙色（`ComicPaperTint.name`）。
+  static const String comicPaperTint = 'comic_paper_tint';
   static const String readerClickActions = 'reader_click_actions';
   static const String readerPaddingHorizontal = 'reader_padding_horizontal';
   static const String readerLineChars = 'reader_line_chars';

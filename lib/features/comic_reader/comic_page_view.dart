@@ -25,6 +25,7 @@ class ComicPageView extends StatefulWidget {
     required this.onFailed,
     this.onOpenWeb,
     this.remedyFor,
+    this.tint,
   });
 
   final ComicPageImages images;
@@ -43,6 +44,10 @@ class ComicPageView extends StatefulWidget {
   /// 載入失敗時能解決它的那一步（登入、前往驗證）；沒有時是 null。有的話
   /// 「用網頁開啟」讓位給它。
   final SourceFailureRemedy? Function(Object error)? remedyFor;
+
+  /// 深色時的紙色：圖的每個點乘上它，白底變成它、黑線條照樣黑；透明的
+  /// 地方維持透明。null 照原色。
+  final Color? tint;
 
   @override
   State<ComicPageView> createState() => _ComicPageViewState();
@@ -152,6 +157,10 @@ class _ComicPageViewState extends State<ComicPageView> {
       height: size.height,
       fit: BoxFit.fill,
       filterQuality: FilterQuality.medium,
+      // 畫圖時一起乘上，不另開一層。modulate 連透明度一起乘，透明的
+      // 地方不會染成一塊紙色（multiply 會）。
+      color: widget.tint,
+      colorBlendMode: widget.tint == null ? null : BlendMode.modulate,
     );
     if (!_fadeIn) return picture;
     // 淡入播完就拿掉底下的骨架：不然它一直在呼吸、每幀重畫。

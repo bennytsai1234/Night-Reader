@@ -92,6 +92,7 @@ class ComicStripView extends StatefulWidget {
     this.initialFraction = 0,
     this.webUrlOpener,
     this.remedyFor,
+    this.pageTint,
   });
 
   final ComicStripModel model;
@@ -119,6 +120,9 @@ class ComicStripView extends StatefulWidget {
 
   /// 載入失敗時能解決它的那一步（登入、前往驗證）；沒有時是 null。
   final SourceFailureRemedy? Function(Object error)? remedyFor;
+
+  /// 每張圖乘上的紙色（[ComicPageView.tint]）；null 照原色。
+  final Color? pageTint;
 
   static const double minScale = 0.5;
   static const double maxScale = 3;
@@ -869,6 +873,7 @@ class _ComicStripViewState extends State<ComicStripView>
           onFailed: (failed) => _onPageFailed(item, failed),
           onOpenWeb: url == null || opener == null ? null : () => opener(url),
           remedyFor: widget.remedyFor,
+          tint: widget.pageTint,
         );
       case ComicTransitionItem():
         final pending = _model.pendingChapterOf(item);
