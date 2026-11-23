@@ -15,6 +15,7 @@ import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_deadline.dart';
 
+import 'content_re_segmenter.dart';
 import 'page_leftovers.dart';
 import 'reader_content.dart';
 import 'semantic_paragraph_formatter.dart';
@@ -963,7 +964,10 @@ class ReaderContentTransformer {
     );
 
     if (reSegmentEnabled) {
-      content = _reSegment(content);
+      content = ContentReSegmenter.reSegment(
+        content,
+        chapterTitle: chapterTitle,
+      );
     }
 
     if (useReplaceRules) {
@@ -985,43 +989,6 @@ class ReaderContentTransformer {
 
     return content;
   }
-
-  static String _reSegment(String content) {
-    final normalized = content
-        .replaceAll(RegExp(r'\r\n?'), '\n')
-        .replaceAll(RegExp(r'[ \t]+\n'), '\n');
-    final nonEmptyLines = normalized
-        .split('\n')
-        .where((line) => line.trim().isNotEmpty)
-        .length;
-    if (nonEmptyLines > 1 || normalized.trim().length < 180) {
-      return normalized;
-    }
-    return _splitSingleLineByPunctuation(normalized);
-  }
-
-  static String _splitSingleLineByPunctuation(String content) {
-    final buffer = StringBuffer();
-    for (var index = 0; index < content.length; index++) {
-      final char = content[index];
-      buffer.write(char);
-      if (!_sentenceEndChars.contains(char)) continue;
-
-      while (index + 1 < content.length &&
-          _sentenceCloseChars.contains(content[index + 1])) {
-        index += 1;
-        buffer.write(content[index]);
-      }
-
-      if (index + 1 < content.length && content[index + 1].trim().isNotEmpty) {
-        buffer.write('\n');
-      }
-    }
-    return buffer.toString();
-  }
-
-  static const String _sentenceEndChars = '。！？!?；;';
-  static const String _sentenceCloseChars = '」』”’））》〉】]';
 
   static String _processTitle({
     required String chapterTitle,
