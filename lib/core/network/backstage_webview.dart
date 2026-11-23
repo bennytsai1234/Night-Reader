@@ -54,6 +54,32 @@ class BackstageWebView {
     return _hiddenWebViewWidget!;
   }
 
+  /// 網頁執行 JS 拿回的結果轉成內容：Android 把字串包成 JSON 字串（加引號
+  /// 與跳脫），解開就是網頁原本的字。HTML 實體原樣留給規則解析（同 Legado
+  /// 的 `unescapeJson`）：在這裡多解一次，正文裡字面上的 `&lt;span&gt;`
+  /// 會變成標籤被刪掉。
+  @visibleForTesting
+  static String contentOf(Object result) {
+    final content = result.toString();
+    if (content.startsWith('"') && content.endsWith('"')) {
+      return jsonDecode(content) as String;
+    }
+    return content;
+  }
+
+  /// [sourceRegex] 在網頁內容裡找到的資源網址，有分組時取第一組；沒找到是
+  /// null。Legado 等的是網頁真的載入的資源網址，這裡在內容裡找，網址寫在
+  /// HTML 屬性裡，實體（`&amp;`）解開才是真的網址。
+  @visibleForTesting
+  static String? sourceIn(String content, String sourceRegex) {
+    final page = HtmlUnescape().convert(content);
+    final match = RegExp(sourceRegex).firstMatch(page);
+    if (match == null) return null;
+    return match.groupCount > 0
+        ? (match.group(1) ?? match.group(0) ?? '')
+        : (match.group(0) ?? '');
+  }
+
   Future<Map<String, dynamic>> getStrResponse() async {
     // 給了 HTML 時網址只當基準網址，沒有載入。
     if ((html ?? '').isEmpty && (url ?? '').isNotEmpty) {
@@ -140,23 +166,12 @@ class BackstageWebView {
                 jsToRun,
               );
               if (result.toString().isNotEmpty && result.toString() != 'null') {
-                var content = result.toString();
-                // Remove surrounding quotes if it's a JSON string
-                if (content.startsWith('"') && content.endsWith('"')) {
-                  content = jsonDecode(content);
-                }
-                content = HtmlUnescape().convert(content);
+                final content = contentOf(result);
 
-                if (sourceRegex != null && sourceRegex!.isNotEmpty) {
-                  final match = RegExp(sourceRegex!).firstMatch(content);
-                  if (match != null) {
-                    finish({
-                      'body': match.groupCount > 0
-                          ? (match.group(1) ?? match.group(0) ?? '')
-                          : (match.group(0) ?? ''),
-                      'url': currentUrl,
-                      'code': 200,
-                    });
+                final regex = sourceRegex;
+                if (regex != null && regex.isNotEmpty) {
+                  if (sourceIn(content, regex) case final source?) {
+                    finish({'body': source, 'url': currentUrl, 'code': 200});
                     return;
                   }
                 }
