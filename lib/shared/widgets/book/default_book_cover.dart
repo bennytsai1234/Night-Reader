@@ -35,10 +35,15 @@ class DefaultBookCover extends StatelessWidget {
   const DefaultBookCover({
     super.key,
     required this.bookName,
+    this.bookUrl,
     this.kind = BookSourceKind.novel,
   });
 
+  /// 星星照它放。
   final String bookName;
+
+  /// 書的網址，用來找書在書架上的位置；null 或不在書架上時天空取中間。
+  final String? bookUrl;
 
   /// 這本書是哪一類；漫畫、有聲畫各自的變體，其他畫原本的天空。
   final BookSourceKind kind;
@@ -78,7 +83,7 @@ class DefaultBookCover extends StatelessWidget {
     painter: _SkyPainter(
       bookName,
       kind,
-      position: ShelfTrial.positionOf(bookName, kind),
+      position: ShelfTrial.positionOf(bookUrl),
       day: Theme.of(context).brightness == Brightness.light,
     ),
     size: Size.infinite,

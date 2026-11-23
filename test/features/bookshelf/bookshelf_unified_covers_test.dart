@@ -9,6 +9,7 @@ import 'package:night_reader/shared/widgets/book/book_cover_widget.dart';
 import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/shared/shelf_trial.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:provider/provider.dart';
@@ -34,14 +35,17 @@ void main() {
 
   late BookshelfProvider provider;
 
-  Future<void> setUpShelf(Map<String, Object> prefs) async {
+  Future<void> setUpShelf(
+    Map<String, Object> prefs, {
+    List<Book>? shelf,
+  }) async {
     await GetIt.instance.reset();
     SharedPreferences.setMockInitialValues(prefs);
     GetIt.instance
       ..registerSingleton<SharedPreferences>(
         await SharedPreferences.getInstance(),
       )
-      ..registerSingleton<BookDao>(_FakeBookDao(books))
+      ..registerSingleton<BookDao>(_FakeBookDao(shelf ?? books))
       ..registerSingleton<BookSourceDao>(_FakeBookSourceDao())
       ..registerSingleton<ChapterDao>(_FakeChapterDao());
     provider = BookshelfProvider(
@@ -107,5 +111,24 @@ void main() {
 
     expect(provider.unifiedCovers, isTrue);
     expect(tileCover(tester), isNull);
+  });
+
+  testWidgets('同名、作者不同的兩本書，預設封面各照自己在書架上的位置', (tester) async {
+    final sameName = [
+      Book(bookUrl: 'a', origin: 'o', name: '同名書', author: '甲'),
+      Book(bookUrl: 'b', origin: 'o', name: '同名書', author: '乙'),
+    ]..forEach((book) => book.isInBookshelf = true);
+    await setUpShelf({}, shelf: sameName);
+    await pumpShelf(tester);
+
+    final tiles = tester
+        .widgetList<BookCoverWidget>(find.byType(BookCoverWidget))
+        .map((cover) => cover.bookUrl)
+        .toList();
+    expect(tiles, unorderedEquals(['a', 'b']));
+    expect(
+      {ShelfTrial.positionOf('a'), ShelfTrial.positionOf('b')},
+      {0.0, 1.0},
+    );
   });
 }

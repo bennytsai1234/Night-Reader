@@ -22,15 +22,18 @@ class BookCoverAmbience extends StatelessWidget {
     super.key,
     required this.coverUrl,
     required this.bookName,
+    this.bookUrl,
     this.kind = BookSourceKind.novel,
   });
 
   /// 詳情頁封面畫的網址；null 或空白時是預設封面。
   final String? coverUrl;
 
-  /// 預設封面用書名找書在書架上的位置（決定天空顏色），也決定星星與有聲書
-  /// 的音量條。
+  /// 預設封面的星星與有聲書的音量條照書名放。
   final String bookName;
+
+  /// 預設封面用它找書在書架上的位置（決定天空顏色）。
+  final String? bookUrl;
 
   /// 書的類別，預設封面畫哪一種變體。
   final BookSourceKind kind;
@@ -76,7 +79,7 @@ class BookCoverAmbience extends StatelessWidget {
     child: SizedBox(
       width: BookInfoHeader.coverWidth,
       height: BookInfoHeader.coverHeight,
-      child: DefaultBookCover(bookName: bookName, kind: kind),
+      child: DefaultBookCover(bookName: bookName, bookUrl: bookUrl, kind: kind),
     ),
   );
 
