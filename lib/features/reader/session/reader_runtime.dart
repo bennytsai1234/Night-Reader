@@ -452,9 +452,15 @@ class ReaderRuntime extends ChangeNotifier {
       _pendingUserNotice = notice;
     } else {
       if (!stateMachine.markUnavailable(token, error)) return;
+      _unavailableChapterIndex = notice.chapterIndex;
     }
     notifyListeners();
   }
+
+  /// 開書取不到正文（[ReaderLifecycle.unavailable]）時取不到的那一章：失敗
+  /// 頁的「單章借源」借的是它（ADR 0080）。
+  int get unavailableChapterIndex => _unavailableChapterIndex;
+  int _unavailableChapterIndex = 0;
 
   bool _targetsAnotherChapterThanOpen(ReaderOperationToken token) {
     final count = repository.chapterCount;

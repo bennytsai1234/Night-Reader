@@ -72,7 +72,8 @@ class ExportBookService {
               dir: await BookIllustrationStorage.dirFor(book),
             );
           }
-          await _chapterContentDao.saveContent(
+          // 補抓的期間使用者借來或重新取得的不蓋掉（ADR 0080）。
+          await _chapterContentDao.fillContent(
             contentKey: ReaderChapterContentDao.contentKey(
               origin: book.origin,
               bookUrl: book.bookUrl,

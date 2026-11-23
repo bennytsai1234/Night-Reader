@@ -5,7 +5,9 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
+import 'package:night_reader/core/source_switch/chapter_borrow.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_departure.dart';
+import 'package:night_reader/features/reader/screen/reader_borrow_chapter.dart';
 import 'package:night_reader/features/reader/screen/reader_chapter_info.dart';
 import 'package:night_reader/features/reader/screen/reader_change_source.dart';
 import 'package:night_reader/features/reader/screen/reader_controller_host.dart';
@@ -18,8 +20,9 @@ import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 
 /// 讀不到正文時的補救（ADR 0038）：開書失敗時正文底下的按鈕列（前往驗證、
-/// 登入、重試、換源、返回），閱讀中提示旁的「登入」「前往驗證」，查這本書
-/// 有登入的書源，登入或驗證回來後重開、跳到取不到的那一章或重抓這一章。
+/// 登入、重試、換源、單章借源、返回），閱讀中提示旁的「登入」「前往驗證」
+/// 「借源」，查這本書有登入的書源，登入或驗證回來後重開、跳到取不到的那一
+/// 章或重抓這一章；借源（ADR 0080）借好後同樣重開、跳過去或重排這一章。
 final class ReaderSourceRemedy {
   ReaderSourceRemedy({
     required this._context,
@@ -28,8 +31,10 @@ final class ReaderSourceRemedy {
     required this._host,
     required this._info,
     required this._changeSource,
+    required this._borrowChapter,
     required this._showNotice,
     required this._jumpToChapter,
+    required this._jumpToChapterAndWait,
     required this._exit,
     required this._restoreMenuWhenUncovered,
   });
@@ -40,10 +45,14 @@ final class ReaderSourceRemedy {
   final ReaderControllerHost _host;
   final ReaderChapterInfo _info;
   final ReaderChangeSource _changeSource;
+  final ReaderBorrowChapter _borrowChapter;
   final void Function(String message, {ReaderNoticeAction? action}) _showNotice;
 
   /// 跳到別章，同從目錄點一章（取不到的是別章時）。
   final void Function(int index) _jumpToChapter;
+
+  /// 跳到別章、等跳完（借來取不到的那一章之後）。
+  final Future<void> Function(int index) _jumpToChapterAndWait;
 
   /// 離開閱讀器（按鈕列的「返回」）。
   final VoidCallback _exit;
@@ -119,12 +128,66 @@ final class ReaderSourceRemedy {
           icon: const Icon(Icons.swap_horiz),
           label: const UiText('換源'),
         ),
+        // 開不起來的那一章（ADR 0080）；本地書、還沒有目錄、付費章節灰著。
+        OutlinedButton.icon(
+          onPressed: _canBorrow(runtime, runtime.unavailableChapterIndex)
+              ? () => unawaited(_borrowUnavailable(runtime))
+              : null,
+          icon: const Icon(Icons.content_paste_go_rounded),
+          label: const UiText('單章借源'),
+        ),
         TextButton.icon(
           onPressed: _exit,
           icon: const Icon(Icons.arrow_back),
           label: const UiText('返回'),
         ),
       ],
+    );
+  }
+
+  bool _canBorrow(ReaderRuntime runtime, int chapterIndex) {
+    if (_book.isLocal) return false;
+    final chapter = runtime.chapterAt(chapterIndex);
+    return chapter != null && chapterBorrowable(chapter);
+  }
+
+  /// 開書失敗的「單章借源」：借好照「重試」重開。
+  Future<void> _borrowUnavailable(ReaderRuntime runtime) => _borrowChapter.show(
+    runtime.unavailableChapterIndex,
+    apply: () async {
+      await _retryReader(runtime);
+      return !runtime.disposed && runtime.state.hasStableWorld;
+    },
+  );
+
+  /// 「更多」的「單章借源」：借目前這一章，借好照目前的位置重排。
+  Future<void> borrowCurrentChapter() async {
+    final runtime = _host.runtime;
+    if (runtime == null || !runtime.state.hasStableWorld) return;
+    await _borrowChapter.show(
+      _info.currentChapterIndex(runtime),
+      apply: () => runtime.disposed
+          ? Future.value(false)
+          : runtime.reloadContentPreservingLocation(),
+    );
+  }
+
+  /// 跳章或捲到下一章取不到時提示旁的「借源」：借好跳過去；取不到的就是
+  /// 正在讀的這一章（例如重新取得本章抓不到）時照目前的位置重排。
+  Future<void> _borrowFailed(int chapterIndex) async {
+    final runtime = _host.runtime;
+    if (runtime == null) return;
+    await _borrowChapter.show(
+      chapterIndex,
+      apply: () async {
+        if (runtime.disposed) return false;
+        if (_info.currentChapterIndex(runtime) == chapterIndex) {
+          return runtime.reloadContentPreservingLocation();
+        }
+        await _jumpToChapterAndWait(chapterIndex);
+        return !runtime.disposed &&
+            runtime.state.visibleLocation.chapterIndex == chapterIndex;
+      },
     );
   }
 
@@ -153,7 +216,20 @@ final class ReaderSourceRemedy {
       return;
     }
     if (!LoginCheckException.describes(message)) {
-      _showNotice(message);
+      final runtime = _host.runtime;
+      // 別的書源借這一章（ADR 0080）。
+      _showNotice(
+        message,
+        action:
+            chapterIndex != null &&
+                runtime != null &&
+                _canBorrow(runtime, chapterIndex)
+            ? (
+                label: '借源',
+                onPressed: () => unawaited(_borrowFailed(chapterIndex)),
+              )
+            : null,
+      );
       return;
     }
     // 要登入才讀得到：提示旁給「登入」，登入完重抓取不到的那一章（ADR 0038）。

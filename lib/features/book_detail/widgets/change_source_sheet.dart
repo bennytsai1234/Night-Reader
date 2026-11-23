@@ -1,10 +1,23 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/models/book/chapter_alignment.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
+import 'package:night_reader/core/source/source_interaction.dart';
+import 'package:night_reader/core/source_switch/same_book.dart';
 import 'package:night_reader/core/source_switch/source_switch_service.dart';
+import 'package:night_reader/features/book_detail/widgets/borrow_chapter_toc.dart';
+import 'package:night_reader/features/source_login/source_browser_page.dart';
+import 'package:night_reader/features/source_login/source_login_page.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
 import 'package:night_reader/features/book_detail/widgets/book_detail_change_source_filter_bar.dart';
@@ -38,6 +51,33 @@ typedef SwitchToSource = Future<PreparedSourceSwitch> Function(
   SourceToc? toc,
 );
 
+/// 單章借源（ADR 0080）：用 [source] 書源抓好的 [toc] 的第 [index] 章蓋進
+/// 主書源那一章；[cancelToken] 是關掉面板、改選別章時取消還沒寫進去的
+/// 那次。網站搜不到、抓不到時丟 [isSourceSwitchUnavailable] 認得的錯，面板
+/// 寫出原因、留著讓人選別的。
+typedef BorrowFromSource = Future<void> Function(
+  BookSource source,
+  SourceToc toc,
+  int index,
+  CancelToken cancelToken,
+);
+
+/// 單章借源要借的主書源那一章 [chapter]，與借的做法 [borrowFrom]。
+class ChapterBorrow {
+  const ChapterBorrow({required this.chapter, required this.borrowFrom});
+
+  final BookChapter chapter;
+  final BorrowFromSource borrowFrom;
+}
+
+/// 選了書源、打開了它的目錄：[estimated] 是估計同一章在 [toc] 的第幾個。
+typedef _Lender = ({
+  SearchBook candidate,
+  BookSource source,
+  SourceToc toc,
+  int estimated,
+});
+
 enum _SourceFilter { checkAuthor, excludeFarWordCount }
 
 class ChangeSourceSheet extends StatelessWidget {
@@ -49,15 +89,54 @@ class ChangeSourceSheet extends StatelessWidget {
   /// 閱讀器情境：提供自訂選源回呼（走 SourceSwitchService）。
   final OnSelectSource? onSelectSource;
 
+  /// 單章借源（[showForBorrow]）：點書源打開它的目錄，點一章才借。
+  final ChapterBorrow? borrow;
+
   const ChangeSourceSheet({
     super.key,
     required this.book,
     this.detailProvider,
     this.onSelectSource,
+    this.borrow,
   }) : assert(
-         detailProvider != null || onSelectSource != null,
-         'ChangeSourceSheet 需要 detailProvider 或 onSelectSource 其中之一',
+         detailProvider != null || onSelectSource != null || borrow != null,
+         'ChangeSourceSheet 需要 detailProvider、onSelectSource 或 borrow 其中之一',
        );
+
+  /// 閱讀器的單章借源（ADR 0080）：和換源同一套搜尋與清單；點書源打開它
+  /// 的目錄、捲到估計的那一章，點一章由 [borrowFrom] 借進主書源的
+  /// [chapter]。借成了面板收起，回傳借的書源；關掉面板是 null，還沒寫進
+  /// 去的那次跟著取消（已經寫進去的照樣回傳）。
+  static Future<BookSource?> showForBorrow({
+    required BuildContext context,
+    required Book book,
+    required BookChapter chapter,
+    required BorrowFromSource borrowFrom,
+    BoxConstraints? constraints,
+  }) async {
+    Future<BookSource?>? latest;
+    await AppBottomSheet.showCustom<void>(
+      context: context,
+      constraints: constraints,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ChangeSourceSheet(
+        book: book,
+        borrow: ChapterBorrow(
+          chapter: chapter,
+          borrowFrom: (source, toc, index, cancelToken) {
+            final borrowing = borrowFrom(source, toc, index, cancelToken);
+            latest = borrowing.then<BookSource?>(
+              (_) => source,
+              onError: (_) => null,
+            );
+            return borrowing;
+          },
+        ),
+      ),
+    );
+    return latest;
+  }
 
   /// 閱讀器、漫畫閱讀器與有聲書播放器的換源：打開清單，選了一個就由
   /// [switchTo] 換源，回傳換好的結果，沒換成是 null。換源途中關掉清單
@@ -111,6 +190,7 @@ class ChangeSourceSheet extends StatelessWidget {
         originalBook: book,
         detailProvider: detailProvider,
         onSelectSource: onSelectSource,
+        borrow: borrow,
       ),
     );
   }
@@ -120,11 +200,13 @@ class _ChangeSourceContent extends StatefulWidget {
   final Book originalBook;
   final BookDetailProvider? detailProvider;
   final OnSelectSource? onSelectSource;
+  final ChapterBorrow? borrow;
 
   const _ChangeSourceContent({
     required this.originalBook,
     required this.detailProvider,
     required this.onSelectSource,
+    required this.borrow,
   });
 
   @override
@@ -135,8 +217,15 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
   final TextEditingController _filterController = TextEditingController();
   bool _isSwitchingSource = false;
 
+  /// 單章借源打開了目錄的那個書源；null 時列書源。
+  _Lender? _lender;
+
+  /// 正在借的那一次：關掉面板、回到書源清單、改點別章時取消。
+  CancelToken? _borrowing;
+
   @override
   void dispose() {
+    _borrowing?.cancel();
     _filterController.dispose();
     super.dispose();
   }
@@ -150,6 +239,8 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
 
     final chrome = AppChrome.of(context);
     final count = sources.length;
+    final lender = _lender;
+    if (lender != null) return _buildLender(lender);
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.75,
@@ -207,7 +298,9 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
                 children: [
                   Expanded(
                     child: UiText(
-                      _isSwitchingSource ? '正在切換來源…' : provider.status,
+                      _isSwitchingSource
+                          ? (widget.borrow == null ? '正在切換來源…' : '正在載入目錄…')
+                          : provider.status,
                     ),
                   ),
                   if (count > 0) UiText('共 $count 個來源'),
@@ -268,6 +361,14 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
     SourceToc? toc,
   ) async {
     if (_isSwitchingSource) return;
+    if (widget.borrow != null) {
+      return _openLender(
+        context,
+        context.read<BookDetailChangeSourceProvider>(),
+        result,
+        toc,
+      );
+    }
     setState(() => _isSwitchingSource = true);
     try {
       final select = widget.onSelectSource;
@@ -296,7 +397,7 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
   Widget _buildHeader(BookDetailChangeSourceProvider provider) {
     final primary = Theme.of(context).colorScheme.primary;
     return SheetHeader(
-      title: '更換來源',
+      title: widget.borrow == null ? '更換來源' : '單章借源',
       // 左右各一顆（docs/design/components.md）：兩個篩選收進一顆選單，
       // 有一項開著時圖示用強調色。
       leading: GlassMenuButton<_SourceFilter>(
@@ -345,5 +446,195 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
               onPressed: _isSwitchingSource ? null : provider.refreshSearch,
             ),
     );
+  }
+
+  /// 單章借源點了一個書源：抓好（清單沒留著時重抓）它的詳情與目錄，核對是
+  /// 同一本小說，打開它的目錄、捲到估計的那一章（先比章名、再比章號，同
+  /// 換源的對法）。
+  Future<void> _openLender(
+    BuildContext context,
+    BookDetailChangeSourceProvider provider,
+    SearchBook result,
+    SourceToc? toc,
+  ) async {
+    final borrow = widget.borrow!;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isSwitchingSource = true);
+    try {
+      final source = await provider.findSourceByUrl(result.origin);
+      if (source == null) {
+        throw SourceException('找不到對應書源', sourceUrl: result.origin);
+      }
+      final loaded =
+          toc ?? await loadSourceToc(BookSourceService(), source, result);
+      final book = widget.originalBook;
+      final lenderBook = loaded.book;
+      // 聚合源的書是哪一類抓完詳情才知道；作者兩邊都寫了才比。
+      if (lenderBook.bookKind != BookSourceKind.novel ||
+          !isSameBook(
+            lenderBook.name,
+            lenderBook.author,
+            book.name,
+            book.author,
+            checkAuthor: book.author.isNotEmpty && lenderBook.author.isNotEmpty,
+          )) {
+        throw SourceException('不是同一本書', sourceUrl: result.origin);
+      }
+      if (!mounted) return;
+      setState(
+        () => _lender = (
+          candidate: result,
+          source: source,
+          toc: loaded,
+          estimated: alignChapterIndex(
+            oldIndex: borrow.chapter.index,
+            oldTitle: borrow.chapter.title,
+            oldTotalCount: book.totalChapterNum,
+            newChapters: loaded.chapters,
+          ),
+        ),
+      );
+    } catch (error, stackTrace) {
+      if (!isSourceSwitchUnavailable(error)) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+      messenger.showSnackBar(
+        SnackBar(content: UiText(failureMessage('借源', error))),
+      );
+    } finally {
+      if (mounted) setState(() => _isSwitchingSource = false);
+    }
+  }
+
+  /// 借的書源的目錄：點一章就借（[_borrowChapter]），頁首左邊回到書源清單。
+  Widget _buildLender(_Lender lender) {
+    final chrome = AppChrome.of(context);
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: BoxDecoration(
+        color: chrome.groupedBackground,
+        borderRadius: AppRadius.topSheetLg,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SheetHeader(
+            title: '單章借源',
+            leading: GlassIconButton(
+              icon: Icons.arrow_back_rounded,
+              iconSize: 20,
+              tooltip: '返回',
+              onPressed: () {
+                _borrowing?.cancel();
+                setState(() => _lender = null);
+              },
+            ),
+          ),
+          SizedBox(
+            height: 2,
+            child: _isSwitchingSource
+                ? const LinearProgressIndicator(minHeight: 2)
+                : null,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(
+              top: AppSpacing.sm,
+              bottom: AppGrouped.sectionGap,
+            ),
+            child: GroupedSliceItem(
+              index: 0,
+              count: 1,
+              child: BookDetailChangeSourceItem(
+                searchBook: lender.candidate,
+                chapterCount: lender.toc.chapters.length,
+              ),
+            ),
+          ),
+          Expanded(
+            child: IgnorePointer(
+              ignoring: _isSwitchingSource,
+              child: BorrowChapterToc(
+                chapters: lender.toc.chapters,
+                estimated: lender.estimated,
+                onPick: (index) => unawaited(_borrowChapter(lender, index)),
+                onLocked: () => ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: UiText(lockedChapterNotice)),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 借 [lender] 目錄的第 [index] 章。借成了收起面板；借的書源要登入或網頁
+  /// 驗證時提示旁給「登入」「前往驗證」，開的是借的書源，回來重借同一章
+  /// （ADR 0038）。
+  Future<void> _borrowChapter(_Lender lender, int index) async {
+    if (_isSwitchingSource) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final cancelToken = _borrowing = CancelToken();
+    setState(() => _isSwitchingSource = true);
+    try {
+      await widget.borrow!.borrowFrom(
+        lender.source,
+        lender.toc,
+        index,
+        cancelToken,
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (error, stackTrace) {
+      if (cancelToken.isCancelled || !mounted) return;
+      if (!isSourceSwitchUnavailable(error)) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+      final message = failureMessage('借源', error);
+      messenger.showSnackBar(
+        SnackBar(
+          content: UiText(message),
+          action: _remedyFor(lender, index, message),
+        ),
+      );
+    } finally {
+      if (identical(_borrowing, cancelToken)) _borrowing = null;
+      if (mounted) setState(() => _isSwitchingSource = false);
+    }
+  }
+
+  SnackBarAction? _remedyFor(_Lender lender, int index, String message) {
+    final source = lender.source;
+    void retry() {
+      if (mounted && identical(_lender, lender)) {
+        unawaited(_borrowChapter(lender, index));
+      }
+    }
+
+    if (SourceVerificationException.describes(message)) {
+      final request = SourceInteraction.verificationFor(source.bookSourceUrl);
+      if (request == null) return null;
+      return SnackBarAction(
+        label: '前往驗證',
+        onPressed: () async {
+          await openSourceVerification(
+            context,
+            sourceUrl: source.bookSourceUrl,
+            sourceName: source.bookSourceName,
+            request: request,
+          );
+          retry();
+        },
+      );
+    }
+    if (LoginCheckException.describes(message) && source.hasLogin) {
+      return SnackBarAction(
+        label: '登入',
+        onPressed: () async {
+          if (await openSourceLogin(context, source)) retry();
+        },
+      );
+    }
+    return null;
   }
 }

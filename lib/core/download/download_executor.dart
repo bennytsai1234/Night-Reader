@@ -346,11 +346,12 @@ Future<DownloadChapterResult> _downloadChapterOf(
             DownloadFailure.illustrationsMissing,
           );
   }
+  // 下載是自動補抓：抓的期間使用者借來或重新取得這一章時，晚到的這份不蓋
+  // 掉它（ADR 0080）。
   final result = await pipeline.prepare(
     chapterIndex: chapter.index,
     chapter: chapter,
     sourceOverride: source,
-    forceRefresh: true,
     maxAttempts: maxAttempts,
     cancelToken: cancelToken,
   );

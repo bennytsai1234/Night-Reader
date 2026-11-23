@@ -120,6 +120,7 @@ class ChapterContentPreparationPipeline {
       chapterIndex: chapterIndex,
       chapter: chapter,
       sourceOverride: sourceOverride,
+      replaceStored: forceRefresh,
       saveChapterMetadata: saveChapterMetadata,
       maxAttempts: maxAttempts,
       cancelToken: cancelToken,
@@ -185,10 +186,14 @@ class ChapterContentPreparationPipeline {
     _inFlight.clear();
   }
 
+  /// [replaceStored]：使用者明確要重抓（[prepare] 的 forceRefresh），抓到
+  /// 就換掉存著的正文；否則是自動補抓，抓的期間這一章已經存好正文（例如
+  /// 使用者借來的，ADR 0080）就不蓋。
   Future<ChapterContentPreparationResult> _fetchAndStore({
     required int chapterIndex,
     required BookChapter chapter,
     required BookSource? sourceOverride,
+    required bool replaceStored,
     required bool saveChapterMetadata,
     required int maxAttempts,
     required CancelToken? cancelToken,
@@ -207,6 +212,7 @@ class ChapterContentPreparationPipeline {
         await _storeResult(
           chapter: chapter,
           result: result,
+          replaceStored: replaceStored,
           saveChapterMetadata: saveChapterMetadata,
         );
         return result;
@@ -223,6 +229,7 @@ class ChapterContentPreparationPipeline {
     await _storeResult(
       chapter: chapter,
       result: result,
+      replaceStored: replaceStored,
       saveChapterMetadata: saveChapterMetadata,
     );
     return result;
@@ -323,6 +330,7 @@ class ChapterContentPreparationPipeline {
   Future<void> _storeResult({
     required BookChapter chapter,
     required ChapterContentPreparationResult result,
+    required bool replaceStored,
     required bool saveChapterMetadata,
   }) async {
     final store = contentStore;
@@ -334,6 +342,7 @@ class ChapterContentPreparationPipeline {
         chapter: chapter,
         content: result.content,
         saveChapterMetadata: saveChapterMetadata,
+        replaceStored: replaceStored,
       );
       return;
     }

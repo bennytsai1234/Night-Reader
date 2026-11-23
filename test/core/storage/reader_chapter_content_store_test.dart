@@ -88,6 +88,64 @@ void main() {
     },
   );
 
+  test('an automatic fetch that arrives late keeps text the reader borrowed '
+      'or refetched in the meantime', () async {
+    final a = chapter(0, '/c/a.html');
+    await ChapterDao(db).insertChapters([a]);
+    expect(
+      await store.saveRawContent(
+        book: book,
+        chapter: a,
+        content: '借來的正文',
+        replaceStored: true,
+      ),
+      isTrue,
+    );
+
+    expect(
+      await store.saveRawContent(book: book, chapter: a, content: '主書源的防盜章'),
+      isFalse,
+    );
+
+    expect(
+      (await store.getContentEntry(book: book, chapter: a))?.content,
+      '借來的正文',
+    );
+  });
+
+  test('refetching the chapter replaces the stored text', () async {
+    final a = chapter(0, '/c/a.html');
+    await ChapterDao(db).insertChapters([a]);
+    await store.saveRawContent(book: book, chapter: a, content: '借來的正文');
+
+    await store.saveRawContent(
+      book: book,
+      chapter: a,
+      content: '主書源修好的正文',
+      replaceStored: true,
+    );
+
+    expect(
+      (await store.getContentEntry(book: book, chapter: a))?.content,
+      '主書源修好的正文',
+    );
+  });
+
+  test('an automatic fetch replaces a recorded failure', () async {
+    final a = chapter(0, '/c/a.html');
+    await ChapterDao(db).insertChapters([a]);
+    await store.saveFailure(book: book, chapter: a, message: '伺服器回應 503');
+
+    expect(
+      await store.saveRawContent(book: book, chapter: a, content: '甲'),
+      isTrue,
+    );
+
+    final entry = await store.getContentEntry(book: book, chapter: a);
+    expect(entry?.isFailed, isFalse);
+    expect(entry?.content, '甲');
+  });
+
   test('a failed refetch keeps the stored text', () async {
     final a = chapter(0, '/c/a.html');
     await ChapterDao(db).insertChapters([a]);
