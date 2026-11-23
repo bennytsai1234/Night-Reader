@@ -14,10 +14,10 @@ AiReply fakeAiReply(String text) {
   if (json is Map<String, dynamic> && json['action'] is String) {
     // 參數照原文給（多一個 action 欄位不影響）：1e400 這種寫不回 JSON 的數字
     // 也照樣送到。
-    return (
+    return AiReply(
       content: '',
       toolCalls: [
-        (
+        AiToolCall(
           id: 'call_${_calls++}',
           name: json['action'] as String,
           arguments: text,
@@ -28,7 +28,7 @@ AiReply fakeAiReply(String text) {
       firstData: Duration.zero,
     );
   }
-  return (
+  return AiReply(
     content: text,
     toolCalls: const [],
     reasoning: '',

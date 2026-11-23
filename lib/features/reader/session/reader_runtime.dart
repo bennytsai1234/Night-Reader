@@ -452,9 +452,18 @@ class ReaderRuntime extends ChangeNotifier {
       _pendingUserNotice = notice;
     } else {
       if (!stateMachine.markUnavailable(token, error)) return;
+      _unavailableLocation = token.targetLocation.normalized(
+        chapterCount: repository.chapterCount,
+      );
     }
     notifyListeners();
   }
+
+  /// 開書取不到正文（[ReaderLifecycle.unavailable]）時要開的位置：失敗頁的
+  /// 「單章借源」借的是這一章，借好在這裡重開（ADR 0080）。開書時位置會照
+  /// 章名、付費章節改過，不一定是建立時給的。
+  ReaderLocation? get unavailableLocation => _unavailableLocation;
+  ReaderLocation? _unavailableLocation;
 
   bool _targetsAnotherChapterThanOpen(ReaderOperationToken token) {
     final count = repository.chapterCount;
