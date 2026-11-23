@@ -102,10 +102,12 @@ class SourceManagerMenus {
     ),
   ];
 
-  /// 加入書源的選單項目：三種匯入與新建。
+  /// 加入書源的選單項目：三種匯入、新建，與從網站建立（AI，ADR 0082；有
+  /// 別的背景工作在跑時灰掉，ADR 0058）。
   static List<GlassMenuEntry<String>> _addEntries({
     required bool importEnabled,
     required bool mutationEnabled,
+    required bool aiCreateEnabled,
   }) => [
     GlassMenuItem(
       value: 'import_url',
@@ -130,6 +132,12 @@ class SourceManagerMenus {
       icon: Icons.add_circle_outline,
       label: '新建書源',
       enabled: mutationEnabled,
+    ),
+    GlassMenuItem(
+      value: 'ai_create',
+      icon: Icons.auto_awesome_outlined,
+      label: '從網站建立（AI）',
+      enabled: mutationEnabled && aiCreateEnabled,
     ),
   ];
 
@@ -189,6 +197,7 @@ class SourceManagerMenus {
     required VoidCallback onImportClipboard,
     required VoidCallback onManageGroups,
     required VoidCallback onNewSource,
+    required VoidCallback onAiCreateSource,
     required VoidCallback onCheckAllSources,
     required VoidCallback onClearCheckMarks,
     required VoidCallback onAiRepairSettings,
@@ -227,11 +236,13 @@ class SourceManagerMenus {
                 _addEntries(
                   importEnabled: importEnabled,
                   mutationEnabled: mutationEnabled,
+                  aiCreateEnabled: canAiCreateSource(),
                 ),
                 (value) => switch (value) {
                   'import_url' => onImportUrl(),
                   'import_file' => onImportFile(),
                   'import_clipboard' => onImportClipboard(),
+                  'ai_create' => onAiCreateSource(),
                   _ => onNewSource(),
                 },
               );

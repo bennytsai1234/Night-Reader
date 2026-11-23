@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/background_work/work_phase.dart';
+import 'package:night_reader/core/ai_repair/ai_create_prompt.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
@@ -576,18 +577,27 @@ class BatchRepairRun extends RepairRun {
 /// 書源不在了或沒有 AI 服務是 null。
 typedef SingleRepairReopen = Future<AiRepairSession?> Function(String url);
 
-/// 單一書源的 AI 修復（用 AI 服務的；剪貼簿的要使用者來回貼，留在頁面上）。
-/// 暫停後按繼續是這個書源從頭重修（使用者 2026-11-15 選，ADR 0058）。
+/// 接著從空白建立書源：照存的網址與樣本書名、用現在的 AI 服務設定建新的
+/// 一段；沒有 AI 服務是 null。
+typedef CreateSourceReopen = Future<AiRepairSession?> Function(
+  AiCreateRequest request,
+);
+
+/// 單一書源的 AI 修復（用 AI 服務的；剪貼簿的要使用者來回貼，留在頁面上），
+/// 或從空白建立書源（[AiRepairJob.create]，ADR 0082）。暫停後按繼續是這個
+/// 書源從頭重修、重新建立（使用者 2026-11-15 選，ADR 0058）。
 class SingleRepairRun extends RepairRun {
   SingleRepairRun(
     this._session, {
     PausedWorkFile? progress,
     SingleRepairReopen? reopen,
+    CreateSourceReopen? reopenCreate,
     Future<void> Function(BookSource source, String? reason)? markUnfixable,
     super.work,
     super.navigator,
   }) : _file = progress ?? PausedWorkFile(repairProgressName),
        _reopen = reopen ?? _reopenWithService,
+       _reopenCreate = reopenCreate ?? _reopenCreateWithService,
        _markUnfixable = markUnfixable ?? markAiUnfixable {
     _session.addListener(changed);
   }
@@ -597,10 +607,12 @@ class SingleRepairRun extends RepairRun {
     this._session, {
     required this._file,
     SingleRepairReopen? reopen,
+    CreateSourceReopen? reopenCreate,
     Future<void> Function(BookSource source, String? reason)? markUnfixable,
     super.work,
     super.navigator,
   }) : _reopen = reopen ?? _reopenWithService,
+       _reopenCreate = reopenCreate ?? _reopenCreateWithService,
        _markUnfixable = markUnfixable ?? markAiUnfixable,
        super(paused: true) {
     _session.addListener(changed);
@@ -612,6 +624,7 @@ class SingleRepairRun extends RepairRun {
   AiRepairSession get session => _session;
   final PausedWorkFile _file;
   final SingleRepairReopen _reopen;
+  final CreateSourceReopen _reopenCreate;
   final Future<void> Function(BookSource source, String? reason) _markUnfixable;
   int _sourceEdits = 0;
 
@@ -620,12 +633,24 @@ class SingleRepairRun extends RepairRun {
 
   String get sourceUrl => _session.job.original.bookSourceUrl;
 
+  /// 從空白建立書源，不是修一個已有的。
+  bool get creating => _session.job.create != null;
+
   static Future<AiRepairSession?> _reopenWithService(String url) async {
     final service = await AiRepairSettings().service();
     if (service == null) return null;
     final source = await getIt<BookSourceDao>().getByUrl(url);
     if (source == null) return null;
     return AiRepairSession(source: source, service: service);
+  }
+
+  static Future<AiRepairSession?> _reopenCreateWithService(
+    AiCreateRequest request,
+  ) async {
+    final service = await AiRepairSettings().service();
+    final blank = aiCreateBlankSource(request.url);
+    if (service == null || blank == null) return null;
+    return AiRepairSession(source: blank, service: service, create: request);
   }
 
   @override
@@ -636,24 +661,35 @@ class SingleRepairRun extends RepairRun {
 
   @override
   BackgroundWorkStatus get runningStatus => BackgroundWorkStatus(
-    title: 'AI 修復 · ${_session.job.original.bookSourceName}',
+    title:
+        '${creating ? 'AI 建立書源' : 'AI 修復'} · '
+        '${_session.job.original.bookSourceName}',
     text: _session.job.steps.lastOrNull?.line ?? '準備中…',
     pausable: true,
   );
 
   @override
   Future<WorkPhase> run() async {
+    final create = _session.job.create;
     _file.save(
       jsonEncode({
         'version': _repairProgressVersion,
-        'kind': 'single',
-        'url': sourceUrl,
+        if (create == null) ...{
+          'kind': 'single',
+          'url': sourceUrl,
+        } else ...{
+          'kind': 'create',
+          'url': create.url,
+          'sampleTitle': create.sampleTitle,
+        },
       }),
     );
     await _session.start();
     if (_session.isPaused) return WorkPhase.paused;
+    if (create != null && _session.job.repairedSource != null) _sourceEdits++;
     // 單一修復也必須保留「網站不穩定＝無法修復」的可移除狀態。
-    if (_session.job.confirmedUnfixable &&
+    if (create == null &&
+        _session.job.confirmedUnfixable &&
         _session.job.giveUpWhy == 'site_unstable') {
       await _markUnfixable(_session.job.original, _session.job.giveUpWhy);
       _sourceEdits++;
@@ -681,7 +717,10 @@ class SingleRepairRun extends RepairRun {
 
   @override
   Future<bool> prepareResume() async {
-    _next = await _reopen(sourceUrl);
+    final create = _session.job.create;
+    _next = create == null
+        ? await _reopen(sourceUrl)
+        : await _reopenCreate(create);
     return _next != null;
   }
 
@@ -726,6 +765,7 @@ Future<void> restorePausedRepair({
   RepairRuns? runs,
   Future<List<BookSource>> Function(List<String> urls)? load,
   SingleRepairReopen? reopenSingle,
+  CreateSourceReopen? reopenCreate,
   BatchRepairReopen? reopenBatch,
   BackgroundWork? work,
 }) async {
@@ -748,6 +788,24 @@ Future<void> restorePausedRepair({
           AiRepairSession(source: source, service: null),
           file: store,
           reopen: reopenSingle,
+          work: work,
+        );
+      }
+    } else if (json case {
+      'version': _repairProgressVersion,
+      'kind': 'create',
+      'url': final String url,
+      'sampleTitle': final String sampleTitle,
+    }) {
+      if (aiCreateBlankSource(url) case final blank?) {
+        run = SingleRepairRun.paused(
+          AiRepairSession(
+            source: blank,
+            service: null,
+            create: (url: url, sampleTitle: sampleTitle),
+          ),
+          file: store,
+          reopenCreate: reopenCreate,
           work: work,
         );
       }
@@ -895,11 +953,22 @@ bool backgroundWorkIdle() => !BackgroundWork.instance.isBusy;
 bool canAiRepair(String sourceUrl, {required bool checking}) {
   final current = RepairRuns.instance.current;
   if (current is SingleRepairRun &&
+      !current.creating &&
       !current.isDone &&
       current.sourceUrl == sourceUrl) {
     return true;
   }
   return !checking && RepairRuns.instance.canStartNew && backgroundWorkIdle();
+}
+
+/// 「從網站建立（AI）」能不能按：有一件正在建立或還沒看結果（推回那一頁），
+/// 或沒有工作在跑。
+bool canAiCreateSource() {
+  final current = RepairRuns.instance.current;
+  if (current is SingleRepairRun && current.creating && !current.isDone) {
+    return true;
+  }
+  return RepairRuns.instance.canStartNew && backgroundWorkIdle();
 }
 
 /// 「修復異常書源」能不能按：有一批正在修或還沒看結果（推回那一批），或

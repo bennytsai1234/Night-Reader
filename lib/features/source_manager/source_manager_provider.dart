@@ -9,17 +9,16 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/source/source_site.dart';
-import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/core/source/source_dedupe.dart';
 import 'package:night_reader/core/network/network_service.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/sync/source_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:share_plus/share_plus.dart';
 
 import 'ai_repair/repair_runs.dart';
 import 'source_check_job.dart';
+import 'source_share.dart';
 import 'widgets/import_preview_sheet.dart';
 import 'widgets/source_list_skeleton.dart';
 
@@ -1137,32 +1136,7 @@ class SourceManagerProvider with ChangeNotifier {
     }
 
     if (sources.isEmpty) return;
-    await _shareSourceObjects(sources, fileName: fileName);
-  }
-
-  Future<void> _shareSourceObjects(
-    List<BookSource> sources, {
-    String fileName = 'sources',
-  }) async {
-    final jsonStr = jsonEncode(sources.map((s) => s.toJson()).toList());
-    final baseName = _sanitizeExportBaseName(fileName);
-    final file = await AppStoragePaths.shareExportFile('$baseName.json');
-    await file.writeAsString(jsonStr);
-    await SharePlus.instance.share(
-      ShareParams(files: [XFile(file.path)], text: '分享夜讀書源 ($baseName.json)'),
-    );
-  }
-
-  static String _sanitizeExportBaseName(String fileName) {
-    var baseName = fileName
-        .replaceAll(RegExp(r'\.(legado|json)$', caseSensitive: false), '')
-        .trim()
-        .replaceAll(RegExp(r'[\x00-\x1F\x7F\\/:*?"<>|]'), '_')
-        .trim();
-    if (baseName.isEmpty || baseName == '.' || baseName == '..') {
-      baseName = 'source';
-    }
-    return baseName;
+    await shareBookSources(sources, fileName: fileName);
   }
 
   /// 批量分享目前選中的書源
@@ -1195,7 +1169,7 @@ class SourceManagerProvider with ChangeNotifier {
       final fileName = selectedFullSources.length == 1
           ? selectedFullSources.first.bookSourceName
           : 'export_${selectedFullSources.length}_sources';
-      await _shareSourceObjects(selectedFullSources, fileName: fileName);
+      await shareBookSources(selectedFullSources, fileName: fileName);
       return false; // false = 已改走分享，非剪貼簿
     }
     await Clipboard.setData(ClipboardData(text: json));

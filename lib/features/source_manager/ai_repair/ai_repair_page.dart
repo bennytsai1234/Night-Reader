@@ -16,6 +16,7 @@ import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../source_share.dart';
 import 'ai_repair_settings_page.dart';
 import 'repair_runs.dart';
 import 'source_repair_page.dart';
@@ -35,7 +36,9 @@ Future<void> openAiRepair(
   final navigator = Navigator.of(context);
   final repairs = runs ?? RepairRuns.instance;
   if (repairs.current case final SingleRepairRun current
-      when !current.isDone && current.sourceUrl == source.bookSourceUrl) {
+      when !current.creating &&
+          !current.isDone &&
+          current.sourceUrl == source.bookSourceUrl) {
     await navigator.push(
       MaterialPageRoute<void>(builder: (_) => current.page()),
     );
@@ -120,6 +123,18 @@ class _AiRepairPageState extends State<AiRepairPage> {
 
   /// 背景跑的修復暫停後按繼續會換成新的一段，照 [AiRepairPage.run] 的。
   AiRepairSession get _session => widget.run?.session ?? widget.session;
+
+  /// 從空白建立書源（ADR 0082），不是修一個已有的。
+  bool get _creating => _session.job.create != null;
+
+  /// 頁首與提示框的「AI 修復」或「AI 建立書源」。
+  String get _what => _creating ? 'AI 建立書源' : 'AI 修復';
+
+  /// 書源的名稱：建立好了是 AI 寫的站名。
+  String get _name {
+    final job = _session.job;
+    return job.repairedSource?.bookSourceName ?? job.original.bookSourceName;
+  }
 
   @override
   void initState() {
@@ -213,7 +228,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
     await SharePlus.instance.share(
       ShareParams(
         files: [XFile(file.path, mimeType: 'text/plain')],
-        subject: 'AI 修復紀錄：${_session.job.original.bookSourceName}',
+        subject: '$_what紀錄：$_name',
       ),
     );
   }
@@ -226,7 +241,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
     if (service == null) {
       final go = await showAppAlert<bool>(
         context: context,
-        title: 'AI 修復「${_session.job.original.bookSourceName}」',
+        title: '$_what「$_name」',
         message: '還沒設定 AI 服務。',
         actions: const [
           AppAlertAction(label: '設定 AI 服務', value: true, isDefault: true),
@@ -241,7 +256,9 @@ class _AiRepairPageState extends State<AiRepairPage> {
       return;
     }
     await run.resume();
-    if (mounted && run.phase == WorkPhase.paused) _say('書源已經不在了，沒辦法接著修');
+    if (mounted && run.phase == WorkPhase.paused) {
+      _say(_creating ? '網址讀不出來，沒辦法接著建立' : '書源已經不在了，沒辦法接著修');
+    }
   }
 
   /// 最後一張卡片：背景跑的修復做著時「暫停｜結束」，暫停中「繼續｜結束」
@@ -326,7 +343,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
           child: Scaffold(
             extendBodyBehindAppBar: true,
             appBar: GlassNavHeader(
-              title: '${context.ui('AI 修復')} · ${job.original.bookSourceName}',
+              title: '${context.ui(_what)} · $_name',
               translateTitle: false,
               actions: [
                 GlassMenuButton<String>(
@@ -381,7 +398,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
                             Icons.pause_circle_rounded,
                           ),
                           title: '已暫停',
-                          subtitle: '按「繼續」從頭重修這個書源',
+                          subtitle: _creating ? '按「繼續」從頭重新建立' : '按「繼續」從頭重修這個書源',
                           showChevron: false,
                         ),
                       if (sentTo != null)
@@ -446,7 +463,9 @@ class _AiRepairPageState extends State<AiRepairPage> {
   /// 規則，這次的校驗還沒開始。
   static bool _backToAi(AiRepairJob job) {
     final steps = job.steps;
-    final verify = steps.lastIndexWhere((s) => s.title == aiRepairVerifyStage);
+    final verify = steps.lastIndexWhere(
+      (s) => s.title == aiRepairVerifyStage || s.title == aiCreateVerifyStage,
+    );
     return verify < 0 ||
         steps.lastIndexWhere((s) => s.kind != AiRepairStepKind.stage) > verify;
   }
@@ -499,14 +518,19 @@ class _AiRepairPageState extends State<AiRepairPage> {
     }
 
     final ai = _aiSteps(job);
+    final verify = _creating ? aiCreateVerifyStage : aiRepairVerifyStage;
     return [
-      stage(aiRepairCheckStage),
-      stage(aiRepairFetchStage),
-      row(_aiState(job, ai), 'AI 修改規則', ai.lastOrNull?.line),
+      stage(_creating ? aiCreateSiteStage : aiRepairCheckStage),
+      stage(_creating ? aiCreateFetchStage : aiRepairFetchStage),
+      row(
+        _aiState(job, ai),
+        _creating ? aiCreateWriteStage : 'AI 修改規則',
+        ai.lastOrNull?.line,
+      ),
       if (ai.isNotEmpty && _backToAi(job))
-        row(AiRepairStepState.waiting, aiRepairVerifyStage, null)
+        row(AiRepairStepState.waiting, verify, null)
       else
-        stage(aiRepairVerifyStage),
+        stage(verify),
     ];
   }
 
@@ -516,11 +540,23 @@ class _AiRepairPageState extends State<AiRepairPage> {
     AiRepairOutcome outcome,
   ) {
     final repaired = outcome == AiRepairOutcome.repaired;
-    final explanation = job.explanation ?? (repaired ? '校驗通過，已套用。' : '書源沒有改。');
+    final explanation =
+        job.explanation ??
+        switch ((_creating, repaired)) {
+          (true, true) => '校驗通過，已加入書源。',
+          (true, false) => '沒有加入書源。',
+          (false, true) => '校驗通過，已套用。',
+          (false, false) => '書源沒有改。',
+        };
+    final created = job.repairedSource;
     return GroupedSection(
       children: [
         GroupedRow(
-          title: repaired ? (job.restored ? '已還原成改前的版本' : '修好了') : '沒修好，書源沒有改',
+          title: _creating
+              ? (repaired ? '建立好了' : '沒有建立')
+              : repaired
+              ? (job.restored ? '已還原成改前的版本' : '修好了')
+              : '沒修好，書源沒有改',
           heading: true,
         ),
         GroupedContent(
@@ -531,7 +567,15 @@ class _AiRepairPageState extends State<AiRepairPage> {
             ),
           ),
         ),
-        if (repaired && !job.restored)
+        if (_creating && repaired && created != null)
+          GroupedRow(
+            title: '分享這個書源',
+            showChevron: false,
+            onTap: () => unawaited(
+              shareBookSources([created], fileName: created.bookSourceName),
+            ),
+          )
+        else if (repaired && !job.restored)
           GroupedRow(
             title: '還原改前的版本',
             showChevron: false,

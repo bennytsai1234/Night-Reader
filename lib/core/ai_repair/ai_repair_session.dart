@@ -686,8 +686,11 @@ class AiRepairSession extends ChangeNotifier {
     bool probeSucceeded = false,
     bool last = true,
   }) async {
-    final step = _addStep(job, aiRepairVerifyStage);
-    log.section(aiRepairVerifyStage);
+    final stage = job.create == null
+        ? aiRepairVerifyStage
+        : aiCreateVerifyStage;
+    final step = _addStep(job, stage);
+    log.section(stage);
     final checkWatch = Stopwatch()..start();
     var checked = await _guard(() => _check(candidate, _cancelToken));
     if (_halting) return null;

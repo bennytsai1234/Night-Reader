@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
+import 'package:night_reader/core/ai_repair/ai_create_prompt.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
+import 'package:night_reader/core/ai_repair/site_check.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source_check/source_check_isolate.dart';
@@ -219,5 +221,46 @@ void main() {
 
     expect(find.text('修好了'), findsOneWidget);
     expect(find.text('校驗通過，已套用。'), findsOneWidget);
+  });
+
+  testWidgets('creating a source shows its own four stages, the name the AI '
+      'gave it, and a row to share it', (tester) async {
+    const url = 'https://site.example/category.html';
+    final session = AiRepairSession(
+      source: aiCreateBlankSource(url)!,
+      create: (url: url, sampleTitle: ''),
+      service: _service,
+      siteCheck: (_, _) async => const SiteCheck(SiteVerdict.alive, '網站正常回應'),
+      fetchPage: (_, _, _) async => (
+        lines: const ['  ← $url 200：<form>'],
+        pages: const [(line: '  ← $url 200：<form>', body: '<form>')],
+      ),
+      check: (source, _) async => _checked(source),
+      probe: (_, _, {start}) async => _probe,
+      ask: (_, _) async => fakeAiReply(
+        jsonEncode({
+          'action': 'submit',
+          'patch': {
+            'bookSourceName': '範例書站',
+            'ruleContent': {'content': 'class.txt@text'},
+          },
+          'note': '都試過',
+        }),
+      ),
+      apply: (_, _) async {},
+      secrets: (_) async => const {},
+    );
+
+    await pumpPage(tester, session);
+    await _settle(tester);
+
+    expect(find.text('AI 建立書源 · 範例書站'), findsOneWidget);
+    expect(find.text('檢查網站'), findsOneWidget);
+    expect(find.text('抓貼的網頁'), findsOneWidget);
+    expect(find.text('AI 寫規則'), findsOneWidget);
+    expect(find.text('校驗寫好的書源'), findsOneWidget);
+    expect(find.text('建立好了'), findsOneWidget);
+    expect(find.text('分享這個書源'), findsOneWidget);
+    expect(find.text('還原改前的版本'), findsNothing);
   });
 }

@@ -12,7 +12,7 @@ import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 
 /// 「會送出什麼」面板：與 `PRIVACY.md`、App 的「隱私說明」同一件事
-/// （ADR 0054、0060），修書源與找書各一段。
+/// （ADR 0054、0060、0082），修書源、建立書源與找書各一段。
 const List<HelpSection> aiSentSections = [
   (
     heading: '按「AI 修復」或「修復異常書源」時送出',
@@ -27,6 +27,14 @@ const List<HelpSection> aiSentSections = [
   (
     heading: '修書源時不送',
     items: ['登入資料（登入表單填的內容、登入標頭）', 'Cookie 的值（只列名稱）', '書源變數'],
+  ),
+  (
+    heading: '按「從網站建立（AI）」再按「開始建立」時送出',
+    items: [
+      '你貼的網址、填的樣本書名與那一頁的內容',
+      'AI 要求看網頁、讀一段、找字、試解析、試抓或跑程式時，那一次的結果',
+      'Cookie 的值不送（只列名稱）',
+    ],
   ),
   (
     heading: '按「AI 找書」再按「開始找書」時送出',

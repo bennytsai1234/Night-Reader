@@ -16,6 +16,7 @@ import 'package:provider/provider.dart';
 
 import 'package:night_reader/core/ai_repair/ai_repair_apply.dart';
 
+import 'ai_repair/ai_create_source_page.dart';
 import 'ai_repair/ai_repair_page.dart';
 import 'ai_repair/ai_repair_settings_page.dart';
 import 'ai_repair/repair_runs.dart';
@@ -362,6 +363,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
           onImportClipboard: () => _importFromClipboard(context),
           onManageGroups: () => _openGroupManagePage(nav, provider),
           onNewSource: () => _openNewEditor(provider),
+          onAiCreateSource: () => unawaited(openAiCreateSource(context)),
           onCheckAllSources: () => SourceManagerDialogs.showCheckConfigDialog(
             context,
             provider,
