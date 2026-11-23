@@ -6,6 +6,7 @@ import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
 import 'package:night_reader/core/source_switch/chapter_borrow.dart';
+import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_departure.dart';
 import 'package:night_reader/features/reader/screen/reader_borrow_chapter.dart';
 import 'package:night_reader/features/reader/screen/reader_chapter_info.dart';
@@ -162,7 +163,7 @@ final class ReaderSourceRemedy {
   ) => _borrowChapter.show(
     failed.chapterIndex,
     apply: () async {
-      if (runtime.disposed) return false;
+      if (!await _rereadBorrowed(runtime, failed.chapterIndex)) return false;
       await runtime.openBook(at: failed);
       return !runtime.disposed &&
           runtime.state.hasStableWorld &&
@@ -194,11 +195,24 @@ final class ReaderSourceRemedy {
         if (_info.currentChapterIndex(runtime) == chapterIndex) {
           return runtime.reloadContentPreservingLocation();
         }
+        if (!await _rereadBorrowed(runtime, chapterIndex)) return false;
         await _jumpToChapterAndWait(chapterIndex);
         return !runtime.disposed &&
             runtime.state.visibleLocation.chapterIndex == chapterIndex;
       },
     );
+  }
+
+  /// 借好了要開過去、跳過去的那一章，閱讀器手上可能還是主書源的（例如面板
+  /// 開著時預載又抓到了）：先重讀存著的。讀不到就不算換好。
+  Future<bool> _rereadBorrowed(ReaderRuntime runtime, int chapterIndex) async {
+    if (runtime.disposed) return false;
+    try {
+      await runtime.rereadStoredContent(chapterIndex);
+    } on ReaderContentUnavailableException {
+      return false;
+    }
+    return !runtime.disposed;
   }
 
   Future<void> _retryReader(ReaderRuntime runtime) async {
