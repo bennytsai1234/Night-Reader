@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/network/cookie_store.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
 import 'package:night_reader/core/network/webview_cloudflare_solver.dart';
+import 'package:night_reader/core/network/webview_js_result.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
@@ -169,10 +169,7 @@ class _SourceBrowserPageState extends State<SourceBrowserPage> {
       final value = await _controller.runJavaScriptReturningResult(
         'document.documentElement.outerHTML',
       );
-      final text = value.toString();
-      return text.length >= 2 && text.startsWith('"') && text.endsWith('"')
-          ? jsonDecode(text) as String
-          : text;
+      return webViewJsResult(value);
     } catch (error) {
       AppLog.w('讀不到書源網頁的內容: $error');
       return '';

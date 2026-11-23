@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/network/webview_js_result.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 /// 讀手機內建瀏覽器的 Cookie 與瀏覽器標識（原生端在 `MainActivity`、
@@ -140,7 +141,7 @@ JSON.stringify({
     WebViewController controller,
   ) async {
     try {
-      final decoded = _decodeJsString(
+      final decoded = webViewJsResult(
         await controller.runJavaScriptReturningResult(_stateScript),
       );
       final map = jsonDecode(decoded) as Map<String, dynamic>;
@@ -157,21 +158,12 @@ JSON.stringify({
 
   static Future<String?> _userAgent(WebViewController controller) async {
     try {
-      return _decodeJsString(
+      return webViewJsResult(
         await controller.runJavaScriptReturningResult('navigator.userAgent'),
       );
     } catch (_) {
       return WebViewUserAgent.value;
     }
-  }
-
-  /// Android 傳回的字串外面多包一層 JSON 引號，iOS 沒有。
-  static String _decodeJsString(Object value) {
-    final text = value.toString();
-    if (text.length >= 2 && text.startsWith('"') && text.endsWith('"')) {
-      return jsonDecode(text) as String;
-    }
-    return text;
   }
 }
 

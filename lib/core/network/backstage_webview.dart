@@ -5,10 +5,10 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
-import 'dart:convert';
 
 import 'package:html_unescape/html_unescape.dart';
 import 'package:night_reader/core/network/request_log.dart';
+import 'package:night_reader/core/network/webview_js_result.dart';
 import 'package:night_reader/core/network/webview_cloudflare_solver.dart';
 
 class BackstageWebView {
@@ -52,19 +52,6 @@ class BackstageWebView {
       ),
     );
     return _hiddenWebViewWidget!;
-  }
-
-  /// 網頁執行 JS 拿回的結果轉成內容：Android 把字串包成 JSON 字串（加引號
-  /// 與跳脫），解開就是網頁原本的字。HTML 實體原樣留給規則解析（同 Legado
-  /// 的 `unescapeJson`）：在這裡多解一次，正文裡字面上的 `&lt;span&gt;`
-  /// 會變成標籤被刪掉。
-  @visibleForTesting
-  static String contentOf(Object result) {
-    final content = result.toString();
-    if (content.startsWith('"') && content.endsWith('"')) {
-      return jsonDecode(content) as String;
-    }
-    return content;
   }
 
   /// [sourceRegex] 在網頁內容裡找到的資源網址，有分組時取第一組；沒找到是
@@ -166,7 +153,7 @@ class BackstageWebView {
                 jsToRun,
               );
               if (result.toString().isNotEmpty && result.toString() != 'null') {
-                final content = contentOf(result);
+                final content = webViewJsResult(result);
 
                 final regex = sourceRegex;
                 if (regex != null && regex.isNotEmpty) {
