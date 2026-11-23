@@ -72,6 +72,7 @@ SourceProbeReport withPageIds(RepairPages pages, SourceProbeReport probe) =>
       timedOut: probe.timedOut,
       contentUsable: probe.contentUsable,
       unjoinedNextPage: probe.unjoinedNextPage,
+      contentAmount: probe.contentAmount,
     );
 
 /// AI 修一個書源這件事（[AgentTask]）：開場是書源、校驗結果與試抓（從空白
