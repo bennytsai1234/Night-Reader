@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/shared/shelf_trial.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -20,6 +21,16 @@ void main() {
 
     ShelfTrial.setShelfOrder(['只有一本']);
     expect(ShelfTrial.positionOf('只有一本'), 0);
+  });
+
+  test('換源換了網址，書架重讀前新網址沿用原本的位置', () {
+    ShelfTrial.setShelfOrder(['u1', 'u2', 'u3']);
+    ShelfTrial.bookSwitched(
+      const BookSwitchedEvent(fromBookUrl: 'u1', toBookUrl: 'n1'),
+    );
+    expect(ShelfTrial.positionOf('n1'), 0);
+    expect(ShelfTrial.positionOf('u1'), isNull);
+    expect(ShelfTrial.positionOf('u3'), 1);
   });
 
   test('開 App 讀偏好時清掉上一次的書架順序', () async {
