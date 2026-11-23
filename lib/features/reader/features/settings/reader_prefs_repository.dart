@@ -6,6 +6,7 @@ import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_constants.dart';
 import 'package:night_reader/features/reader/features/brightness/reader_brightness.dart';
 import 'package:night_reader/features/reader/features/menu/reader_tap_action.dart';
+import 'package:night_reader/features/reader/features/settings/comic_paper_tint.dart';
 import 'package:night_reader/features/reader/features/settings/reader_highlight_style.dart';
 import 'package:night_reader/features/reader/features/settings/reader_info_item.dart';
 import 'package:night_reader/features/reader/features/settings/reader_orientation.dart';
@@ -329,6 +330,14 @@ abstract final class ReaderSettings {
     encode: ReaderHighlightStrength.normalize,
   );
 
+  /// 漫畫閱讀器深色時的紙色，預設原色。
+  static final comicPaperTint = _text<ComicPaperTint>(
+    PreferKey.comicPaperTint,
+    () => ComicPaperTint.original,
+    parse: ComicPaperTint.parse,
+    encode: (value) => value.name,
+  );
+
   /// 亮度跟隨系統；關閉時用 [brightness]。
   static final brightnessAuto = _bool(PreferKey.readerBrightnessAuto, true);
 
@@ -474,6 +483,7 @@ abstract final class ReaderSettings {
     footerInfo,
     highlightColor,
     highlightStrength,
+    comicPaperTint,
     brightnessAuto,
     brightness,
     volumeKeyPage,
@@ -544,6 +554,7 @@ class ReaderPrefsSnapshot {
   ReaderHighlightColor get highlightColor =>
       valueOf(ReaderSettings.highlightColor);
   double get highlightStrength => valueOf(ReaderSettings.highlightStrength);
+  ComicPaperTint get comicPaperTint => valueOf(ReaderSettings.comicPaperTint);
   bool get brightnessAuto => valueOf(ReaderSettings.brightnessAuto);
   double get brightness => valueOf(ReaderSettings.brightness);
   bool get volumeKeyPage => valueOf(ReaderSettings.volumeKeyPage);

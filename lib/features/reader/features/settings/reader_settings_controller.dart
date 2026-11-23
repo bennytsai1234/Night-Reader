@@ -8,6 +8,7 @@ import 'package:night_reader/core/fonts/font_library.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/features/reader/features/brightness/reader_brightness.dart';
+import 'package:night_reader/features/reader/features/settings/comic_paper_tint.dart';
 import 'package:night_reader/features/reader/features/settings/reader_highlight_style.dart';
 import 'package:night_reader/features/reader/features/settings/reader_info_item.dart';
 import 'package:night_reader/features/reader/features/settings/reader_orientation.dart';
@@ -90,6 +91,7 @@ class ReaderSettingsController extends ChangeNotifier {
   ReaderHighlightColor highlightColor =
       ReaderPrefsSnapshot.defaults().highlightColor;
   double highlightStrength = ReaderPrefsSnapshot.defaults().highlightStrength;
+  ComicPaperTint comicPaperTint = ReaderPrefsSnapshot.defaults().comicPaperTint;
   bool brightnessAuto = ReaderPrefsSnapshot.defaults().brightnessAuto;
   double brightness = ReaderPrefsSnapshot.defaults().brightness;
   bool volumeKeyPage = ReaderPrefsSnapshot.defaults().volumeKeyPage;
@@ -171,6 +173,7 @@ class ReaderSettingsController extends ChangeNotifier {
     footerInfo = snapshot.footerInfo;
     highlightColor = snapshot.highlightColor;
     highlightStrength = snapshot.highlightStrength;
+    comicPaperTint = snapshot.comicPaperTint;
     brightnessAuto = snapshot.brightnessAuto;
     brightness = snapshot.brightness;
     volumeKeyPage = snapshot.volumeKeyPage;
@@ -558,6 +561,13 @@ class ReaderSettingsController extends ChangeNotifier {
     value,
     current: highlightColor,
     put: (v) => highlightColor = v,
+  );
+
+  void setComicPaperTint(ComicPaperTint value) => _set(
+    ReaderSettings.comicPaperTint,
+    value,
+    current: comicPaperTint,
+    put: (v) => comicPaperTint = v,
   );
 
   void setHighlightStrength(double value) {
