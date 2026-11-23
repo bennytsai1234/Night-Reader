@@ -359,21 +359,23 @@ const List<String> _upstreamTags = [
 
 /// 網站那邊的問題：書源先隔離（排出搜尋與閱讀），[tag] 說是哪一種——
 /// 「網站失效」（網域查不到、網站不在了）、「網站不穩定」（AI 確認時好時壞
-/// 或持續限流，無法修復、可移除）、「上游異常」（連不上、回錯誤、擋下夜讀）、
-/// 「校驗超時」（太慢）。
+/// 或持續限流）、「上游異常」（連不上、回錯誤、擋下夜讀）、「校驗超時」
+/// （太慢）。這四種都沒通過校驗，列入建議清理；上游異常與校驗超時照樣能交給
+/// AI 修，修好就拿掉（ADR 0081）。「已隔離」是夜讀自己的校驗流程出錯，不算
+/// 書源的問題，不列入清理。
 SourceRuntimeHealth upstreamHealth(String tag) => SourceRuntimeHealth(
   category: SourceHealthCategory.upstreamUnstable,
   label: tag,
   description: switch (tag) {
-    siteBrokenSourceGroupTag => '網域查不到或網站已經不在，換了網址才可能恢復',
+    siteBrokenSourceGroupTag => '網域查不到或網站已經不在，建議移除',
     unstableSourceGroupTag => '網站不穩定，AI 已判定無法修復，建議移除',
-    timeoutSourceGroupTag => '網站回應太慢，來源先隔離但不視為永久失效',
+    timeoutSourceGroupTag => '網站回應太慢，建議移除或交給 AI 修',
     quarantineSourceGroupTag => '校驗流程異常，先隔離避免影響其他書源',
-    _ => '上游暫時不可用，來源先隔離但不視為永久失效',
+    _ => '網站連不上或擋下夜讀，建議移除或交給 AI 修',
   },
   allowsSearch: false,
   allowsReading: false,
-  cleanupCandidate: tag == unstableSourceGroupTag,
+  cleanupCandidate: tag != quarantineSourceGroupTag,
   quarantined: true,
 );
 
