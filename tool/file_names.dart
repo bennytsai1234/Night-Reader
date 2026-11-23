@@ -21,6 +21,7 @@ const _reviewed = {
   'lib/main.dart': 'App 的進入點',
   'lib/core/ai_find/ai_find_prompt.dart': '提示詞與 AI 可以下的各種指令',
   'lib/core/ai_repair/agent_loop.dart': 'AI 修復一回合的指令、結果與紀錄',
+  'lib/core/ai_repair/ai_create_prompt.dart': '建立書源的提示詞、開場與要建立的網址',
   'lib/core/ai_repair/ai_repair_apply.dart': '主角是存修好的書源與還原改前版本的函式',
   'lib/core/ai_repair/ai_repair_prompt.dart': '提示詞與 AI 可以下的各種指令',
   'lib/core/ai_repair/repair_verdict.dart': '主角是判斷 AI 交出的書源算不算修好的函式',
