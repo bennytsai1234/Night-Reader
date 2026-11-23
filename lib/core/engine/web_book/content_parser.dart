@@ -45,11 +45,12 @@ class ContentParser {
       if (contentRule == null) return const ContentResult(content: '');
 
       var content = rule.getString(contentRule.content ?? '', unescape: false);
-
+      // 先清標籤再解實體（同 Legado `BookContent`）：倒過來的話，原文寫著的
+      // `&lt;span&gt;` 先變成 `<span>`，再被當成標籤刪掉。
+      content = HtmlFormatter.formatKeepImg(content, redirectUrl: pageUrl);
       if (content.contains('&')) {
         content = AnalyzeRuleBase.htmlUnescape.convert(content);
       }
-      content = HtmlFormatter.formatKeepImg(content, redirectUrl: pageUrl);
 
       final nextUrls = <String>[];
       if (contentRule.nextContentUrl != null &&

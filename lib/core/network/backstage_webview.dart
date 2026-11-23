@@ -5,10 +5,9 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
-import 'dart:convert';
-
 import 'package:html_unescape/html_unescape.dart';
 import 'package:night_reader/core/network/request_log.dart';
+import 'package:night_reader/core/network/webview_js_result.dart';
 import 'package:night_reader/core/network/webview_cloudflare_solver.dart';
 
 class BackstageWebView {
@@ -52,6 +51,19 @@ class BackstageWebView {
       ),
     );
     return _hiddenWebViewWidget!;
+  }
+
+  /// [sourceRegex] 在網頁內容裡找到的資源網址，有分組時取第一組；沒找到是
+  /// null。Legado 等的是網頁真的載入的資源網址，這裡在內容裡找，網址寫在
+  /// HTML 屬性裡，實體（`&amp;`）解開才是真的網址。
+  @visibleForTesting
+  static String? sourceIn(String content, String sourceRegex) {
+    final page = HtmlUnescape().convert(content);
+    final match = RegExp(sourceRegex).firstMatch(page);
+    if (match == null) return null;
+    return match.groupCount > 0
+        ? (match.group(1) ?? match.group(0) ?? '')
+        : (match.group(0) ?? '');
   }
 
   Future<Map<String, dynamic>> getStrResponse() async {
@@ -140,23 +152,12 @@ class BackstageWebView {
                 jsToRun,
               );
               if (result.toString().isNotEmpty && result.toString() != 'null') {
-                var content = result.toString();
-                // Remove surrounding quotes if it's a JSON string
-                if (content.startsWith('"') && content.endsWith('"')) {
-                  content = jsonDecode(content);
-                }
-                content = HtmlUnescape().convert(content);
+                final content = webViewJsResult(result);
 
-                if (sourceRegex != null && sourceRegex!.isNotEmpty) {
-                  final match = RegExp(sourceRegex!).firstMatch(content);
-                  if (match != null) {
-                    finish({
-                      'body': match.groupCount > 0
-                          ? (match.group(1) ?? match.group(0) ?? '')
-                          : (match.group(0) ?? ''),
-                      'url': currentUrl,
-                      'code': 200,
-                    });
+                final regex = sourceRegex;
+                if (regex != null && regex.isNotEmpty) {
+                  if (sourceIn(content, regex) case final source?) {
+                    finish({'body': source, 'url': currentUrl, 'code': 200});
                     return;
                   }
                 }
