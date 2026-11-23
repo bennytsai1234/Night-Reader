@@ -41,6 +41,7 @@ class SettingsSync extends SyncKind {
     'bookshelf_is_grid',
     'bookshelf_show_last_update',
     'bookshelf_unified_covers',
+    PreferKey.shelfMergedList,
     PreferKey.bookshelfSort,
     'precision_search',
     'search_blocked_words',

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:night_reader/shared/shelf_trial.dart';
+import 'package:night_reader/shared/shelf_look.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/comic/comic_folder_picker.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
@@ -73,7 +73,7 @@ enum _ShelfMenuAction {
   gridView,
   listView,
   unifiedCovers,
-  trialMergedList,
+  mergedList,
   sortFilter,
   select,
   export,
@@ -341,12 +341,11 @@ class _BookshelfPageState extends State<BookshelfPage>
         checked: provider.unifiedCovers,
         toggle: true,
       ),
-      // 試用開關（DESIGN.md 設計原則 6），使用者選定後拿掉。
       GlassMenuItem(
-        value: _ShelfMenuAction.trialMergedList,
-        label: '試用：列表併成一面',
+        value: _ShelfMenuAction.mergedList,
+        label: '列表併成一面',
         icon: Icons.view_agenda_outlined,
-        checked: ShelfTrial.mergedList.value,
+        checked: ShelfLook.mergedList.value,
         toggle: true,
         enabled: !provider.isGridView,
       ),
@@ -452,8 +451,8 @@ class _BookshelfPageState extends State<BookshelfPage>
         provider.setGridView(false);
       case _ShelfMenuAction.unifiedCovers:
         provider.setUnifiedCovers(!provider.unifiedCovers);
-      case _ShelfMenuAction.trialMergedList:
-        provider.setTrialMergedList(!ShelfTrial.mergedList.value);
+      case _ShelfMenuAction.mergedList:
+        provider.setMergedList(!ShelfLook.mergedList.value);
       case _ShelfMenuAction.sortFilter:
         break;
       case _ShelfMenuAction.select:
@@ -508,7 +507,7 @@ class _BookshelfPageState extends State<BookshelfPage>
 
   /// 捲到底時最後一本到底部的距離，和卡與卡之間的組間距一樣（ADR 0075）；
   /// 分開的列表書卡每張自己帶下方 [AppSpacing.sm]，最後一張不再多算。
-  static double _bottomGap(bool grid) => grid || ShelfTrial.mergedList.value
+  static double _bottomGap(bool grid) => grid || ShelfLook.mergedList.value
       ? AppGrouped.sectionGap
       : AppGrouped.sectionGap - AppSpacing.sm;
 
@@ -532,7 +531,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     };
     final books = [for (final url in shownUrls) ?known[url]];
     _shownBooks = {for (final book in books) book.bookUrl: book};
-    ShelfTrial.setShelfOrder([for (final book in books) book.bookUrl]);
+    ShelfLook.setShelfOrder([for (final book in books) book.bookUrl]);
     // 載入失敗時已有的書照常顯示；只有什麼都沒有時才換成錯誤頁。
     if (books.isEmpty && provider.loadErrorMessage != null) {
       return Padding(
@@ -923,7 +922,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     required int count,
   }) {
     final selecting = _isMultiSelect;
-    final merged = ShelfTrial.mergedList.value;
+    final merged = ShelfLook.mergedList.value;
     // 書卡不設左滑動作（使用者 2026-10-23 決定，DESIGN.md「否決過的方向」）：
     // 檢查更新、移出書架從長按選單走。
     final card = Padding(

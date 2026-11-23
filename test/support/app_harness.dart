@@ -12,7 +12,7 @@ import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
-import 'package:night_reader/shared/shelf_trial.dart';
+import 'package:night_reader/shared/shelf_look.dart';
 import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
 import 'package:night_reader/app_providers.dart';
 import 'package:night_reader/core/database/app_database.dart';
@@ -241,7 +241,7 @@ Future<void> resetPrefs(Map<String, Object> values) async {
   }
   _startChineseDisplay(prefs);
   TabBarLook.restore(prefs);
-  ShelfTrial.restore(prefs);
+  ShelfLook.restore(prefs);
 }
 
 /// App 開機時從偏好讀進記憶體的繁簡轉換模式（App 是 ChineseDisplay.start）。
