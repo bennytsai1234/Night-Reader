@@ -1,35 +1,30 @@
-import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
-import 'package:night_reader/core/network/cookie_store.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/network/network_service.dart';
 
 void main() {
-  test('a secret is hidden in its JSON-escaped forms too', () {
-    // 審查：含引號的密碼放進書源 JSON（標頭本身是 JSON 字串，再跳脫一層）。
-    const secret = 'password-"123456';
-    final once = jsonEncode({'header': secret});
-    final twice = jsonEncode({
-      'source': jsonEncode({'header': secret}),
-    });
+  test('cookies the site set in the network cookie jar are secrets too: a '
+      'page that prints them back does not hand them to the AI', () async {
+    await NetworkService().init(ephemeral: true);
+    await NetworkService().cookieJar.saveFromResponse(
+      Uri.parse('https://www.site.example/'),
+      [Cookie('sid', 'jar-cookie-value-123')],
+    );
 
-    for (final text in [
-      secret,
-      once,
-      twice,
-      Uri.encodeQueryComponent(secret),
-    ]) {
-      final hidden = redactAiRepairSecrets(text, {secret});
-      expect(hidden, contains(aiRepairRedacted), reason: text);
-      expect(hidden, isNot(contains('123456')), reason: text);
-    }
-  });
+    final secrets = await aiRepairSecretsOf(
+      BookSource(
+        bookSourceUrl: 'https://www.site.example',
+        bookSourceName: '範例書站',
+      ),
+    );
 
-  test('cookies written during the repair are read live', () async {
-    // 審查：開始時沒有 Cookie，修到一半規則或網站驗證才寫進來。
-    const url = 'https://live-cookie.example';
-    expect(aiRepairLiveCookieSecrets({url}), isEmpty);
-    await CookieStore().setCookie(url, 'sid=session-value-9876; a=1');
-    expect(aiRepairLiveCookieSecrets({url}), {'session-value-9876'});
+    expect(secrets, contains('jar-cookie-value-123'));
+    expect(
+      redactAiRepairSecrets('你的工作階段：jar-cookie-value-123', secrets),
+      '你的工作階段：$aiRepairRedacted',
+    );
   });
 }

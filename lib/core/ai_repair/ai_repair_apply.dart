@@ -54,24 +54,27 @@ Future<void> saveRepairedSource(
 /// 合併替使用者挑留哪一個。
 Future<void> saveCreatedSource(BookSource created, String url) async {
   final dao = getIt<BookSourceDao>();
-  final all = await dao.getAll();
-  final key = siteKey(created);
-  for (final other in all) {
-    if (other.bookSourceUrl == created.bookSourceUrl ||
-        (siteKey(other) == key &&
-            other.bookSourceType == created.bookSourceType)) {
-      throw AiRepairConflict('已經有同網站的書源「${other.bookSourceName}」，沒有存。');
-    }
-  }
   final date = DateTime.now().toIso8601String().substring(0, 10);
   created
     ..bookSourceComment = '夜讀 AI 依 $url 建立（$date）'
     ..enabled = true
-    ..enabledExplore = true
-    ..customOrder = all.isEmpty
+    ..enabledExplore = true;
+  // 查重與寫入在同一個交易裡：查完到寫進去之間匯入或同步的書源不會被蓋掉。
+  await dao.transaction(() async {
+    final all = await dao.getAll();
+    final key = siteKey(created);
+    for (final other in all) {
+      if (other.bookSourceUrl == created.bookSourceUrl ||
+          (siteKey(other) == key &&
+              other.bookSourceType == created.bookSourceType)) {
+        throw AiRepairConflict('已經有同網站的書源「${other.bookSourceName}」，沒有存。');
+      }
+    }
+    created.customOrder = all.isEmpty
         ? 0
         : all.map((source) => source.customOrder).reduce(max) + 1;
-  await BookSourceService().saveEditedSource(created);
+    await dao.saveEdited(created);
+  });
 }
 
 /// 修好的書源存不進去：修的這段時間書源被刪掉或改過。

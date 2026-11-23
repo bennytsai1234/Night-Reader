@@ -40,7 +40,8 @@ Future<void> openAiCreateSource(
   );
 }
 
-/// 網址沒寫開頭時補上 https://；不是 http(s) 網站時是 null。
+/// 網址沒寫開頭時補上 https://；不是 http(s) 網站、或網址裡夾著帳密時是
+/// null。
 String? aiCreateUrl(String text) {
   final trimmed = text.trim();
   if (trimmed.isEmpty) return null;
@@ -52,6 +53,8 @@ String? aiCreateUrl(String text) {
   final url = RegExp(r'^https?://', caseSensitive: false).hasMatch(trimmed)
       ? trimmed
       : 'https://$trimmed';
+  // 網址裡夾帳密（https://名稱:密碼@網站）不收：網址會送給 AI、寫進書源說明。
+  if (Uri.tryParse(url)?.userInfo.isNotEmpty ?? true) return null;
   return aiCreateBlankSource(url) == null ? null : url;
 }
 

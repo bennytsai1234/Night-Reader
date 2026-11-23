@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../models/source/base_source.dart';
 import '../models/source/book_source.dart';
 import '../network/cookie_store.dart';
+import '../network/network_service.dart';
 import '../diagnostics/app_log_service.dart';
 
 /// 送給 AI 的內容裡換掉秘密的那段字。
@@ -12,7 +13,8 @@ const String aiRepairRedacted = '«已遮蔽»';
 const int _minSecretLength = 6;
 
 /// 這個書源的秘密（ADR 0054：登入資料、Cookie 與書源變數不送）：登入表單
-/// 填的內容、登入標頭、夜讀存的網站 Cookie、書源變數，與書源標頭裡的
+/// 填的內容、登入標頭、夜讀存的網站 Cookie（書源的與網路層 Cookie 罐裡這個
+/// 網站的）、書源變數，與書源標頭裡的
 /// Cookie、Authorization。它們不在書源 JSON 裡，但抓網頁時照常帶上，值會出現
 /// 在試抓的網址、除錯紀錄與錯誤訊息裡，送出前用 [redactAiRepairSecrets]
 /// 換掉。讀不到的那一種略過：書源抓網頁時同樣讀不到。
@@ -44,6 +46,14 @@ Future<Set<String>> aiRepairSecretsOf(BookSource source) async {
   });
   await read('Cookie', () async {
     addAll(_cookieValues(await CookieStore().getCookie(source.getKey())));
+  });
+  // 網站回的 Cookie 存在網路層的 Cookie 罐，抓網頁時照網址帶上（同一個網站
+  // 別的書源存的也算），值可能被網頁原樣印出來。
+  await read('網站的 Cookie 罐', () async {
+    final uri = Uri.tryParse(source.getKey());
+    if (uri == null || !uri.hasScheme) return;
+    final saved = await NetworkService().cookieJar.loadForRequest(uri);
+    addAll([for (final cookie in saved) cookie.value]);
   });
   await read('書源變數', () async {
     final variable = await source.getVariable();

@@ -15,6 +15,11 @@ void main() {
     expect(aiCreateUrl(' http://site.example '), 'http://site.example');
     expect(aiCreateUrl(''), isNull);
     expect(aiCreateUrl('ftp://site.example'), isNull);
+    expect(
+      aiCreateUrl('https://me:secret@site.example/'),
+      isNull,
+      reason: '網址裡的帳密會送給 AI、寫進書源說明',
+    );
   });
 
   Future<void> pumpPage(

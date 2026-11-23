@@ -176,7 +176,11 @@ class AiRepairSession extends ChangeNotifier {
          sourceUrl: source.bookSourceUrl,
          directory: logDirectory,
        ),
-       _check = check ?? AiRepairDefaults.check,
+       _check =
+           check ??
+           (create == null
+               ? AiRepairDefaults.check
+               : AiRepairDefaults.checkAll),
        _probe = probe ?? AiRepairDefaults.probe,
        _fetchPage = fetchPage ?? AiRepairDefaults.fetchPage,
        _parsePage = parsePage ?? AiRepairDefaults.parsePage,
@@ -721,6 +725,14 @@ class AiRepairSession extends ChangeNotifier {
     if (checked != null && !usable(checked)) {
       log.both(checked.diagnostics.join('\n\n'));
     }
+    if (_createStopReason(job, checked) case final why?) {
+      _finish(step, checkText, failed: true);
+      job
+        ..confirmedUnfixable = true
+        ..giveUpWhy = why;
+      _fail(job, '${aiGiveUpLabels[why]}。校驗：$checkText');
+      return null;
+    }
     if (checked == null || !usable(checked)) {
       _finish(step, checkText, failed: true);
       if (!last) {
@@ -786,6 +798,24 @@ class AiRepairSession extends ChangeNotifier {
     _logOutcome('$result${note.isEmpty ? '' : '\nAI：$note'}');
     _notify();
     return null;
+  }
+
+  /// 建立書源時，校驗判成付費、要登入或要網頁驗證：照「一看到就放棄」直接
+  /// 結束，不再退回給 AI（ADR 0082）；傳回放棄的原因（[aiGiveUpLabels] 的
+  /// key），其他是 null。
+  static String? _createStopReason(
+    AiRepairJob job,
+    SourceCheckIsolateResult? checked,
+  ) {
+    if (job.create == null || checked == null || checked.isHealthy) return null;
+    return switch (BookSource.fromJson(checked.updatedSourceJson)
+        .runtimeHealth
+        .category) {
+      SourceHealthCategory.paid => 'paid',
+      SourceHealthCategory.loginRequired => 'login',
+      SourceHealthCategory.verificationRequired => 'human_check',
+      _ => null,
+    };
   }
 
   /// 送給 AI、寫進紀錄的文字都經過這裡：開始時讀到的秘密、修復途中重讀

@@ -61,6 +61,7 @@ void main() {
     required List<String> replies,
     SiteVerdict site = SiteVerdict.alive,
     String sampleTitle = '',
+    SourceCheckIsolateResult Function(BookSource source)? check,
   }) {
     var next = 0;
     return AiRepairSession(
@@ -68,7 +69,7 @@ void main() {
       create: (url: _url, sampleTitle: sampleTitle),
       service: _service,
       siteCheck: (_, _) async => SiteCheck(site, site.name),
-      check: (source, _) async => _checked(source),
+      check: (source, _) async => (check ?? _checked)(source),
       probe: (source, _, {start}) async =>
           const SourceProbeReport(logs: [], requests: []),
       fetchPage: (source, url, _) async {
@@ -149,6 +150,42 @@ void main() {
 
     expect(s.job.outcome, AiRepairOutcome.failed);
     expect(s.job.giveUpWhy, 'paid');
+    expect(applied, isEmpty);
+  });
+
+  test('a check that finds paid chapters ends it at once without asking the '
+      'AI again', () async {
+    final s = session(
+      replies: [_submit],
+      check: (source) {
+        final paid = BookSource.fromJson(source.toJson())
+          ..addHealthGroups(
+            const SourceRuntimeHealth(
+              category: SourceHealthCategory.paid,
+              label: paidSourceGroupTag,
+              description: '',
+              allowsSearch: false,
+              allowsReading: false,
+              cleanupCandidate: true,
+              quarantined: true,
+            ),
+          );
+        return SourceCheckIsolateResult(
+          stage: 'content',
+          message: '目錄有付費章節',
+          isHealthy: false,
+          updatedSourceJson: paid.toJson(),
+          logs: const [],
+        );
+      },
+    );
+
+    await s.start();
+
+    expect(asked, hasLength(1), reason: '交出一次就結束，不再退回給 AI');
+    expect(s.job.outcome, AiRepairOutcome.failed);
+    expect(s.job.giveUpWhy, 'paid');
+    expect(s.job.explanation, startsWith('要付費'));
     expect(applied, isEmpty);
   });
 
