@@ -51,7 +51,7 @@ void main() {
     ),
     chapters: [BookChapter(title: '第一章', bookUrl: candidate.bookUrl)],
     targetChapterIndex: 0,
-    validatedContent: '正文',
+    validatedContent: '這一章的正文。' * 20,
   );
 
   setUp(() {
