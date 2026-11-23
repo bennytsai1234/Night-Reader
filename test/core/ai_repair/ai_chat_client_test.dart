@@ -129,72 +129,79 @@ void main() {
     expect(service.request!.data, isNot(contains('temperature')));
   });
 
-  test('tools are sent and must be called; earlier calls, their thinking '
-      'and results go back in the conversation', () async {
-    final service = _Service(200, {
-      'choices': [
-        {
-          'message': {
-            'role': 'assistant',
-            'content': null,
-            'tool_calls': [
-              {
-                'id': 'call_2',
-                'type': 'function',
-                'function': {'name': 'read', 'arguments': '{"page":1}'},
-              },
-            ],
-          },
-        },
-      ],
-    });
-    const fetch = (id: 'call_1', name: 'fetch', arguments: '{"url":"/"}');
-
-    final reply = await _client(service).complete(
-      [
-        const AiMessage.user('書源'),
-        const AiMessage.assistant('', toolCalls: [fetch], reasoning: '先看首頁'),
-        const AiMessage.tool('call_1', '頁 1'),
-      ],
-      tools: [
-        (
-          name: 'read',
-          description: '讀頁',
-          parameters: {'type': 'object', 'properties': {}},
-        ),
-      ],
-    );
-
-    expect(reply.content, '');
-    expect(reply.toolCalls, [
-      (id: 'call_2', name: 'read', arguments: '{"page":1}'),
-    ]);
-    final data = service.request!.data as Map<String, dynamic>;
-    expect(data['tool_choice'], 'required');
-    expect((data['tools'] as List).single, {
-      'type': 'function',
-      'function': {
-        'name': 'read',
-        'description': '讀頁',
-        'parameters': {'type': 'object', 'properties': {}},
-      },
-    });
-    expect((data['messages'] as List).skip(1), [
-      {
-        'role': 'assistant',
-        'content': null,
-        'reasoning_content': '先看首頁',
-        'tool_calls': [
+  test(
+    'tools are sent and the model decides whether to call them; earlier '
+    'calls, their thinking and results go back in the conversation',
+    () async {
+      final service = _Service(200, {
+        'choices': [
           {
-            'id': 'call_1',
-            'type': 'function',
-            'function': {'name': 'fetch', 'arguments': '{"url":"/"}'},
+            'message': {
+              'role': 'assistant',
+              'content': null,
+              'tool_calls': [
+                {
+                  'id': 'call_2',
+                  'type': 'function',
+                  'function': {'name': 'read', 'arguments': '{"page":1}'},
+                },
+              ],
+            },
           },
         ],
-      },
-      {'role': 'tool', 'content': '頁 1', 'tool_call_id': 'call_1'},
-    ]);
-  });
+      });
+      const fetch = AiToolCall(
+        id: 'call_1',
+        name: 'fetch',
+        arguments: '{"url":"/"}',
+      );
+
+      final reply = await _client(service).complete(
+        [
+          const AiMessage.user('書源'),
+          const AiMessage.assistant('', toolCalls: [fetch], reasoning: '先看首頁'),
+          const AiMessage.tool('call_1', '頁 1'),
+        ],
+        tools: [
+          (
+            name: 'read',
+            description: '讀頁',
+            parameters: {'type': 'object', 'properties': {}},
+          ),
+        ],
+      );
+
+      expect(reply.content, '');
+      expect(reply.toolCalls, [
+        AiToolCall(id: 'call_2', name: 'read', arguments: '{"page":1}'),
+      ]);
+      final data = service.request!.data as Map<String, dynamic>;
+      expect(data.containsKey('tool_choice'), isFalse);
+      expect((data['tools'] as List).single, {
+        'type': 'function',
+        'function': {
+          'name': 'read',
+          'description': '讀頁',
+          'parameters': {'type': 'object', 'properties': {}},
+        },
+      });
+      expect((data['messages'] as List).skip(1), [
+        {
+          'role': 'assistant',
+          'content': null,
+          'reasoning_content': '先看首頁',
+          'tool_calls': [
+            {
+              'id': 'call_1',
+              'type': 'function',
+              'function': {'name': 'fetch', 'arguments': '{"url":"/"}'},
+            },
+          ],
+        },
+        {'role': 'tool', 'content': '頁 1', 'tool_call_id': 'call_1'},
+      ]);
+    },
+  );
 
   test('a streamed tool call is put together from its pieces', () async {
     Map<String, Object?> piece(Map<String, Object?> call) => {
@@ -232,7 +239,7 @@ void main() {
     final reply = await _client(service).complete([const AiMessage.user('hi')]);
 
     expect(reply.toolCalls, [
-      (id: 'call_9', name: 'fetch', arguments: '{"url":"/s"}'),
+      AiToolCall(id: 'call_9', name: 'fetch', arguments: '{"url":"/s"}'),
     ]);
   });
 
@@ -544,5 +551,543 @@ void main() {
       _client(_Service(200, {'models': []})).listModels(),
       throwsA(isA<AiServiceException>()),
     );
+  });
+
+  group('each service\'s format', () {
+    Map<String, Object?> piece(Map<String, Object?> delta) => {
+      'choices': [
+        {'delta': delta},
+      ],
+    };
+
+    test(
+      'a tool without parameters is sent without a parameter schema',
+      () async {
+        final service = _Service(200, {
+          'choices': [
+            {
+              'message': {'content': 'ok'},
+            },
+          ],
+        });
+        await _client(service).complete(
+          [const AiMessage.user('hi')],
+          tools: [(name: 'shelf', description: '書架', parameters: const {})],
+        );
+        final data = service.request!.data as Map<String, dynamic>;
+        expect((data['tools'] as List).single, {
+          'type': 'function',
+          'function': {'name': 'shelf', 'description': '書架'},
+        });
+      },
+    );
+
+    test('once any reply carried thinking, every reply sends the thinking '
+        'field (DeepSeek wants it on each)', () async {
+      final service = _Service(200, {
+        'choices': [
+          {
+            'message': {'content': 'ok'},
+          },
+        ],
+      });
+      await _client(service).complete([
+        const AiMessage.user('hi'),
+        const AiMessage.assistant('a', reasoning: '想'),
+        const AiMessage.user('again'),
+        const AiMessage.assistant('b'),
+        const AiMessage.user('more'),
+      ]);
+      final sent = (service.request!.data as Map)['messages'] as List;
+      expect((sent[1] as Map)['reasoning_content'], '想');
+      expect((sent[3] as Map)['reasoning_content'], '');
+      expect((sent[0] as Map).containsKey('reasoning_content'), isFalse);
+
+      final plain = _Service(200, {
+        'choices': [
+          {
+            'message': {'content': 'ok'},
+          },
+        ],
+      });
+      await _client(plain).complete([
+        const AiMessage.user('hi'),
+        const AiMessage.assistant('a'),
+        const AiMessage.user('again'),
+      ]);
+      final plainSent = (plain.request!.data as Map)['messages'] as List;
+      expect((plainSent[1] as Map).containsKey('reasoning_content'), isFalse);
+    });
+
+    test('Gemini: calls in separate chunks without an index stay apart, and '
+        'the thought signature goes back on its call', () async {
+      const signature = {
+        'google': {'thought_signature': 'sig-1'},
+      };
+      final service = _Stream([
+        _event(
+          piece({
+            'tool_calls': [
+              {
+                'id': 'g1',
+                'type': 'function',
+                'function': {'name': 'search', 'arguments': '{"keyword":"a"}'},
+                'extra_content': signature,
+              },
+            ],
+          }),
+        ),
+        _event(
+          piece({
+            'tool_calls': [
+              {
+                'id': 'g2',
+                'type': 'function',
+                'function': {'name': 'search', 'arguments': '{"keyword":"b"}'},
+              },
+            ],
+          }),
+        ),
+        'data: [DONE]\n\n',
+      ]);
+
+      final reply = await _client(service)
+          .complete([const AiMessage.user('hi')]);
+
+      expect(reply.toolCalls, [
+        const AiToolCall(
+          id: 'g1',
+          name: 'search',
+          arguments: '{"keyword":"a"}',
+          extra: {'extra_content': signature},
+        ),
+        const AiToolCall(
+          id: 'g2',
+          name: 'search',
+          arguments: '{"keyword":"b"}',
+        ),
+      ]);
+
+      final next = _Service(200, {
+        'choices': [
+          {
+            'message': {'content': 'ok'},
+          },
+        ],
+      });
+      await _client(next).complete([
+        const AiMessage.user('hi'),
+        AiMessage.reply(reply),
+        const AiMessage.tool('g1', '1'),
+        const AiMessage.tool('g2', '2'),
+      ]);
+      final calls =
+          (((next.request!.data as Map)['messages'] as List)[1]
+                  as Map)['tool_calls']
+              as List;
+      expect(calls.first, {
+        'extra_content': signature,
+        'id': 'g1',
+        'type': 'function',
+        'function': {'name': 'search', 'arguments': '{"keyword":"a"}'},
+      });
+      expect((calls.last as Map).containsKey('extra_content'), isFalse);
+    });
+
+    test('calls without an index or an id are told apart by their name; a '
+        'missing id is filled in', () async {
+      final service = _Stream([
+        _event(
+          piece({
+            'tool_calls': [
+              {
+                'id': '',
+                'function': {'name': 'read', 'arguments': '{"page"'},
+              },
+            ],
+          }),
+        ),
+        _event(
+          piece({
+            'tool_calls': [
+              {
+                'function': {'arguments': ':1}'},
+              },
+            ],
+          }),
+        ),
+        _event(
+          piece({
+            'tool_calls': [
+              {
+                'function': {'name': 'read', 'arguments': '{"page":2}'},
+              },
+            ],
+          }),
+        ),
+      ]);
+
+      final reply = await _client(service)
+          .complete([const AiMessage.user('hi')]);
+
+      expect(
+        [for (final c in reply.toolCalls) c.arguments],
+        ['{"page":1}', '{"page":2}'],
+      );
+      expect([for (final c in reply.toolCalls) c.id], everyElement(isNotEmpty));
+      expect(reply.toolCalls.first.id, isNot(reply.toolCalls.last.id));
+    });
+
+    test('a service that repeats the id and name on every chunk does not '
+        'double them', () async {
+      final service = _Stream([
+        for (final part in ['{"url":', '"/"}'])
+          _event(
+            piece({
+              'tool_calls': [
+                {
+                  'index': 0,
+                  'id': 'call_1',
+                  'function': {'name': 'fetch', 'arguments': part},
+                },
+              ],
+            }),
+          ),
+      ]);
+
+      final reply = await _client(service)
+          .complete([const AiMessage.user('hi')]);
+
+      expect(reply.toolCalls, [
+        const AiToolCall(id: 'call_1', name: 'fetch', arguments: '{"url":"/"}'),
+      ]);
+    });
+
+    test('OpenRouter: reasoning details are put together like its SDK does '
+        'and go back on the reply', () async {
+      final service = _Stream([
+        _event(
+          piece({
+            'reasoning': '先',
+            'reasoning_details': [
+              {
+                'type': 'reasoning.text',
+                'text': '先',
+                'format': 'anthropic-claude-v1',
+                'index': 0,
+              },
+            ],
+          }),
+        ),
+        _event(
+          piece({
+            'reasoning': '看',
+            'reasoning_details': [
+              {'type': 'reasoning.text', 'text': '看', 'signature': 'sig'},
+            ],
+          }),
+        ),
+        _event(
+          piece({
+            'reasoning_details': [
+              {'type': 'reasoning.encrypted', 'data': 'enc', 'id': 'r1'},
+            ],
+          }),
+        ),
+        _event(piece({'content': 'ok'})),
+      ]);
+
+      final reply = await _client(service)
+          .complete([const AiMessage.user('hi')]);
+
+      expect(reply.reasoning, '先看');
+      expect(reply.reasoningDetails, [
+        {
+          'type': 'reasoning.text',
+          'text': '先看',
+          'format': 'anthropic-claude-v1',
+          'index': 0,
+          'signature': 'sig',
+        },
+        {'type': 'reasoning.encrypted', 'data': 'enc', 'id': 'r1'},
+      ]);
+
+      final next = _Service(200, {
+        'choices': [
+          {
+            'message': {'content': 'ok'},
+          },
+        ],
+      });
+      await _client(next).complete([
+        const AiMessage.user('hi'),
+        AiMessage.reply(reply),
+        const AiMessage.user('again'),
+      ]);
+      final sent = ((next.request!.data as Map)['messages'] as List)[1] as Map;
+      expect(sent['reasoning_details'], reply.reasoningDetails);
+      expect(sent['reasoning_content'], '先看');
+    });
+
+    test('OpenRouter: unsigned Anthropic and Gemini thinking text is not sent '
+        'back', () {
+      const message = AiMessage(
+        'assistant',
+        'ok',
+        reasoningDetails: [
+          {'type': 'reasoning.text', 'text': 'x', 'format': 'google-gemini-v1'},
+          {'type': 'reasoning.text', 'text': 'y', 'format': 'unknown'},
+        ],
+      );
+      expect(message.toJson()['reasoning_details'], [
+        {'type': 'reasoning.text', 'text': 'y', 'format': 'unknown'},
+      ]);
+    });
+  });
+
+  group('OpenAI responses', () {
+    const base = 'https://api.openai.com/v1';
+
+    test('only OpenAI itself goes to responses', () {
+      expect(AiChatClient.endpoint(base), '$base/responses');
+      expect(
+        AiChatClient.endpoint('$base/chat/completions'),
+        '$base/responses',
+      );
+      expect(
+        AiChatClient.endpoint('https://openrouter.ai/api/v1'),
+        'https://openrouter.ai/api/v1/chat/completions',
+      );
+    });
+
+    String event(Map<String, Object?> data) =>
+        'event: ${data['type']}\ndata: ${jsonEncode(data)}\n\n';
+
+    const reasoningItem = {
+      'type': 'reasoning',
+      'id': 'rs_1',
+      'summary': <Object?>[],
+      'encrypted_content': 'enc',
+    };
+    const callItem = {
+      'type': 'function_call',
+      'id': 'fc_1',
+      'call_id': 'call_1',
+      'name': 'fetch',
+      'arguments': '{"url":"/"}',
+      'status': 'completed',
+    };
+
+    test('a streamed reply: text, the call, the items to send back and the '
+        'usage', () async {
+      final service = _Stream([
+        event({'type': 'response.created', 'response': <String, Object?>{}}),
+        event({
+          'type': 'response.output_item.done',
+          'output_index': 0,
+          'item': reasoningItem,
+        }),
+        event({
+          'type': 'response.output_text.delta',
+          'output_index': 1,
+          'delta': '先看首頁',
+        }),
+        event({
+          'type': 'response.output_item.added',
+          'output_index': 2,
+          'item': {...callItem, 'arguments': ''},
+        }),
+        event({
+          'type': 'response.function_call_arguments.delta',
+          'output_index': 2,
+          'delta': '{"url":',
+        }),
+        event({
+          'type': 'response.function_call_arguments.delta',
+          'output_index': 2,
+          'delta': '"/"}',
+        }),
+        event({
+          'type': 'response.output_item.done',
+          'output_index': 2,
+          'item': callItem,
+        }),
+        event({
+          'type': 'response.completed',
+          'response': {
+            'usage': {
+              'input_tokens': 100,
+              'input_tokens_details': {'cached_tokens': 40},
+              'output_tokens': 30,
+              'output_tokens_details': {'reasoning_tokens': 10},
+            },
+          },
+        }),
+      ]);
+
+      final reply = await _client(
+        service,
+        baseUrl: base,
+      ).complete([const AiMessage.user('hi')]);
+
+      expect(reply.content, '先看首頁');
+      expect(reply.toolCalls, [
+        const AiToolCall(id: 'call_1', name: 'fetch', arguments: '{"url":"/"}'),
+      ]);
+      expect(reply.responseItems, [reasoningItem, callItem]);
+      expect(reply.usage, (
+        prompt: 100,
+        cached: 40,
+        completion: 30,
+        reasoning: 10,
+      ));
+    });
+
+    test('the request: stateless, tools without strict mode, the items sent '
+        'back in order and the tool results', () async {
+      final service = _Service(200, {
+        'output': [
+          {
+            'type': 'message',
+            'role': 'assistant',
+            'content': [
+              {'type': 'output_text', 'text': 'ok'},
+            ],
+          },
+        ],
+        'usage': {'input_tokens': 5, 'output_tokens': 1},
+      });
+
+      final reply = await _client(service, baseUrl: base, effort: 'low')
+          .complete(
+            [
+              const AiMessage.system('規則'),
+              const AiMessage.user('書源'),
+              const AiMessage(
+                'assistant',
+                '',
+                toolCalls: [
+                  AiToolCall(
+                    id: 'call_1',
+                    name: 'fetch',
+                    arguments: '{"url":"/"}',
+                  ),
+                ],
+                responseItems: [reasoningItem, callItem],
+              ),
+              const AiMessage.tool('call_1', '頁 1'),
+              // 沒有原本項目的（換服務前存下的）照話與呼叫組出來。
+              const AiMessage.assistant(
+                '再看',
+                toolCalls: [
+                  AiToolCall(id: 'call_2', name: 'read', arguments: '{}'),
+                ],
+              ),
+              const AiMessage.tool('call_2', '頁 2'),
+            ],
+            tools: [
+              (
+                name: 'fetch',
+                description: '看網頁',
+                parameters: const {
+                  'type': 'object',
+                  'properties': {
+                    'url': {'type': 'string'},
+                  },
+                },
+              ),
+              (name: 'shelf', description: '書架', parameters: const {}),
+            ],
+          );
+
+      expect(reply.content, 'ok');
+      expect(reply.usage?.prompt, 5);
+      expect(service.request!.uri.toString(), '$base/responses');
+      final data = service.request!.data as Map<String, dynamic>;
+      expect(data['store'], isFalse);
+      expect(data['include'], ['reasoning.encrypted_content']);
+      expect(data['reasoning'], {'effort': 'low'});
+      expect(data.containsKey('tool_choice'), isFalse);
+      expect(data.containsKey('messages'), isFalse);
+      expect(data['tools'], [
+        {
+          'type': 'function',
+          'name': 'fetch',
+          'description': '看網頁',
+          'parameters': {
+            'type': 'object',
+            'properties': {
+              'url': {'type': 'string'},
+            },
+          },
+          'strict': false,
+        },
+        {
+          'type': 'function',
+          'name': 'shelf',
+          'description': '書架',
+          'parameters': {'type': 'object', 'properties': <String, Object?>{}},
+          'strict': false,
+        },
+      ]);
+      expect(data['input'], [
+        {'role': 'system', 'content': '規則'},
+        {'role': 'user', 'content': '書源'},
+        reasoningItem,
+        callItem,
+        {'type': 'function_call_output', 'call_id': 'call_1', 'output': '頁 1'},
+        {'role': 'assistant', 'content': '再看'},
+        {
+          'type': 'function_call',
+          'call_id': 'call_2',
+          'name': 'read',
+          'arguments': '{}',
+        },
+        {'type': 'function_call_output', 'call_id': 'call_2', 'output': '頁 2'},
+      ]);
+    });
+
+    test('running out of output is a runaway; a failed response is an '
+        'error', () async {
+      await expectLater(
+        _client(
+          _Stream([
+            event({
+              'type': 'response.output_text.delta',
+              'output_index': 0,
+              'delta': '{"a":',
+            }),
+            event({
+              'type': 'response.incomplete',
+              'response': {
+                'incomplete_details': {'reason': 'max_output_tokens'},
+              },
+            }),
+          ]),
+          baseUrl: base,
+        ).complete([const AiMessage.user('hi')]),
+        throwsA(isA<AiRunaway>()),
+      );
+      await expectLater(
+        _client(
+          _Stream([
+            event({
+              'type': 'response.failed',
+              'response': {
+                'error': {'message': 'server_error'},
+              },
+            }),
+          ]),
+          baseUrl: base,
+        ).complete([const AiMessage.user('hi')]),
+        throwsA(
+          isA<AiServiceException>().having(
+            (e) => e.message,
+            'message',
+            contains('server_error'),
+          ),
+        ),
+      );
+    });
   });
 }

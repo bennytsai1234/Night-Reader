@@ -160,11 +160,13 @@ bool _headerReadable(String header) {
   }
 }
 
-/// 書源 JSON 的欄位（Legado 3.0 格式，[BookSource.toJson]）。
-final Set<String> _sourceFields = BookSource.fromJson(const {
+/// 書源 JSON 的欄位與預設值（Legado 3.0 格式，[BookSource.toJson]）。
+final Map<String, dynamic> _sourceDefaults = BookSource.fromJson(const {
   'bookSourceUrl': '',
   'bookSourceName': '',
-}).toJson().keys.toSet();
+}).toJson();
+
+final Set<String> _sourceFields = _sourceDefaults.keys.toSet();
 
 /// 每個規則物件可以寫的項目。
 final Map<String, Set<String>> _ruleFields = {
@@ -576,12 +578,26 @@ const String _method =
 - 一個書源最多 ${AiAgentKnobs.maxRounds} 輪（每次回覆算一輪），用完算沒修完；每一步都要有目的，把想確認什麼寫在 note。
 ''';
 
-/// 改規則的參數：蓋到目前的書源上的欄位。
-const Map<String, Object?> _patch = {
+/// 改規則的參數：蓋到目前的書源上的欄位。欄位逐一列出：沒列欄位的物件
+/// Gemini 不收（「should be non-empty for OBJECT type」），列出來 AI 也不會
+/// 寫成書源沒有的欄位。
+final Map<String, Object?> _patch = {
   'type': 'object',
   'description':
       '要改的欄位，蓋到目前的書源上：規則物件（ruleSearch 這類）逐項蓋，'
       '沒寫的項目照舊，值給空字串就拿掉那一項。只寫要改的欄位。',
+  'properties': {
+    for (final MapEntry(:key, :value) in _sourceDefaults.entries)
+      key: switch (_ruleFields[key]) {
+        final items? => {
+          'type': 'object',
+          'properties': {
+            for (final item in items) item: const {'type': 'string'},
+          },
+        },
+        _ => {'type': value is int ? 'integer' : 'string'},
+      },
+  },
 };
 
 const Map<String, Object?> _note = {
@@ -773,6 +789,8 @@ List<AiMessage> aiRepairOpening({
 const String aiRepairSystemPrompt =
     '你是夜讀的書源修復員：書源壞了，你要查出原因、改好規則，再用試抓證明修好了；'
     '或拿出證據說明修不好。也要判斷書源的類型。\n'
+    '每次回覆都呼叫工具：修好用 submit 交出、修不好用 give_up 放棄，這兩個是'
+    '唯一的結束方式。\n'
     '每一輪都要等你回覆，輪數越少越好：互不相依的查詢放在同一次回覆一起呼叫，'
     '同一個問題的各種寫法（不同網域、www. 或 m.、GET 或 POST、參數、關鍵字）'
     '一次全部送出；要看前一個結果才算得出網址或參數的，才留到下一次。\n\n'

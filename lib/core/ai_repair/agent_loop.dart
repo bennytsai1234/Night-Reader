@@ -148,11 +148,19 @@ Map<String, Object?> agentMessageToJson(AiMessage message) => {
   'role': message.role,
   'content': message.content,
   if (message.reasoning.isNotEmpty) 'reasoning': message.reasoning,
+  if (message.reasoningDetails.isNotEmpty)
+    'reasoningDetails': message.reasoningDetails,
+  if (message.responseItems.isNotEmpty) 'responseItems': message.responseItems,
   'toolCallId': ?message.toolCallId,
   if (message.toolCalls.isNotEmpty)
     'toolCalls': [
       for (final call in message.toolCalls)
-        {'id': call.id, 'name': call.name, 'arguments': call.arguments},
+        {
+          'id': call.id,
+          'name': call.name,
+          'arguments': call.arguments,
+          if (call.extra.isNotEmpty) 'extra': call.extra,
+        },
     ],
 };
 
@@ -164,6 +172,14 @@ AiMessage agentMessageFromJson(Object? json) {
       reasoning: switch (json['reasoning']) {
         final String text => text,
         _ => '',
+      },
+      reasoningDetails: switch (json['reasoningDetails']) {
+        final List<Object?> details => details,
+        _ => const [],
+      },
+      responseItems: switch (json['responseItems']) {
+        final List<Object?> items => items,
+        _ => const [],
       },
       toolCallId: switch (json['toolCallId']) {
         final String id => id,
@@ -177,7 +193,15 @@ AiMessage agentMessageFromJson(Object? json) {
               'name': final String name,
               'arguments': final String arguments,
             })
-              (id: id, name: name, arguments: arguments),
+              AiToolCall(
+                id: id,
+                name: name,
+                arguments: arguments,
+                extra: switch (call['extra']) {
+                  final Map<String, Object?> extra => extra,
+                  _ => const {},
+                },
+              ),
       ],
     );
   }
@@ -674,13 +698,7 @@ Future<_AttemptEnd> _attempt<C>(
       }
       continue;
     }
-    messages.add(
-      AiMessage.assistant(
-        reply.content,
-        toolCalls: reply.toolCalls,
-        reasoning: reply.reasoning,
-      ),
-    );
+    messages.add(AiMessage.reply(reply));
 
     if (reply.toolCalls.isEmpty) {
       stats.noCommands++;

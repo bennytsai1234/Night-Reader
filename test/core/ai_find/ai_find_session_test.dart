@@ -157,11 +157,11 @@ class _Library implements AiFindLibrary {
 }
 
 /// 一次呼叫好幾個工具的回覆：`(名稱, 參數)`。
-AiReply _calls(List<(String, Map<String, Object?>)> calls) => (
+AiReply _calls(List<(String, Map<String, Object?>)> calls) => AiReply(
   content: '',
   toolCalls: [
     for (final (i, (name, args)) in calls.indexed)
-      (id: 'call_$i', name: name, arguments: jsonEncode(args)),
+      AiToolCall(id: 'call_$i', name: name, arguments: jsonEncode(args)),
   ],
   reasoning: '',
   usage: (prompt: 1000, cached: 0, completion: 100, reasoning: 0),
@@ -706,7 +706,7 @@ void main() {
 
   test('the same search with another filter is not the same call', () {
     AiToolCall call(Map<String, Object?> args) =>
-        (id: 'c', name: 'search', arguments: jsonEncode(args));
+        AiToolCall(id: 'c', name: 'search', arguments: jsonEncode(args));
     expect(
       readAiFindCall(call({'keyword': '穿越', 'filter': '後宮'})).key,
       isNot(readAiFindCall(call({'keyword': '穿越', 'filter': '金庸'})).key),
@@ -971,9 +971,11 @@ void main() {
   test('arguments that are not JSON are dropped and the same conversation '
       'is sent again', () async {
     final ai = _Ai([
-      (
+      AiReply(
         content: '',
-        toolCalls: [(id: 'bad', name: 'search', arguments: '{"keyword">"x"}')],
+        toolCalls: [
+          AiToolCall(id: 'bad', name: 'search', arguments: '{"keyword">"x"}'),
+        ],
         reasoning: '',
         usage: null,
         firstData: Duration.zero,
@@ -986,7 +988,7 @@ void main() {
   });
 
   group('every way of not converging ends as unfinished', () {
-    AiReply noTool() => (
+    AiReply noTool() => AiReply(
       content: '我想想',
       toolCalls: const [],
       reasoning: '',
@@ -1055,6 +1057,7 @@ void main() {
 
   test('every tool says which arguments it needs', () {
     for (final tool in aiFindTools) {
+      if (tool.parameters.isEmpty) continue;
       final properties = tool.parameters['properties']! as Map;
       for (final name in tool.parameters['required']! as List) {
         expect(properties.keys, contains(name), reason: tool.name);

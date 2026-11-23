@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
@@ -16,6 +17,41 @@ BookSource _source() => BookSource(
 );
 
 void main() {
+  test('every object in every tool schema lists its fields, and a tool '
+      'without parameters sends none (Gemini rejects empty objects)', () {
+    void check(Object? schema, String path) {
+      if (schema is! Map) return;
+      if (schema['type'] == 'object') {
+        expect(schema['properties'], isA<Map>(), reason: path);
+        expect((schema['properties'] as Map), isNotEmpty, reason: path);
+      }
+      for (final MapEntry(:key, :value) in schema.entries) {
+        if (value is Map) {
+          for (final MapEntry(key: name, value: inner) in value.entries) {
+            check(inner, '$path.$key.$name');
+          }
+        }
+        check(schema['items'], '$path.items');
+      }
+    }
+
+    for (final tool in [...aiRepairTools, ...aiFindTools]) {
+      if (tool.parameters.isEmpty) continue;
+      check(tool.parameters, tool.name);
+    }
+    final shelf = aiFindTools.firstWhere((tool) => tool.name == 'shelf');
+    expect(shelf.parameters, isEmpty);
+    final submit = aiRepairTools.firstWhere((tool) => tool.name == 'submit');
+    final patch =
+        (submit.parameters['properties'] as Map)['patch']
+            as Map<String, Object?>;
+    expect(
+      (patch['properties'] as Map)['ruleSearch'],
+      containsPair('type', 'object'),
+    );
+    expect((patch['properties'] as Map)['bookSourceType'], {'type': 'integer'});
+  });
+
   test(
     'the opening says why the source was sent: what the last check found',
     () {
@@ -69,7 +105,7 @@ void main() {
 
   group('reading the AI reply', () {
     AiToolCall call(String name, String arguments) =>
-        (id: 'call_1', name: name, arguments: arguments);
+        AiToolCall(id: 'call_1', name: name, arguments: arguments);
 
     test(
       'a tool call is read into a command, with a key for its arguments',
