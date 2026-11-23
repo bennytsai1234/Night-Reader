@@ -240,6 +240,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                           child: BookCoverAmbience(
                             coverUrl: UnifiedCovers.coverOf(currentBook),
                             bookName: context.zh(currentBook.name),
+                            bookUrl: currentBook.bookUrl,
                             kind: currentBook.bookKind,
                           ),
                         ),

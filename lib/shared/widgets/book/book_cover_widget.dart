@@ -18,6 +18,9 @@ class BookCoverWidget extends StatefulWidget {
   final String? coverUrl;
   final String bookName;
 
+  /// 書的網址：預設封面用它找書在書架上的位置（[DefaultBookCover.bookUrl]）。
+  final String? bookUrl;
+
   /// 書的類別：沒有封面時畫哪一種預設封面（[DefaultBookCover]）。
   final BookSourceKind kind;
   final String? author;
@@ -29,6 +32,7 @@ class BookCoverWidget extends StatefulWidget {
     super.key,
     this.coverUrl,
     required this.bookName,
+    this.bookUrl,
     this.kind = BookSourceKind.novel,
     this.author,
     this.width = 50,
@@ -216,6 +220,7 @@ class _BookCoverWidgetState extends State<BookCoverWidget>
                           child: _CoverImage(
                             source: layer.source,
                             bookName: widget.bookName,
+                            bookUrl: widget.bookUrl,
                             kind: widget.kind,
                             width: widget.width,
                             height: widget.height,
@@ -271,6 +276,7 @@ class _CoverImage extends StatefulWidget {
   const _CoverImage({
     required this.source,
     required this.bookName,
+    required this.bookUrl,
     required this.kind,
     required this.width,
     required this.height,
@@ -281,6 +287,7 @@ class _CoverImage extends StatefulWidget {
 
   final String? source;
   final String bookName;
+  final String? bookUrl;
   final BookSourceKind kind;
   final double width;
   final double height;
@@ -525,8 +532,11 @@ class _CoverImageState extends State<_CoverImage> {
   }
 
   /// 沒有封面或載不到時畫預設封面（[DefaultBookCover]）。
-  Widget _buildDefaultCover() =>
-      DefaultBookCover(bookName: bookName, kind: widget.kind);
+  Widget _buildDefaultCover() => DefaultBookCover(
+    bookName: bookName,
+    bookUrl: widget.bookUrl,
+    kind: widget.kind,
+  );
 }
 
 /// 第一次出現時在 [background] 上以 [AppMotion.fade] 淡入 [child]；之後重建

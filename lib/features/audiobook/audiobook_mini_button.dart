@@ -219,18 +219,20 @@ class _MiniFace extends StatelessWidget {
               child: SizedBox(
                 width: inner,
                 height: inner * 7 / 5,
-                // 書名用畫面上顯示的（繁簡轉換後），預設封面才和書架上同一本
-                // 一樣；封面載不到時也畫有聲書的預設封面。
+                // 書名用畫面上顯示的（繁簡轉換後），預設封面的星星才和書架上
+                // 同一本一樣；封面載不到時也畫有聲書的預設封面。
                 child: cover != null && cover.trim().isNotEmpty
                     ? BookCoverWidget(
                         coverUrl: cover,
                         bookName: context.zh(book.name),
+                        bookUrl: book.bookUrl,
                         kind: BookSourceKind.audio,
                         width: inner,
                         height: inner * 7 / 5,
                       )
                     : DefaultBookCover(
                         bookName: context.zh(book.name),
+                        bookUrl: book.bookUrl,
                         kind: BookSourceKind.audio,
                       ),
               ),
