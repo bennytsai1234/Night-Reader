@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../../theme/app_tokens.dart';
+import '../animation_latency.dart';
 import 'painted_when.dart';
 import 'skeleton.dart';
 import 'skeleton_reveal.dart';
@@ -361,12 +362,17 @@ class _LaunchEntranceState extends State<LaunchEntrance>
       _controller,
       sweep: reveal.sweeps,
     );
+    // 進場整段（含長骨架前的停頓）都開著低延遲模式：幀與幀之間的空檔裡
+    // Dart 不做舊生區回收，收尾不會落在長骨架與換場中（ADR 0036）。播完後由
+    // [AnimationLatency] 等畫面靜止才放開。
+    _latency = AnimationLatency.request();
     // 換場最後一幀還在畫時就會完成；等這一幀畫完才開始背景工作，最後一幀
     // 不必跟著等它同步的那一段。
     unawaited(
       motion.finished.then((_) => SchedulerBinding.instance.endOfFrame).then((
         _,
       ) {
+        _releaseLatency();
         if (mounted) widget.onFinished?.call();
       }),
     );
@@ -441,8 +447,17 @@ class _LaunchEntranceState extends State<LaunchEntrance>
   /// 長骨架前的間隔、長完到呼吸的間隔與停頓，同一時間只有一個。
   Timer? _timer;
 
+  /// 進場期間的低延遲模式。
+  PerformanceModeRequestHandle? _latency;
+
+  void _releaseLatency() {
+    _latency?.dispose();
+    _latency = null;
+  }
+
   @override
   void dispose() {
+    _releaseLatency();
     _timer?.cancel();
     _controller.dispose();
     _motion?._dispose();

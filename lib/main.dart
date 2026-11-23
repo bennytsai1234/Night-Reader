@@ -50,6 +50,7 @@ import 'features/search/search_provider.dart';
 import 'features/search/background_search.dart';
 import 'features/source_manager/ai_repair/repair_runs.dart';
 import 'features/source_manager/source_check_job.dart';
+import 'shared/widgets/animation_latency.dart';
 import 'shared/widgets/skeleton/skeleton_text.dart';
 import 'shared/navigation/root_navigator.dart';
 
@@ -378,52 +379,55 @@ class NightReaderApp extends StatelessWidget {
         .select<SettingsProvider, (ThemeMode, Locale?)>(
           (settings) => (settings.themeMode, settings.locale),
         );
-    return Consumer<ThemeSettingsProvider>(
-      builder: (context, themeSettings, child) {
-        return MaterialApp(
-          title: kAppDisplayName,
-          navigatorKey: rootNavigatorKey,
-          scaffoldMessengerKey: scaffoldMessengerKey,
-          navigatorObservers: [appRouteObserver, statusBarPolicy],
-          debugShowCheckedModeBanner: false,
-          theme: buildAppTheme(
-            themeSettings.lightStyle,
-            Brightness.light,
-            textStyle: themeSettings.lightTextStyle,
-            contrast: themeSettings.contrast,
-            glassStrength: themeSettings.glassStrength,
-            accent: themeSettings.accent,
-            pageTransition: themeSettings.pageTransition,
-            fontFamily: themeSettings.uiFontFamily,
-          ),
-          darkTheme: buildAppTheme(
-            themeSettings.darkStyle,
-            Brightness.dark,
-            textStyle: themeSettings.darkTextStyle,
-            contrast: themeSettings.contrast,
-            glassStrength: themeSettings.glassStrength,
-            accent: themeSettings.accent,
-            pageTransition: themeSettings.pageTransition,
-            pureBlack: themeSettings.pureBlack,
-            fontFamily: themeSettings.uiFontFamily,
-          ),
-          themeMode: themeMode,
-          // 使用者切換深淺或風格時由 ThemeRevealScope 從觸發點暈開新配色，
-          // 底下的主題要一次到位；預設 200ms 的漸變會讓暈開的圓裡先露出
-          // 半新半舊的顏色。系統自己切換深淺時也直接換。
-          themeAnimationStyle: AnimationStyle.noAnimation,
-          locale: locale,
-          // 玻璃元件以 BackdropFilter.grouped 共用這裡的背景取樣。
-          builder: (context, child) => TabletTextScale(
-            child: TransitionOriginRecorder(
-              child: ThemeRevealScope(
-                child: StatusBarStableInset(
-                  child: BackdropGroup(
-                    child: UiLanguageScope(
-                      locale: locale,
-                      child: ChineseDisplayScope(
-                        child: HiddenWebViews(
-                          child: child ?? const SizedBox.shrink(),
+    // 動畫播放中不讓舊生區的記憶體回收開始（ADR 0036）。
+    return AnimationLatency(
+      child: Consumer<ThemeSettingsProvider>(
+        builder: (context, themeSettings, child) {
+          return MaterialApp(
+            title: kAppDisplayName,
+            navigatorKey: rootNavigatorKey,
+            scaffoldMessengerKey: scaffoldMessengerKey,
+            navigatorObservers: [appRouteObserver, statusBarPolicy],
+            debugShowCheckedModeBanner: false,
+            theme: buildAppTheme(
+              themeSettings.lightStyle,
+              Brightness.light,
+              textStyle: themeSettings.lightTextStyle,
+              contrast: themeSettings.contrast,
+              glassStrength: themeSettings.glassStrength,
+              accent: themeSettings.accent,
+              pageTransition: themeSettings.pageTransition,
+              fontFamily: themeSettings.uiFontFamily,
+            ),
+            darkTheme: buildAppTheme(
+              themeSettings.darkStyle,
+              Brightness.dark,
+              textStyle: themeSettings.darkTextStyle,
+              contrast: themeSettings.contrast,
+              glassStrength: themeSettings.glassStrength,
+              accent: themeSettings.accent,
+              pageTransition: themeSettings.pageTransition,
+              pureBlack: themeSettings.pureBlack,
+              fontFamily: themeSettings.uiFontFamily,
+            ),
+            themeMode: themeMode,
+            // 使用者切換深淺或風格時由 ThemeRevealScope 從觸發點暈開新配色，
+            // 底下的主題要一次到位；預設 200ms 的漸變會讓暈開的圓裡先露出
+            // 半新半舊的顏色。系統自己切換深淺時也直接換。
+            themeAnimationStyle: AnimationStyle.noAnimation,
+            locale: locale,
+            // 玻璃元件以 BackdropFilter.grouped 共用這裡的背景取樣。
+            builder: (context, child) => TabletTextScale(
+              child: TransitionOriginRecorder(
+                child: ThemeRevealScope(
+                  child: StatusBarStableInset(
+                    child: BackdropGroup(
+                      child: UiLanguageScope(
+                        locale: locale,
+                        child: ChineseDisplayScope(
+                          child: HiddenWebViews(
+                            child: child ?? const SizedBox.shrink(),
+                          ),
                         ),
                       ),
                     ),
@@ -431,12 +435,12 @@ class NightReaderApp extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-          home: const _AssociationLifecycleHost(
-            child: MainPage(onLaunchSettled: _runPostLaunchTasks),
-          ),
-        );
-      },
+            home: const _AssociationLifecycleHost(
+              child: MainPage(onLaunchSettled: _runPostLaunchTasks),
+            ),
+          );
+        },
+      ),
     );
   }
 }
