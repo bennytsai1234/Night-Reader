@@ -267,6 +267,22 @@ class ReaderChapterRepository {
 
   ReaderContent? cachedContent(int chapterIndex) => _contentCache[chapterIndex];
 
+  /// 排出第 [chapterIndex] 章、身分是 [contentHash] 的那份正文時用的原文
+  /// （規則套用前、存著的樣子）；那份正文已經不在快取裡或換過了時是 null。
+  /// 選字「隱藏」「替換」照它找原文：存著的正文換過（單章借源、重新取得
+  /// 本章）而畫面還沒換時，不會拿新的原文去對舊的字。
+  String? rawContentOf(int chapterIndex, String contentHash) {
+    final raw = _rawContents[chapterIndex];
+    return raw != null &&
+            raw.contentHash == contentHash &&
+            _contentCache[chapterIndex]?.contentHash == contentHash
+        ? raw.raw
+        : null;
+  }
+
+  /// 快取裡每一章正文是照哪份原文排的（[rawContentOf]）。
+  final Map<int, ({String contentHash, String raw})> _rawContents = {};
+
   /// Monotonic generation for the committed semantic document.
   ///
   /// This is intentionally separate from [_contentCacheGeneration], which is
@@ -310,6 +326,9 @@ class ReaderChapterRepository {
     await ensureChapters();
     final safeIndex = _normalizeChapterIndex(chapterIndex);
     final previousCache = Map<int, ReaderContent>.from(_contentCache);
+    final previousRaw = Map<int, ({String contentHash, String raw})>.from(
+      _rawContents,
+    );
     final previousSource = _source;
     final previousRules = _enabledRules;
     final previousRulesRevision = _rulesRevision;
@@ -321,6 +340,7 @@ class ReaderChapterRepository {
     final refreshGeneration = _contentCacheGeneration;
     _source = null;
     _contentCache.clear();
+    _rawContents.clear();
     _contentInFlight.clear();
     _materializedContentIdentities.clear();
     _enabledRules = null;
@@ -344,6 +364,9 @@ class ReaderChapterRepository {
         _contentCache
           ..clear()
           ..addAll(previousCache);
+        _rawContents
+          ..clear()
+          ..addAll(previousRaw);
         _contentInFlight.clear();
         _materializedContentIdentities
           ..clear()
@@ -368,13 +391,14 @@ class ReaderChapterRepository {
     final testLoader = contentLoader;
     if (testLoader != null) {
       final rawContent = await testLoader(chapterIndex, chapter);
+      final raw = rawContent ?? chapter.content ?? '';
       final content = ReaderContent.fromRaw(
         chapterIndex: chapterIndex,
         title: chapter.title,
-        rawText: rawContent ?? chapter.content ?? '',
+        rawText: raw,
       );
       if (cacheGeneration == _contentCacheGeneration) {
-        _writeToContentCache(chapterIndex, content);
+        _writeToContentCache(chapterIndex, content, raw: raw);
       }
       return content;
     }
@@ -385,23 +409,28 @@ class ReaderChapterRepository {
     );
     if (loaded != null) {
       if (cacheGeneration == _contentCacheGeneration) {
-        _writeToContentCache(chapterIndex, loaded);
+        _writeToContentCache(chapterIndex, loaded.content, raw: loaded.raw);
       }
-      return loaded;
+      return loaded.content;
     }
 
+    final raw = (chapter.content ?? '').trim();
     final content = ReaderContent.fromRaw(
       chapterIndex: chapterIndex,
       title: chapter.title,
-      rawText: (chapter.content ?? '').trim(),
+      rawText: raw,
     );
     if (cacheGeneration == _contentCacheGeneration) {
-      _writeToContentCache(chapterIndex, content);
+      _writeToContentCache(chapterIndex, content, raw: raw);
     }
     return content;
   }
 
-  void _writeToContentCache(int chapterIndex, ReaderContent content) {
+  void _writeToContentCache(
+    int chapterIndex,
+    ReaderContent content, {
+    required String raw,
+  }) {
     final previousIdentity = _materializedContentIdentities[chapterIndex];
     if (previousIdentity != null && previousIdentity != content.contentHash) {
       // Persistent acquisition can change outside the active Reader (for
@@ -413,9 +442,11 @@ class ReaderChapterRepository {
 
     _contentCache.remove(chapterIndex);
     if (_contentCache.length >= _maxContentCacheSize) {
+      _rawContents.remove(_contentCache.keys.first);
       _contentCache.remove(_contentCache.keys.first);
     }
     _contentCache[chapterIndex] = content;
+    _rawContents[chapterIndex] = (contentHash: content.contentHash, raw: raw);
   }
 
   Future<List<ReplaceRule>> _ensureEnabledReplaceRules() {
@@ -502,7 +533,7 @@ class ReaderChapterRepository {
     );
   }
 
-  Future<ReaderContent?> _loadViaContentPipeline(
+  Future<({ReaderContent content, String raw})?> _loadViaContentPipeline(
     int chapterIndex,
     BookChapter chapter,
     int cacheGeneration,
@@ -530,7 +561,7 @@ class ReaderChapterRepository {
     }
     final enabledRules = await _ensureEnabledReplaceRules();
     try {
-      return await _contentTransformer.process(
+      final content = await _contentTransformer.process(
         chapterIndex: chapterIndex,
         book: book,
         chapter: chapter,
@@ -542,6 +573,7 @@ class ReaderChapterRepository {
             : null,
         onRuleTimedOut: _disableTimedOutRule,
       );
+      return (content: content, raw: prepared.content);
     } on ReaderContentTransformException catch (error) {
       throw ReaderContentUnavailableException(error.message);
     }

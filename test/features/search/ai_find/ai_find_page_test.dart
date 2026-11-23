@@ -94,9 +94,9 @@ class _Library implements AiFindLibrary {
   Future<List<AiFindShelfEntry>> shelf() async => const [];
 }
 
-AiReply _call(String name, Map<String, Object?> args) => (
+AiReply _call(String name, Map<String, Object?> args) => AiReply(
   content: '',
-  toolCalls: [(id: 'c', name: name, arguments: jsonEncode(args))],
+  toolCalls: [AiToolCall(id: 'c', name: name, arguments: jsonEncode(args))],
   reasoning: '',
   usage: (prompt: 30000, cached: 0, completion: 2000, reasoning: 0),
   firstData: Duration.zero,

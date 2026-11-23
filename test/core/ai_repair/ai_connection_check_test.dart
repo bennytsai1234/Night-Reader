@@ -80,7 +80,7 @@ void main() {
 
     expect(service.requests, hasLength(2));
     final first = service.requests.first.data as Map<String, dynamic>;
-    expect(first['tool_choice'], 'required');
+    expect(first.containsKey('tool_choice'), isFalse, reason: '由模型決定');
     final tools = first['tools'] as List<dynamic>;
     final function =
         (tools.single as Map<String, dynamic>)['function']
@@ -89,7 +89,9 @@ void main() {
     expect(function['parameters'], containsPair('required', ['value']));
 
     final second = service.requests.last.data as Map<String, dynamic>;
-    expect(second.containsKey('tools'), isFalse);
+    // 對話裡有工具呼叫，請求也帶工具清單（Anthropic 規定兩者一起出現）。
+    expect(second['tools'], first['tools']);
+    expect(second.containsKey('tool_choice'), isFalse);
     final messages = second['messages'] as List<dynamic>;
     expect(messages, hasLength(5));
     final assistant = messages[2] as Map<String, dynamic>;
@@ -154,7 +156,6 @@ void main() {
       _toolCall(arguments: '{"value":'),
       _toolCall(arguments: '{}'),
       _toolCall(name: 'different_tool'),
-      _toolCall(id: ''),
     ]) {
       final service = _ProbeService([(_) => reply]);
       await expectLater(
@@ -163,6 +164,22 @@ void main() {
       );
       expect(service.requests, hasLength(1));
     }
+  });
+
+  test('a call the service gave no id gets one, and its result goes back '
+      'under it', () async {
+    final service = _ProbeService([(_) => _toolCall(id: ''), _echoToolNonce]);
+
+    await verifyAiToolConnection(_client(service));
+
+    final messages =
+        (service.requests.last.data as Map<String, dynamic>)['messages']
+            as List<dynamic>;
+    final call =
+        ((messages[2] as Map<String, dynamic>)['tool_calls'] as List).single
+            as Map<String, dynamic>;
+    expect(call['id'], isNotEmpty);
+    expect((messages[3] as Map<String, dynamic>)['tool_call_id'], call['id']);
   });
 
   test('a second reply that ignores the tool result is rejected', () async {

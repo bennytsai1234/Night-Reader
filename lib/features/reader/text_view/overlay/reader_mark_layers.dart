@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, visibleForTesting;
 import 'package:flutter/widgets.dart';
 
 import 'package:night_reader/features/reader/chapter/reader_content.dart';
@@ -24,12 +25,14 @@ final class ReaderMarkGeometry {
     required this._pipeline,
     required this._documentIndex,
     required this._scrollOffset,
+    required this._viewportHeight,
   });
 
   /// 目前排版世代的排版管線；換代時整份換新，所以每次都重新取。
   final LayoutPipeline Function() _pipeline;
   final DocumentIndex _documentIndex;
   final double? Function() _scrollOffset;
+  final double Function() _viewportHeight;
 
   final Map<
     int,
@@ -45,6 +48,7 @@ final class ReaderMarkGeometry {
       int revision,
       ChapterTextRange range,
       List<LineBox> boxes,
+      bool complete,
     })
   >
   _highlightBoxes = {};
@@ -111,25 +115,39 @@ final class ReaderMarkGeometry {
           cached.mark.length != mark.length ||
           !identical(cached.blocks, blocks) ||
           cached.revision != revision) {
-        final range = _highlightRangeIn(mark, blocks);
-        final world = pipeline.geometry.lineBoxes(
+        final range = highlightRangeIn(mark, blocks);
+        final world = pipeline.geometry.lineBoxesChecked(
           mark.location.chapterIndex,
           range.start,
           range.end,
         );
         // 那一段還沒排好：這次不畫、不記，排好後文件索引換版再算。
-        if (world.isEmpty) continue;
+        if (world.boxes.isEmpty) continue;
         cached = (
           mark: mark,
           blocks: blocks,
           revision: revision,
           range: range,
-          boxes: world,
+          boxes: world.boxes,
+          complete: world.complete,
         );
         _highlightBoxes[mark.id] = cached;
       }
+      // 跨好幾屏的標註有幾段的排版不在手上（畫面外丟掉了）時，記下的框
+      // 缺了那幾段；每幀只算畫面上看得到的那一段，捲回來的段落照樣畫到。
+      // 排齊的照記下的框，只畫畫面上的那幾行。
+      final bottom = scroll + _viewportHeight();
+      final boxes = cached.complete
+          ? cached.boxes.where((box) => box.bottom > scroll && box.top < bottom)
+          : pipeline.geometry.lineBoxesWithin(
+              mark.location.chapterIndex,
+              cached.range.start,
+              cached.range.end,
+              top: scroll,
+              bottom: bottom,
+            );
       paints.add((
-        boxes: [for (final box in cached.boxes) _scrolled(box, scroll)],
+        boxes: [for (final box in boxes) _scrolled(box, scroll)],
         color: mark.color,
         style: mark.style,
       ));
@@ -153,7 +171,7 @@ final class ReaderMarkGeometry {
               identical(cached.mark.location, mark.location) &&
               identical(cached.blocks, hit.blocks)
           ? cached.range
-          : _highlightRangeIn(mark, hit.blocks);
+          : highlightRangeIn(mark, hit.blocks);
       if (hit.offset >= range.start && hit.offset < range.end) {
         if (found == null || mark.id > found) found = mark.id;
       }
@@ -177,8 +195,10 @@ final class ReaderMarkGeometry {
   }
 
   /// 標註在那一章正文裡的範圍：開頭照錨點找回（正文變了照前後原文），往
-  /// 後畫記下的那麼長，不超出那一章。
-  static ChapterTextRange _highlightRangeIn(
+  /// 後數記下的那麼多個字，段落分隔不算（分段和畫的時候不同也畫到同一段
+  /// 字的結尾），不超出那一章。
+  @visibleForTesting
+  static ChapterTextRange highlightRangeIn(
     ReaderHighlightMark mark,
     ChapterBlocks blocks,
   ) {
@@ -188,10 +208,13 @@ final class ReaderMarkGeometry {
       displayText: text,
       contentHash: blocks.contentHash,
     ).clamp(0, text.length - 1).toInt();
-    return ChapterTextRange(
-      start,
-      math.min(text.length, start + math.max(1, mark.length)),
-    );
+    var end = start;
+    var remaining = math.max(1, mark.length);
+    while (end < text.length && remaining > 0) {
+      if (text.codeUnitAt(end) != 0x0A) remaining--;
+      end++;
+    }
+    return ChapterTextRange(start, end);
   }
 
   static LineBox _scrolled(LineBox box, double scroll) => LineBox(

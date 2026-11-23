@@ -63,19 +63,27 @@ final class TextGeometry {
   /// 開始或結束時，只標出屬於它的字，不波及同一行的其他句子。朗讀高亮
   /// 與選字反白在捲動時每幀都要畫，所以文件索引與這段文字都沒變時沿用
   /// 上次的結果；有 block 還沒排好時不記，下次再算。
-  List<LineBox> lineBoxes(int chapterIndex, int start, int end) {
+  List<LineBox> lineBoxes(int chapterIndex, int start, int end) =>
+      lineBoxesChecked(chapterIndex, start, end).boxes;
+
+  /// 同 [lineBoxes]，另外回傳範圍內的 block 是不是都排好了（沒排好的那幾
+  /// 塊沒有框）；要把結果記下來的呼叫端只在排齊時記。
+  ({List<LineBox> boxes, bool complete}) lineBoxesChecked(
+    int chapterIndex,
+    int start,
+    int end,
+  ) {
     final blocks = _blocksOf(chapterIndex);
-    if (blocks == null) return const <LineBox>[];
+    if (blocks == null) return (boxes: const <LineBox>[], complete: false);
     final range = ChapterTextRange(math.max(0, start), math.max(0, end));
-    if (range.isEmpty) return const <LineBox>[];
+    if (range.isEmpty) return (boxes: const <LineBox>[], complete: true);
     final memo = _lineBoxMemo;
     if (memo != null &&
         identical(memo.blocks, blocks) &&
         memo.range == range &&
         memo.revision == _documentIndex.revisionNumber) {
-      return memo.boxes;
+      return (boxes: memo.boxes, complete: true);
     }
-    final paintLeft = _layoutSpec().textPaddingLeft;
     final result = <LineBox>[];
     var complete = true;
     final blockList = blocks.blocks;
@@ -93,39 +101,7 @@ final class TextGeometry {
       final block = blockList[index];
       if (block.charRange.start >= range.end) break;
       if (!block.charRange.intersects(range)) continue;
-      final top = _documentIndex.topOf(block.key);
-      final boxes = top == null
-          ? null
-          : _blockLocalBoxesForRange(blocks, block, range);
-      if (top == null || boxes == null) {
-        complete = false;
-        continue;
-      }
-      for (final box in boxes) {
-        final lineBox = LineBox(
-          left: paintLeft + box.left,
-          top: top + box.top,
-          right: paintLeft + box.right,
-          bottom: top + box.bottom,
-        );
-        // block 可以切在行中，同一條視覺行會由前後兩個 block 各給一段；
-        // 框已夾在各自的行格內、不同行不會重疊，所以垂直有交集就是同
-        // 一行；併成一個框，避免半透明色在接縫處疊深。
-        final previous = result.isEmpty ? null : result.last;
-        if (previous != null &&
-            math.min(previous.bottom, lineBox.bottom) -
-                    math.max(previous.top, lineBox.top) >
-                0.5) {
-          result[result.length - 1] = LineBox(
-            left: math.min(previous.left, lineBox.left),
-            top: math.min(previous.top, lineBox.top),
-            right: math.max(previous.right, lineBox.right),
-            bottom: math.max(previous.bottom, lineBox.bottom),
-          );
-        } else {
-          result.add(lineBox);
-        }
-      }
+      if (!_addBlockBoxes(result, blocks, block, range)) complete = false;
     }
     _lineBoxMemo = complete
         ? (
@@ -135,7 +111,77 @@ final class TextGeometry {
             boxes: result,
           )
         : null;
+    return (boxes: result, complete: complete);
+  }
+
+  /// [start, end) 落在文件座標 [top, bottom) 之間的字形範圍，每條視覺行
+  /// 一個框，只含這段高度裡的行；不記結果。選取跨好幾屏時只畫看得到的
+  /// 那一段：畫面外的段落排版可能已經丟掉，照 [lineBoxes] 算出的頭尾不一
+  /// 定是真的頭尾。
+  List<LineBox> lineBoxesWithin(
+    int chapterIndex,
+    int start,
+    int end, {
+    required double top,
+    required double bottom,
+  }) {
+    final blocks = _blocksOf(chapterIndex);
+    final range = ChapterTextRange(math.max(0, start), math.max(0, end));
+    if (blocks == null || range.isEmpty) return const <LineBox>[];
+    final result = <LineBox>[];
+    for (final key in _documentIndex.keysInRange(top, bottom)) {
+      if (key.chapterIndex != chapterIndex ||
+          key.blockIndex >= blocks.blocks.length) {
+        continue;
+      }
+      final block = blocks.blocks[key.blockIndex];
+      if (!block.charRange.intersects(range)) continue;
+      _addBlockBoxes(result, blocks, block, range);
+    }
+    result.removeWhere((box) => box.bottom <= top || box.top >= bottom);
     return result;
+  }
+
+  /// 把 [block] 裡屬於 [range] 的字形框加到 [result]（文件座標）；那一塊
+  /// 還沒進文件索引或還沒排好時回傳 false。
+  bool _addBlockBoxes(
+    List<LineBox> result,
+    ChapterBlocks blocks,
+    ChapterBlock block,
+    ChapterTextRange range,
+  ) {
+    final top = _documentIndex.topOf(block.key);
+    final boxes = top == null
+        ? null
+        : _blockLocalBoxesForRange(blocks, block, range);
+    if (top == null || boxes == null) return false;
+    final paintLeft = _layoutSpec().textPaddingLeft;
+    for (final box in boxes) {
+      final lineBox = LineBox(
+        left: paintLeft + box.left,
+        top: top + box.top,
+        right: paintLeft + box.right,
+        bottom: top + box.bottom,
+      );
+      // block 可以切在行中，同一條視覺行會由前後兩個 block 各給一段；
+      // 框已夾在各自的行格內、不同行不會重疊，所以垂直有交集就是同
+      // 一行；併成一個框，避免半透明色在接縫處疊深。
+      final previous = result.isEmpty ? null : result.last;
+      if (previous != null &&
+          math.min(previous.bottom, lineBox.bottom) -
+                  math.max(previous.top, lineBox.top) >
+              0.5) {
+        result[result.length - 1] = LineBox(
+          left: math.min(previous.left, lineBox.left),
+          top: math.min(previous.top, lineBox.top),
+          right: math.max(previous.right, lineBox.right),
+          bottom: math.max(previous.bottom, lineBox.bottom),
+        );
+      } else {
+        result.add(lineBox);
+      }
+    }
+    return true;
   }
 
   /// [start, end) 在正文上佔的上下範圍；左右不用，固定為 0。範圍內的
@@ -316,21 +362,29 @@ final class TextGeometry {
     return (blocks: blocks, paragraph: paragraphRange, offset: offset);
   }
 
-  /// 拖把手時 [point] 在選取段落內最近的游標位置；點超出段落上下緣時
-  /// 夾回段落內，所以不會換到別段。
+  /// 拖把手時 [point] 最近的游標位置，可以跨段；點超出這一章正文的上下緣
+  /// 時夾回正文裡，所以不會換到別章或章名。落在插圖上時取插圖的位置（圖
+  /// 前後兩個字之間）；那一段還沒排好時回傳 null。
   int? caretAt(ReaderTextSelection selection, Offset point) {
     if (!isSelectionCurrent(selection)) return null;
     final blocks = selection.blocks;
-    final first = blocks.blockForCharOffset(selection.paragraph.start);
-    final last = blocks.blockForCharOffset(selection.paragraph.end - 1);
-    final top = _documentIndex.topOf(first.key);
-    final lastTop = _documentIndex.topOf(last.key);
-    final lastHeight = _documentIndex.metricsFor(last.key)?.height;
-    if (top == null || lastTop == null || lastHeight == null) return null;
-    final bottom = math.max(top, lastTop + lastHeight - 0.5);
-    final worldY = point.dy.clamp(top, bottom).toDouble();
+    final body = selection.bounds;
+    final chapter = _documentIndex.chapterRange(blocks.chapterIndex);
+    if (body.isEmpty || chapter == null) return null;
+    final first = blocks.blockForCharOffset(body.start);
+    final last = blocks.blockForCharOffset(body.end - 1);
+    final top = _documentIndex.topOf(first.key) ?? chapter.top;
+    final bottom = _documentIndex.bottomOf(last.key) ?? chapter.bottom;
+    final worldY = point.dy.clamp(top, math.max(top, bottom - 0.5)).toDouble();
     final hit = _documentIndex.hitTest(worldY);
-    if (hit == null) return null;
+    if (hit == null ||
+        hit.key.chapterIndex != blocks.chapterIndex ||
+        hit.key.blockIndex >= blocks.blocks.length) {
+      return null;
+    }
+    final block = blocks.blocks[hit.key.blockIndex];
+    if (block.isTitle) return body.start;
+    if (block.isIllustration) return block.charRange.start;
     final at = _paragraphPointAt(blocks, hit, point.dx);
     if (at == null) return null;
     final position = at.paragraph.getPositionForOffset(at.local);

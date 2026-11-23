@@ -32,6 +32,7 @@ import 'package:night_reader/shared/widgets/lists/swipe_actions.dart';
 import 'reading_stats_view.dart';
 
 import 'package:night_reader/core/chinese/ui_language.dart';
+import 'package:night_reader/core/models/reading/excerpt_text.dart';
 
 /// 「我的 → 閱讀紀錄」：頂端分段切換書籤、標註與統計。書籤與標註都是一本書
 /// 一組（最近留過的書在上），組裡照在書裡的先後排。點了開那本書、跳過去；
@@ -374,7 +375,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
                     ],
                     child: GroupedRow(
                       translateTitle: false,
-                      title: context.zh(bookmark.excerpt),
+                      title: context.zh(withSingleLineBreaks(bookmark.excerpt)),
                       maxTitleLines: 2,
                       translateSubtitle: false,
                       subtitle: context.zh(bookmark.chapterTitle),
@@ -431,7 +432,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
                     child: GroupedRow(
                       leading: HighlightColorBar(color: highlight.color),
                       translateTitle: false,
-                      title: context.zh(highlight.quote),
+                      title: context.zh(withSingleLineBreaks(highlight.quote)),
                       maxTitleLines: 3,
                       // 章名一行，有備忘時接在下面（最多兩行）。備忘是
                       // 自己寫的，不做繁簡轉換。

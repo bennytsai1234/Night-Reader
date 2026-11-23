@@ -11,6 +11,7 @@ import 'package:night_reader/shared/widgets/skeleton/grouped_list_skeleton.dart'
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
+import 'package:night_reader/core/models/reading/excerpt_text.dart';
 
 /// 點正文上已畫的標註打開的面板：畫到的字、換顏色、換底色或底線、備忘、
 /// 複製、刪除。換了就存，不另按儲存；備忘在面板收起或切到別的 App 時存。
@@ -91,7 +92,7 @@ class _ReaderHighlightSheetState extends State<ReaderHighlightSheet> {
               GroupedRow(
                 // 摘錄與章名是書的資料，照閱讀偏好（ADR 0066）。
                 translateTitle: false,
-                title: context.zh(_highlight.quote),
+                title: context.zh(withSingleLineBreaks(_highlight.quote)),
                 maxTitleLines: 4,
                 translateSubtitle: false,
                 subtitle: context.zh(_highlight.chapterTitle),
@@ -141,7 +142,11 @@ class _ReaderHighlightSheetState extends State<ReaderHighlightSheet> {
                 showChevron: false,
                 onTap: () {
                   unawaited(
-                    Clipboard.setData(ClipboardData(text: _highlight.quote)),
+                    Clipboard.setData(
+                      ClipboardData(
+                        text: withSingleLineBreaks(_highlight.quote),
+                      ),
+                    ),
                   );
                   Navigator.of(context).pop();
                 },

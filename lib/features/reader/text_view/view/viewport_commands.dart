@@ -186,6 +186,22 @@ final class ViewportCommands {
       ..ensureCharRangeVisible = _ensureCharRangeVisible;
   }
 
+  /// 拖選字的把手到正文區邊上時推一下（同自動翻頁的連續捲動）：量位置、
+  /// 補排版，不存進度；輪到它時 [isWanted] 不成立（拖曳結束、選取收掉）
+  /// 就不捲。捲不動時回傳 false。
+  Future<bool> selectionScrollBy(double delta, bool Function() isWanted) =>
+      _enqueueCommand(
+        (current) =>
+            _continuousScrollByNow(delta, () => current() && isWanted()),
+      );
+
+  /// 拖把手的自動捲動結束：沒有別的命令（翻頁、朗讀跟隨、跳轉）接手位置
+  /// 時，停在這裡、記下閱讀位置；有的話位置歸它。
+  Future<void> settleAfterSelectionScroll() async {
+    if (_commands.queued > 0) return;
+    await _settleScroll();
+  }
+
   /// 拆掉 [attach] 接上的；別人已經換上的不動。
   void detach(ReaderViewportController? controller) {
     if (controller == null) return;

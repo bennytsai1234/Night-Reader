@@ -360,6 +360,14 @@ class ReaderRuntime extends ChangeNotifier {
     }
   }
 
+  /// 存著的第 [chapterIndex] 章正文在閱讀器外換掉了（單章借源，ADR 0080）：
+  /// 閱讀器手上那一章的舊正文作廢，重讀存著的。接著開書或跳過去時發布新的
+  /// 內容世代，正文層排好的那一章跟著換掉。讀不到丟
+  /// [ReaderContentUnavailableException]，閱讀器手上的維持原樣。
+  Future<void> rereadStoredContent(int chapterIndex) async {
+    await repository.reloadContent(chapterIndex);
+  }
+
   Future<ReaderLocation> _remapReloadLocation({
     required ReaderLocation location,
     required ReaderContent? previousContent,
@@ -452,9 +460,18 @@ class ReaderRuntime extends ChangeNotifier {
       _pendingUserNotice = notice;
     } else {
       if (!stateMachine.markUnavailable(token, error)) return;
+      _unavailableLocation = token.targetLocation.normalized(
+        chapterCount: repository.chapterCount,
+      );
     }
     notifyListeners();
   }
+
+  /// 開書取不到正文（[ReaderLifecycle.unavailable]）時要開的位置：失敗頁的
+  /// 「單章借源」借的是這一章，借好在這裡重開（ADR 0080）。開書時位置會照
+  /// 章名、付費章節改過，不一定是建立時給的。
+  ReaderLocation? get unavailableLocation => _unavailableLocation;
+  ReaderLocation? _unavailableLocation;
 
   bool _targetsAnotherChapterThanOpen(ReaderOperationToken token) {
     final count = repository.chapterCount;

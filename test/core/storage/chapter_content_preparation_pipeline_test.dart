@@ -82,6 +82,30 @@ class _UnreachableImages extends BookSourceService {
   }) async => 1;
 }
 
+/// 抓的期間使用者從別的書源借來這一章（ADR 0080）：[onFetch] 在主書源回覆
+/// 前寫進去，主書源回 [reply]，[fail] 時回錯誤。
+class _BorrowedMeanwhile extends BookSourceService {
+  _BorrowedMeanwhile(this.onFetch, {this.reply = '主書源的防盜章', this.fail = false});
+
+  final Future<void> Function() onFetch;
+  final String reply;
+  final bool fail;
+
+  @override
+  Future<String> getContent(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    String? nextChapterUrl,
+    int? pageConcurrency,
+    CancelToken? cancelToken,
+  }) async {
+    await onFetch();
+    if (fail) throw DioException(requestOptions: RequestOptions());
+    return reply;
+  }
+}
+
 /// 只有開頭的 PNG（寬 300、高 200），夠讀出寬高。
 final _png = Uint8List(24)
   ..setAll(0, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
@@ -136,6 +160,60 @@ void main() {
         service: BookSourceService(),
         getSource: () => source,
       );
+
+  group('an automatic fetch that arrives after the reader borrowed the '
+      'chapter hands back the borrowed text', () {
+    final chapter = BookChapter(
+      url: 'https://s.example/c/2.html',
+      title: '第二章',
+      bookUrl: book.bookUrl,
+      index: 1,
+    );
+    Future<void> borrow() => store.saveRawContent(
+      book: book,
+      chapter: chapter,
+      content: '借來的正文',
+      replaceStored: true,
+    );
+    ChapterContentPreparationPipeline site(BookSourceService service) =>
+        ChapterContentPreparationPipeline(
+          book: book,
+          contentStore: store,
+          sourceDao: BookSourceDao(db),
+          service: service,
+          getSource: () => source,
+        );
+
+    setUp(() => ChapterDao(db).insertChapters([chapter]));
+
+    test('when the main source answers', () async {
+      final result = await site(_BorrowedMeanwhile(borrow))
+          .prepare(chapterIndex: 1, chapter: chapter);
+
+      expect(result.isReady, isTrue);
+      expect(result.content, '借來的正文');
+      expect(await store.getRawContent(book: book, chapter: chapter), '借來的正文');
+    });
+
+    test('when the main source fails', () async {
+      final result = await site(_BorrowedMeanwhile(borrow, fail: true))
+          .prepare(chapterIndex: 1, chapter: chapter);
+
+      expect(result.isReady, isTrue);
+      expect(result.content, '借來的正文');
+    });
+
+    test('but refetching the chapter replaces it', () async {
+      final result = await site(_BorrowedMeanwhile(borrow, reply: '主書源修好的正文'))
+          .prepare(chapterIndex: 1, chapter: chapter, forceRefresh: true);
+
+      expect(result.content, '主書源修好的正文');
+      expect(
+        await store.getRawContent(book: book, chapter: chapter),
+        '主書源修好的正文',
+      );
+    });
+  });
 
   test('a paid chapter not bought yet is not fetched nor stored', () async {
     final result = await realService().prepare(

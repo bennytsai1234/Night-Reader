@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
@@ -16,6 +19,41 @@ BookSource _source() => BookSource(
 );
 
 void main() {
+  test('every object in every tool schema lists its fields, and a tool '
+      'without parameters sends none (Gemini rejects empty objects)', () {
+    void check(Object? schema, String path) {
+      if (schema is! Map) return;
+      if (schema['type'] == 'object') {
+        expect(schema['properties'], isA<Map>(), reason: path);
+        expect((schema['properties'] as Map), isNotEmpty, reason: path);
+      }
+      for (final MapEntry(:key, :value) in schema.entries) {
+        if (value is Map) {
+          for (final MapEntry(key: name, value: inner) in value.entries) {
+            check(inner, '$path.$key.$name');
+          }
+        }
+        check(schema['items'], '$path.items');
+      }
+    }
+
+    for (final tool in [...aiRepairTools, ...aiFindTools]) {
+      if (tool.parameters.isEmpty) continue;
+      check(tool.parameters, tool.name);
+    }
+    final shelf = aiFindTools.firstWhere((tool) => tool.name == 'shelf');
+    expect(shelf.parameters, isEmpty);
+    final submit = aiRepairTools.firstWhere((tool) => tool.name == 'submit');
+    final patch =
+        (submit.parameters['properties'] as Map)['patch']
+            as Map<String, Object?>;
+    expect(
+      (patch['properties'] as Map)['ruleSearch'],
+      containsPair('type', 'object'),
+    );
+    expect((patch['properties'] as Map)['bookSourceType'], {'type': 'integer'});
+  });
+
   test(
     'the opening says why the source was sent: what the last check found',
     () {
@@ -69,7 +107,7 @@ void main() {
 
   group('reading the AI reply', () {
     AiToolCall call(String name, String arguments) =>
-        (id: 'call_1', name: name, arguments: arguments);
+        AiToolCall(id: 'call_1', name: name, arguments: arguments);
 
     test(
       'a tool call is read into a command, with a key for its arguments',
@@ -272,10 +310,26 @@ void main() {
         aiRepairSystemPrompt,
         allOf(
           contains('規則裡寫死完整網址的'),
-          contains('誰把正文填進'),
-          contains('照抄成正文規則的 JS'),
+          contains('誰把內容填進'),
+          contains('照抄成規則的 JS'),
         ),
       );
+    });
+
+    test('the AI can look at a page after its script has run, and writes '
+        'that into the source only as a last resort', () {
+      // 2026-11-23：空殼網站 AI 只看得到第一次回來的空殼；開網頁抓讀者每章
+      // 都要等，使用者嫌太慢。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(
+          contains('"webView":true'),
+          contains('"webViewDelayTime"'),
+          contains('找不到資料從哪來時，才把 "webView":true 寫進'),
+        ),
+      );
+      final fetch = aiRepairTools.firstWhere((tool) => tool.name == 'fetch');
+      expect(jsonEncode(fetch.parameters), contains('webView'));
     });
 
     test('a whole site turned into another one is its own case, with why to '

@@ -85,6 +85,12 @@ final class ReaderMenuPages {
           enabled: !isLocal,
         ),
         AppSheetAction(
+          label: '單章借源',
+          icon: Icons.content_paste_go_rounded,
+          value: _ReaderMoreAction.borrowChapter,
+          enabled: !isLocal,
+        ),
+        AppSheetAction(
           label: '重新取得本章',
           icon: Icons.refresh_rounded,
           value: _ReaderMoreAction.refetchChapter,
@@ -119,6 +125,9 @@ final class ReaderMenuPages {
       case _ReaderMoreAction.changeSource:
         _host.menu.dismissControls();
         await _changeSource.show();
+      case _ReaderMoreAction.borrowChapter:
+        _host.menu.dismissControls();
+        await _remedy.borrowCurrentChapter();
       case _ReaderMoreAction.refetchChapter:
         _host.menu.dismissControls();
         await _remedy.refetchCurrentChapter();
@@ -408,6 +417,7 @@ Future<({int index, List<BookChapter>? latest})?> resolveDetailChapter({
 
 enum _ReaderMoreAction {
   changeSource,
+  borrowChapter,
   refetchChapter,
   reSegment,
   login,

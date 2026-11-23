@@ -109,9 +109,29 @@ void main() {
     );
 
     expect(repository.cachedContent(0), same(before));
+    // 選字「隱藏」「替換」照樣找得到畫面上那份正文的原文。
+    expect(repository.rawContentOf(0, before.contentHash), '只抓到一半的正文');
     // 存著的正文也沒有被失敗蓋掉，下次開書照樣讀得到。
     site.body = '不該被讀到';
     final reopened = await repository.reloadContent(0);
     expect(reopened.plainText, contains('只抓到一半的正文'));
+  });
+
+  test('選字找原文用的是排出畫面上那份正文的原文，存著的換了也一樣', () async {
+    site.body = '大門尚未打開。';
+    final shown = await repository.loadContent(0);
+    expect(repository.rawContentOf(0, shown.contentHash), '大門尚未打開。');
+
+    // 網站上的正文換了，畫面還沒重排：找原文照畫面上那份。
+    site.body = '城門終於開了。';
+    expect(repository.rawContentOf(0, shown.contentHash), '大門尚未打開。');
+
+    final after = await repository.reloadContent(0, refetch: true);
+    expect(repository.rawContentOf(0, after.contentHash), '城門終於開了。');
+    expect(
+      repository.rawContentOf(0, shown.contentHash),
+      isNull,
+      reason: '舊正文的選取對不上新的原文',
+    );
   });
 }
