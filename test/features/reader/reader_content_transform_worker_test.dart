@@ -92,24 +92,12 @@ void main() {
     },
   );
 
-  test('with re-segmenting on, replace rules still see blank lines', () async {
+  test('with re-segmenting on, a sentence broken across a blank line joins', () async {
     final result = await worker.process(
-      _args(
-        rawContent: '第一段。\n\n第二段。',
-        rules: [
-          ReplaceRule(
-            id: 3,
-            name: '空白行',
-            pattern: '\n\n',
-            replacement: '\n＊\n',
-            isRegex: false,
-            order: 1,
-          ).toJson(),
-        ],
-      ),
+      _args(rawContent: '他推開門走了\n\n進去，屋裡一片漆黑。'),
     );
     final document = result['document']! as ReaderContent;
-    expect(document.paragraphs, ['第一段。', '＊', '第二段。']);
+    expect(document.paragraphs, ['他推開門走了進去，屋裡一片漆黑。']);
   });
 
   test(
