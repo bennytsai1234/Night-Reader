@@ -775,7 +775,8 @@ class CheckSourceService extends ChangeNotifier {
     final message = _compactMessage(
       error.toString().trim().isEmpty ? '校驗失敗' : error.toString(),
     );
-    // 夜讀自己的校驗流程出錯，不是網站的問題：只隔離，不標網站的哪一種。
+    // 校驗跑到一半意外出錯：判不出是網站的哪一種，標「已隔離」，一樣建議移除
+    // 或交給 AI 修（ADR 0081）。
     final health = upstreamHealth(quarantineSourceGroupTag);
 
     await _persistStatus(source, health, message);
