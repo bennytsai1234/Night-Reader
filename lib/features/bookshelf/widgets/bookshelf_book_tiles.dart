@@ -256,8 +256,8 @@ class BookshelfListCard extends StatelessWidget {
     this.radius,
   });
 
-  /// 書卡的圓角；null 是一般的分組卡片圓角。試用「列表併成一面」時照
-  /// [mergedRadius] 給（DESIGN.md 設計原則 6）。
+  /// 書卡的圓角；null 是一般的分組卡片圓角。「列表併成一面」時照
+  /// [mergedRadius] 給（ADR 0079）。
   final BorderRadius? radius;
 
   /// 列表併成一面時第 [index] 本（共 [count] 本）的圓角：只有第一本的上緣、

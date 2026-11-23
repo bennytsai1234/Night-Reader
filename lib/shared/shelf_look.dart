@@ -1,21 +1,24 @@
-// 試用開關（DESIGN.md 設計原則 6）：書架列表的版面，使用者日常用過再選；選定後拿掉
-// 開關與書架「整理」選單裡的那一項，只留選中的做法。書架順序（預設封面的天空顏色）
-// 也記在這裡。
+// 書架列表的樣子：「整理」選單的「列表併成一面」（ADR 0079），跟著多台手機同步。
+// 書架順序（預設封面的天空顏色）也記在這裡。
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-abstract final class ShelfTrial {
+abstract final class ShelfLook {
   /// 書架列表併成一個面：書與書之間不留縫，只有第一本上緣、最後一本下緣是圓角。
   static final ValueNotifier<bool> mergedList = ValueNotifier<bool>(false);
-
-  static const String mergedListKey = 'trial_shelf_merged_list';
 
   /// 開 App 時在第一幀前讀回來：書架骨架第一幀就照它排。書架順序同時清空，
   /// 測試之間不帶著上一個測試的書架。
   static void restore(SharedPreferences prefs) {
-    mergedList.value = prefs.getBool(mergedListKey) ?? false;
+    readMergedList(prefs);
     setShelfOrder(const []);
+  }
+
+  /// 讀回「列表併成一面」；同步套用了另一台的設定時書架也照它重讀。
+  static void readMergedList(SharedPreferences prefs) {
+    mergedList.value = prefs.getBool(PreferKey.shelfMergedList) ?? false;
   }
 
   /// 書架上由上到下的位置，鍵是書的網址（`Book.bookUrl`）：同名的書，不論

@@ -5,7 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
-import 'package:night_reader/shared/shelf_trial.dart';
+import 'package:night_reader/shared/shelf_look.dart';
 
 /// 書架「統一封面」：開著時書架上的書與它們的書籍詳情一律畫預設封面，
 /// 不用書源的封面（搜尋與發現的結果照舊）。值存在書架設定，由
@@ -83,7 +83,7 @@ class DefaultBookCover extends StatelessWidget {
     painter: _SkyPainter(
       bookName,
       kind,
-      position: ShelfTrial.positionOf(bookUrl),
+      position: ShelfLook.positionOf(bookUrl),
       day: Theme.of(context).brightness == Brightness.light,
     ),
     size: Size.infinite,

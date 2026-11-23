@@ -35,6 +35,10 @@ class PreferKey {
 
   /// 主頁分頁列與搜尋鈕的樣子（[TabBarLook.name]）。
   static const String tabBarLook = 'tab_bar_look';
+
+  /// 書架列表併成一面（`ShelfLook.mergedList`）。名稱是試用時取的，沿用下來，
+  /// 開著的手機升級後照樣開著。
+  static const String shelfMergedList = 'trial_shelf_merged_list';
   static const String userAgent = 'userAgent';
   static const String showUnread = 'showUnread';
   static const String bookGroupStyle = 'bookGroupStyle';

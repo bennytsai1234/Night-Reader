@@ -54,7 +54,7 @@ import 'shared/widgets/animation_latency.dart';
 import 'shared/widgets/skeleton/skeleton_text.dart';
 import 'shared/navigation/root_navigator.dart';
 
-import 'package:night_reader/shared/shelf_trial.dart';
+import 'package:night_reader/shared/shelf_look.dart';
 import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
 import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 
@@ -171,9 +171,9 @@ Future<void> _startApp() async {
     _restoreWebViewUserAgent(getIt<SharedPreferences>());
     // 開 App 的骨架照上次量的標點位置畫長條。
     PunctuationInk.restore(getIt<SharedPreferences>());
-    // 分頁列的樣子與書架的試用開關：第一幀就照它們畫。
+    // 分頁列與書架列表的樣子：第一幀就照它們畫。
     TabBarLook.restore(getIt<SharedPreferences>());
-    ShelfTrial.restore(getIt<SharedPreferences>());
+    ShelfLook.restore(getIt<SharedPreferences>());
 
     runApp(
       MultiProvider(

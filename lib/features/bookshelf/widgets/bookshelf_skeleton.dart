@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/shelf_trial.dart';
+import 'package:night_reader/shared/shelf_look.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/features/bookshelf/provider/bookshelf_provider_base.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
@@ -109,8 +109,8 @@ class BookshelfSkeleton extends StatelessWidget {
 
   Widget _buildList(BoxConstraints constraints) {
     const cardHeight = BookshelfListCard.coverHeight + AppSpacing.md * 2;
-    // 試用「列表併成一面」時書與書之間不留縫（DESIGN.md 設計原則 6）。
-    final merged = ShelfTrial.mergedList.value;
+    // 「列表併成一面」時書與書之間不留縫（ADR 0079）。
+    final merged = ShelfLook.mergedList.value;
     final gap = merged ? 0.0 : AppSpacing.sm;
     final count = _countToFill(
       constraints.maxHeight - padding.top,

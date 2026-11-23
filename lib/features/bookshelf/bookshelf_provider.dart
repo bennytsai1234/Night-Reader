@@ -5,7 +5,7 @@ import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/book_storage_service.dart';
 import 'package:night_reader/core/sync/settings_sync.dart';
-import 'package:night_reader/shared/shelf_trial.dart';
+import 'package:night_reader/shared/shelf_look.dart';
 
 import 'provider/bookshelf_provider_base.dart';
 import 'provider/bookshelf_logic_mixin.dart';
@@ -38,7 +38,7 @@ class BookshelfProvider extends BookshelfProviderBase
 
   void _bookSwitched(AppEvent event) {
     if (event.data case final BookSwitchedEvent switched) {
-      ShelfTrial.bookSwitched(switched);
+      ShelfLook.bookSwitched(switched);
     }
   }
 
@@ -50,7 +50,7 @@ class BookshelfProvider extends BookshelfProviderBase
     unawaited(loadBooks());
   }
 
-  /// 同步套用了另一台的書架設定（網格或列表、排序、統一封面）。
+  /// 同步套用了另一台的書架設定（網格或列表、排序、統一封面、列表併成一面）。
   void _settingsSynced() {
     loadUiPreferences();
     notifyListeners();

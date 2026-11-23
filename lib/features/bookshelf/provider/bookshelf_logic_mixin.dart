@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:night_reader/shared/shelf_trial.dart';
+import 'package:night_reader/shared/shelf_look.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book/book.dart';
@@ -26,6 +26,7 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
         BookshelfProviderBase.defaultShowLastUpdate;
     UnifiedCovers.enabled.value =
         prefs.getBool(_unifiedCoversKey) ?? UnifiedCovers.defaultEnabled;
+    ShelfLook.readMergedList(prefs);
     final savedSort = prefs.getInt(PreferKey.bookshelfSort);
     sortMode =
         savedSort != null &&
@@ -117,11 +118,11 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
     notifyListeners();
   }
 
-  /// 試用中：列表併成一個面（見 [ShelfTrial]）。
-  void setTrialMergedList(bool value) {
-    ShelfTrial.mergedList.value = value;
+  /// 列表併成一個面（見 [ShelfLook]）。
+  void setMergedList(bool value) {
+    ShelfLook.mergedList.value = value;
     SharedPreferences.getInstance().then(
-      (p) => p.setBool(ShelfTrial.mergedListKey, value),
+      (p) => p.setBool(PreferKey.shelfMergedList, value),
     );
     notifyListeners();
   }
