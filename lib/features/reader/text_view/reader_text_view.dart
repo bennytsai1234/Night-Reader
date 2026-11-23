@@ -175,6 +175,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     pipeline: () => _pipeline,
     documentIndex: _documentIndex,
     scrollOffset: _effectiveScrollOffset,
+    viewportHeight: () => _viewportSize.height,
   );
 
   /// 還原已經排好、原生捲動位置還沒套上時要停的錨點。位置不存成數字，

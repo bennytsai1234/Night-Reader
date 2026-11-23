@@ -77,7 +77,13 @@ final class ReaderTextTouch {
     ReaderTextSelection selection,
     double viewportHeight,
   ) {
-    const nothing = (boxes: <LineBox>[], startBox: null, endBox: null);
+    const nothing = (
+      boxes: <LineBox>[],
+      startBox: null,
+      endBox: null,
+      chapterStartShown: false,
+      chapterEndShown: false,
+    );
     final geometry = _pipeline().geometry;
     if (!geometry.isSelectionCurrent(selection)) {
       // 章節重新切分、換內容或樣式換代後，舊 offset 不再對應畫面。
@@ -120,10 +126,19 @@ final class ReaderTextTouch {
         : range.end - 1;
     final starts = within(range.start, firstEnd);
     final ends = within(lastStart, range.end);
+    final body = selection.bounds;
+    final first = body.isEmpty
+        ? const <LineBox>[]
+        : within(body.start, body.start + 1);
+    final last = body.isEmpty
+        ? const <LineBox>[]
+        : within(body.end - 1, body.end);
     return (
       boxes: within(range.start, range.end),
       startBox: starts.isEmpty ? null : starts.first,
       endBox: ends.isEmpty ? null : ends.last,
+      chapterStartShown: first.isNotEmpty && first.first.top >= 0,
+      chapterEndShown: last.isNotEmpty && last.last.bottom <= viewportHeight,
     );
   }
 

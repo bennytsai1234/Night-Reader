@@ -40,8 +40,8 @@ final class ReaderTextSelectionLayer extends StatefulWidget {
   /// 正文捲動時重算框位置。
   final Listenable repaint;
 
-  /// 選取在高 viewportHeight 的 viewport 上要畫的東西：看得到的字形框與
-  /// 兩端的行框。
+  /// 選取在高 viewportHeight 的 viewport 上要畫的東西：看得到的字形框、
+  /// 兩端的行框與這一章的頭尾在不在畫面上。
   final SelectionPaint Function(
     ReaderTextSelection selection,
     double viewportHeight,
@@ -107,6 +107,9 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer>
   Offset? _dragPoint;
   Offset? _finger;
   double _viewportHeight = 0;
+
+  /// 最近一次畫的選取（自動捲動看這一章的頭尾在不在畫面上）。
+  SelectionPaint? _lastPaint;
 
   /// 每個把手最後畫在哪一行。
   final Map<SelectionEdge, LineBox> _handleBoxes = <SelectionEdge, LineBox>{};
@@ -178,7 +181,7 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer>
   Widget _buildSelection(BuildContext context) {
     final selection = widget.selection.selection;
     if (selection == null) return const SizedBox.shrink();
-    final paint = widget.paintFor(selection, _viewportHeight);
+    final paint = _lastPaint = widget.paintFor(selection, _viewportHeight);
     if (paint.boxes.isEmpty && _draggedHandle == null) {
       return const SizedBox.shrink();
     }
@@ -314,14 +317,11 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer>
       _autoScroll.stop();
       return;
     }
-    // 拖著的那一端已經到這一章的章首或章末：那裡就在畫面上，不再捲。
-    final bounds = selection.bounds;
-    if ((overDrag < 0 &&
-            _dragEdge == SelectionEdge.start &&
-            selection.range.start <= bounds.start) ||
-        (overDrag > 0 &&
-            _dragEdge == SelectionEdge.end &&
-            selection.range.end >= bounds.end)) {
+    // 這一章的第一行或最後一行已經整行在畫面上：選取到不了別章，不再捲。
+    final paint = _lastPaint;
+    if (paint != null &&
+        ((overDrag < 0 && paint.chapterStartShown) ||
+            (overDrag > 0 && paint.chapterEndShown))) {
       return;
     }
     if (_scrollInFlight) return;

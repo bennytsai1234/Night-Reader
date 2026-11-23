@@ -43,12 +43,14 @@ typedef SelectionHighlight = ({
 });
 
 /// 選取在 viewport 上要畫的東西：看得到的那一段的字形框（每條視覺行一個）、
-/// 開頭與結尾那個字的行框；開頭或結尾不在畫面上（或那一段還沒排好）時是
-/// null。
+/// 開頭與結尾那個字的行框（不在畫面上或那一段還沒排好時是 null），以及這一
+/// 章正文的第一行、最後一行是不是整行在畫面上（自動捲動到這裡就停）。
 typedef SelectionPaint = ({
   List<LineBox> boxes,
   LineBox? startBox,
   LineBox? endBox,
+  bool chapterStartShown,
+  bool chapterEndShown,
 });
 
 /// 正文上的一段選取。offset 是章內 displayText 的 UTF-16 位置；可以跨段，

@@ -25,12 +25,14 @@ final class ReaderMarkGeometry {
     required this._pipeline,
     required this._documentIndex,
     required this._scrollOffset,
+    required this._viewportHeight,
   });
 
   /// 目前排版世代的排版管線；換代時整份換新，所以每次都重新取。
   final LayoutPipeline Function() _pipeline;
   final DocumentIndex _documentIndex;
   final double? Function() _scrollOffset;
+  final double Function() _viewportHeight;
 
   final Map<
     int,
@@ -46,6 +48,7 @@ final class ReaderMarkGeometry {
       int revision,
       ChapterTextRange range,
       List<LineBox> boxes,
+      bool complete,
     })
   >
   _highlightBoxes = {};
@@ -120,23 +123,29 @@ final class ReaderMarkGeometry {
         );
         // 那一段還沒排好：這次不畫、不記，排好後文件索引換版再算。
         if (world.boxes.isEmpty) continue;
-        final computed = (
+        cached = (
           mark: mark,
           blocks: blocks,
           revision: revision,
           range: range,
           boxes: world.boxes,
+          complete: world.complete,
         );
-        // 跨好幾屏的標註有幾段還沒排好時先畫排好的，不記；下一幀再算。
-        if (world.complete) {
-          _highlightBoxes[mark.id] = computed;
-        } else {
-          _highlightBoxes.remove(mark.id);
-        }
-        cached = computed;
+        _highlightBoxes[mark.id] = cached;
       }
+      // 跨好幾屏的標註有幾段的排版不在手上（畫面外丟掉了）時，記下的框
+      // 缺了那幾段；每幀只算畫面上看得到的那一段，捲回來的段落照樣畫到。
+      final boxes = cached.complete
+          ? cached.boxes
+          : pipeline.geometry.lineBoxesWithin(
+              mark.location.chapterIndex,
+              cached.range.start,
+              cached.range.end,
+              top: scroll,
+              bottom: scroll + _viewportHeight(),
+            );
       paints.add((
-        boxes: [for (final box in cached.boxes) _scrolled(box, scroll)],
+        boxes: [for (final box in boxes) _scrolled(box, scroll)],
         color: mark.color,
         style: mark.style,
       ));

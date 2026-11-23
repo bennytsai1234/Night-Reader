@@ -392,8 +392,13 @@ void main() {
           home: ReaderTextSelectionLayer(
             selection: service,
             repaint: service,
-            paintFor: (_, _) =>
-                (boxes: <LineBox>[box], startBox: box, endBox: box),
+            paintFor: (_, _) => (
+              boxes: <LineBox>[box],
+              startBox: box,
+              endBox: box,
+              chapterStartShown: false,
+              chapterEndShown: false,
+            ),
             caretAt: (_, _) => null,
             onHide: onHide,
             onReplace: onReplace,
@@ -865,7 +870,13 @@ void main() {
             repaint: service,
             paintFor: (_, _) =>
                 paint?.call() ??
-                (boxes: const <LineBox>[box], startBox: box, endBox: box),
+                (
+                  boxes: const <LineBox>[box],
+                  startBox: box,
+                  endBox: box,
+                  chapterStartShown: false,
+                  chapterEndShown: false,
+                ),
             caretAt: (_, point) => caretAt?.call(point),
             autoScrollBy: autoScrollBy,
             onAutoScrollEnd: onAutoScrollEnd,
@@ -888,6 +899,33 @@ void main() {
       await tester.pump();
       return gesture;
     }
+
+    testWidgets('兩端都在畫面外、反白佔滿畫面時，選單仍在畫面裡', (tester) async {
+      await pumpLayer(
+        tester,
+        paint: () => (
+          boxes: [
+            for (var top = 0.0; top < 600; top += 20)
+              LineBox(left: 10, top: top, right: 390, bottom: top + 20),
+          ],
+          startBox: null,
+          endBox: null,
+          chapterStartShown: false,
+          chapterEndShown: false,
+        ),
+      );
+      final screen = tester.getRect(find.byType(ReaderTextSelectionLayer));
+      final copy = tester.getRect(find.text('複製'));
+      expect(screen.contains(copy.topLeft), isTrue, reason: '$copy');
+      expect(screen.contains(copy.bottomRight), isTrue, reason: '$copy');
+      for (final edge in SelectionEdge.values) {
+        expect(
+          find.byKey(ValueKey<SelectionEdge>(edge)),
+          findsNothing,
+          reason: '兩端都不畫把手',
+        );
+      }
+    });
 
     testWidgets('複製時段落之間只換一行', (tester) async {
       final copied = <Object?>[];
@@ -998,10 +1036,17 @@ void main() {
       expect(settled, 1);
     });
 
-    testWidgets('拖到這一章的章末就不再捲', (tester) async {
+    testWidgets('這一章的最後一行整行在畫面上時就不再捲', (tester) async {
       final deltas = <double>[];
       final service = await pumpLayer(
         tester,
+        paint: () => (
+          boxes: const <LineBox>[box],
+          startBox: box,
+          endBox: box,
+          chapterStartShown: false,
+          chapterEndShown: true,
+        ),
         caretAt: (_) => 1 << 20,
         autoScrollBy: (delta) async {
           deltas.add(delta);
@@ -1031,6 +1076,8 @@ void main() {
           boxes: const <LineBox>[box],
           startBox: box,
           endBox: hideEnd ? null : box,
+          chapterStartShown: false,
+          chapterEndShown: false,
         ),
         caretAt: (_) => display.indexOf('即將') + caret,
       );
