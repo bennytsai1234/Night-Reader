@@ -360,6 +360,14 @@ class ReaderRuntime extends ChangeNotifier {
     }
   }
 
+  /// 存著的第 [chapterIndex] 章正文在閱讀器外換掉了（單章借源，ADR 0080）：
+  /// 閱讀器手上那一章的舊正文作廢，重讀存著的。接著開書或跳過去時發布新的
+  /// 內容世代，正文層排好的那一章跟著換掉。讀不到丟
+  /// [ReaderContentUnavailableException]，閱讀器手上的維持原樣。
+  Future<void> rereadStoredContent(int chapterIndex) async {
+    await repository.reloadContent(chapterIndex);
+  }
+
   Future<ReaderLocation> _remapReloadLocation({
     required ReaderLocation location,
     required ReaderContent? previousContent,
