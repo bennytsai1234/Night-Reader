@@ -1,3 +1,5 @@
+import 'package:night_reader/core/engine/js/replacement_js.dart';
+
 import 'dart:async';
 import 'dart:isolate';
 
@@ -135,7 +137,7 @@ void _previewMain((SendPort, List<ReplaceRule>, String) args) {
   var text = input;
   for (var i = 0; i < rules.length; i++) {
     reply.send(('rule', i));
-    text = rules[i].apply(text);
+    text = rules[i].apply(text, runJs: runReplacementJs);
   }
   reply.send(('done', text));
 }

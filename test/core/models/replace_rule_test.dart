@@ -1,5 +1,9 @@
+import 'package:flutter_js/flutter_js.dart' show fetchPolyfillSource;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/engine/js/replacement_js.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
+
+import '../../test_helper.dart';
 
 void main() {
   ReplaceRule regex(String pattern, [String replacement = '']) =>
@@ -83,6 +87,42 @@ void main() {
       expect(apply(r'(a)', r'$2', 'abc'), 'abc');
       expect(apply(r'(a)', r'${none}', 'abc'), 'abc');
       expect(apply('a', r'x\', 'abc'), 'abc');
+    });
+  });
+
+  group('「替換為」寫 @js: 時每一處跑那段 JS（同 Legado）', () {
+    final skip = quickJsUnavailableReason();
+    // 測試沒有 rootBundle，替換規則的 JS 用不到 fetch。
+    setUpAll(() => fetchPolyfillSource ??= '');
+
+    test('對到的字放在 result，傳回的字照字面替換', skip: skip, () {
+      final rule = ReplaceRule(
+        pattern: r'\d+',
+        replacement: r'@js:String(Number(result) * 2) + "$1"',
+      );
+      expect(rule.apply('第5章、第12章', runJs: runReplacementJs), r'第10$1章、第24$1章');
+    });
+
+    test('JS 出錯時這條規則不套，正文照舊', skip: skip, () {
+      final rule = ReplaceRule(
+        pattern: 'a',
+        replacement: '@js:throw new Error("x")',
+      );
+      expect(rule.apply('abc', runJs: runReplacementJs), 'abc');
+    });
+
+    test('沒有 JS 可以跑時不套，不把 JS 原文貼進正文', () {
+      final rule = ReplaceRule(pattern: 'a', replacement: '@js:result + 1');
+      expect(rule.apply('abc'), 'abc');
+    });
+
+    test('純文字規則的 @js: 照字面（Legado 只有正則規則認 @js:）', () {
+      final rule = ReplaceRule(
+        pattern: 'a',
+        replacement: '@js:x',
+        isRegex: false,
+      );
+      expect(rule.apply('abc', runJs: runReplacementJs), '@js:xbc');
     });
   });
 }

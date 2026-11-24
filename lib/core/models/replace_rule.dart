@@ -94,11 +94,30 @@ class ReplaceRule {
   /// 套用這一條規則：正文、標題與試跑都用它。正則照 Java 預設（同
   /// Legado）：`.` 不跨段、`^`／`$` 不逐行，開頭寫 `(?s)`、`(?m)` 才開
   /// （[javaRegExp]）。
-  String apply(String content) {
+  ///
+  /// 正則規則的「替換為」寫 `@js:` 時，每一處交給 [runJs]（對到的字當
+  /// `result`）算出要換成的字，照字面替換（同 Legado）；沒給 [runJs] 或 JS
+  /// 出錯時這條不套，正文照舊。
+  String apply(
+    String content, {
+    String Function(String code, String matched)? runJs,
+  }) {
     if (pattern.isEmpty) return content;
     try {
       if (isRegex) {
         final reg = javaRegExp(pattern);
+        if (replacement.startsWith('@js:')) {
+          if (runJs == null) return content;
+          final code = replacement.substring(4);
+          try {
+            return content.replaceAllMapped(
+              reg,
+              (match) => runJs(code, match.group(0)!),
+            );
+          } on Object {
+            return content;
+          }
+        }
         return content.replaceAllMapped(
           reg,
           (match) => _javaReplacement(replacement, match as RegExpMatch),

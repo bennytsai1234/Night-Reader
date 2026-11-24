@@ -1,3 +1,6 @@
+import 'package:flutter_js/flutter_js.dart' show fetchPolyfillSource;
+import 'package:night_reader/core/engine/js/replacement_js.dart';
+
 import 'dart:async';
 import 'dart:isolate';
 
@@ -828,6 +831,9 @@ class ReaderContentTransformer {
   static RuleStageText _ruleStageParagraphsInBackground(
     Map<String, Object?> args,
   ) {
+    // 在 Isolate.run 開的 isolate 跑，同 [ReaderContentTransformWorker] 沒有
+    // rootBundle。
+    fetchPolyfillSource ??= '';
     final bookName = args['bookName'] as String? ?? '';
     final bookOrigin = args['bookOrigin'] as String? ?? '';
     final chapterTitle = args['chapterTitle'] as String? ?? '';
@@ -935,7 +941,7 @@ class ReaderContentTransformer {
     for (final rule in rules) {
       started = true;
       onRule?.call(rule._sourceIndex);
-      final next = rule.apply(result);
+      final next = rule.apply(result, runJs: runReplacementJs);
       if (keep == null || keep(next)) result = next;
     }
     if (started) onRule?.call(null);
@@ -1369,6 +1375,9 @@ class ReaderContentTransformWorker {
   }
 
   static void _workerMain(SendPort replyPort) {
+    // 這個 isolate 沒有 rootBundle：替換規則的 `@js:` 用不到 fetch，給空的
+    // 補丁，JS 引擎才建得起來（書源 isolate 是主 isolate 讀好再傳過去）。
+    fetchPolyfillSource ??= '';
     final commands = ReceivePort();
     replyPort.send(commands.sendPort);
     commands.listen((Object? message) {
