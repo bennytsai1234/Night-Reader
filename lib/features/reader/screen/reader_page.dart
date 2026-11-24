@@ -339,7 +339,7 @@ class _ReaderPageState extends State<ReaderPage>
           runtime?.visibleChapterIndex ??
           _NoChapterYet(_chapterInfo.openChapterIndex),
       scrub: menu.scrub,
-      titleFor: _chapterInfo.chapterTitleAt,
+      titleFor: _chapterInfo.displayTitleAt,
     );
 
     final customBrightness =

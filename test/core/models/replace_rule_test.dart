@@ -58,4 +58,31 @@ void main() {
     );
     expect(plain.isValid(), isTrue);
   });
+
+  group('「替換為」照 Java 的取代字串（同 Legado）', () {
+    String apply(String pattern, String replacement, String content) =>
+        ReplaceRule(pattern: pattern, replacement: replacement).apply(content);
+
+    test(r'${名稱} 取具名群組', () {
+      expect(apply(r'(?<num>\d+)章', r'第${num}回', '12章'), '第12回');
+    });
+
+    test(r'\ 跳脫下一個字：\$ 是錢字號、\\ 是反斜線', () {
+      expect(apply('元', r'\$\\', '十元'), r'十$\');
+    });
+
+    test(r'$12 只有一個群組時是第 1 組接著字「2」', () {
+      expect(apply(r'(a)', r'$12', 'a'), 'a2');
+    });
+
+    test(r'$1 到 $n 與 $0 照舊', () {
+      expect(apply(r'(甲)(乙)', r'$2$1$0', '甲乙'), '乙甲甲乙');
+    });
+
+    test('寫錯的取代字串（沒有的群組、結尾落單的 \\）整條規則不套，正文照舊', () {
+      expect(apply(r'(a)', r'$2', 'abc'), 'abc');
+      expect(apply(r'(a)', r'${none}', 'abc'), 'abc');
+      expect(apply('a', r'x\', 'abc'), 'abc');
+    });
+  });
 }
