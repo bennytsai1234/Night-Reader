@@ -171,6 +171,18 @@ class BackstageWebView {
           await Future.delayed(Duration(milliseconds: 1000 + delayTime));
           if (isCompleted) return;
 
+          // 等網頁跳到某個網址的（[overrideUrlRegex]）：同 Legado 的
+          // SnifferWebClient，網頁載完只跑書源給的 JS，不交回網頁內容，
+          // 等到符合的跳轉（[onNavigationRequest]）或逾時才結束。跳轉常在
+          // 網頁跑了一陣子之後才發生（例如播放頁幾秒後才導向音訊）。
+          if (overrideUrlRegex?.isNotEmpty ?? false) {
+            final js = javaScript;
+            if (js != null && js.isNotEmpty) {
+              unawaited(controller.runJavaScript(js).catchError((_) {}));
+            }
+            return;
+          }
+
           final jsToRun = javaScript?.isNotEmpty == true
               ? javaScript!
               : 'document.documentElement.outerHTML';
