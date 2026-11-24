@@ -52,11 +52,6 @@ if [ "$needs_check" -eq 0 ]; then
   exit 0
 fi
 
-# Git 跑 hook 時帶著 GIT_DIR 這類變數，Flutter 算自己的版本時會讀到夜讀的 repo，把共用
-# SDK 的 bin/cache/flutter.version.json 寫成 0.0.0-unknown，之後每個 pub get 都失敗。
-# hook 的工作目錄已經是 worktree 根目錄，下面的 flutter 不需要這些變數。
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX
-
 # 下面用 --no-pub，不讓每次推送都去解析套件。新開的 worktree 還沒下載套件，或 pubspec
 # 改過之後，analyze 會把每個 import 都報成錯誤（新 worktree 一次三萬多個），所以這時先
 # 裝好：套件設定檔不存在，或比 pubspec.yaml／pubspec.lock 舊時，先從本機快取裝，快取缺
