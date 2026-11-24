@@ -17,6 +17,8 @@ void main() {
       'bookSourceName': '順序',
       'bookSourceUrl': 'https://order.test',
       'ruleBookInfo': {
+        // 寫了 canReName，書名才換成詳情頁的（同 Legado）。
+        'canReName': '1',
         'name': '.title@text',
         'intro': '.intro@text@js:result + "\\n当前来源【2】"',
         'tocUrl':

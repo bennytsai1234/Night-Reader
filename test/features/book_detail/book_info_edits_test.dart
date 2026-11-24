@@ -61,7 +61,8 @@ void main() {
     expect(parsed.author, '我改過的作者');
   });
 
-  test('canReName or a search result still takes the detail page', () async {
+  test('canReName takes the detail page; otherwise a search result keeps its '
+      'name too (Legado BookInfo)', () async {
     final renamed = await parse(
       sourceWith(canReName: '1'),
       shelfBook(inShelf: true),
@@ -69,8 +70,8 @@ void main() {
     expect(renamed.name, '書源上的書名');
 
     final fromSearch = await parse(sourceWith(), shelfBook(inShelf: false));
-    expect(fromSearch.name, '書源上的書名');
-    expect(fromSearch.author, '書源上的作者');
+    expect(fromSearch.name, '我改過的書名');
+    expect(fromSearch.author, '我改過的作者');
   });
 
   test('a failed update check is an error, not "up to date"', () async {

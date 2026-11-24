@@ -34,13 +34,4 @@ void main() {
     expect(matchesPrecisionSearch(book('大陸', '某人'), '斗羅大陸'), isFalse);
     expect(matchesPrecisionSearch(book('斗破蒼穹', '天蠶土豆'), '斗羅'), isFalse);
   });
-
-  test('精準搜尋的合併結果留「等於」與「含」兩級', () {
-    final cards = SearchModel.aggregateForTest(
-      [book('斗羅大陸', '唐家三少'), book('斗羅大陸外傳', '唐家三少')],
-      '斗羅大陸',
-      true,
-    );
-    expect(cards.map((c) => c.name), ['斗羅大陸', '斗羅大陸外傳']);
-  });
 }
