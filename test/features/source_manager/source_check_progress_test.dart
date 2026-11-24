@@ -9,6 +9,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/core/source_check/source_check_isolate.dart';
+import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/core/background_work/paused_work_file.dart';
 import 'package:night_reader/features/source_manager/source_check_job.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
@@ -314,4 +315,47 @@ void main() {
     provider.dispose();
     slow.dispose();
   });
+
+  test('a check pressed after another job took the slot does not start, and '
+      'the paused check stays paused', () async {
+    final paused = PausedSourceCheck(file: _MemoryFile.new);
+    final pausedFile = _MemoryFile();
+    paused.hold(SourceCheckPlan([url]), pausedFile);
+    final provider = SourceManagerProvider(
+      entrance: Future<void>.value(),
+      pausedCheck: paused,
+    );
+    addTearDown(provider.dispose);
+    while (provider.isLoading || provider.totalSourceCount == 0) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    // 按下去之後、開始之前，別件（例如自動換源）佔了位置。
+    final other = _Other();
+    expect(
+      BackgroundWork.instance.begin(
+        other,
+        const BackgroundWorkStatus(title: '自動換源', text: ''),
+      ),
+      isTrue,
+    );
+    addTearDown(() => BackgroundWork.instance.end(other));
+
+    await provider.checkAllSources();
+
+    expect(SourceCheckJob.current, isNull, reason: '沒開始');
+    expect(paused.isPaused, isTrue, reason: '新的沒開始，暫停的那次不結束');
+    expect(pausedFile.closed, isFalse);
+    expect(BackgroundWork.instance.current, same(other));
+  });
+}
+
+class _Other implements BackgroundJob {
+  @override
+  void pauseFromSystem() {}
+
+  @override
+  void endFromSystem() {}
+
+  @override
+  void openFromNotification() {}
 }

@@ -1230,19 +1230,26 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
+  /// 開始新的一次校驗：先佔住背景工作的位置，佔不到（按下去之後別件剛好
+  /// 開始）就不做，暫停中的那次照舊；佔到了才存設定、結束暫停中的那次（做完的
+  /// 那些不再接著校驗）。
+  Future<void> _checkAnew(List<String> urls, SourceCheckConfig? config) async {
+    final job = SourceCheckJob.of(checkService, SourceCheckPlan(urls));
+    if (!job.reserve()) return;
+    try {
+      if (config != null) await checkService.updateConfig(config);
+      await pausedCheck.end();
+      await job.run();
+    } finally {
+      job.release();
+    }
+  }
+
   Future<void> checkSelectedSources({SourceCheckConfig? config}) async {
     final selectedUrls = Set<String>.from(_selectedUrls);
     if (selectedUrls.isEmpty || !_beginBatchOperation()) return;
     try {
-      if (config != null) {
-        await checkService.updateConfig(config);
-      }
-      // 開始新的一次：暫停中的那次結束，做完的那些不再接著校驗。
-      await pausedCheck.end();
-      await SourceCheckJob.of(
-        checkService,
-        SourceCheckPlan(selectedUrls.toList(growable: false)),
-      ).run();
+      await _checkAnew(selectedUrls.toList(growable: false), config);
     } finally {
       _selectedUrls.removeAll(selectedUrls);
       _endBatchOperation();
@@ -1359,11 +1366,7 @@ class SourceManagerProvider with ChangeNotifier {
     if (urls.isEmpty || !_beginBatchOperation()) return;
     final selectedAtStart = Set<String>.from(_selectedUrls);
     try {
-      if (config != null) {
-        await checkService.updateConfig(config);
-      }
-      await pausedCheck.end();
-      await SourceCheckJob.of(checkService, SourceCheckPlan(urls)).run();
+      await _checkAnew(urls, config);
     } finally {
       _selectedUrls.removeAll(selectedAtStart);
       _endBatchOperation();

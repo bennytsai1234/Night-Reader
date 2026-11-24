@@ -1015,6 +1015,125 @@ void main() {
     expect(work.isBusy, isFalse);
   });
 
+  group('the slot is taken when the repair is pressed', () {
+    const switching = BackgroundWorkStatus(title: '自動換源', text: '找書源');
+
+    test('a job that comes while the page is still sliding in waits behind '
+        'the repair, and the notification is the repair\'s', () async {
+      final gate = Completer<void>();
+      final batch = _batch(gate: gate);
+      final run = runOf(batch);
+      expect(runs.adopt(run), isTrue);
+      expect(work.isBusy, isTrue, reason: '按下去就佔住，別件開不了');
+
+      // 推入動畫還在播：刪書源的自動換源排在後面（ADR 0069）。
+      final other = _Other();
+      var otherStarted = false;
+      unawaited(
+        work.beginAfterCurrent(other, switching).then((_) {
+          otherStarted = true;
+        }),
+      );
+      await _flush();
+      expect(platform.calls, isEmpty, reason: '還沒開始，不送通知');
+      expect(otherStarted, isFalse);
+
+      run.start();
+      await _flush();
+      expect(work.current, same(run));
+      expect(platform.calls, isNotEmpty);
+      expect(
+        platform.calls.where((call) => call.startsWith('找書源')),
+        isEmpty,
+        reason: '通知是修書源的',
+      );
+      expect(otherStarted, isFalse, reason: '一次只有一件在跑');
+
+      gate.complete();
+      await batch.completion;
+      await _flush();
+      expect(otherStarted, isTrue, reason: '修完接著換源');
+      expect(work.current, same(other));
+    });
+
+    test('a repair pressed after another job took the slot is not adopted, '
+        'and a paused one stays paused', () async {
+      final repairs = RepairRuns(newEndsPaused: true);
+      await restorePausedRepair(
+        file: _MemoryFile(
+          jsonEncode({
+            'version': 1,
+            'kind': 'single',
+            'url': 'https://a.example',
+          }),
+        ),
+        runs: repairs,
+        load: (_) async => [_s('a')],
+        work: work,
+      );
+      final paused = repairs.current!;
+      expect(work.isBusy, isFalse, reason: '暫停中的不佔位置');
+
+      final other = _Other();
+      work.begin(other, switching);
+      final next = runOf(_batch());
+      expect(repairs.adopt(next), isFalse);
+      expect(repairs.current, same(paused));
+      expect(paused.isPaused, isTrue, reason: '新的沒開始，暫停的不結束');
+      expect(work.current, same(other));
+      next
+        ..disposeWork()
+        ..dispose();
+      work.end(other);
+      repairs.dispose();
+    });
+
+    test('a repair let go before it started gives the slot back', () {
+      final run = runOf(_batch());
+      expect(runs.adopt(run), isTrue);
+      expect(work.isBusy, isTrue);
+      run
+        ..disposeWork()
+        ..dispose();
+      expect(work.isBusy, isFalse);
+    });
+
+    testWidgets('going back before the page finished sliding in still starts '
+        'the repair, once the page is gone', (tester) async {
+      final gate = Completer<void>();
+      final batch = _batch(gate: gate);
+      final run = runOf(batch);
+      runs.adopt(run);
+      final navigator = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigator,
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: const SizedBox(),
+        ),
+      );
+      unawaited(
+        navigator.currentState!.push(
+          MaterialPageRoute<void>(builder: (_) => SourceRepairPage(run: run)),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(batch.isRunning, isFalse, reason: '推入動畫還沒播完');
+
+      navigator.currentState!.pop();
+      await _settle(tester);
+      expect(find.byType(SourceRepairPage), findsNothing);
+      expect(batch.isRunning, isTrue, reason: '按了開始，返回照樣在背景跑');
+      expect(work.current, same(run));
+
+      gate.complete();
+      await tester.runAsync(() => batch.completion);
+      await tester.pump();
+      expect(work.isBusy, isFalse);
+    });
+  });
+
   test('a paused page hears when the slot frees up, so continue turns on', () {
     final run = SingleRepairRun.paused(
       AiRepairSession(source: _s('a'), service: null),
