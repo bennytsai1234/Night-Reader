@@ -1052,6 +1052,10 @@ class _ProgressBarState extends State<_ProgressBar> {
   /// 拖到的位置（毫秒）；沒在拖時是 null。
   double? _scrubbing;
 
+  /// 開始拖時是哪一集、總長多少（毫秒）。拖的途中換了集、重載這一集（總長
+  /// 先變成沒有），這次拖動就作廢：進度條跟著新的這一集，放手時不跳。
+  (int, int)? _scrubbingIn;
+
   AudiobookPlayer get player => widget.player;
 
   @override
@@ -1066,6 +1070,10 @@ class _ProgressBarState extends State<_ProgressBar> {
       valueListenable: player.position,
       builder: (context, played, _) {
         final max = total?.inMilliseconds ?? 0;
+        if (_scrubbing != null && _scrubbingIn != (player.chapterIndex, max)) {
+          _scrubbing = null;
+          _scrubbingIn = null;
+        }
         final scrubbing = _scrubbing;
         final at = scrubbing == null
             ? played
@@ -1096,11 +1104,19 @@ class _ProgressBarState extends State<_ProgressBar> {
                   max: max <= 0 ? 1 : max.toDouble(),
                   onChanged: max <= 0
                       ? null
-                      : (ms) => setState(() => _scrubbing = ms),
+                      : (ms) => setState(() {
+                          _scrubbing = ms;
+                          _scrubbingIn = (player.chapterIndex, max);
+                        }),
                   onChangeEnd: max <= 0
                       ? null
                       : (ms) {
-                          setState(() => _scrubbing = null);
+                          // 拖的途中換了集：這次拖動已經作廢，不跳。
+                          if (_scrubbing == null) return;
+                          setState(() {
+                            _scrubbing = null;
+                            _scrubbingIn = null;
+                          });
                           unawaited(
                             player.seek(Duration(milliseconds: ms.round())),
                           );

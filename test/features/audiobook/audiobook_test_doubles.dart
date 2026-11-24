@@ -62,6 +62,7 @@ class FakeAudioEngine implements AudioEngine {
   }) async {
     opened.add((uri, start));
     _opens.add(null);
+    await openGate?.future;
     lastHeaders = headers;
     position = start;
     duration = const Duration(minutes: 20);
@@ -78,6 +79,9 @@ class FakeAudioEngine implements AudioEngine {
   /// 暫停、拖動要等外面放行（測試等待途中按了什麼）。
   Completer<void>? pauseGate;
   Completer<void>? seekGate;
+
+  /// 給了就等它才開好這一集（載入中的那段時間）。
+  Completer<void>? openGate;
 
   @override
   Future<void> pause() async {
