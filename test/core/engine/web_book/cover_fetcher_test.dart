@@ -108,4 +108,29 @@ void main() {
       isTrue,
     );
   });
+
+  test('只有要跑書源程式時才交給書源 isolate', () {
+    expect(
+      CoverFetcher.needsScript(
+        source(header: '{"Referer":"x"}'),
+        '$baseUrl/c.png,{"headers":{"a":"b"}}',
+      ),
+      isFalse,
+    );
+    expect(
+      CoverFetcher.needsScript(
+        source(coverDecodeJs: 'result'),
+        '$baseUrl/c.png',
+      ),
+      isTrue,
+    );
+    expect(
+      CoverFetcher.needsScript(
+        source(header: '@js:JSON.stringify({a:1})'),
+        '$baseUrl/c.png',
+      ),
+      isTrue,
+    );
+    expect(CoverFetcher.needsScript(source(), '$baseUrl/{{1+1}}.png'), isTrue);
+  });
 }

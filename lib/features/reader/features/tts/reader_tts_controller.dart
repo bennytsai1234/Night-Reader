@@ -412,6 +412,7 @@ class ReaderTtsController extends ChangeNotifier
         bookName: book.name,
         author: book.getRealAuthor(),
         coverSource: UnifiedCovers.coverOf(book),
+        coverOrigin: book.origin,
       ),
       playing: isPlaying,
       // 上一章、下一章跳過付費章節：那個方向沒有能念的章就不放那顆。

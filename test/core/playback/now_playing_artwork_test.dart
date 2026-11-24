@@ -27,13 +27,13 @@ void main() {
   tearDown(() => dir.deleteSync(recursive: true));
 
   NowPlayingArtwork artwork({
-    Future<File> Function(String url)? download,
+    Future<File> Function(String url, String? origin)? download,
     Future<Directory> Function()? directory,
   }) => NowPlayingArtwork(
     directory: directory ?? () async => dir,
     download:
         download ??
-        (url) async {
+        (url, _) async {
           downloads.add(url);
           throw const SocketException('offline');
         },
@@ -146,7 +146,7 @@ void main() {
     await tester.runAsync(() async {
       final cached = File('${dir.path}/cached')..writeAsBytesSync(image);
       final file = await fileOf(
-        artwork(download: (url) async => cached)
+        artwork(download: (url, _) async => cached)
             .resolve('https://x.test/c.jpg', '書'),
       );
 
@@ -162,7 +162,7 @@ void main() {
       final broken = File('${dir.path}/broken.jpg')
         ..writeAsBytesSync([1, 2, 3]);
       final file = await fileOf(
-        artwork(download: (url) async => broken)
+        artwork(download: (url, _) async => broken)
             .resolve('https://x.test/c.jpg', '書'),
       );
 

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:night_reader/shared/widgets/book/source_cover_image.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
@@ -23,11 +24,15 @@ class BookCoverAmbience extends StatelessWidget {
     required this.coverUrl,
     required this.bookName,
     this.bookUrl,
+    this.origin,
     this.kind = BookSourceKind.novel,
   });
 
   /// 詳情頁封面畫的網址；null 或空白時是預設封面。
   final String? coverUrl;
+
+  /// 書的書源網址：網路封面照這個書源抓（[SourceCoverImage]）。
+  final String? origin;
 
   /// 預設封面的星星與有聲書的音量條照書名放。
   final String bookName;
@@ -55,17 +60,19 @@ class BookCoverAmbience extends StatelessWidget {
   /// 頁面就不顯示氛圍。沒有封面時鋪預設封面，所以可以。
   static bool supports(String? coverUrl) {
     final source = coverUrl?.trim();
-    return source == null || source.isEmpty || _imageOf(source) != null;
+    return source == null || source.isEmpty || _imageOf(source, null) != null;
   }
 
-  static ImageProvider? _imageOf(String source) {
+  static ImageProvider? _imageOf(String source, String? origin) {
     final ImageProvider provider;
     if (source.startsWith('local://')) {
       provider = FileImage(File(source.replaceFirst('local://', '')));
     } else if (source.startsWith('file://')) {
       provider = FileImage(File(Uri.parse(source).toFilePath()));
     } else if (source.startsWith('http://') || source.startsWith('https://')) {
-      provider = CachedNetworkImageProvider(source);
+      provider = origin != null && origin.isNotEmpty
+          ? SourceCoverImage(source, origin)
+          : CachedNetworkImageProvider(source);
     } else {
       return null;
     }
@@ -85,7 +92,9 @@ class BookCoverAmbience extends StatelessWidget {
 
   Widget _cover() {
     final source = coverUrl?.trim();
-    final image = source == null || source.isEmpty ? null : _imageOf(source);
+    final image = source == null || source.isEmpty
+        ? null
+        : _imageOf(source, origin);
     if (image == null) return _defaultCover();
     return Image(
       image: image,
