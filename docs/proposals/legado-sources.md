@@ -16,18 +16,18 @@
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| 書源網址、名稱、分組、類型、手動排序、啟用、啟用發現 | | |
-| 詳情頁網址規則（`bookUrlPattern`） | | |
-| 請求標頭（`header`，JSON 或 `@js:`） | | |
-| 程式庫（`jsLib`，一段 JS 或 `{名稱: 網址}`） | | |
-| 自動存 Cookie（`enabledCookieJar`） | | |
-| 併發率（`concurrentRate`，「次數/毫秒」與「毫秒」兩種） | | |
-| 登入（`loginUrl`、`loginUi`、`loginCheckJs`） | | |
-| 封面解密（`coverDecodeJs`） | | |
-| 書源說明與變數說明（`bookSourceComment`、`variableComment`） | | |
-| 更新時間、回應時間、權重（`lastUpdateTime`、`respondTime`、`weight`） | | |
-| 發現網址與篩選（`exploreUrl`、`exploreScreen`） | | |
-| 搜尋網址（`searchUrl`） | | |
+| 書源網址、名稱、分組、類型、手動排序、啟用、啟用發現 | 一樣 | 欄位與預設值相同；類型怎麼判另有 ADR 0051、0056。 |
+| 詳情頁網址規則（`bookUrlPattern`） | 見「搜尋」 | 用在搜尋直接跳詳情頁，在搜尋一類對。 |
+| 請求標頭（`header`，JSON 或 `@js:`） | 結果不對 | 標頭裡的 `proxy`（代理）夜讀拿掉不用，見 R2；其餘（`@js:`、`<js>`、寬鬆 JSON、登入標頭蓋過）一樣，沒寫瀏覽器標識時用哪個是 ADR 0072。 |
+| 程式庫（`jsLib`，一段 JS 或 `{名稱: 網址}`） | 一樣 | 兩種寫法都認、網址抓過的存著；Legado 整個書源共用一個作用域，夜讀每個引擎各跑一次，結果相同、只是多跑。 |
+| 自動存 Cookie（`enabledCookieJar`） | 一樣 | 預設開，關掉時網站回的 Cookie 不存。 |
+| 併發率（`concurrentRate`，「次數/毫秒」與「毫秒」兩種） | 一樣 | 兩種寫法照同一套算；「次數/毫秒」Legado 實際放行次數＋1，夜讀照寫的次數，網站看到的只會更少。 |
+| 登入（`loginUrl`、`loginUi`、`loginCheckJs`） | 見「登入」 | |
+| 封面解密（`coverDecodeJs`） | 結果不對 | 夜讀抓封面不跑它，也不帶書源的標頭與網址選項，見 R1。 |
+| 書源說明與變數說明（`bookSourceComment`、`variableComment`） | 見「書源編輯與除錯」 | 書源說明在編輯頁；變數說明是「設定書源變數」的提示。 |
+| 更新時間、回應時間、權重（`lastUpdateTime`、`respondTime`、`weight`） | 見「書源管理」「換源」 | 都只用在排序。 |
+| 發現網址與篩選（`exploreUrl`、`exploreScreen`） | 一樣（篩選） | `exploreScreen` 這版 Legado 只存著、沒有地方用，夜讀也只存著；發現網址在「發現」對。 |
+| 搜尋網址（`searchUrl`） | 見「搜尋」 | |
 
 ### 規則的寫法
 
@@ -258,7 +258,21 @@
 
 ## 結果不對
 
-（對完的類別寫在這裡。）
+輕重分三級：**抓不到**（讀者拿不到東西）、**抓錯或抓不全**、**少數寫法才碰到**。
+
+### R1 書源的封面載不出來：沒帶書源的標頭、沒跑封面解密（抓錯或抓不全）
+
+- 讀者會碰到：網站擋盜連（要帶 `Referer` 或書源標頭裡的 Cookie、瀏覽器標識）、或封面網址後面接了網址選項（`https://…/a.jpg,{"headers":{"Referer":"…"}}`）的書源，搜尋結果、書籍詳情與書架上的封面一律是載不出來的預設封面；書源寫了封面解密（`coverDecodeJs`）的，抓到的是加密過的位元組，一樣載不出來。
+- Legado：封面照書源組一個請求（`L:help/glide/OkHttpStreamFetcher.kt:67-77`：照 `sourceOrigin` 找回書源，`AnalyzeUrl(url, source)` 帶上書源標頭、網址選項的標頭與 Cookie），抓到後交給 `coverDecodeJs`（`L:utils/ImageUtils.kt:40-55, 61-71`，`result` 是抓到的資料、`book`、`src` 都綁好）。畫面傳書源進去的地方：`L:ui/widget/image/CoverImageView.kt:196-213`。
+- 夜讀：封面元件直接用網址字串抓（`N:lib/shared/widgets/book/book_cover_widget.dart:455-462`，`CachedNetworkImageProvider(source)`），存成檔的那條也是光網址（`N:lib/core/storage/book_cover_storage_service.dart:200-207`）；`coverDecodeJs` 只存在資料庫欄位，沒有地方執行（`N:lib/core/database/tables/app_tables.dart:295`）。網址選項整段當成網址的一部分送出。
+- 插圖（`imageDecode`）夜讀有照做（`N:lib/core/engine/web_book/illustration_fetcher.dart:111-119`），封面沒有。
+
+### R2 書源標頭裡的代理（`proxy`）被拿掉（少數寫法才碰到）
+
+- 讀者會碰到：書源在標頭寫了 `"proxy":"socks5://…"` 或 `"http://…"`，網站只讓經過代理的連線進來時，Legado 走代理抓得到，夜讀直接連、抓不到。
+- Legado：`L:model/analyzeRule/AnalyzeUrl.kt:120-127` 把標頭的 `proxy` 拿出來，`getClient()` 用 `getProxyClient(proxy)`（`L:model/analyzeRule/AnalyzeUrl.kt:524-526`）。
+- 夜讀：`N:lib/core/engine/analyze_url.dart:193-207` 註解寫「夜讀不走代理」，拿掉不用；沒有 ADR 記這個決定。
+- 備註：多數寫代理的書源是作者自己的環境（例如 `127.0.0.1`），換一台手機本來就連不上；要補的話照 Legado 只在書源寫了時才走。
 
 ## 少一個選項
 
