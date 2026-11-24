@@ -736,19 +736,24 @@ class AnalyzeUrl {
     }, cancelToken: cancelToken);
   }
 
-  /// 站點存的 Cookie 併進請求，規則或網址選項自己給的同名 Cookie 優先
-  /// （Legado `setCookie`）。
+  /// 存著的 Cookie 併進請求（Legado `setCookie`）：書源網址的網域存的（登入、
+  /// 書源程式存的都在這裡，書源打別的網域時照樣帶著，Legado 的 `domain`），
+  /// 再加這次請求的網域存的；規則或網址選項自己給的同名 Cookie 優先。
   Future<void> _mergeStoredCookie() async {
-    final stored = await CookieStore().getCookie(url);
-    if (stored.isEmpty) return;
     final store = CookieStore();
+    final sourceKey = source?.getKey();
+    final ofSource = sourceKey == null || sourceKey.isEmpty
+        ? ''
+        : await store.getCookie(sourceKey);
+    final ofRequest = await store.getCookie(url);
+    if (ofSource.isEmpty && ofRequest.isEmpty) return;
     final given = _header('Cookie');
     headerMap.removeWhere((k, _) => k.toLowerCase() == 'cookie');
-    headerMap['Cookie'] = given == null || given.isEmpty
-        ? stored
-        : store.mapToCookie(
-            store.cookieToMap(stored)..addAll(store.cookieToMap(given)),
-          );
+    headerMap['Cookie'] = store.mapToCookie(
+      store.cookieToMap(ofSource)
+        ..addAll(store.cookieToMap(ofRequest))
+        ..addAll(store.cookieToMap(given ?? '')),
+    );
   }
 
   /// 送出請求，傳回回應的位元組。連線一下就斷這類暫時的失敗再試兩次；網站
