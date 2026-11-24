@@ -858,11 +858,7 @@ List<({String title, int start, int end})> _splitKeepingImages(
   keep(content.length);
   offsets.add(content.length);
   return [
-    for (final span in TxtParser.splitText(
-      plain.toString(),
-      leadTitle: title,
-      untitledTitle: title,
-    ))
+    for (final span in TxtParser.splitEpubChapter(plain.toString(), title))
       (
         title: span.title,
         start: span.start == 0 ? 0 : offsets[span.start],
