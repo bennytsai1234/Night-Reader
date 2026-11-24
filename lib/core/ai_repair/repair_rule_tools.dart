@@ -268,6 +268,7 @@ Future<String> Function(CancelToken) _jsTask(
     responsePreview: RequestLog.diagnosisPreview,
     sentHeaders: true,
     live: true,
+    secrets: secrets,
   );
   return requests.run(() async {
     try {

@@ -115,11 +115,15 @@ class SourceCheckIsolateHandle {
 /// 立刻交回 handle：還沒真的結束的臨時 worker 太多時，worker 要等名額才開
 /// （[SourceWorker.maxTemporaryWorkers]），等的時候也能 abort；[timeout] 從
 /// worker 開好才算。
+///
+/// [secrets] 是校驗紀錄的回應開頭截短前先遮掉的值（AI 修書源的開場校驗，
+/// [SourceChecker]）。
 Future<SourceCheckIsolateHandle> spawnSourceCheck(
   BookSource source,
   IsolateCheckConfig config,
-  Duration timeout,
-) async {
+  Duration timeout, {
+  Set<String> secrets = const {},
+}) async {
   final completer = Completer<SourceCheckIsolateResult?>();
   final stop = CancelToken();
   SourceWorker? worker;
@@ -154,7 +158,7 @@ Future<SourceCheckIsolateHandle> spawnSourceCheck(
     timer = Timer(timeout, () => finish(null));
     try {
       final map = await worker!.run(
-        _checkTask(source.toJson(), config.toMap()),
+        _checkTask(source.toJson(), config.toMap(), secrets),
       );
       finish(SourceCheckIsolateResult.fromMap(map));
     } catch (error, stack) {
@@ -184,10 +188,12 @@ Future<SourceCheckIsolateHandle> spawnSourceCheck(
 Future<Map<String, dynamic>> Function(CancelToken) _checkTask(
   Map<String, dynamic> sourceJson,
   Map<String, dynamic> configMap,
+  Set<String> secrets,
 ) => (_) async {
   final checker = SourceChecker(
     source: BookSource.fromJson(sourceJson),
     config: IsolateCheckConfig.fromMap(configMap),
+    secrets: secrets,
   );
   return (await checker.run()).toMap();
 };

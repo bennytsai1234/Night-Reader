@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/network/page_digest.dart';
+import 'package:night_reader/core/network/secret_text.dart';
 import 'package:night_reader/core/utils/encoding_detect.dart';
 import 'package:night_reader/core/source/source_progress.dart';
 
@@ -18,6 +19,7 @@ typedef RequestLogSettings = ({
   bool sentHeaders,
   bool live,
   bool returnsPages,
+  Set<String> secrets,
 });
 
 /// [RequestLog.pages] 的一筆：請求或回應的那一行（同 [RequestLog.lines]），
@@ -61,6 +63,7 @@ final class RequestLog {
     this.keepPages = false,
     this.sentHeaders = false,
     this.live = false,
+    this.secrets = const {},
   }) : _returnsPages = false;
 
   /// 網路 isolate 照停住的 worker 的設定記（[settingsFor]）。
@@ -70,6 +73,7 @@ final class RequestLog {
       keepPages = settings.keepPages,
       sentHeaders = settings.sentHeaders,
       live = settings.live,
+      secrets = settings.secrets,
       _returnsPages = settings.returnsPages;
 
   /// 網頁先精簡（[digestPage]）再取開頭，給 AI 看。
@@ -97,6 +101,13 @@ final class RequestLog {
   /// 網路 isolate 的這份紀錄要把整頁帶回停住的 worker（[settingsFor]）。
   final bool _returnsPages;
 
+  /// 回應開頭截短前先遮掉的值（[hideSecrets]；送出的內容截在欄位之間，不切
+  /// 在值的中間）：AI 修書源拿這份
+  /// 紀錄給 AI 看，截在一段秘密中間時，留下的半段後面認不出來。整頁原文
+  /// （[pages]）不遮，規則解析要用。跟著 [settingsFor] 帶到網路 isolate，
+  /// 只用在這份紀錄。
+  final Set<String> secrets;
+
   /// 規則 JS 的請求在網路 isolate 照這份設定記。[forwardsDirectly]：網路
   /// isolate 記下的可以直接交給收這份紀錄的人（[live]，而且收的人就是這個
   /// 書源工作的，`BlockingCall` 判斷）；不行時接上（[merge]）時再交。在
@@ -111,6 +122,7 @@ final class RequestLog {
       sentHeaders: sentHeaders,
       live: direct,
       returnsPages: _currentPageSink != null || (keepPages && !direct),
+      secrets: secrets,
     );
   }
 
@@ -439,6 +451,7 @@ bool _recordBody(RequestLog log, String head, Object? data) {
       raw.length <= 2000 &&
       collapsed.replaceAll(RegExp(r'<[^>]*>|\s'), '').isEmpty;
   if (tooShort) collapsed = raw;
+  collapsed = hideSecrets(collapsed, log.secrets);
   final preview = log.responsePreview!;
   final shown = collapsed.length > preview
       ? '${collapsed.substring(0, preview)}…'

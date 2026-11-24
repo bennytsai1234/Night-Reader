@@ -1,13 +1,15 @@
+import 'dart:async';
 import 'dart:convert';
 
 import '../models/source/base_source.dart';
 import '../models/source/book_source.dart';
 import '../network/cookie_store.dart';
 import '../network/network_service.dart';
+import '../network/secret_text.dart';
 import '../diagnostics/app_log_service.dart';
 
 /// 送給 AI 的內容裡換掉秘密的那段字。
-const String aiRepairRedacted = '«已遮蔽»';
+const String aiRepairRedacted = hiddenSecret;
 
 /// 太短的值不遮：「1」「true」這類會把整份內容遮得看不懂，也不是秘密。
 const int _minSecretLength = 6;
@@ -62,20 +64,9 @@ Future<Set<String>> aiRepairSecretsOf(BookSource source) async {
   return secrets;
 }
 
-/// [text] 裡出現的每個秘密換成 [aiRepairRedacted]；長的先換，一段秘密包著
-/// 另一段時不會只換掉一半。
-String redactAiRepairSecrets(String text, Set<String> secrets) {
-  if (secrets.isEmpty) return text;
-  final ordered = secrets.toList()
-    ..sort((a, b) => b.length.compareTo(a.length));
-  var out = text;
-  for (final secret in ordered) {
-    for (final form in _forms(secret)) {
-      out = out.replaceAll(form, aiRepairRedacted);
-    }
-  }
-  return out;
-}
+/// [text] 裡出現的每個秘密換成 [aiRepairRedacted]（[hideSecrets]）。
+String redactAiRepairSecrets(String text, Set<String> secrets) =>
+    hideSecrets(text, secrets);
 
 /// [text] 從 [start] 到 [end] 的那一段，遮掉 [secrets] 給 AI 看（讀頁、讀
 /// 章節分段）。切點落在一段秘密中間時往外延到整段，前後兩段都只看得到遮過
@@ -86,7 +77,7 @@ String redactAiRepairSecrets(String text, Set<String> secrets) {
   int end,
   Set<String> secrets,
 ) {
-  final forms = {for (final secret in secrets) ..._forms(secret)};
+  final forms = {for (final secret in secrets) ...secretForms(secret)};
   int widen(int at, {required bool toEnd}) {
     for (var moved = true; moved;) {
       moved = false;
@@ -110,17 +101,18 @@ String redactAiRepairSecrets(String text, Set<String> secrets) {
   );
 }
 
-/// 秘密在送出的文字裡可能長的樣子：原樣、網址編碼，與放進 JSON 字串後跳脫
-/// 一層、兩層的（書源標頭本身是 JSON 字串，放進書源 JSON 又跳脫一層）。
-Set<String> _forms(String secret) {
-  String escaped(String value) {
-    final json = jsonEncode(value);
-    return json.substring(1, json.length - 1);
-  }
+/// 這次修復現在要遮的秘密，給在背景 worker 裡截短的地方（試抓、看網頁、
+/// 試解析、跑程式）帶過去先遮再截；不在 [withAiRepairSecrets] 裡時是空的。
+Set<String> get currentAiRepairSecrets =>
+    Zone.current[_secretsZoneKey] as Set<String>? ?? const {};
 
-  final once = escaped(secret);
-  return {secret, Uri.encodeQueryComponent(secret), once, escaped(once)};
-}
+/// 在 [body] 裡 [currentAiRepairSecrets] 是 [secrets]。
+Future<T> withAiRepairSecrets<T>(
+  Set<String> secrets,
+  Future<T> Function() body,
+) => runZoned(body, zoneValues: {_secretsZoneKey: secrets});
+
+final Object _secretsZoneKey = Object();
 
 /// 這個書源在記憶體裡現在的 Cookie 值：修復途中規則或網站驗證才寫進來的
 /// （[aiRepairSecretsOf] 只在開始時讀一次）。同步讀，每次遮蔽前都看。

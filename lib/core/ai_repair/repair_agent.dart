@@ -49,8 +49,8 @@ abstract interface class RepairAgentHost {
   /// 送給 AI、寫進紀錄的文字遮掉秘密。
   String redact(String text);
 
-  /// 現在要遮的秘密：讀頁、找字、試解析、跑程式截短前先遮（[redact] 用的
-  /// 同一份）。
+  /// 現在要遮的秘密：讀頁、找字截短前先遮（[redact] 用的同一份；在背景
+  /// worker 裡截的由 [guard] 帶過去）。
   Set<String> get secrets;
 
   /// 校驗 AI 交出的書源，通過才存進去；沒通過時傳回要回給 AI 的校驗結果，
@@ -421,8 +421,7 @@ final class RepairAgent implements AgentTask<AiRepairCommand> {
         step.detail = '解析頁 $page…';
         _host.notify();
         final result = await _host.guard(
-          (cancelToken) =>
-              _parsePage(source, stage, found, cancelToken, _host.secrets),
+          (cancelToken) => _parsePage(source, stage, found, cancelToken),
         );
         if (_host.stopped || result == null) return _cancelled;
         final reply =
@@ -442,8 +441,7 @@ final class RepairAgent implements AgentTask<AiRepairCommand> {
         step.detail = '跑程式…';
         _host.notify();
         final result = await _host.guard(
-          (cancelToken) =>
-              _runJs(source, code, pages, cancelToken, _host.secrets),
+          (cancelToken) => _runJs(source, code, pages, cancelToken),
         );
         if (_host.stopped || result == null) return _cancelled;
         _log.full('### 程式\n$code');

@@ -115,7 +115,6 @@ typedef AiRepairPageParser = Future<String> Function(
   String stage,
   RepairPage page,
   CancelToken cancelToken,
-  Set<String> secrets,
 );
 
 /// 在書源規則 JS 的環境跑一段程式（[runRepairJs]）；[pages] 是程式用到的
@@ -125,7 +124,6 @@ typedef AiRepairJsRunner = Future<String> Function(
   String code,
   Map<int, String> pages,
   CancelToken cancelToken,
-  Set<String> secrets,
 );
 
 /// AI 要看的一頁（[fetchPageForAi]）。
@@ -863,8 +861,8 @@ class AiRepairSession extends ChangeNotifier {
   String _redact(AiRepairJob job, String text) =>
       redactAiRepairSecrets(text, _secretSet(job));
 
-  /// 現在要遮的秘密（[_redact]）：截短前先遮的地方（讀頁、找字、試解析、
-  /// 跑程式）拿這一份。
+  /// 現在要遮的秘密（[_redact]）：截短前先遮的地方拿這一份（讀頁、找字，
+  /// 與 [_guard] 裡在背景 worker 截的）。
   Set<String> _secretSet(AiRepairJob job) => {
     ...job._secrets,
     ...aiRepairLiveCookieSecrets({job.original.getKey(), ?job.repairedUrl}),
@@ -950,9 +948,12 @@ class AiRepairSession extends ChangeNotifier {
   /// 做完（含出錯）先重讀秘密再交回：跑書源的程式（校驗、試抓、看網頁、
   /// 試解析、跑程式）可能寫了新的 Cookie、登入標頭或變數，交回的結果接著就
   /// 寫進紀錄、送給 AI。寫入在背景 isolate 做，轉送回這裡的那份比結果先到。
+  ///
+  /// 在背景 worker 裡截短的地方（試抓、看網頁、試解析、跑程式）照
+  /// [currentAiRepairSecrets] 先遮再截。
   Future<T?> _guard<T>(Future<T> Function() work) async {
     try {
-      return await work();
+      return await withAiRepairSecrets(_secretSet(job), work);
     } on DioException catch (error) {
       if (CancelToken.isCancel(error) || _halting) return null;
       rethrow;

@@ -13,6 +13,7 @@ import 'package:native_synchronization/mailbox.dart';
 import 'package:native_synchronization/sendable.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/js/js_extensions.dart';
 import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/network/request_log.dart';
@@ -885,17 +886,26 @@ void _main(SendPort mainPort) {
           final void Function(Object entry)? sink = progress
               ? (entry) => channel.notify(_Progress(id, entry))
               : null;
+          final writes = <Future<void>>{};
           try {
-            return await runZoned(
-              () => _runCancellable(
-                task,
-                cancelToken,
-                taskId: id,
-                progress: sink,
+            return await JsExtensions.taskWrites(
+              writes,
+              () => runZoned(
+                () => _runCancellable(
+                  task,
+                  cancelToken,
+                  taskId: id,
+                  progress: sink,
+                ),
+                zoneValues: {_taskProgressZoneKey: ?sink},
               ),
-              zoneValues: {_taskProgressZoneKey: ?sink},
             );
           } finally {
+            // 這件工作的規則 JS 寫入（快取、Cookie、登入資料、變數）不等；交回
+            // 之前寫完：呼叫的一方常在拿到結果後就收掉這個 worker，Cookie 這類
+            // 轉送回主 isolate 的也要排在結果前面。只等這件工作自己的，同一個
+            // isolate 上別的工作的寫入不算。
+            await JsExtensions.settleTaskWrites(writes);
             tasks.remove(id);
           }
         case _Perform(

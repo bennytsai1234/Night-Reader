@@ -1030,6 +1030,39 @@ void main() {
     );
   });
 
+  // AI 修書源的開場校驗：診斷的回應開頭截字前先遮秘密，跨過截字處的秘密
+  // 兩半都不留（#529 第 47 條）。
+  test('a diagnosis hides a secret before cutting a response short', () async {
+    const left = 'LEFTq7Wk';
+    const right = 'RIGHTz3Pm';
+    final service = _FakeBookSourceService(
+      chapters: (_) async {
+        final uri = Uri.parse('https://mirror.example/api/toc');
+        recordRequestUrl('GET', uri);
+        recordResponse(
+          Response<dynamic>(
+            requestOptions: RequestOptions(path: uri.toString()),
+            statusCode: 200,
+            data: '${'x' * (RequestLog.diagnosisPreview - 4)}$left$right',
+          ),
+        );
+        return const <BookChapter>[];
+      },
+    );
+    final result = await SourceChecker(
+      source: _source(),
+      config: _searchOnly,
+      service: service,
+      networkCheck: () async => true,
+      secrets: const {'$left$right'},
+    ).run();
+
+    final diagnosis = result.diagnostics.join('\n');
+    expect(diagnosis, contains('https://mirror.example/api/toc'));
+    expect(diagnosis, isNot(contains(left.substring(0, 4))));
+    expect(diagnosis, isNot(contains(right)));
+  });
+
   test('an unsupported source is filtered before any request', () async {
     final service = _FakeBookSourceService(
       search: () => fail('unsupported sources should not be searched'),

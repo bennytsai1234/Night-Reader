@@ -13,6 +13,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/network/cookie_store.dart';
 import 'package:night_reader/core/network/network_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,6 +28,9 @@ class _MinimalServicesBinding extends BindingBase
 }
 
 const _chapter = '夜雨落在書鋪的瓦上，掌櫃把燈芯挑亮，翻開那一匣手抄的書稿。';
+
+const _left = 'LEFTq7Wk';
+const _right = 'RIGHTz3Pm';
 
 void main() {
   _MinimalServicesBinding.ensureInitialized();
@@ -78,6 +82,8 @@ void main() {
         '/book/3/1.html' =>
           '<div id="content">$_chapter</div><a href="/book/3/1_2.html">下一页</a>',
         '/book/3/1_2.html' => '<div id="content">後半章</div>',
+        // 秘密剛好跨過回應開頭截字處（前面接著 `<html><body>`）。
+        '/secret' => '${'x' * 144}$_left$_right',
         _ => '',
       };
       request.response
@@ -394,6 +400,66 @@ void main() {
     expect(result, isNot(contains(left.substring(0, 4))));
     expect(result, isNot(contains(right)));
   });
+
+  // 請求紀錄的回應開頭截字前先遮秘密（#529 第 47 條）。
+  group('a secret across where a response is cut is hidden', () {
+    void hidden(String text) {
+      expect(text, isNot(contains(_left.substring(0, 4))));
+      expect(text, isNot(contains(_right)));
+    }
+
+    test('when the AI looks at a page', () async {
+      final page = await fetchPageForAi(
+        source(),
+        '$site/secret',
+        keyword: '夜雨',
+        timeout: const Duration(seconds: 30),
+        pageLength: 160,
+        secrets: const {'$_left$_right'},
+        database: Future.value(databaseIsolate),
+      );
+      hidden(page.lines.join('\n'));
+      expect(
+        page.pages.map((p) => p.body).join(),
+        contains('$_left$_right'),
+        reason: '整頁原文照舊，規則解析要用',
+      );
+    });
+
+    // `java.ajax` 停住 worker、在網路 isolate 送出與記錄。
+    test('when rule JS fetches through the network isolate', () async {
+      final result = await runRepairJs(
+        source(),
+        code: 'java.ajax("$site/secret")',
+        pages: const {},
+        timeout: const Duration(seconds: 30),
+        database: Future.value(databaseIsolate),
+        secrets: const {'$_left$_right'},
+      );
+      expect(result, contains('  ← $site/secret 200'), reason: result);
+      hidden(result.substring(result.indexOf('# 這段程式送出的請求')));
+    }, skip: quickJsUnavailableReason());
+  });
+
+  // 規則 JS 的寫入不等；worker 交回結果就被收掉。交回之前要寫完，主
+  // isolate 才拿得到（之後重讀秘密才遮得到，#529 第 52 條）。
+  test('what rule JS writes is all there when the JS tool returns', () async {
+    final result = await runRepairJs(
+      source(),
+      code:
+          'source.putLoginHeader(JSON.stringify('
+          '{"Cookie": "sid=fresh-cookie-123456"})); "ok"',
+      pages: const {},
+      timeout: const Duration(seconds: 30),
+      database: Future.value(databaseIsolate),
+    );
+
+    expect(result, '傳回：ok');
+    expect(
+      CookieStore().getMemoryCookie(site),
+      contains('fresh-cookie-123456'),
+    );
+  }, skip: quickJsUnavailableReason());
 
   test('js runs in the rule JS world and can read fetched pages', () async {
     final result = await runRepairJs(

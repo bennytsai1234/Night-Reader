@@ -68,6 +68,53 @@ void main() {
       expect(log.lines, everyElement(contains('，沒有內容')));
     });
 
+    // 跨過截字處的秘密兩半都不留（#529 第 47 條）：先遮再截。
+    group('秘密先遮再截', () {
+      const left = 'LEFTq7Wk';
+      const right = 'RIGHTz3Pm';
+      const secrets = {'$left$right'};
+      void hidden(String line) {
+        expect(line, isNot(contains(left.substring(0, 4))));
+        expect(line, isNot(contains(right)));
+      }
+
+      test('回應的開頭', () async {
+        final log = RequestLog(
+          responsePreview: RequestLog.diagnosisPreview,
+          secrets: secrets,
+        );
+        await log.run(() async {
+          recordResponse(
+            _response(
+              'https://site.example/s',
+              200,
+              '${'x' * (RequestLog.diagnosisPreview - 4)}$left$right',
+            ),
+          );
+        });
+        hidden(log.lines.single);
+      });
+
+      // 規則 JS 的請求在網路 isolate 照帶過去的設定記。
+      test('網路 isolate 照帶過去的設定記', () async {
+        final log = RequestLog(
+          responsePreview: RequestLog.diagnosisPreview,
+          secrets: secrets,
+        );
+        final there = RequestLog.from(log.settingsFor(forwardsDirectly: false));
+        await there.run(() async {
+          recordResponse(
+            _response(
+              'https://site.example/s',
+              200,
+              '${'x' * (RequestLog.diagnosisPreview - 4)}$left$right',
+            ),
+          );
+        });
+        hidden(there.lines.single);
+      });
+    });
+
     test('POST 的內容太長時截在欄位之間，不切在值的中間', () async {
       const secret = 'PRIVATEPASSWORD123456789';
       final body = '${'x' * 1985}&password=$secret';
