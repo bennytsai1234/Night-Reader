@@ -692,6 +692,64 @@ void main() {
         expect(next.of(LocalBookAction.deleteRemote), hasLength(1));
       });
 
+      group('chapters sent up before an upload failed, then the comic '
+          'removed here, are deleted from the cloud on the next press', () {
+        Future<void> failOn(_Phone phone, String title) async {
+          final book = (await phone.shelf()).single;
+          final chapter = (await phone.chapters.getByBook(book.bookUrl))
+              .firstWhere((c) => c.title == title);
+          store.failingBlobs[LocalBookSync.comicChapterName(chapter.url)] =
+              const SyncStoreException.file('同步空間拒絕存取這份檔案（HTTP 403）');
+        }
+
+        Future<void> removeAndPressAgain(_Phone phone) async {
+          phone.use();
+          await BookStorageService(
+            bookDao: phone.books,
+            chapterDao: phone.chapters,
+          ).discardBook((await phone.shelf()).single);
+          final next = await phone.localBooks().plan();
+          expect(next.of(LocalBookAction.download), isEmpty);
+          expect((await phone.localBooks().run(next)).failures, isEmpty);
+        }
+
+        test('a comic that never made it to the cloud', () async {
+          await importComic(a, ['第1話', '第2話', '第3話']);
+          await failOn(a, '第3話');
+          final up = await a.localBooks().plan();
+          expect((await a.localBooks().run(up)).failures, hasLength(1));
+          expect(store.blobs.keys.where((k) => k.startsWith('comic_')), [
+            isNotEmpty,
+            isNotEmpty,
+          ]);
+
+          store.failingBlobs.clear();
+          await removeAndPressAgain(a);
+
+          expect(
+            store.blobs.keys.where((k) => k.startsWith('comic_')),
+            isEmpty,
+          );
+        });
+
+        test('chapters added to a synced comic', () async {
+          await importComic(a, ['第1話', '第2話']);
+          await sync(a);
+          await importComic(a, ['第1話', '第2話', '第3話', '第4話']);
+          await failOn(a, '第4話');
+          final up = await a.localBooks().plan();
+          expect((await a.localBooks().run(up)).failures, hasLength(1));
+
+          store.failingBlobs.clear();
+          await removeAndPressAgain(a);
+
+          expect(
+            store.blobs.keys.where((k) => k.startsWith('comic_')),
+            isEmpty,
+          );
+        });
+      });
+
       test('both uploaded under their own keys before seeing each other: '
           'they settle on one key and every chapter file stays', () async {
         await importComic(a, ['第1話', '第2話']);

@@ -50,6 +50,7 @@ class LocalBookTask {
     this.bookUrls = const [],
     this.remoteTime = 0,
     this.chapters = const [],
+    this.unrecordedOnly = false,
   });
 
   final LocalBookAction action;
@@ -73,8 +74,14 @@ class LocalBookTask {
   /// 下載：雲端那筆紀錄的時間，記進上次同步的紀錄。
   final int remoteTime;
 
-  /// 本地漫畫的每一話（章指紋、章名）：上傳是這台的，下載與刪除是雲端的。
+  /// 本地漫畫的每一話（章指紋、章名）：上傳是這台的，下載與刪除是雲端的
+  /// （加上這台傳上去、還沒寫進雲端紀錄的）。
   final List<ComicSyncChapter> chapters;
+
+  /// 刪雲端：只刪這台傳上去、沒寫進雲端紀錄的那幾話（[chapters]），雲端紀錄
+  /// 不動。雲端記著刪除的那本，再寫一次刪除會把之後重新加入的另一台也當成
+  /// 被移出。
+  final bool unrecordedOnly;
 }
 
 /// 本地漫畫的一話：章指紋與章名（ADR 0052）。
@@ -172,6 +179,28 @@ class LocalBookSync {
   /// 同一份小紀錄被別台同時寫入時，重讀再寫的次數。
   static const int _maxAttempts = 3;
 
+  /// 本地漫畫傳上去、還沒寫進雲端紀錄的話：書的指紋 → 章指紋。存在上次同步
+  /// 的紀錄旁邊（換同步空間時一起清掉）。上傳到一半失敗、之後移出書架的，
+  /// 下次按的時候照它刪掉（[planLocalBookSync]）。
+  static const String _unrecordedFile = 'local_books_unrecorded';
+
+  Future<Map<String, List<String>>> _unrecorded() async => {
+    for (final MapEntry(:key, :value) in (await _bases.readJson(
+      _unrecordedFile,
+    )).entries)
+      if (value is List) key: [for (final print in value) '$print'],
+  };
+
+  Future<void> _setUnrecorded(String book, List<String>? chapters) async {
+    final all = await _unrecorded();
+    if (chapters == null || chapters.isEmpty) {
+      if (all.remove(book) == null) return;
+    } else {
+      all[book] = chapters;
+    }
+    await _bases.writeJson(_unrecordedFile, all);
+  }
+
   /// 雲端原檔的檔名：`book_<指紋>.txt.gz`、`book_<指紋>.epub`。EPUB 本身就
   /// 是壓縮檔，不再壓。
   static String originalName(String fingerprint, String extension) =>
@@ -207,7 +236,13 @@ class LocalBookSync {
       local = await _shelf();
     }
     final base = await _bases.read(kind);
-    final plan = await _planOn(_run, file?.content, local, base);
+    final plan = await _planOn(
+      _run,
+      file?.content,
+      local,
+      base,
+      await _unrecorded(),
+    );
     if (plan.settled.isNotEmpty) {
       await _bases.write(kind, {...await _bases.read(kind), ...plan.settled});
     }
@@ -324,9 +359,15 @@ class LocalBookSync {
             base.remove(task.fingerprint);
           case LocalBookAction.deleteRemote:
             await _deleteRemote(task);
+            if (task.extension == comicExtension) {
+              await _setUnrecorded(task.fingerprint, null);
+            }
             // 留著上次同步的紀錄：刪除紀錄被別台同時寫入蓋回去時，下次按
-            // 的時候還認得出是這台移出的，再刪一次。
-            base[task.fingerprint] = _entry(task.remoteTime, task.extension);
+            // 的時候還認得出是這台移出的，再刪一次。只刪沒記著的那幾話的，
+            // 雲端紀錄沒動，上次同步的紀錄也照舊。
+            if (!task.unrecordedOnly) {
+              base[task.fingerprint] = _entry(task.remoteTime, task.extension);
+            }
         }
         await _bases.write(kind, base);
         done++;
@@ -464,6 +505,7 @@ class LocalBookSync {
         if (kept.contains(chapter.fingerprint)) continue;
         await _store.delete(comicChapterName(chapter.fingerprint));
       }
+      if (task.unrecordedOnly) return;
     } else {
       await _store.delete(originalName(task.fingerprint, task.extension));
     }
@@ -502,6 +544,11 @@ class LocalBookSync {
       if (!await local.exists()) continue;
       size += await local.length();
       if (uploaded.contains(chapter.fingerprint)) continue;
+      // 先記下再傳：傳了、雲端紀錄卻沒寫成的話，還找得到這一話。
+      await _setUnrecorded(task.fingerprint, [
+        ...?(await _unrecorded())[task.fingerprint],
+        chapter.fingerprint,
+      ]);
       await _store.writeBytes(
         comicChapterName(chapter.fingerprint),
         await local.readAsBytes(),
@@ -530,6 +577,7 @@ class LocalBookSync {
         },
       ),
     );
+    await _setUnrecorded(task.fingerprint, null);
     return time;
   }
 
@@ -686,10 +734,16 @@ LocalBookSyncPlan planLocalBookSync({
   required Map<String, LocalShelfBook> local,
   required Map<String, SyncRecord> remote,
   required Map<String, SyncBaseEntry> base,
+  Map<String, List<String>> unrecorded = const {},
 }) {
   final tasks = <LocalBookTask>[];
   final settled = <String, SyncBaseEntry>{};
-  for (final print in {...local.keys, ...remote.keys, ...base.keys}) {
+  for (final print in {
+    ...local.keys,
+    ...remote.keys,
+    ...base.keys,
+    ...unrecorded.keys,
+  }) {
     final mine = local[print];
     final theirs = remote[print];
     final last = base[print];
@@ -733,13 +787,45 @@ LocalBookSyncPlan planLocalBookSync({
       );
       continue;
     }
+    // 這台傳上去、沒寫進雲端紀錄的話（本地漫畫上傳到一半失敗）。
+    final stray = [
+      for (final chapter in unrecorded[print] ?? const <String>[])
+        (fingerprint: chapter, title: ''),
+    ];
     if (alive) {
       final removedHere = last != null && last.time == theirs.time;
+      final task = _remoteTask(
+        removedHere ? LocalBookAction.deleteRemote : LocalBookAction.download,
+        print,
+        theirs,
+      );
       tasks.add(
-        _remoteTask(
-          removedHere ? LocalBookAction.deleteRemote : LocalBookAction.download,
-          print,
-          theirs,
+        removedHere && stray.isNotEmpty
+            ? LocalBookTask(
+                action: task.action,
+                fingerprint: print,
+                name: task.name,
+                author: task.author,
+                extension: task.extension,
+                size: task.size,
+                remoteTime: task.remoteTime,
+                chapters: [...task.chapters, ...stray],
+              )
+            : task,
+      );
+      continue;
+    }
+    if (stray.isNotEmpty) {
+      tasks.add(
+        LocalBookTask(
+          action: LocalBookAction.deleteRemote,
+          fingerprint: print,
+          name: '沒傳完的漫畫',
+          author: '',
+          extension: LocalBookSync.comicExtension,
+          size: 0,
+          chapters: stray,
+          unrecordedOnly: true,
         ),
       );
       continue;
@@ -867,6 +953,7 @@ Future<LocalBookSyncPlan> _planOn(
   String? content,
   Map<String, LocalShelfBook> local,
   Map<String, SyncBaseEntry> base,
+  Map<String, List<String>> unrecorded,
 ) => run(
   () => planLocalBookSync(
     local: local,
@@ -874,6 +961,7 @@ Future<LocalBookSyncPlan> _planOn(
         ? const <String, SyncRecord>{}
         : SyncDocument.decode(content).records,
     base: base,
+    unrecorded: unrecorded,
   ),
 );
 
