@@ -6,6 +6,7 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/source/source_progress.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
@@ -253,6 +254,7 @@ class BookSourceService {
       return sourceDao.saveEdited(source);
     }
     final books = await getIt<BookDao>().bookUrlsFromOrigin(previousUrl);
+    final moving = await _booksAt(books);
     final otherSources = [
       for (final other in await sourceDao.getAllPart()) other.bookSourceUrl,
     ];
@@ -266,6 +268,7 @@ class BookSourceService {
         otherKeys: otherSources,
         commit: () => sourceDao.saveEdited(source, previousUrl: previousUrl),
       );
+      await _moveBookFiles(moving, source.bookSourceUrl);
     } finally {
       release?.call();
     }
@@ -282,12 +285,17 @@ class BookSourceService {
       for (final url in from)
         if (url != into) ...await getIt<BookDao>().bookUrlsFromOrigin(url),
     ];
+    final moving = await _booksAt(books);
     final release = books.isEmpty
         ? null
         : await DownloadService().holdBooks(books);
     final List<String> merged;
     try {
       merged = await getIt<BookSourceDao>().mergeInto(from, into);
+      await _moveBookFiles([
+        for (final book in moving)
+          if (merged.contains(book.origin)) book,
+      ], into);
     } finally {
       release?.call();
     }
@@ -297,6 +305,23 @@ class BookSourceService {
       await moves.record(from: url, to: into);
     }
     return merged;
+  }
+
+  static Future<List<Book>> _booksAt(List<String> bookUrls) async => [
+    for (final url in bookUrls) ?await getIt<BookDao>().getByUrl(url),
+  ];
+
+  /// 資料庫裡這些書已經改記 [toOrigin]：書本資料夾的名字也照書源網址算，
+  /// 一起搬過去，不然已下載的漫畫、有聲書、插圖與封面都對不到。
+  static Future<void> _moveBookFiles(List<Book> books, String toOrigin) async {
+    if (books.isEmpty) return;
+    final dao = getIt<BookDao>();
+    for (final book in await BookCoverStorageService().moveBookAssets(
+      books,
+      toOrigin,
+    )) {
+      await dao.saveStoredCover(book);
+    }
   }
 
   /// 依 URL 取得書源

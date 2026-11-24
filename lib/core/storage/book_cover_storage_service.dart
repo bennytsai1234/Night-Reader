@@ -145,6 +145,62 @@ class BookCoverStorageService {
     }
   }
 
+  /// 書的書源網址換成 [toOrigin]（書源改網址、重複書源合併）：書本資料夾
+  /// 的名字照書源網址算（[bookStorageKey]），下載好的漫畫、有聲書、插圖與
+  /// 存好的封面整個搬到新的位置，封面路徑改指過去。新位置已經有資料夾時
+  /// 把缺的檔併進去。傳回封面路徑改過的書（已換成新的書源網址），由呼叫端
+  /// 寫回資料庫。搬不動的那本留在原處、記下錯誤，不擋其他本。
+  Future<List<Book>> moveBookAssets(List<Book> books, String toOrigin) async {
+    final repointed = <Book>[];
+    for (final book in books) {
+      final moved = book.copyWith(origin: toOrigin);
+      final from = await AppStoragePaths.bookAssetDir(bookStorageKey(book));
+      final to = await AppStoragePaths.bookAssetDir(bookStorageKey(moved));
+      if (from.path == to.path || !await from.exists()) continue;
+      try {
+        if (await to.exists()) {
+          await _mergeDirectory(from, to);
+        } else {
+          await to.parent.create(recursive: true);
+          await from.rename(to.path);
+        }
+      } catch (error, stack) {
+        AppLog.e('書源換網址時搬書本資料夾失敗: $error', error: error, stackTrace: stack);
+        continue;
+      }
+      String? repoint(String? path) =>
+          path != null && p.isWithin(from.path, path)
+          ? p.join(to.path, p.relative(path, from: from.path))
+          : path;
+      final cover = repoint(book.coverLocalPath);
+      final custom = repoint(book.customCoverLocalPath);
+      if (cover == book.coverLocalPath && custom == book.customCoverLocalPath) {
+        continue;
+      }
+      repointed.add(
+        moved
+          ..coverLocalPath = cover
+          ..customCoverLocalPath = custom,
+      );
+    }
+    return repointed;
+  }
+
+  /// [from] 裡 [to] 還沒有的檔搬進 [to]，[from] 刪掉。
+  static Future<void> _mergeDirectory(Directory from, Directory to) async {
+    await for (final entity in from.list(followLinks: false)) {
+      final target = p.join(to.path, p.basename(entity.path));
+      if (entity is Directory) {
+        await Directory(target).create(recursive: true);
+        await _mergeDirectory(entity, Directory(target));
+      } else if (await FileSystemEntity.type(target) ==
+          FileSystemEntityType.notFound) {
+        await entity.rename(target);
+      }
+    }
+    await from.delete(recursive: true);
+  }
+
   Future<void> deleteBookAssets(Book book) async {
     final dir = await AppStoragePaths.bookAssetDir(bookStorageKey(book));
     if (await dir.exists()) {
