@@ -736,9 +736,10 @@ class AnalyzeUrl {
     }, cancelToken: cancelToken);
   }
 
-  /// 存著的 Cookie 併進請求（Legado `setCookie`）：書源網址的網域存的（登入、
-  /// 書源程式存的都在這裡，書源打別的網域時照樣帶著，Legado 的 `domain`），
-  /// 再加這次請求的網域存的；規則或網址選項自己給的同名 Cookie 優先。
+  /// 存著的 Cookie 併進請求（Legado `setCookie`）：書源網址的網域存的（登入
+  /// 標頭、登入頁存下的在這裡，書源打別的網域時照樣帶著，Legado 的
+  /// `domain`），再加這次請求網域存的；規則或網址選項給的同名優先。只有一邊
+  /// 有、規則也沒給時照原字串送。
   Future<void> _mergeStoredCookie() async {
     final store = CookieStore();
     final sourceKey = source?.getKey();
@@ -746,15 +747,29 @@ class AnalyzeUrl {
         ? ''
         : await store.getCookie(sourceKey);
     final ofRequest = await store.getCookie(url);
-    if (ofSource.isEmpty && ofRequest.isEmpty) return;
-    final given = _header('Cookie');
+    // 同一個請求再送一次時（登入檢查的 `java.getStrResponse()`），標頭裡的是
+    // 上次合好的，規則給的是上次記下的那份：網站這期間更新的 Cookie 才不會
+    // 被上次的舊值蓋掉。
+    final current = _header('Cookie');
+    final given = current != null && current == _mergedCookie
+        ? _givenCookie
+        : current;
+    final parts = [ofSource, ofRequest, given ?? ''].where((c) => c.isNotEmpty);
+    if (parts.isEmpty) return;
+    final merged = parts.length == 1
+        ? parts.single
+        : store.mapToCookie({
+            for (final part in parts) ...store.cookieToMap(part),
+          });
     headerMap.removeWhere((k, _) => k.toLowerCase() == 'cookie');
-    headerMap['Cookie'] = store.mapToCookie(
-      store.cookieToMap(ofSource)
-        ..addAll(store.cookieToMap(ofRequest))
-        ..addAll(store.cookieToMap(given ?? '')),
-    );
+    headerMap['Cookie'] = merged;
+    _givenCookie = given;
+    _mergedCookie = merged;
   }
+
+  /// 上一次 [_mergeStoredCookie] 合好的 Cookie 與當時規則給的。
+  String? _mergedCookie;
+  String? _givenCookie;
 
   /// 送出請求，傳回回應的位元組。連線一下就斷這類暫時的失敗再試兩次；網站
   /// 回 4xx、5xx 照樣傳回，不成功時照網址選項 `retry` 再送（同 Legado）。

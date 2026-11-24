@@ -50,4 +50,44 @@ void main() {
     );
     expect(stored, {'old': '1', 'sid': 'new'});
   });
+
+  test('兩邊同名時請求網域的優先；只有一邊有時照原字串送', () async {
+    await CookieStore().setCookie('https://www.novel.test', 'sid=source');
+    await CookieStore().setCookie('https://api.other.test', 'sid=api');
+    final both = await AnalyzeUrl(
+      'https://api.other.test/s',
+      source: source(),
+    ).playbackRequest();
+    expect(CookieStore().cookieToMap(both.headers['Cookie']!), {'sid': 'api'});
+
+    await CookieStore().removeCookie('https://api.other.test');
+    final onlySource = await AnalyzeUrl(
+      'https://api.other.test/s',
+      source: source(),
+    ).playbackRequest();
+    expect(onlySource.headers['Cookie'], 'sid=source');
+  });
+
+  test('同一個請求再送一次時，網站這期間更新的 Cookie 不被上次的蓋掉', () async {
+    await CookieStore().setCookie('https://www.novel.test', 'sid=old');
+    final analyzeUrl = AnalyzeUrl(
+      'https://api.other.test/s,{"headers":{"Cookie":"a=1"}}',
+      source: source(),
+    );
+    await analyzeUrl.playbackRequest();
+    await CookieStore().setCookie('https://www.novel.test', 'sid=new');
+    final again = await analyzeUrl.playbackRequest();
+    expect(CookieStore().cookieToMap(again.headers['Cookie']!), {
+      'sid': 'new',
+      'a': '1',
+    });
+  });
+
+  test('登入標頭存的 Cookie 登出後清乾淨', () async {
+    await CookieStore().setCookie('https://www.novel.test', 'old=1');
+    final s = source();
+    await s.putLoginHeader('{"Cookie":"sid=new"}');
+    await s.clearLoginData();
+    expect(await CookieStore().getCookie('https://www.novel.test'), isEmpty);
+  });
 }
