@@ -172,15 +172,6 @@ CheckIssue paidChapterIssue(CheckMode mode, BookChapter chapter) {
   );
 }
 
-CheckIssue lockedChapterIssue(CheckMode mode, BookChapter chapter) {
-  final title = compactChapterTitle(chapter.title);
-  return CheckIssue(
-    stage: checkStage(mode, 'content'),
-    message: title.isEmpty ? '章節都是付費章節' : '章節都是付費章節: $title',
-    health: loginRequiredSourceHealth,
-  );
-}
-
 /// 這本書的詳情、目錄或正文打不開（會讓書源被隔離的那幾種）。
 bool bookCannotOpen(CheckIssue issue) => const {
   SourceHealthCategory.detailBroken,

@@ -504,14 +504,14 @@ class SourceChecker {
       return;
     }
 
-    final freeChapters = [
+    // 章名寫了 VIP 這類字樣、書源沒標付費的：先讀其他章；每一章都這樣寫
+    // 時照樣讀它們。章名的字樣只用來挑章，不單憑章名判付費（ADR 0057），
+    // 真的付費由讀到的正文判斷。
+    final titledFree = [
       for (final chapter in readableChapters)
         if (!looksLikeLockedChapter(chapter)) chapter,
     ];
-    if (freeChapters.isEmpty) {
-      _recordIssue(issues, lockedChapterIssue(mode, readableChapters.first));
-      return;
-    }
+    final freeChapters = titledFree.isEmpty ? readableChapters : titledFree;
 
     if (!_config.checkContent) return;
 
