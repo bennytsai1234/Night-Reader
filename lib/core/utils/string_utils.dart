@@ -73,6 +73,9 @@ class StringUtils {
     return buffer.toString();
   }
 
+  /// 認得的中文數字字（[_chnMap] 的字），放進正則的字元類別用。
+  static final String chineseNumberChars = _chnMap.keys.join();
+
   /// 一段連續的中文數字，認得的字就是 [_chnMap] 裡的字：比對與換算用同一份
   /// 對照表，不會有認得換算卻切不出來的字。
   static final RegExp chineseNumberRun = RegExp('[${_chnMap.keys.join()}]+');

@@ -35,4 +35,78 @@ void main() {
       2,
     );
   });
+
+  // 照 Legado `BookHelp.getDurChapter`：章名寫法不同時，去掉章號比章名本身，
+  // 再比章號（認中文數字與「100、」這種寫法）。
+  group('章名寫法不同（同 Legado）', () {
+    // 新目錄前面多了 5 章（作品相關、請假條），照比例估的位置（約 101）
+    // 和真正的位置（104）不同，要靠章名或章號對上。
+    List<String> numbered(String Function(int n) title) => [
+      for (var i = 1; i <= 5; i++) '作品相關$i',
+      for (var n = 1; n <= 200; n++) title(n),
+    ];
+    int align(String oldTitle, List<String> titles) => alignChapterIndex(
+      oldIndex: 99,
+      oldTitle: oldTitle,
+      oldTotalCount: 200,
+      newChapters: toc(titles),
+    );
+
+    test('章號寫成中文數字（章名也不同，要靠章號）', () {
+      final titles = numbered((n) => '第${_chinese(n)}章 新版章名$n');
+      expect(align('第100章 舊版的名字', titles), 104);
+    });
+
+    test('章號寫成「100、」（章名也不同，要靠章號）', () {
+      final titles = numbered((n) => '第$n章 新版章名$n');
+      expect(align('100、舊版的名字', titles), 104);
+    });
+
+    test('章號對不上、章名本身一樣（網站多算一章）', () {
+      final titles = numbered((n) => '第$n章 章名${n - 1}');
+      // 舊的是「第100章 章名100」，新目錄的「第101章 章名100」才是同一章。
+      expect(align('第100章 章名100', titles), 105);
+    });
+
+    test('好幾章去掉章號後都一樣時，章號相同的優先', () {
+      final titles = numbered((n) => '第$n章 正文（已校）');
+      expect(align('第100章 正文', titles), 104);
+    });
+
+    test('舊的位置超過新目錄長度時不出界', () {
+      final titles = ['第1章 甲', '第2章 乙', '第3章 丙'];
+      expect(
+        alignChapterIndex(
+          oldIndex: 50,
+          oldTitle: '第51章 庚',
+          oldTotalCount: 60,
+          newChapters: toc(titles),
+        ),
+        inInclusiveRange(0, 2),
+      );
+    });
+
+    test('章名外面多了括號裡的字', () {
+      final titles = numbered((n) => '第$n章 章名$n');
+      expect(align('第100章 章名100（求月票）', titles), 104);
+    });
+  });
+}
+
+String _chinese(int n) {
+  const digits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  if (n < 10) return digits[n];
+  if (n < 20) return '十${n % 10 == 0 ? '' : digits[n % 10]}';
+  if (n < 100) {
+    return '${digits[n ~/ 10]}十${n % 10 == 0 ? '' : digits[n % 10]}';
+  }
+  final rest = n % 100;
+  return '${digits[n ~/ 100]}百'
+      '${rest == 0
+          ? ''
+          : rest < 10
+          ? '零${digits[rest]}'
+          : rest < 20
+          ? '一${_chinese(rest)}'
+          : _chinese(rest)}';
 }
