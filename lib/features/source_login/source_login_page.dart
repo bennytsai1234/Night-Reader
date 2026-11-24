@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
@@ -95,7 +96,11 @@ Future<bool> openSourceLogin(
     attempted = await closed.future;
   }
   final after = await _loginSnapshot(source);
-  final changed = after != before;
+  // Cookie 檔沒登入也會變（網站的回應常順手換 Cookie），只在登入過時算。
+  final changed =
+      (after.info, after.header, after.cookie) !=
+          (before.info, before.header, before.cookie) ||
+      (attempted && after.jar != before.jar);
   if (changed && after.hasData) await _clearLoginRequiredTag(source);
   // 呼叫端拿到結果就重抓、改畫面；等返回動畫播完再交出去，不和動畫疊在
   // 一起（ADR 0018）。網頁登入的頁面一開始返回就交回結果，表單頁要等卸載。
@@ -130,8 +135,17 @@ String? sourceWebsiteLoginUrl(BookSource source) {
 /// `/account/login` 這類路徑，那裡設的 Cookie 從網站根目錄看不到。
 Future<void> clearSourceLoginData(BookSource source) async {
   await source.clearLoginData();
+  final uris = _loginUris(source);
+  for (final uri in uris) {
+    await NetworkService().cookieJar.delete(uri, true);
+  }
+  if (uris.isNotEmpty) await WebViewNative.clearCookies(uris);
+}
+
+/// 書源網址，與登入網址是網址時的登入網頁。
+List<Uri> _loginUris(BookSource source) {
   final loginUrl = source.loginUrl?.trim() ?? '';
-  final uris = [
+  return [
     for (final url in [
       source.bookSourceUrl,
       if (loginUrl.isNotEmpty && !_looksLikeScript(loginUrl))
@@ -139,10 +153,6 @@ Future<void> clearSourceLoginData(BookSource source) async {
     ])
       if (Uri.tryParse(url) case final uri? when uri.hasScheme) uri,
   ];
-  for (final uri in uris) {
-    await NetworkService().cookieJar.delete(uri, true);
-  }
-  if (uris.isNotEmpty) await WebViewNative.clearCookies(uris);
 }
 
 bool _looksLikeScript(String loginUrl) =>
@@ -151,17 +161,67 @@ bool _looksLikeScript(String loginUrl) =>
     loginUrl.contains('function ') ||
     loginUrl.contains('\n');
 
-typedef _LoginSnapshot = ({String info, String header, String cookie});
+/// 書源的登入資料：表單內容、登入標頭、夜讀自己存的 Cookie，與 HTTP 回應
+/// 存在 Cookie 檔裡的書源網站與登入網頁的 Cookie（登入程式常只靠回應拿到
+/// 工作階段）。
+typedef _LoginSnapshot = ({
+  String info,
+  String header,
+  String cookie,
+  String jar,
+});
 
 extension on _LoginSnapshot {
-  bool get hasData => info.isNotEmpty || header.isNotEmpty || cookie.isNotEmpty;
+  bool get hasData =>
+      info.isNotEmpty ||
+      header.isNotEmpty ||
+      cookie.isNotEmpty ||
+      jar.isNotEmpty;
 }
 
 Future<_LoginSnapshot> _loginSnapshot(BookSource source) async => (
   info: await source.getLoginInfo() ?? '',
   header: await source.getLoginHeader() ?? '',
   cookie: await CookieStore().getCookie(source.bookSourceUrl),
+  jar: await _jarCookies(_loginUris(source)),
 );
+
+/// Cookie 檔裡 [uris] 這些網站的 Cookie，不分路徑：登入網頁常在
+/// `/account/login`，回應設的 Cookie 只屬於 `/account`，從網站根目錄讀不到。
+/// 每個一條「路徑 名稱＝值」，排好；讀不到是空的。
+Future<String> _jarCookies(List<Uri> uris) async {
+  final entries = <String>{};
+  try {
+    final jar = NetworkService().cookieJar;
+    for (final uri in uris.where((uri) => uri.host.isNotEmpty)) {
+      // 先讀一次，Cookie 檔才把這個網站存著的 Cookie 載進記憶體。
+      final cookies = await jar.loadForRequest(uri);
+      if (jar is! DefaultCookieJar) {
+        entries.addAll([for (final c in cookies) '${c.name}=${c.value}']);
+        continue;
+      }
+      void collect(Map<String, Map<String, SerializableCookie>>? byPath) {
+        byPath?.forEach((path, byName) {
+          for (final c in byName.values) {
+            if (!c.isExpired()) {
+              entries.add('$path ${c.cookie.name}=${c.cookie.value}');
+            }
+          }
+        });
+      }
+
+      final host = uri.host;
+      collect(jar.hostCookies[host]);
+      jar.domainCookies.forEach((domain, byPath) {
+        if (host == domain || host.endsWith('.$domain')) collect(byPath);
+      });
+    }
+  } catch (error) {
+    AppLog.w('讀 Cookie 檔失敗: ${error.runtimeType}');
+    return '';
+  }
+  return (entries.toList()..sort()).join('; ');
+}
 
 Future<void> _clearLoginRequiredTag(BookSource source) async {
   try {

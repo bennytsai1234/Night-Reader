@@ -1,9 +1,11 @@
+import 'dart:io' as io;
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/network/network_service.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -140,6 +142,99 @@ void main() {
     expect(await close(tester, closed), isFalse);
     final stored = await tester.runAsync(() => dao.getByUrl(url));
     expect(stored!.groupTags, contains(loginRequiredSourceGroupTag));
+  });
+
+  group('a cookie the website set in the cookie jar', () {
+    Future<void> useCookieJar(WidgetTester tester) async {
+      await tester.runAsync(() => NetworkService().init(ephemeral: true));
+      addTearDown(
+        () => tester.runAsync(
+          () => NetworkService().cookieJar.delete(Uri.parse(url), true),
+        ),
+      );
+    }
+
+    // 網頁登入時網站的回應設了工作階段 Cookie（存在 Cookie 檔，不在表單、
+    // 登入標頭與夜讀自己存的 Cookie 裡）：照樣算登入資料變了，讓呼叫端
+    // 重抓。登入網頁在子路徑，回應沒寫 Path 的 Cookie 只屬於那一層。
+    testWidgets('counts as changed after logging in on the website', (
+      tester,
+    ) async {
+      setupTestDI();
+      final webView = FakeWebViewPlatform();
+      final previousPlatform = WebViewPlatform.instance;
+      WebViewPlatform.instance = webView;
+      addTearDown(() {
+        if (previousPlatform != null) {
+          WebViewPlatform.instance = previousPlatform;
+        }
+      });
+      final web = BookSource(
+        bookSourceUrl: url,
+        bookSourceName: '網頁登入的書源',
+        loginUrl: '/account/login',
+      );
+      await useCookieJar(tester);
+      await tester.runAsync(() => dao.upsert(web));
+
+      late Future<bool> result;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: BackdropGroup(
+            child: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () => result = openSourceLogin(context, web),
+                  child: const Text('開啟'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('開啟'));
+      for (
+        var i = 0;
+        i < 20 && find.byType(SourceBrowserPage).evaluate().isEmpty;
+        i++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      expect(find.byType(SourceBrowserPage), findsOneWidget);
+
+      await tester.runAsync(
+        () => NetworkService().cookieJar.saveFromResponse(
+          Uri.parse('$url/account/login'),
+          [io.Cookie('sid', 'fresh-session')],
+        ),
+      );
+
+      expect(await close(tester, result), isTrue);
+    });
+
+    // 表單頁開著時網站的回應也會換 Cookie（例如按了表單上的其他按鈕）；
+    // 沒按登入就不算。
+    testWidgets('does not count when leaving the form without logging in', (
+      tester,
+    ) async {
+      setupTestDI();
+      await useCookieJar(tester);
+      await tester.runAsync(() => dao.upsert(source));
+
+      final closed = await openLogin(tester);
+      await tester.runAsync(
+        () => NetworkService().cookieJar.saveFromResponse(Uri.parse(url), [
+          io.Cookie('sid', 'other-session'),
+        ]),
+      );
+
+      expect(await close(tester, closed), isFalse);
+    });
   });
 
   group('tells the caller it logged in', () {
