@@ -8,6 +8,7 @@ import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/network/error_text.dart';
+import 'package:night_reader/core/network/str_response.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
 
 /// 這一段校驗從哪裡拿到書：搜尋或發現。
@@ -349,18 +350,14 @@ CheckIssue issueFromException({
     );
   }
 
-  if (error is LoginCheckException ||
-      normalized.contains('需要登入後閱讀') ||
-      normalized.contains('需要登录后阅读') ||
-      normalized.contains('loginrequired') ||
-      normalized.contains('permissionlimit') ||
-      normalized.contains('vip') ||
-      normalized.contains('鎖章') ||
-      normalized.contains('锁章') ||
-      normalized.contains('解鎖') ||
-      normalized.contains('解锁') ||
-      normalized.contains('付費') ||
-      normalized.contains('付费')) {
+  // 登入牆丟的錯誤（ADR 0038），或規則 JS 接住後改寫的同一句：只認登入牆
+  // 那份明確的片語，也只看錯誤本身的訊息。解析錯誤後面接著規則與網址、
+  // 連不上的接著主機名稱，網站叫 vipxs 這類時會被誤認成要登入。
+  if (_errorChain(error).any(
+    (layer) =>
+        layer is LoginCheckException ||
+        StrResponse.mentionsLoginRequired(_ownMessage(layer)),
+  )) {
     return const CheckIssue(
       stage: 'content',
       message: '正文需要登入後閱讀',
@@ -390,6 +387,26 @@ CheckIssue issueFromException({
     health: _brokenHealthFor(mode, stage),
   );
 }
+
+/// 錯誤與包在裡面的每一層：解析錯誤、網路錯誤會把規則 JS 的錯誤或登入牆
+/// 的錯誤包在裡面（同 `source_checker` 的 `_ruleJsError`）。
+Iterable<Object> _errorChain(Object? error) sync* {
+  for (var depth = 0; depth < 6 && error != null; depth++) {
+    yield error;
+    error = switch (error) {
+      ParsingException(:final originalError) => originalError,
+      DioException(error: final inner) => inner,
+      _ => null,
+    };
+  }
+}
+
+/// 錯誤本身的訊息，不含夜讀接在後面的規則、網址與原始錯誤。
+String _ownMessage(Object error) => switch (error) {
+  AppException(:final message) => message,
+  DioException(:final message) => message ?? '',
+  _ => '$error',
+};
 
 CheckIssue primaryIssue(List<CheckIssue> issues) {
   var primary = issues.first;
