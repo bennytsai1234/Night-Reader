@@ -251,8 +251,9 @@ final class AiRepairLog {
   /// 別件還在寫的那份，不然它接著寫只剩後半。
   static final Set<String> _writing = {};
 
-  /// 這一件寫完了：再修剪一次資料夾，這份寫完後合計超過 [_keptBytes] 的，
-  /// 刪掉較舊的（這一份留著）。開檔時只量得到舊的，寫完才知道這份多大。
+  /// 這一件寫完了（或暫停、關掉，不再寫這一段）：不再當成還在寫，再修剪
+  /// 一次資料夾，這份寫完後合計超過 [_keptBytes] 的，刪掉較舊的（這一份
+  /// 留著）。開檔時只量得到舊的，寫完才知道這份多大。
   void finish() {
     _queue = _queue.then((_) async {
       final file = _file;
