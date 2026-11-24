@@ -161,7 +161,7 @@
 - **同一個原因**：推送前的 `tool/skill_refs.sh` 只認「`` `名稱` 技能 ``」這種寫法（`tool/skill_refs.sh:13`），`/名稱` 的寫法查不到，所以沒擋下來。
 - **該改哪一邊**：改文件，拿掉指向沒裝的技能的句子與「Wayfinding 操作」一段；`triage-labels.md` 與 `AGENTS.md`「Agent skills」要留多少由使用者定。
 
-#### 14. `docs/design/` 寫了選定的日期與來回的經過，違反 `DESIGN.md` 自己「規格裡不寫經過」
+#### 14. `docs/design/` 寫了選定的日期與來回的經過，違反 `DESIGN.md` 自己「規格裡不寫經過」（已修）
 
 - **文件寫的規則**：「理由寫在 ADR，規格裡不寫經過。」（`DESIGN.md:5`）
 - **實際寫的**：只算日期就有 `docs/design/screens.md` 26 處、`components.md` 13、`appearance.md` 4、`website.md` 3、`reader.md` 2、`audiobook.md` 2；多半跟著「使用者在候選圖上選了甲，否決了……」的經過。例：
