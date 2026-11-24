@@ -1225,6 +1225,32 @@ void main() {
       expect((await b.books.getByUrl('novel-src'))!.customIntro, '小說自己的簡介');
     });
 
+    test('a comic an older version sent under the plain title key joins an '
+        'empty shelf without later removing a novel of that title '
+        'elsewhere (ADR 0053)', () async {
+      final comic = Book(
+        bookUrl: 'comic-src',
+        origin: 'https://comic.example',
+        name: '夜航',
+        author: '某人',
+        type: 2,
+        isInBookshelf: true,
+      );
+      store.files['bookshelf.json'] = (
+        SyncDocument({'夜航\t某人': BookshelfSync.recordOf(comic)}).encode(),
+        1,
+      );
+      await b.sync.syncAll();
+      await b.sync.syncAll();
+      expect((await b.book('comic-src')).isInBookshelf, isTrue);
+
+      await a.addBook('novel-src', toc: toc, time: 100);
+      await a.sync.syncAll();
+
+      expect(a.discarded, isEmpty);
+      expect((await a.book('novel-src')).isInBookshelf, isTrue);
+    });
+
     test('a network book removed here is still removed elsewhere when a '
         'local book has the same title and author', () async {
       await a.addBook('a-src', toc: toc, time: 100);
@@ -1527,6 +1553,71 @@ void main() {
         await syncBoth();
 
         expect(await b.books.getByUrl('src'), isNull);
+      });
+
+      test('titles that already differed before the first sync keep both '
+          'books on both phones', () async {
+        // 開同步之前，A 就把這本改了名；兩台都還沒同步過，沒有改名紀錄。
+        await a.addBook('src', toc: toc, time: 200, name: '新夜航');
+        await b.addBook('src', toc: toc, time: 100);
+
+        await a.sync.syncAll();
+        await b.sync.syncAll();
+        await b.sync.syncAll();
+        await a.sync.syncAll();
+        await syncBoth();
+
+        expect(a.discarded, isEmpty);
+        expect(b.discarded, isEmpty);
+        expect((await a.book('src')).isInBookshelf, isTrue);
+        expect((await b.book('src')).isInBookshelf, isTrue);
+        expect(await a.chapters.titlesByBook('src'), toc);
+        expect(await b.chapters.titlesByBook('src'), toc);
+      });
+
+      test('a last-sync record an older version wrote for the other phone\'s '
+          'title does not remove the book there', () async {
+        await a.addBook('src', toc: toc, time: 200, name: '新夜航');
+        await b.addBook('src', toc: toc, time: 100);
+        await a.sync.syncAll();
+        // 舊版的 B 套用 A 那筆時，把「新夜航」記成在 B 同步過。
+        final cloud = SyncDocument.decode(store.files['bookshelf.json']!.$1)
+            .records['新夜航\t某人']!;
+        final print = BookshelfSync(bookDao: b.books).fingerprint(cloud);
+        await SyncBaseStorage(
+          directory: () async => Directory('${baseDir.path}/b'),
+        ).write('bookshelf', {
+          '新夜航\t某人': SyncBaseEntry(
+            local: print,
+            remote: print,
+            time: cloud.time,
+          ),
+        });
+
+        await b.sync.syncAll();
+        await a.sync.syncAll();
+
+        expect(a.discarded, isEmpty);
+        expect((await a.book('src')).isInBookshelf, isTrue);
+      });
+
+      test('a book open in the player but not on the shelf is not renamed or '
+          'put on the shelf until it closes', () async {
+        await a.addBook('src', toc: toc, time: 200, name: '新夜航');
+        await b.addBook('src', toc: toc, time: 100);
+        await b.books.updateInBookshelf('src', false);
+        final open = await b.book('src');
+        b.sync.openBook(open);
+
+        await a.sync.syncAll();
+        await b.sync.syncAll();
+        expect((await b.book('src')).name, '夜航');
+        expect((await b.book('src')).isInBookshelf, isFalse);
+
+        b.sync.closeBook(open);
+        await b.sync.syncAll();
+        expect((await b.book('src')).name, '新夜航');
+        expect((await b.book('src')).isInBookshelf, isTrue);
       });
 
       test('an old title the other phone added again is not renamed', () async {
