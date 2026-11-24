@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_apply.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_step.dart';
@@ -890,6 +891,82 @@ void main() {
       expect(asked[1].last.content, contains('«已遮蔽»'));
     },
   );
+
+  // 規則在試抓途中才寫進新的登入標頭（例如登入程式從 /session 拿到再
+  // `source.putLoginHeader`），送出的請求那一行帶著它：開場的第一封、工具
+  // 的結果與完整紀錄都要遮（#529 第 52 條）。秘密照真的讀法讀。
+  group('a login header a rule writes during a fetch is hidden', () {
+    const fresh = 'fresh-secret-123';
+    final giveUp = jsonEncode({
+      'action': 'give_up',
+      'why': 'site_broken',
+      'reason': '測試',
+    });
+    String loginHeader() => jsonEncode({'X-Login': fresh});
+
+    test(
+      'in the opening message and the log after the opening fetch',
+      () async {
+        final logs = Directory.systemTemp.createTempSync('ai-repair-log');
+        addTearDown(() => logs.deleteSync(recursive: true));
+        final source = _source('https://login-open.example');
+        addTearDown(source.removeLoginHeader);
+        final s = session(
+          [source],
+          replies: [giveUp],
+          logs: logs,
+          secrets: aiRepairSecretsOf,
+          probe: (probed) {
+            unawaited(probed.putLoginHeader(loginHeader()));
+            return const SourceProbeReport(
+              logs: [(10, '︾開始解析搜尋頁'), (-1, '❌ 發生錯誤: 正文為空')],
+              requests: [
+                'https://login-open.example/next 標頭：X-Login: $fresh',
+                '  ← https://login-open.example/next 200：<p>空</p>',
+              ],
+            );
+          },
+        );
+
+        await s.start();
+
+        expect(
+          asked.first.map((m) => m.content).join(),
+          isNot(contains(fresh)),
+        );
+        final full = (await s.log.file())!.readAsStringSync();
+        expect(full, isNot(contains(fresh)));
+        expect(s.log.summary, isNot(contains(fresh)));
+      },
+    );
+
+    test('in the log while a tool runs', () async {
+      final logs = Directory.systemTemp.createTempSync('ai-repair-log');
+      addTearDown(() => logs.deleteSync(recursive: true));
+      final source = _source('https://login-tool.example');
+      addTearDown(source.removeLoginHeader);
+      final s = session(
+        [source],
+        replies: [
+          jsonEncode({'action': 'fetch', 'url': '/next'}),
+          giveUp,
+        ],
+        logs: logs,
+        secrets: aiRepairSecretsOf,
+        fetchLines: (url) {
+          unawaited(source.putLoginHeader(loginHeader()));
+          return ['$url 標頭：X-Login: $fresh', '  ← $url 200：<p>下一頁</p>'];
+        },
+      );
+
+      await s.start();
+
+      expect(asked[1].last.content, isNot(contains(fresh)));
+      final full = (await s.log.file())!.readAsStringSync();
+      expect(full, isNot(contains(fresh)));
+      expect(s.log.summary, isNot(contains(fresh)));
+    });
+  });
 
   test('an AI going in circles stops as not finished, not as unfixable, with '
       'the stats line for the evaluation table', () async {

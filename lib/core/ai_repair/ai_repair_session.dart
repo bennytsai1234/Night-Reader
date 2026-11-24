@@ -946,12 +946,18 @@ class AiRepairSession extends ChangeNotifier {
   }
 
   /// 停下時正在等的那件事以取消結束，當成 null。
+  ///
+  /// 做完（含出錯）先重讀秘密再交回：跑書源的程式（校驗、試抓、看網頁、
+  /// 試解析、跑程式）可能寫了新的 Cookie、登入標頭或變數，交回的結果接著就
+  /// 寫進紀錄、送給 AI。寫入在背景 isolate 做，轉送回這裡的那份比結果先到。
   Future<T?> _guard<T>(Future<T> Function() work) async {
     try {
       return await work();
     } on DioException catch (error) {
       if (CancelToken.isCancel(error) || _halting) return null;
       rethrow;
+    } finally {
+      await _refreshSecrets(job);
     }
   }
 
@@ -1032,9 +1038,6 @@ final class _AgentHost implements RepairAgentHost {
 
   @override
   Set<String> get secrets => s._secretSet(job);
-
-  @override
-  Future<void> refreshSecrets() => s._refreshSecrets(job);
 
   @override
   Future<String?> validate(
