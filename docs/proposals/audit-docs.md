@@ -191,10 +191,19 @@
 - **程式做的**：`file_picker` 已經是 `11.0.3+nightreader.3`（`third_party/file_picker/pubspec.yaml:3`，同一份 `PATCHES.md` 後面也記了 `nightreader.2`、`.3`）。`flutter_tts` 的 `nightreader.3` 改了 `getEngines` 的回傳（`third_party/flutter_tts/PATCHES.md:47`；`lib/flutter_tts.dart:496-503`），`nightreader.5` 重寫了 Android 外掛的執行緒與回覆（`PATCHES.md:59`；`android/src/main/kotlin/com/eyedeadevelopment/fluttertts/FlutterTtsPlugin.kt` 和上游 4.2.5 整份不同）。照開頭那句，升級或對照上游的人會以為執行的程式和上游一樣。
 - **該改哪一邊**：改文件，`file_picker` 那行改成 `nightreader.3`；`flutter_tts` 那句改成只說建置設定那一段沒動到執行的程式，或直接拿掉。
 
+### 隱私說明補對的幾句
+
+第一次讀隱私說明時沒對到的四句，補對過程式，都和程式一樣，沒有新的問題：
+
+- 「AI 改書源之前的那一份存在手機上，用來還原，不進備份、不同步」（`PRIVACY.md:25`）：存在 App 資料夾的 `ai_repair_previous.json`（`lib/core/ai_repair/ai_repair_backups.dart:16-21`），備份只帶資料庫匯出的幾份檔與偏好設定（`lib/core/backup/backup_service.dart:149-155`），同步也沒有讀它。
+- 「WebDAV 的帳號密碼存在手機的設定裡，備份檔也會帶著」（`PRIVACY.md:43`）：存在偏好設定的 `sync.webdav.password`（`lib/core/sync/sync_settings.dart:18`、`:83`），不在備份排除的那幾項（`backup_service.dart:31-37`）。
+- 「AI 要查一部作品的各地譯名時，夜讀把那個作品名稱送到中文維基百科，不送其他資料」（`PRIVACY.md:33`）：三個請求只帶作品名或維基百科回的條目名、語言變體與固定的 User-Agent，用的是不帶書源 Cookie 的連線（`lib/features/search/ai_find/app_ai_find_library.dart:278-353`）。
+- 「讀章節抓到的正文不存、不算閱讀時間」（`PRIVACY.md:33`）：AI 找書讀章節直接回傳 `BookSourceService.getContent` 的結果、不寫正文快取（`app_ai_find_library.dart:202-235`、`lib/core/source/book_source_service.dart:89-107`），也沒有碰閱讀紀錄。一次最多 3000 字也對（`lib/core/ai_find/ai_find_prompt.dart:37`）。
+
+第 1 筆照「從檔案管理員選用夜讀開啟」的讀法修了。
+
 ## 拿不準
 
-- **第 1 筆**的「用檔案開書」是照「從檔案管理員選用夜讀開啟」讀的；作者原意若是 App 裡選檔，這筆不成立。
-- **隱私說明**只核對了同步、備份、送給 AI 的長度上限與遮掉的資料、日誌遮罩；「AI 改書源之前的那一份不進備份、不同步」（`ai_repair_backups.dart` 存在哪）、WebDAV 帳密存在哪、AI 找書只送作品名稱到維基百科、讀章節的正文不存不算閱讀時間，都還沒對程式。
 - **ADR 本文與 `docs/state-machines.md` 的日期與經過**：76 份 ADR 共 342 處日期、`state-machines.md` 18 處，照 `auto-audit.md` 也算沉積；但 ADR 照它的索引就是記「考慮過什麼、否決了什麼」（`docs/adr/README.md:3`），`state-machines.md` 是每做完一個狀態機加一節的紀錄（`docs/state-machines.md:3`），沒算進第 14 筆。類別名稱也沒算：`docs/design/` 寫了不少（例如 `components.md:22` 的 `DragOverflowText`），是不是沉積和日期一樣由使用者定。
 - **只改 `.gitignore` 這類檔也會發測試版**：`tool/changelog.sh` 的 `is_app_path` 把文件、網站、測試、hook、工具與三份 workflow 以外的路徑都算 App 內容（`tool/changelog.sh:32-40`），`.gitignore`、`.gitattributes`、`LICENSE`、`.metadata` 也算；上一個發布之後只改了這些時，`android-release.yml` 仍會發一版（`.github/workflows/android-release.yml:79-88`、`:202`）。實際有沒有碰過、要不要排除沒查。
 - **第 13 筆**：`a21f85a4` 整理「指向不存在的技能」時改了 `git-flow`、`codex-review` 這幾個，留著 `/triage`、`/wayfinder`、`/grill-with-docs`；這三份是 mattpocock 技能的設定範本產生的，可能是刻意留著等之後裝，若是就不算問題。
