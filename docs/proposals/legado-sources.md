@@ -120,29 +120,29 @@
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| `init` 規則 | | |
-| 各欄位（書名、作者、簡介、分類、最新章節、更新時間、封面、目錄網址、字數） | | |
-| 詳情抓不到書名時沿用搜尋結果 | | |
+| `init` 規則 | 一樣 | 結果換成接下來解析的內容（`L:model/webBook/BookInfo.kt:58-64`、`N:lib/core/engine/web_book/book_info_parser.dart:45-55`）；結果是空的時 Legado 出錯，夜讀照原頁解析。 |
+| 各欄位（書名、作者、簡介、分類、最新章節、更新時間、封面、目錄網址、字數） | 一樣 | 順序相同、每算完一欄就寫到書上；分類、字數、最新章節、簡介、封面出錯只留空，書名、作者、目錄網址出錯整頁失敗；`updateTime` 兩邊都不讀；封面抓到好幾個時夜讀取第一個。 |
+| 詳情抓不到書名時沿用搜尋結果 | 一樣 | 規則抓到空的就留原本的（`N:lib/core/engine/web_book/book_info_parser.dart:62-65`）。 |
 | 目錄網址空時等於詳情網址、同一頁不重抓 | 結果不對 | 夜讀會自己在詳情頁找「目錄」連結換過去，見 R10。 |
 | `canReName`（書架上的書可以改名） | 結果不對 | 沒寫 `canReName` 時 Legado 不拿詳情頁的書名蓋掉搜尋結果的，夜讀會蓋，見 R13。 |
-| `downloadUrls`（檔案書源） | | |
-| 簡介的 HTML 整理 | | |
+| `downloadUrls`（檔案書源） | 刻意不同 | 只有類型 3（文件）的書源用（`L:model/webBook/BookInfo.kt:156-167`），夜讀不支援這一類（ADR 0051）。 |
+| 簡介的 HTML 整理 | 一樣 | 同一套 `HtmlFormatter.format`；夜讀的標籤不分大小寫（`N:lib/core/utils/html_formatter.dart:11-14`）。 |
 
 ### 目錄
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
 | 章節清單與 `-` 倒序 | 一樣 | 兩次倒序與去重的順序相同。 |
-| 目錄下一頁（`nextTocUrl`，一個網址接一個與一次給多個） | | |
-| 章名、章節網址（空時等於目錄網址） | | |
+| 目錄下一頁（`nextTocUrl`，一個網址接一個與一次給多個） | 一樣 | 一個接一個時抓到沒有下一頁或抓過的為止，不限頁數（`L:model/webBook/BookChapterList.kt:69`、`N:lib/core/engine/web_book/web_book_service.dart:236`）；一次給多個時並發抓，同時幾頁與一頁抓不到時怎麼辦不同，見檔尾。 |
+| 章名、章節網址（空時等於目錄網址） | 一樣 | 沒有章名的不列；網址空時卷名用「卷名＋序號」、其他用目錄網址（`L:model/webBook/BookChapterList.kt:232`、`N:lib/core/engine/web_book/chapter_list_parser.dart:91-114`）。 |
 | 卷名（`isVolume`） | 結果不對 | 「是不是卷」怎麼判不同，見 R12。 |
 | 付費章節（`isVip`、`isPay`） | 結果不對 | 同 R12，付費章節認不出來。 |
-| 章節的更新時間 | | |
+| 章節的更新時間 | 一樣 | 存在章節的 `tag`（`L:model/webBook/BookChapterList.kt:224`、`N:lib/core/engine/web_book/chapter_list_parser.dart:104`）。 |
 | `formatJs` | 結果不對 | 少了 `index`、`gInt`，而且在最後一次倒序之前跑，見 R11。 |
 | `preUpdateJs` | 結果不對（`reGetBook`） | 見 R9；Legado 只在書架上的書與閱讀時跑，夜讀每次抓目錄都跑，結果應相同。 |
 | 同網址章節去重 | 一樣 | 照網址。 |
-| 目錄抓不到時的錯誤 | | |
-| 最新章節與新章節數 | | |
+| 目錄抓不到時的錯誤 | 一樣 | 空目錄當失敗：Legado 在解析時丟（`L:model/webBook/BookChapterList.kt:117`），夜讀由閱讀與檢查新章節各自擋（`N:lib/features/reader/chapter/reader_chapter_repository.dart:156`、`N:lib/core/storage/book_toc_replacer.dart:25`）；夜讀另外認出登入牆（ADR 0038）。 |
+| 最新章節與新章節數 | 一樣 | 目錄更新後照新舊章數算（`L:model/webBook/BookChapterList.kt:157`、`N:lib/core/download/book_update_service.dart:171`）；Legado 每次抓目錄都記，夜讀在檢查新章節時記。 |
 
 ### 正文
 
@@ -391,4 +391,5 @@
 - **`@put` 的值是空的時**：Legado 照樣存空字串，夜讀不存、留著舊值（`N:lib/core/engine/analyze_rule/analyze_rule_string.dart:38-45`）；影響多大沒查。
 - **刻意不同，但只寫在程式註解或畫面規格、沒有 ADR**：照規則要有 ADR 才算「刻意不同」，這幾處先放這裡，要不要補 ADR 由使用者定。
   - 每個書源等多久：搜尋、換源每次搜尋與校驗每一段都等 20 秒（`N:lib/core/constant/source_wait.dart:1-3`，使用者 2026-11-13）；Legado 搜尋 30 秒、校驗整個書源 180 秒。
+  - 目錄一次給好幾頁時：夜讀同時抓 4 頁（`N:lib/core/engine/web_book/web_book_service.dart:31`），其中一頁抓不到就略過、先給抓到的部分，檢查新章節時才整份失敗（同檔 202）；Legado 同時抓的頁數照「線程數」設定（預設 16，`L:model/webBook/BookChapterList.kt:99`），一頁抓不到整份失敗。閱讀時的目錄可能少幾章，讀者看不出來。
 
