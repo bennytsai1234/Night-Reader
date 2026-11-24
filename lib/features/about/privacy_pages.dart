@@ -174,12 +174,14 @@ class _PermissionsPageState extends State<PermissionsPage>
       children: [
         for (final item in items) _permissionRow(item),
         GroupedRow(
+          leading: _actionIcon(Icons.settings_outlined),
           title: '開啟系統設定',
           accent: true,
           showChevron: false,
           onTap: _permissionService.openSystemSettings,
         ),
         GroupedRow(
+          leading: _actionIcon(Icons.refresh_rounded),
           title: '重新整理',
           accent: true,
           showChevron: false,
@@ -188,6 +190,12 @@ class _PermissionsPageState extends State<PermissionsPage>
       ],
     );
   }
+
+  /// 卡片裡的動作列：和權限列同大小的強調色線條圖示。
+  Widget _actionIcon(IconData icon) => SizedBox(
+    width: AppGrouped.iconTile,
+    child: Icon(icon, color: context.colorScheme.primary, size: 24),
+  );
 
   Widget _permissionRow(AppPermissionItem item) {
     final color = _permissionColor(item.tone);

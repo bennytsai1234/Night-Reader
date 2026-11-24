@@ -140,9 +140,8 @@ class _ChangeCoverSheetState extends State<_ChangeCoverSheetBody> {
   Widget _buildCoverGrid() {
     return Consumer<ChangeCoverProvider>(
       builder: (context, provider, child) {
-        if (!provider.isInitialized) {
-          return const Center(child: CircularProgressIndicator());
-        }
+        // 讀存過的封面時照樣畫格子：第一格「恢復預設」一開始就在，讀到的
+        // 封面接著排上去，各自淡入（頁首寫「正在載入封面…」）。
         if (provider.covers.isEmpty && !provider.isSearching) {
           return Center(
             child: UiText(

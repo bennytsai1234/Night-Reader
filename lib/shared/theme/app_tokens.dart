@@ -53,11 +53,45 @@ class AppSpacing {
 
 /// 不能按的鈕、選單項目與清單列（DESIGN.md 原則 5「選單只有一種樣子」）：
 /// 不管原本是強調色、危險色還是一般字色，文字與圖示一律換成一般字色，再降到
-/// [opacity]。顏色用 `context.disabledForeground`；整個元件包 [Opacity] 時，
-/// 裡面的強調色、危險色同樣先換成一般字色。
+/// [opacity]。顏色用 `context.disabledForeground`；整個元件灰掉時包
+/// [DisabledDim]，裡面的強調色、危險色同樣先換成一般字色。
 class AppDisabled {
   AppDisabled._();
   static const double opacity = 0.4;
+}
+
+/// 把整塊降到 [AppDisabled.opacity] 的停用外觀。裡面自己會灰掉的元件（開關、
+/// 用 `context.disabledForeground` 的字與圖示）從 [covers] 得知外面已經灰掉，
+/// 不再降一次，灰掉全 App 只有一種深淺。
+class DisabledDim extends StatelessWidget {
+  const DisabledDim({super.key, this.disabled = true, required this.child});
+
+  final bool disabled;
+  final Widget child;
+
+  /// [context] 是否在已經灰掉的 [DisabledDim] 裡。
+  static bool covers(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_DisabledDimScope>()?.dimmed ??
+      false;
+
+  @override
+  Widget build(BuildContext context) {
+    final dimmed = disabled || covers(context);
+    return Opacity(
+      opacity: disabled ? AppDisabled.opacity : 1,
+      child: _DisabledDimScope(dimmed: dimmed, child: child),
+    );
+  }
+}
+
+class _DisabledDimScope extends InheritedWidget {
+  const _DisabledDimScope({required this.dimmed, required super.child});
+
+  final bool dimmed;
+
+  @override
+  bool updateShouldNotify(_DisabledDimScope oldWidget) =>
+      dimmed != oldWidget.dimmed;
 }
 
 /// Border-radius tokens.

@@ -24,12 +24,15 @@
 | 給 agent 看的文件 | `AGENTS.md`、`DESIGN.md`、`CODING_STANDARDS.md`、`docs/agents/` 十七份全文，寫到的路徑、檔案、指令、函式與類別逐一對過還在，數值與行為只抽查（候選圖的預設風格與玻璃、崩潰日誌最多 50 份、「我的」九個入口、推送前檢查、PR 標題長度）；ADR 本文、`GLOSSARY.md`、`docs/state-machines.md` 只機械比對（寫到的路徑與類別、函式名稱在不在程式裡），沒逐條對行為；`docs/design/` 的日期與經過照 `DESIGN.md` 自己的規則評 | 6 |
 | CI 與腳本 | 全文：`.github/workflows/` 四份、`.githooks/` 三支、`tool/changelog.sh`、`flutter_test.sh`、`skill_refs.sh`；`frame_budget_compare.sh` 只讀檔頭與參數；`tool/` 其餘只對過每一支都有文件或程式指到、文件寫的用法與參數；四份 workflow 的 Flutter 版本一致（3.47.2）；跑過 `changelog_test.sh`、`frame_budget_compare_test.sh`、`skill_refs.sh`，都通過 | 0（兩處檢查的缺口併在第 8、13 筆） |
 | 沒排進分段的程式 | `lib/features/` 17 個、`lib/core/` 31 個資料夾，`lib/core/source/` 9、`storage/` 15、`utils/` 12 個檔，逐一對 `docs/agents/auto-audit.md` 的分段表；表上寫的檔名反過來也都對過還在 | 交辦範圍內 0；範圍外 3 處 |
+| 補讀：`lib/shared/shelf_look.dart` | 全文；所有呼叫的地方（開 App 讀回、書架寫入與重讀、同步套用、換源搬位置、預設封面取位置） | 0 |
+| 補讀：iOS 的 Swift 程式 | `ios/Runner/AppDelegate.swift`、`SceneDelegate.swift` 全文；每個平台通道對 Dart 呼叫的方法名稱，iOS 沒實作的通道與方法 Dart 端有沒有擋（App 內更新、背景工作、選漫畫資料夾、啟動畫面、系統結束紀錄、音量鍵、亮度、挖孔、狀態列）；`Info.plist` 的 Face ID 說明 | 0 |
+| 補讀：`flutter_tts`、`file_picker`、`xpath_selector` 的修補 | 三份 `PATCHES.md` 全文；從 pub.dev 下載三個上游封存檔（雜湊和 `PATCHES.md` 寫的一樣），整份比對改過哪些檔、都有記；`xpath_selector` 的存在條件、相對路徑、聯集切分三處讀程式；`flutter_tts` 的 Android 外掛讀了連線、念、重連與回覆的部分 | 1 |
 
 ## 問題
 
 ### README 與網站
 
-#### 1. README 說「用檔案開書」只有 iOS 沒有，其實 Android 也沒有
+#### 1. README 說「用檔案開書」只有 iOS 沒有，其實 Android 也沒有（已修）
 
 - **文件寫的**：「iOS 版沒有 App 內更新、分享進 App 與用檔案開書，也沒在 iPhone 上試過。」（`README.md:31`）讀起來 Android 有這三項。
 - **程式做的**：Android 只接 `legado://`、`yuedu://` 連結的「開啟」，與 JSON、文字、EPUB 的「分享」；沒有接檔案的「開啟」（從檔案管理員點書檔、選「用夜讀開啟」不會出現夜讀）。`android/app/src/main/AndroidManifest.xml:51-66`：
@@ -47,7 +50,7 @@
   分享進來的檔案由 `lib/features/association/handlers/file_association_handler.dart:18-47` 處理，只有分享這條路。
 - **該改哪一邊**：改文件，拿掉「與用檔案開書」，或寫成 Android 也只能分享進 App。
 
-#### 2. README 說漫畫的圖片資料夾在「加入本地書籍」匯入，其實要用「加入本地漫畫」
+#### 2. README 說漫畫的圖片資料夾在「加入本地書籍」匯入，其實要用「加入本地漫畫」（已修）
 
 - **文件寫的**：「手邊的 TXT、EPUB 與漫畫（CBZ、ZIP、圖片資料夾）不用書源，在書架選「加入本地書籍」。」（`README.md:39`）
 - **程式做的**：書架「加入」選單有兩項，「加入本地書籍」選單一個檔，只收 TXT、EPUB、CBZ、ZIP（`lib/core/platform/app_file_selection_service.dart:22-24`：`allowedExtensions: ['txt', 'epub', 'cbz', 'zip']`）；圖片資料夾、一個作品好幾話的資料夾要按「加入本地漫畫」選資料夾（`lib/features/bookshelf/bookshelf_page.dart:417-424` 兩個選單項；`:1220-1222`「加入本地漫畫（ADR 0052）：選一個作品資料夾」）。照 README 去「加入本地書籍」找不到選資料夾的地方。
@@ -81,13 +84,13 @@
 
 ### `docs/design/`
 
-#### 5. 規格與用語表寫「關於夜讀 → 系統工具」，畫面上沒有「系統工具」這幾個字
+#### 5. 規格與用語表寫「關於夜讀 → 系統工具」，畫面上沒有「系統工具」這幾個字（已修）
 
 - **文件寫的**：「開 App 時照同樣方式檢查一次（「關於夜讀 → 系統工具 → 啟動時檢查書架更新」可關）」（`docs/design/screens.md:10`）；`GLOSSARY.md:24`「更新紀錄」也寫「「關於夜讀 → 系統工具」裡列出各版更新說明的頁面」。寫成路徑，讀的人會去找一個叫「系統工具」的分段。
 - **程式做的**：「關於夜讀」的幾組卡片都沒有段落標題（`lib/features/about/about_page.dart:304`、`:333` 的 `GroupedSection(children: [...])` 都沒給 `header`），照 ADR 0076 卡片外不放小字，只有隱私說明、權限這種說明文件有段落標題（`docs/design/components.md:67`）。「系統工具」只是 `screens.md:143` 描述分組時用的名字。
 - **該改哪一邊**：改文件，`screens.md:10` 與 `GLOSSARY.md:24` 改成「關於夜讀」裡的「啟動時檢查書架更新」「更新紀錄」，不寫成有「系統工具」這一層。
 
-#### 6. 畫面規格的「背景工作」只列四種，漏了 AI 建立書源與自動換源
+#### 6. 畫面規格的「背景工作」只列四種，漏了 AI 建立書源與自動換源（已修）
 
 - **文件寫的**：「修書源（單一、一批）、從書源管理按的校驗（…）、AI 找書與按了「放到背景」的搜尋（ADR 0070）離開頁面、離開夜讀、關螢幕都照跑。」（`docs/design/screens.md:129`）；「一次一件」列哪些入口會灰掉（`:131`）、「通知」逐一寫每一種的標題與內文（`:133-137`），最後「右邊兩顆「暫停」「結束」」（`:138`）。
 - **程式做的**：
@@ -105,7 +108,7 @@
 - **同一個原因**：`GLOSSARY.md`「背景工作」也只列「修書源、校驗書源、AI 找書、按了「放到背景」的搜尋」，並寫「使用者按了才開始」；自動換源是刪書源時夜讀自己開始的。
 - **該改哪一邊**：改文件，`screens.md`「背景工作」與 `GLOSSARY.md`「背景工作」補上這兩種：一次一件的入口、通知的標題與內文，以及自動換源只有「結束」。AI 建立書源一節（`:90`）已寫了灰掉的規則，這裡只差總表。
 
-#### 7. 規格裡的幾句畫面字，程式改字或拿掉後沒跟著改
+#### 7. 規格裡的幾句畫面字，程式改字或拿掉後沒跟著改（已修）
 
 同一個原因：#382（畫面說明文字更精簡）、#369、#487（分組標題拿掉）改了畫面字，規格沒跟上。
 
@@ -126,26 +129,26 @@
 
 ### 給 agent 看的文件
 
-#### 9. 寫碼規範說網站「隨正式版部署」，其實推上 `beta` 就部署
+#### 9. 寫碼規範說網站「隨正式版部署」，其實推上 `beta` 就部署（已修）
 
 - **文件寫的**：「網站隨正式版部署，#92 拿掉朗讀音量後網站寫錯到下一個正式版前才發現。」（`CODING_STANDARDS.md:44`）
 - **程式做的**：`website-deploy.yml` 在 `website/` 推上 `beta` 時就部署（`.github/workflows/website-deploy.yml:3-6`：`push: branches: ["beta"]`、`paths: ["website/**", …]`），#309 改的；網站規格也寫「`website/` 推上 `beta` 就部署」（`docs/design/website.md:9`）。照寫碼規範讀，agent 會以為網站改了要等發正式版才上線。
 - **該改哪一邊**：改文件，`CODING_STANDARDS.md:44` 拿掉「網站隨正式版部署」與 #92 的經過，只留「不符的在同一個 PR 改」。
 
-#### 10. 發測試版的步驟指向一段已經不在的全域指示，而現在的全域指示說的正好相反
+#### 10. 發測試版的步驟指向一段已經不在的全域指示，而現在的全域指示說的正好相反（已修）
 
 - **文件寫的**：「還在跑就在同一輪裡前景等（`gh run watch <run> --exit-status`，逾時設 10 分鐘），不放背景，原因見全域指示「指令與測試」。」（`docs/agents/release.md:9`）
 - **現在的樣子**：全域指示沒有「指令與測試」這一段了；現在的「長指令」寫「等 CI……一律放背景」（`~/.claude/CLAUDE.md:27`）。前景等的規則和原因搬到 `plan` 技能的收尾合併清單：「還要等、十分鐘內跑得完的（例如等主線 CI 再發版），在同一輪前景等……T3 在背景工作結束、PR 已合併時可能自動收尾」（`~/.claude/skills/plan/references/rubric.md:87`）。照指向去找的 agent 找到的是相反的規則。
 - **該改哪一邊**：改文件，`release.md:9` 的「原因見全域指示「指令與測試」」改成指向 `plan` 技能「收尾合併清單」第 6 條。
 
-#### 11. ADR 0001 與索引說自行維護「三個 fork」，`third_party/` 其實有四個
+#### 11. ADR 0001 與索引說自行維護「三個 fork」，`third_party/` 其實有四個（已修）
 
 - **文件寫的**：「自行維護 flutter_tts、flutter_js、file_picker 三個 fork」（`docs/adr/0001-maintain-third-party-plugin-forks.md:1`、`docs/adr/README.md:105`），本文的理由是上游用了 AGP 9 拿掉的 Kotlin 設定（`0001…md:3`）。
 - **程式做的**：`xpath_selector` 也放在 `third_party/`、自己維護（`pubspec.yaml:53-56`：「自行維護（源自 3.0.2），見 third_party/xpath_selector/PATCHES.md」，`:131-133` 連 `xpath_selector_html_parser` 也換成這一份），#214、#217 為了 XPath 照 Legado 改的，理由和 ADR 0001 的不同；`docs/` 裡沒有任何一份寫到它。`a21f85a4`（「third_party 的 fork 是四個，不是三個」）只把 `AGENTS.md` 那句改成「各 fork」，ADR 與索引沒跟著改。
 - **同一個原因**：巡檢的分段表只排了 `third_party/flutter_js/`（`docs/agents/auto-audit.md:25`），另外三個的修補沒有段會看，見「沒排進分段的程式」。
 - **該改哪一邊**：改文件，ADR 0001 與索引補上 `xpath_selector` 與它的理由；要併進 0001 還是另寫一份由使用者定。
 
-#### 12. ADR 0028 寫網址選項 `webView` 經 `HeadlessWebViewService.delegate` 交給主 isolate，這個類別已經拿掉
+#### 12. ADR 0028 寫網址選項 `webView` 經 `HeadlessWebViewService.delegate` 交給主 isolate，這個類別已經拿掉（已修）
 
 - **文件寫的**：「網址選項 `webView` 與 `java.webView` 由書源 isolate 請主 isolate 渲染（`HeadlessWebViewService.delegate`、`BackstageWebView.delegate`）。」（`docs/adr/0028-source-work-in-a-source-isolate.md:13`）
 - **程式做的**：`headless_webview_service.dart` 在 #175 刪掉了，網址選項 `webView` 改走 `BackstageWebView`（`lib/core/engine/analyze_url.dart:692`），書源 isolate 只設 `BackstageWebView.delegate`（`lib/core/engine/source_isolate/source_isolate.dart:952`、`lib/core/network/backstage_webview.dart:30`）。照 ADR 找程式的 agent 找不到前一個。
@@ -158,7 +161,7 @@
 - **同一個原因**：推送前的 `tool/skill_refs.sh` 只認「`` `名稱` 技能 ``」這種寫法（`tool/skill_refs.sh:13`），`/名稱` 的寫法查不到，所以沒擋下來。
 - **該改哪一邊**：改文件，拿掉指向沒裝的技能的句子與「Wayfinding 操作」一段；`triage-labels.md` 與 `AGENTS.md`「Agent skills」要留多少由使用者定。
 
-#### 14. `docs/design/` 寫了選定的日期與來回的經過，違反 `DESIGN.md` 自己「規格裡不寫經過」
+#### 14. `docs/design/` 寫了選定的日期與來回的經過，違反 `DESIGN.md` 自己「規格裡不寫經過」（已修）
 
 - **文件寫的規則**：「理由寫在 ADR，規格裡不寫經過。」（`DESIGN.md:5`）
 - **實際寫的**：只算日期就有 `docs/design/screens.md` 26 處、`components.md` 13、`appearance.md` 4、`website.md` 3、`reader.md` 2、`audiobook.md` 2；多半跟著「使用者在候選圖上選了甲，否決了……」的經過。例：
@@ -178,11 +181,31 @@
 - `ios/Runner/AppDelegate.swift`（280 行，斷詞、網頁、電量、閱讀器裝置、系統列的平台通道）與 `SceneDelegate.swift`：資料 3 只排了 Android 那一半（`auto-audit.md:38`）。
 - `third_party/flutter_tts/`、`file_picker/`、`xpath_selector/` 的修補：只有 `flutter_js` 排進書源 0（`auto-audit.md:25`）；「不報的」說 `PATCHES.md` 記的修補可以看，但沒有段會看到（見第 11 筆）。
 
+## 補讀：沒排進分段的三處
+
+照 `docs/agents/auto-audit.md` 的標準讀，讀的是 `origin/beta` 的 `2b98b434`。書架列表的設定檔與 iOS 程式沒有找到問題；Dart 端呼叫 iOS 沒實作的方法時都有接住或先擋掉平台。
+
+#### 15. `flutter_tts` 與 `file_picker` 的修補紀錄，開頭寫的版本與「沒改」的說法過時了（已修）
+
+- **文件寫的**：`third_party/file_picker/PATCHES.md:9`「Local version: `11.0.3+nightreader.1`」；`third_party/flutter_tts/PATCHES.md:23`「Dart and native runtime sources are unchanged from the published archive.」
+- **程式做的**：`file_picker` 已經是 `11.0.3+nightreader.3`（`third_party/file_picker/pubspec.yaml:3`，同一份 `PATCHES.md` 後面也記了 `nightreader.2`、`.3`）。`flutter_tts` 的 `nightreader.3` 改了 `getEngines` 的回傳（`third_party/flutter_tts/PATCHES.md:47`；`lib/flutter_tts.dart:496-503`），`nightreader.5` 重寫了 Android 外掛的執行緒與回覆（`PATCHES.md:59`；`android/src/main/kotlin/com/eyedeadevelopment/fluttertts/FlutterTtsPlugin.kt` 和上游 4.2.5 整份不同）。照開頭那句，升級或對照上游的人會以為執行的程式和上游一樣。
+- **該改哪一邊**：改文件，`file_picker` 那行改成 `nightreader.3`；`flutter_tts` 那句改成只說建置設定那一段沒動到執行的程式，或直接拿掉。
+
+### 隱私說明補對的幾句
+
+第一次讀隱私說明時沒對到的四句，補對過程式，都和程式一樣，沒有新的問題：
+
+- 「AI 改書源之前的那一份存在手機上，用來還原，不進備份、不同步」（`PRIVACY.md:25`）：存在 App 資料夾的 `ai_repair_previous.json`（`lib/core/ai_repair/ai_repair_backups.dart:16-21`），備份只帶資料庫匯出的幾份檔與偏好設定（`lib/core/backup/backup_service.dart:149-155`），同步也沒有讀它。
+- 「WebDAV 的帳號密碼存在手機的設定裡，備份檔也會帶著」（`PRIVACY.md:43`）：存在偏好設定的 `sync.webdav.password`（`lib/core/sync/sync_settings.dart:18`、`:83`），不在備份排除的那幾項（`backup_service.dart:31-37`）。
+- 「AI 要查一部作品的各地譯名時，夜讀把那個作品名稱送到中文維基百科，不送其他資料」（`PRIVACY.md:33`）：三個請求只帶作品名或維基百科回的條目名、語言變體與固定的 User-Agent，用的是不帶書源 Cookie 的連線（`lib/features/search/ai_find/app_ai_find_library.dart:278-353`）。
+- 「讀章節抓到的正文不存、不算閱讀時間」（`PRIVACY.md:33`）：AI 找書讀章節直接回傳 `BookSourceService.getContent` 的結果、不寫正文快取（`app_ai_find_library.dart:202-235`、`lib/core/source/book_source_service.dart:89-107`），也沒有碰閱讀紀錄。一次最多 3000 字也對（`lib/core/ai_find/ai_find_prompt.dart:37`）。
+
+第 1 筆照「從檔案管理員選用夜讀開啟」的讀法修了。
+
 ## 拿不準
 
-- **第 1 筆**的「用檔案開書」是照「從檔案管理員選用夜讀開啟」讀的；作者原意若是 App 裡選檔，這筆不成立。
-- **隱私說明**只核對了同步、備份、送給 AI 的長度上限與遮掉的資料、日誌遮罩；「AI 改書源之前的那一份不進備份、不同步」（`ai_repair_backups.dart` 存在哪）、WebDAV 帳密存在哪、AI 找書只送作品名稱到維基百科、讀章節的正文不存不算閱讀時間，都還沒對程式。
 - **ADR 本文與 `docs/state-machines.md` 的日期與經過**：76 份 ADR 共 342 處日期、`state-machines.md` 18 處，照 `auto-audit.md` 也算沉積；但 ADR 照它的索引就是記「考慮過什麼、否決了什麼」（`docs/adr/README.md:3`），`state-machines.md` 是每做完一個狀態機加一節的紀錄（`docs/state-machines.md:3`），沒算進第 14 筆。類別名稱也沒算：`docs/design/` 寫了不少（例如 `components.md:22` 的 `DragOverflowText`），是不是沉積和日期一樣由使用者定。
 - **只改 `.gitignore` 這類檔也會發測試版**：`tool/changelog.sh` 的 `is_app_path` 把文件、網站、測試、hook、工具與三份 workflow 以外的路徑都算 App 內容（`tool/changelog.sh:32-40`），`.gitignore`、`.gitattributes`、`LICENSE`、`.metadata` 也算；上一個發布之後只改了這些時，`android-release.yml` 仍會發一版（`.github/workflows/android-release.yml:79-88`、`:202`）。實際有沒有碰過、要不要排除沒查。
 - **第 13 筆**：`a21f85a4` 整理「指向不存在的技能」時改了 `git-flow`、`codex-review` 這幾個，留著 `/triage`、`/wayfinder`、`/grill-with-docs`；這三份是 mattpocock 技能的設定範本產生的，可能是刻意留著等之後裝，若是就不算問題。
+- **沒有任何能用的朗讀引擎時，按朗讀可能一直等、外掛一直重連**：照程式推，`speak` 碰到連線不能用時重建引擎、把這句排回去（`third_party/flutter_tts/android/src/main/kotlin/com/eyedeadevelopment/fluttertts/FlutterTtsPlugin.kt:785-789`、`:414-417`）；引擎初始化失敗時 `ttsStatus` 照樣設成失敗碼，接著重跑排著的呼叫（`:320-356`），`speak` 又看到連線不能用、再重建，沒有上限，Dart 的 `speak` 一直收不到回覆（`lib/core/playback/tts_service.dart:297` 沒有逾時）。上游 4.2.5 也是同一個重連條件。沒把握的一步是 Android 的 `TextToSpeech` 連不上任何引擎時 `mServiceConnection` 是不是一直是 null（照 AOSP 原始碼推的，沒在手機上看過）；`PATCHES.md` 的 `nightreader.5` 說「失敗會回覆、不會卡住」，這條路不在裡面。
 - **這台 Linux 電腦**：`docs/agents/environment.md`、`emulator.md`、`phone.md` 只寫了家裡與公司兩台 Windows（Legado 在 `C:\…`、模擬器在 `C:/Android/Sdk`、Git Bash、「家裡這台沒有 `jq`」）；這台有 `jq`、沒有模擬器、Legado 在 `~/.cache/audit-legado/legado`。是不是會長期用的電腦不知道，沒列成問題。`issue-tracker.md:8` 要用 `jq` 過濾留言，和 `environment.md:24`「家裡這台沒有 `jq`」也對不上。
