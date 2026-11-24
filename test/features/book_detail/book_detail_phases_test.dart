@@ -31,6 +31,9 @@ class _Source extends BookSourceService {
   /// 給了就等它才回目錄（照開始抓時的 [toc]）。
   Completer<void>? tocGate;
 
+  /// 給了就等它才回詳情；回的是照手上的書填上詳情頁簡介的那一份。
+  Completer<void>? infoGate;
+
   @override
   Future<Book> getBookInfo(
     BookSource source,
@@ -38,7 +41,10 @@ class _Source extends BookSourceService {
     CancelToken? cancelToken,
   }) async {
     if (infoFails) throw Exception('連不上');
-    return book;
+    final gate = infoGate;
+    if (gate == null) return book;
+    await gate.future;
+    return book.copyWith()..intro = '詳情頁的簡介';
   }
 
   @override
@@ -256,6 +262,34 @@ void main() {
     if (message == null || message.isEmpty) return (null, false);
     return (message, provider.loginRequired);
   }
+
+  test('fetching the book info keeps what an update check and sync wrote '
+      'meanwhile', () async {
+    await storeSource();
+    // 書架上的書、手機裡還沒有目錄（例如剛還原備份）：詳情向書源重抓資訊。
+    await db.bookDao.upsert(searchResult()..isInBookshelf = true);
+    service.infoGate = Completer<void>();
+    final provider = await open(waitReady: false);
+    await until(() => provider.isLoading);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    // 抓詳情的這段時間，書架的檢查更新寫了章數、同步套用了另一台的進度。
+    final meanwhile = (await db.bookDao.getByUrl(_bookUrl))!
+      ..totalChapterNum = 12
+      ..lastCheckCount = 2
+      ..chapterIndex = 5
+      ..durChapterTitle = '第6章';
+    await db.bookDao.upsert(meanwhile);
+    service.infoGate!.complete();
+    await until(() => !provider.isLoading);
+
+    final stored = (await db.bookDao.getByUrl(_bookUrl))!;
+    expect(stored.intro, '詳情頁的簡介');
+    expect(stored.totalChapterNum, 12);
+    expect(stored.lastCheckCount, 2);
+    expect(stored.chapterIndex, 5);
+    expect(stored.durChapterTitle, '第6章');
+  });
 
   group('書源問題那一列', () {
     test('nothing wrong shows no row', () async {

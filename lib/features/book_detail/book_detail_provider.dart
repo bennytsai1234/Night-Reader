@@ -462,14 +462,14 @@ class BookDetailProvider extends ChangeNotifier {
       updatedBook.customCoverLocalPath = customCoverLocalPath;
       _book = updatedBook;
       if (_fetchIssue == _FetchIssue.staleInfo) _fetchIssue = _FetchIssue.none;
-      await _bookDao.upsert(_book);
+      await _bookDao.saveFetchedInfo(_book);
     } catch (e) {
       AppLog.e('加載書籍詳情失敗: $e', error: e);
       if (_fetchIssue == _FetchIssue.none) _fetchIssue = _FetchIssue.staleInfo;
       if (_book.tocUrl.isEmpty) {
         _book.tocUrl = _book.bookUrl;
       }
-      await _bookDao.upsert(_book);
+      await _bookDao.saveFetchedInfo(_book);
     }
   }
 

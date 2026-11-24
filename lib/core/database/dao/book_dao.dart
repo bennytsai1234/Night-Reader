@@ -92,6 +92,27 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
   Future<void> insertIfMissing(Book book) =>
       into(books).insert(_row(book), mode: InsertMode.insertOrIgnore);
 
+  /// 書籍詳情向書源重抓的資訊（[info]：手上的書填上詳情頁的欄位）寫回，只寫
+  /// 詳情頁給得出的那幾欄（書名作者照書源規則與 `canReName`、分類、字數、
+  /// 最新章節、簡介、封面、目錄網址，與規則寫的變數、閱讀設定）：抓詳情要
+  /// 幾秒，這段期間背景檢查更新寫的章數、同步套用的進度不被手上的舊資料蓋
+  /// 掉。資料庫還沒有這本書時整筆新增。
+  Future<void> saveFetchedInfo(Book info) => writeFields(
+    info,
+    BooksCompanion(
+      name: Value(info.name),
+      author: Value(info.author),
+      kind: Value(info.kind),
+      wordCount: Value(info.wordCount),
+      latestChapterTitle: Value(info.latestChapterTitle),
+      intro: Value(info.intro),
+      coverUrl: Value(info.coverUrl),
+      tocUrl: Value(info.tocUrl),
+      variable: Value(info.variable),
+      readConfig: Value(info.readConfig),
+    ),
+  );
+
   /// 存這本書自己的閱讀設定（替換規則、重新分段這類開關）。
   Future<void> saveReadConfig(Book book) =>
       writeFields(book, BooksCompanion(readConfig: Value(book.readConfig)));
