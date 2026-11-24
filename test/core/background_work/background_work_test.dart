@@ -254,6 +254,56 @@ void main() {
     expect(platform.calls.last, 'hide');
   });
 
+  test('a job pressed while its page is still sliding in holds the slot '
+      'without a notification, and starts with one', () async {
+    // 推入動畫播完才開始（ADR 0018），位置在按下去那一刻就佔住：這段時間
+    // 別件開不了，自動換源排在後面。
+    final job = _Job();
+    expect(work.reserve(job), isTrue);
+    expect(work.isBusy, isTrue);
+    expect(work.current, same(job));
+    expect(work.reserve(_Job()), isFalse);
+    expect(work.begin(_Job(), _start), isFalse);
+
+    work.update(job, _start);
+    platform.handler!('end');
+    platform.handler!('pause');
+    await _flush();
+    expect(platform.calls, isEmpty, reason: '還沒開始，不送通知');
+    expect(permissionAsks, 0, reason: '權限框不在轉場中跳');
+    expect(job.stops, 0, reason: '舊通知上的按鈕不交給還沒開始的這件');
+    expect(job.pauses, 0);
+
+    expect(work.begin(job, _start), isTrue);
+    await _flush();
+    expect(permissionAsks, 1);
+    expect(platform.calls, ['show 校驗書源｜第 0／4 個｜0']);
+    platform.handler!('end');
+    expect(job.stops, 1, reason: '開始了，通知控制這一件');
+  });
+
+  test('a queued job waits behind one that only holds the slot, and takes '
+      'over when it is let go', () async {
+    final held = _Job();
+    final queued = _Job();
+    work.reserve(held);
+    var started = false;
+    unawaited(
+      work.beginAfterCurrent(queued, _switching).then((_) {
+        started = true;
+      }),
+    );
+    await _flush();
+    expect(started, isFalse);
+    expect(work.current, same(held));
+
+    work.end(held);
+    await _flush();
+    expect(started, isTrue);
+    expect(work.current, same(queued));
+    expect(platform.calls, ['show 自動換源｜正在找替代的書源｜null']);
+  });
+
   test('a job that does not wait starts at once without asking for the '
       'notification permission', () async {
     final job = _Job();

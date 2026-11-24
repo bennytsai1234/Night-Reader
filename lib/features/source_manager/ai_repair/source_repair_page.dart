@@ -37,9 +37,7 @@ Future<void> openSourceRepair(
   final navigator = Navigator.of(context);
   final repairs = runs ?? RepairRuns.instance;
   if (repairs.current case final BatchRepairRun current when !current.isDone) {
-    await navigator.push(
-      MaterialPageRoute<void>(builder: (_) => SourceRepairPage(run: current)),
-    );
+    await navigator.push(current.pageRoute());
     return;
   }
   // 工作結束但結果還沒看過時，不能從另一個入口蓋掉它。
@@ -82,9 +80,7 @@ Future<void> openSourceRepair(
     run.dispose();
     return;
   }
-  await navigator.push(
-    MaterialPageRoute<void>(builder: (_) => SourceRepairPage(run: run)),
-  );
+  await navigator.push(run.pageRoute());
 }
 
 String _tokens(int count) => count >= 10000
