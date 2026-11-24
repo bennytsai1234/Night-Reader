@@ -176,7 +176,9 @@ class RestoreService {
             await _restoreReadingStats(
               readStatsFiles,
               fromDevice: backup.manifest?['syncDeviceId'] as String?,
-              fromLegado: fromLegado,
+              inMillis:
+                  fromLegado ||
+                  backup.manifest?[BackupService.readTimeInMillisKey] == true,
             ) ||
             restoredAny;
       } catch (e) {
@@ -234,7 +236,7 @@ class RestoreService {
   Future<bool> _restoreReadingStats(
     List<_DecodedFile> files, {
     required String? fromDevice,
-    required bool fromLegado,
+    required bool inMillis,
   }) async {
     var records = <ReadRecord>[];
     final days = <ReadDay>[];
@@ -249,7 +251,7 @@ class RestoreService {
         }
       }
     }
-    if (fromLegado) records = _fromLegadoRecords(records);
+    if (inMillis) records = _fromMillisRecords(records);
     await _readRecordDao.restoreReadingStats(records: records, days: days);
     await RestoredStats.remember(
       await SharedPreferences.getInstance(),
@@ -306,10 +308,11 @@ class RestoreService {
     );
   }
 
-  /// Legado 的閱讀時長以毫秒記（`ReadBook.upReadTime`），一台一筆；夜讀以秒記、
-  /// 一本書一筆：換成秒，同一本書各台的加起來（Legado 顯示的也是加總，
+  /// 閱讀時長以毫秒記的備份（Legado 的，與照 Legado 寫的夜讀備份，
+  /// [BackupService.readTimeInMillisKey]）：Legado 一台一筆，夜讀以秒記、一本
+  /// 書一筆：換成秒，同一本書各台的加起來（Legado 顯示的也是加總，
   /// `ReadRecordDao.getReadTime`），最後閱讀時間取最晚的。
-  static List<ReadRecord> _fromLegadoRecords(List<ReadRecord> records) {
+  static List<ReadRecord> _fromMillisRecords(List<ReadRecord> records) {
     final byBook = <String, ReadRecord>{};
     for (final record in records) {
       final seconds = record.readTime ~/ 1000;

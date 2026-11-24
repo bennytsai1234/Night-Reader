@@ -23,6 +23,9 @@ import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/backup/backup_service.dart';
+import 'package:night_reader/core/backup/restore_service.dart';
+import 'package:night_reader/core/models/reading/bookmark.dart';
+import 'package:night_reader/core/models/reading/read_record.dart';
 import 'package:night_reader/core/network/network_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -218,5 +221,51 @@ void main() {
       ],
       [true, true, true, true],
     );
+  });
+
+  test('閱讀時長照 Legado 寫成毫秒、書籤多寫 Legado 的欄位，夜讀還原回來不變', () async {
+    await ReadRecordDao(db).restoreByBookName(
+      ReadRecord(deviceId: 'd', bookName: '時長書', readTime: 7200, lastRead: 5),
+    );
+    await BookmarkDao(db).upsertAll([
+      Bookmark(
+        id: 1700000000123456,
+        bookName: '時長書',
+        chapterIndex: 2,
+        chapterTitle: '第三章',
+        charOffset: 40,
+        excerpt: '這一句',
+      ),
+    ]);
+
+    final zip = await BackupService().createBackupZip();
+    final archive = ZipDecoder().decodeBytes(await zip!.readAsBytes());
+    dynamic entry(String name) =>
+        jsonDecode(utf8.decode(archive.findFile(name)!.content as List<int>));
+
+    expect(entry('manifest.json')['readTimeInMillis'], isTrue);
+    final record = (entry('readRecord.json') as List).firstWhere(
+      (r) => r['bookName'] == '時長書',
+    );
+    expect(record['readTime'], 7200000);
+    final mark = (entry('bookmark.json') as List).firstWhere(
+      (b) => b['bookName'] == '時長書',
+    );
+    expect(mark['time'], 1700000000123);
+    expect(mark['chapterName'], '第三章');
+    expect(mark['chapterPos'], 40);
+    expect(mark['bookText'], '這一句');
+
+    // 夜讀還原自己的備份：時長換回秒、書籤照 id。
+    await ReadRecordDao(db).clearAll();
+    final marks = BookmarkDao(db);
+    await marks.deleteByIds((await marks.getAll()).map((b) => b.id));
+    await RestoreService().restoreFromZip(zip);
+    expect((await ReadRecordDao(db).getByBookName('時長書'))?.readTime, 7200);
+    final restored = (await marks.getAll()).firstWhere(
+      (b) => b.bookName == '時長書',
+    );
+    expect(restored.id, 1700000000123456);
+    expect(restored.charOffset, 40);
   });
 }

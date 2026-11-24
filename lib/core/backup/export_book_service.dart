@@ -52,6 +52,12 @@ class ExportBookService {
     buffer.writeln('---');
 
     for (var i = 0; i < chapters.length; i++) {
+      // 分卷只寫卷名（同 Legado）。
+      if (chapters[i].isVolume) {
+        buffer.writeln('\n${(await present(chapters[i], '')).title}\n');
+        onProgress?.call((i + 1) / chapters.length);
+        continue;
+      }
       final entry = await _chapterContentDao.getEntry(
         contentKey: ReaderChapterContentDao.contentKey(
           origin: book.origin,

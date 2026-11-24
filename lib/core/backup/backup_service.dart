@@ -63,6 +63,8 @@ class BackupService {
         // 這台在同步裡的名字：還原到另一台時，閱讀統計認得出哪些時間已經
         // 在雲端這台的那筆裡（`RestoredStats`）。
         'syncDeviceId': ?prefs.getString(SyncSettings.deviceIdKey),
+        // readRecord.json 的閱讀時長照 Legado 寫成毫秒（[_legadoReadable]）。
+        readTimeInMillisKey: true,
       };
       await File(p.join(backupFolder.path, 'manifest.json'))
           .writeAsString(jsonEncode(manifest));
@@ -209,6 +211,10 @@ class BackupService {
   /// 閱讀設定讀到字串時整份放棄（書源還會改用舊格式讀成沒有規則的空殼，
   /// 蓋掉同網址的書源）。這裡只改備份檔：同步的紀錄照 `toJson` 算指紋，
   /// 改了會讓兩台認不出同一條規則。夜讀自己讀兩種寫法都認得。
+  /// manifest 裡的這個鍵是 true：readRecord.json 的閱讀時長是毫秒。之前的
+  /// 備份是秒。
+  static const String readTimeInMillisKey = 'readTimeInMillis';
+
   static const Map<String, List<String>> _legadoSwitches = {
     'bookshelf.json': ['canUpdate', 'isInBookshelf'],
     'bookSource.json': ['enabled', 'enabledExplore', 'enabledCookieJar'],
@@ -219,6 +225,20 @@ class BackupService {
     String name,
     Map<String, dynamic> json,
   ) {
+    switch (name) {
+      // Legado 的閱讀時長以毫秒記（`ReadBook.upReadTime`）。
+      case 'readRecord.json':
+        return {...json, 'readTime': (json['readTime'] as int? ?? 0) * 1000};
+      // Legado 的書籤照建立時間（`time`）認，位置與原文的欄位名不同。
+      case 'bookmark.json':
+        return {
+          ...json,
+          'time': (json['id'] as int? ?? 0) ~/ 1000,
+          'chapterName': json['chapterTitle'],
+          'chapterPos': json['charOffset'],
+          'bookText': json['excerpt'],
+        };
+    }
     final switches = _legadoSwitches[name];
     if (switches == null) return json;
     final out = {

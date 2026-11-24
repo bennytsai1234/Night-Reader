@@ -1,9 +1,9 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/features/reader/chapter/reader_content_transformer.dart';
-
-import 'dart:async';
-import 'dart:io';
 
 import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 import 'package:night_reader/core/exception/user_error.dart';
