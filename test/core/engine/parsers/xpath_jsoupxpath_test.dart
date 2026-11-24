@@ -119,4 +119,43 @@ void main() {
       throwsA(anything),
     );
   });
+
+  group('text() 照 JsoupXpath', () {
+    const page = '<div><p>甲<b>乙</b>丙</p><p><b>丁</b></p></div>';
+    List<String> of(String rule) => AnalyzeByXPath(page).getStringList(rule);
+
+    test('元素自己的每段文字各一條，不含子元素的字', () {
+      expect(of('//p[1]/text()'), ['甲', '丙']);
+      expect(of('//p[2]/text()'), isEmpty);
+    });
+
+    test('//text() 是底下所有的文字，照文件順序', () {
+      expect(of('//p[1]//text()'), ['甲', '乙', '丙']);
+    });
+
+    test('條件裡的 text() 是自己的字', () {
+      expect(of("//p[contains(text(),'乙')]/b/text()"), isEmpty);
+      expect(of("//p[contains(text(),'丙')]/b/text()"), ['乙']);
+    });
+  });
+
+  test('條件裡可以寫軸', () {
+    expect(list('//li[following-sibling::li]/a/text()'), ['第1章 開始', '第2章 風起']);
+  });
+
+  test('中文的元素名稱（XML）', () {
+    final xml = AnalyzeByXPath('<?xml version="1.0"?><書><章><名>第一章</名></章></書>');
+    expect(xml.getStringList('//章/名/text()'), ['第一章']);
+  });
+
+  test('位置算出來是無限大時不成立，不報錯', () {
+    expect(list('//li[1 div 0]/a/text()'), isEmpty);
+  });
+
+  test('寫錯的條件報錯，不卡住', () {
+    expect(
+      () => AnalyzeByXPath(html).getStringList('//li[!a]/@class'),
+      throwsA(anything),
+    );
+  });
 }

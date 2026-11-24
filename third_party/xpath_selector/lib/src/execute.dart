@@ -165,6 +165,7 @@ bool _matchPredicates({
     XContext(element, position: position + 1, size: length),
   );
   if (value is XNumber) {
+    if (!value.value.isFinite) return false;
     var index = value.value.toInt();
     if (index < 0) index = length + index + 1;
     return index == position + 1;

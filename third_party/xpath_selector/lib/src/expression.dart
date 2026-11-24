@@ -88,15 +88,23 @@ class XList extends XValue {
   bool get asBool => values.isNotEmpty;
 }
 
-/// The direct text of [node], without its child elements (Jsoup `ownText`).
-String ownText(XPathNode node) {
-  final buffer = StringBuffer();
-  for (final child in node.children) {
-    if (!child.isElement) buffer.write(child.text ?? '');
-  }
-  if (buffer.isEmpty && node.children.isEmpty) return node.text ?? '';
-  return buffer.toString();
+/// The element's own text nodes, whitespace collapsed (JsoupXpath `text()`:
+/// one text element for each of Jsoup `textNodes()`, read with `ownText`).
+/// A text node itself is its own text.
+List<String> ownTextNodes(XPathNode node) {
+  if (!node.isElement) return [_collapse(node.text ?? '')];
+  final texts = XPathNode.textNodesOf?.call(node.node, false) ??
+      [
+        for (final child in node.children)
+          if (!child.isElement) child.text ?? '',
+      ];
+  return [for (final text in texts) _collapse(text)];
 }
+
+/// The element's own text, without its child elements (Jsoup `ownText`).
+String ownText(XPathNode node) => _collapse(ownTextNodes(node).join(' '));
+
+String _collapse(String text) => text.replaceAll(RegExp(r'\s+'), ' ').trim();
 
 /// The context of one evaluation: the node a predicate is tested on, its
 /// 1-based position among the nodes being filtered and how many there are.
@@ -299,6 +307,9 @@ List<_Token> _tokenize(String input) {
     // A location path: up to the next operator, comma or closing bracket at
     // depth zero.
     final end = _pathEnd(input, i);
+    if (end == i) {
+      throw FormatException('Unexpected ${input[i]} in: $input');
+    }
     tokens.add(_Token(_T.path, input.substring(i, end).trim()));
     i = end;
   }
@@ -725,8 +736,12 @@ XValue evaluatePath(String path, XPathNode node) {
   if (relative.startsWith('./')) relative = relative.substring(1);
   final query = relative.startsWith('/') ? relative : '/$relative';
   final result = XPath(node).query(query);
-  final endsInValue =
-      RegExp(r'(?:^|/)@[^/]*$|\)\s*$').hasMatch(relative.trim());
+  final trimmed = relative.trim();
+  // JsoupXpath: `text()` is text elements, read as their own text joined.
+  if (RegExp(r'(?:^|/)text\(\)$').hasMatch(trimmed)) {
+    return XString(result.attrs.whereType<String>().join());
+  }
+  final endsInValue = RegExp(r'(?:^|/)@[^/]*$|\)\s*$').hasMatch(trimmed);
   if (endsInValue) {
     return XList(result.attrs.whereType<String>().toList());
   }

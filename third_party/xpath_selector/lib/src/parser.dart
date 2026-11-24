@@ -136,22 +136,22 @@ Selector _parseSelector(String input, {required bool first}) {
   final simpleSelector = _parseSimpleSelector(selectorType, source);
   if (simpleSelector != null) return simpleSelector;
 
-  // Axis
+  // Axis. Night Reader patch: the predicates are split off first, so a
+  // predicate may hold an axis (`li[following-sibling::li]`).
+  var (stepTest, predicateList) = _splitPredicates(source);
   AxesAxis? axis;
-  late String withoutAxis;
-  if (source.contains('::')) {
-    final pattern = source.split('::');
-    if (pattern.length > 2) throw UnsupportedError('Not support multiple axis');
-    axis = SelectorAxes.createAxis(pattern.first.trim());
-    withoutAxis = pattern.last.trim();
-  } else {
-    withoutAxis = source;
+  var nodeTest = stepTest;
+  final axisAt = stepTest.indexOf('::');
+  if (axisAt >= 0) {
+    axis = SelectorAxes.createAxis(stepTest.substring(0, axisAt).trim());
+    nodeTest = stepTest.substring(axisAt + 2).trim();
   }
-
-  var (nodeTest, predicateList) = _splitPredicates(withoutAxis);
-  // Night Reader patch: a node test is a name, `*`, `.`, `..` or `node()`;
-  // anything else (`div[2] div`, a missing `/`) is not a valid path.
-  if (!RegExp(r'^(?:[A-Za-z_*][\w.:*-]*|\.\.?|node\(\))$').hasMatch(nodeTest)) {
+  // Night Reader patch: a node test is a name (any letters, CJK too), `*`,
+  // `.`, `..` or `node()`; anything else (`div[2] div`, a missing `/`) is not
+  // a valid path.
+  if (!RegExp(
+    r'^(?:[A-Za-z_*\u0080-\uFFFF][\w.:*\u0080-\uFFFF-]*|\.\.?|node\(\))$',
+  ).hasMatch(nodeTest)) {
     throw FormatException("'$input' is not a valid xpath query string");
   }
 
@@ -251,6 +251,18 @@ List<String?> parseAttr({
         } else {
           result.add(element.attributes[lastSelector.attr]);
         }
+      } else if (lastSelector.function == 'text()') {
+        // Night Reader patch: JsoupXpath `text()`, one string for each of
+        // the element's own text nodes; `//text()` every text node inside,
+        // in document order.
+        if (lastSelector.selectorType == SelectorType.descendant) {
+          if (elements.any((e) => e != element && _isAncestor(e, element))) {
+            continue;
+          }
+          result.addAll(_descendantTextNodes(element));
+        } else {
+          result.addAll(ownTextNodes(element));
+        }
       } else if (lastSelector.function != null) {
         // function
         result.add(
@@ -268,15 +280,40 @@ List<String?> parseAttr({
   return result;
 }
 
+bool _isAncestor(XPathNode ancestor, XPathNode node) {
+  for (var p = node.parent; p != null; p = p.parent) {
+    if (p == ancestor) return true;
+  }
+  return false;
+}
+
+List<String> _descendantTextNodes(XPathNode node) {
+  final deep = XPathNode.textNodesOf?.call(node.node, true);
+  if (deep != null) {
+    return [
+      for (final text in deep) text.replaceAll(RegExp(r'\s+'), ' ').trim(),
+    ];
+  }
+  return [
+    for (final child in node.children)
+      if (child.isElement)
+        ..._descendantTextNodes(child)
+      else
+        ...ownTextNodes(child),
+  ];
+}
+
 /// if node-test is text() or other functions
 String? elementFunction({required XPathNode node, required String function}) {
   if (function.startsWith('@')) {
     return node.attributes[function.substring(1)];
   } else {
     switch (function) {
+      // Night Reader patch: JsoupXpath `text()` is the element's own text,
+      // `allText()` all the text inside.
       case 'text()':
+        return ownText(node);
       case 'string()':
-      // Night Reader patch: JsoupXpath `allText()`, all the text inside.
       case 'allText()':
         return node.text ?? '';
       // Night Reader patch: JsoupXpath `num()`, the first number in the

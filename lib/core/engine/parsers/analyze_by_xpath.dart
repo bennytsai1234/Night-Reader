@@ -23,7 +23,27 @@ class AnalyzeByXPath {
     r'/(allText|textNodes|ownText|html|outerHtml)\(\)\s*$',
   );
 
+  /// JsoupXpath 的 `text()` 是元素自己的文字節點（`//text()` 是底下全部
+  /// 的）；xpath_selector 的網頁節點只交出子元素，從 `package:html` 讀。
+  static List<String>? _textNodesOf(Object? node, bool deep) {
+    if (node is! Node) return null;
+    final texts = <String>[];
+    void collect(Node parent) {
+      for (final child in parent.nodes) {
+        if (child is Text) {
+          texts.add(child.text);
+        } else if (deep && child is Element) {
+          collect(child);
+        }
+      }
+    }
+
+    collect(node);
+    return texts;
+  }
+
   AnalyzeByXPath(dynamic doc) {
+    XPathNode.textNodesOf ??= _textNodesOf;
     final htmlLike = _extractHtmlLikeContent(doc);
     if (doc is XPathNode) {
       final node = doc.node;
@@ -241,10 +261,11 @@ class AnalyzeByXPath {
         return _queryStringListCompat(rule);
       }
 
-      // 2. 處理文本提取 /text()
+      // 2. 處理文本提取 /text()：照 JsoupXpath，每個元素自己的每段文字各
+      // 一條（`//text()` 是底下所有的文字），不含子元素的字。
       if (rule.endsWith('/text()')) {
-        final texts = queryResult.nodes
-            .map((n) => n.text?.trim() ?? '')
+        final texts = queryResult.attrs
+            .whereType<String>()
             .where((t) => t.isNotEmpty)
             .toList();
         if (texts.isNotEmpty) {

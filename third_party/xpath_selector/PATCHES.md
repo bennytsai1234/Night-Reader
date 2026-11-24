@@ -48,9 +48,24 @@ uses (`cn.wanghaomiao:JsoupXpath`, its `Xpath.g4` grammar and the
   and `.` and cut predicates holding `]` or a function with arguments. A node
   test that is not a name, `*`, `.`, `..` or `node()` (`div[2] div`, a missing
   `/`) is rejected.
+- `lib/src/parser.dart` `parseAttr`, `elementFunction`,
+  `lib/src/expression.dart` `ownTextNodes`, `lib/src/model/base.dart`
+  `XPathNode.textNodesOf`: `text()` is JsoupXpath's: one string for each of
+  the element's own text nodes, without its child elements' text
+  (`<p>甲<b>乙</b>丙</p>` gives `甲` and `丙`); `//text()` every text node
+  inside, in document order; in a predicate the own text joined. Upstream
+  gave the text of the element and all its descendants. The HTML model of
+  `xpath_selector_html_parser` exposes element children only, so the app
+  sets `XPathNode.textNodesOf` to read text nodes from its DOM.
+- `lib/src/parser.dart` `_parseSelector`: the predicates are split off
+  before the axis, so a predicate may hold one (`li[following-sibling::li]`).
+  A node test may hold any non-ASCII letter (XML tags such as `章`).
+- `lib/src/execute.dart` `_matchPredicates`: a position that is not finite
+  (`[1 div 0]`) does not hold. `lib/src/expression.dart` `_tokenize`: a
+  character that starts no token (`[!a]`) is a `FormatException`.
 - `lib/src/parser.dart` `_parseSimpleSelector`, `elementFunction`: the last
   step may be a function: `num()` (the first number in the text),
-  `allText()`, or a call with arguments (`substring-after(text(),'：')`)
+  `allText()` (all the text inside), or a call with arguments (`substring-after(text(),'：')`)
   evaluated with the node as the context.
 - `lib/src/builder.dart` `XPath.query`: a whole expression that is a function
   call (`concat(//h2/text(),'!')`, `sum(//li/span/num())`) gives one string,
