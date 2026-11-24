@@ -243,7 +243,8 @@ abstract class BaseSource {
       if (decoded is Map) {
         final cookie = decoded['cookie'] ?? decoded['Cookie'];
         if (cookie != null && cookie.toString().isNotEmpty) {
-          await CookieStore().setCookie(getKey(), cookie.toString());
+          // 併進這個網站原本存的，同名的換新（Legado `replaceCookie`）。
+          await CookieStore().replaceCookie(getKey(), cookie.toString());
         }
       }
     } catch (_) {}
