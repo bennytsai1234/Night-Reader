@@ -740,6 +740,33 @@ class ReaderContentTransformer {
     return result['document']! as ReaderContent;
   }
 
+  /// 匯出書用的一章：照 Legado（`ExportBookService.getExportData`）套這本書
+  /// 的替換規則與標題規則、拿掉正文開頭重複的章名，不做繁簡轉換、不重新
+  /// 分段，插圖不放（ADR 0050）。[text] 是每段前面空兩格、一段一行。
+  static Future<({String title, String text})> exportChapter({
+    required Book book,
+    required BookChapter chapter,
+    required String rawContent,
+    required List<ReplaceRule> enabledRules,
+  }) async {
+    final result = await ReaderContentTransformWorker.instance.process({
+      'chapterIndex': chapter.index,
+      'bookName': book.name,
+      'bookOrigin': book.origin,
+      'chapterTitle': chapter.title,
+      'rawContent': rawContent,
+      'rulesJson': enabledRules.map((rule) => rule.toJson()).toList(),
+      'useReplaceRules': book.getUseReplaceRule(),
+      'reSegmentEnabled': false,
+      'chineseConvertType': 0,
+    });
+    final document = result['document']! as ReaderContent;
+    return (
+      title: document.title,
+      text: document.paragraphs.map((paragraph) => '　　$paragraph').join('\n'),
+    );
+  }
+
   /// [onRule]：每開始套用一條規則就傳它在 `rulesJson` 的位置，一輪規則套完
   /// 傳 null，worker 拿來讓主 isolate 計時。
   static Map<String, Object?> _processInBackground(

@@ -1,3 +1,7 @@
+import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/features/reader/chapter/reader_content_transformer.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -682,8 +686,19 @@ class _BookDetailPageState extends State<BookDetailPage> {
     if (_exportProgress != null) return;
     setState(() => _exportProgress = 0);
     try {
+      final book = provider.book;
+      final rules = await getIt<ReplaceRuleDao>().getEnabledForBook(
+        book.name,
+        book.origin,
+      );
       await ExportBookService().exportToTxt(
-        provider.book,
+        book,
+        present: (chapter, raw) => ReaderContentTransformer.exportChapter(
+          book: book,
+          chapter: chapter,
+          rawContent: raw,
+          enabledRules: rules,
+        ),
         fetchMissingRemote: fetchMissingRemote,
         onProgress: (progress) {
           if (mounted) setState(() => _exportProgress = progress);
