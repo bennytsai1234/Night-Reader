@@ -228,6 +228,9 @@ jobs:
             echo "::error::Duplicate ADR numbers: $duplicates. Renumber the newer ADR and the links to it."
             exit 1
           fi
+      - name: Check ADR index lists every ADR
+        # 推送前的 hook 也跑（只改文件的推送這裡不跑）。
+        run: sh tool/adr_index.sh
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.2'

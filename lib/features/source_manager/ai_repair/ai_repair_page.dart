@@ -39,9 +39,7 @@ Future<void> openAiRepair(
       when !current.creating &&
           !current.isDone &&
           current.sourceUrl == source.bookSourceUrl) {
-    await navigator.push(
-      MaterialPageRoute<void>(builder: (_) => current.page()),
-    );
+    await navigator.push(current.pageRoute());
     return;
   }
   // 工作結束但結果還沒看過時，不能從另一個入口蓋掉它。
@@ -87,7 +85,7 @@ Future<void> openAiRepair(
     run.dispose();
     return;
   }
-  await navigator.push(MaterialPageRoute<void>(builder: (_) => run.page()));
+  await navigator.push(run.pageRoute());
 }
 
 /// 修復頁：固定四段，AI 做過的步收在「經過」（docs/design/screens.md

@@ -76,11 +76,117 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
   Future<void> upsert(Book book) =>
       into(books).insertOnConflictUpdate(_row(book));
 
+  /// 只寫 [fields] 這幾欄，其他欄位留著資料庫裡現在的：手上的 [book] 可能是
+  /// 打開畫面時讀的，之後背景檢查更新、同步、書籍詳情寫進去的不被它蓋掉。
+  /// 資料庫還沒有這本書（剛從搜尋打開、還沒存過）時整筆新增 [book]。
+  Future<void> writeFields(Book book, BooksCompanion fields) {
+    return transaction(() async {
+      final updated = await (update(
+        books,
+      )..where((t) => t.bookUrl.equals(book.bookUrl))).write(fields);
+      if (updated == 0) await upsert(book);
+    });
+  }
+
+  /// 資料庫還沒有這本書時整筆新增 [book]；已經有的不動。
+  Future<void> insertIfMissing(Book book) =>
+      into(books).insert(_row(book), mode: InsertMode.insertOrIgnore);
+
+  /// 存這本書自己的閱讀設定（替換規則、重新分段這類開關）。
+  Future<void> saveReadConfig(Book book) =>
+      writeFields(book, BooksCompanion(readConfig: Value(book.readConfig)));
+
+  /// 封面下載完、存進手機之後補上檔案位置。只改封面檔的兩欄，而且只在這本
+  /// 書還在、自訂封面網址還是下載時那一個的時候寫：下載的期間讀者可能換了
+  /// 封面，或把書移出書架。
+  Future<void> saveStoredCover(Book book) {
+    final custom = book.customCoverUrl;
+    return (update(books)..where(
+          (t) =>
+              t.bookUrl.equals(book.bookUrl) &
+              (custom == null
+                  ? t.customCoverUrl.isNull()
+                  : t.customCoverUrl.equals(custom)),
+        ))
+        .write(
+          BooksCompanion(
+            coverLocalPath: Value(book.coverLocalPath),
+            customCoverLocalPath: Value(book.customCoverLocalPath),
+          ),
+        );
+  }
+
+  /// 存封面：自訂封面網址與存在這台的封面檔。
+  Future<void> saveCover(Book book) => writeFields(
+    book,
+    BooksCompanion(
+      coverLocalPath: Value(book.coverLocalPath),
+      customCoverUrl: Value(book.customCoverUrl),
+      customCoverLocalPath: Value(book.customCoverLocalPath),
+    ),
+  );
+
+  /// 加入書架：加入的記號，與手上的書整理好的章名（[Book.fillChapterTitle]）。
+  Future<void> saveJoinedShelf(Book book) => writeFields(
+    book,
+    BooksCompanion(
+      isInBookshelf: Value(book.isInBookshelf),
+      syncTime: Value(book.syncTime),
+      durChapterTitle: Value(book.durChapterTitle),
+    ),
+  );
+
+  /// 從閱讀器加入書架：閱讀位置與加入書架的記號；[withChapterCount] 時連目錄
+  /// 章數（這次才存進閱讀器手上的目錄時）。
+  Future<void> saveShelfEntry(Book book, {required bool withChapterCount}) =>
+      writeFields(
+        book,
+        BooksCompanion(
+          isInBookshelf: Value(book.isInBookshelf),
+          chapterIndex: Value(book.chapterIndex),
+          charOffset: Value(book.charOffset),
+          visualOffsetPx: Value(_normalizeVisualOffsetPx(book.visualOffsetPx)),
+          durChapterTitle: Value(book.durChapterTitle),
+          readerAnchorJson: Value(book.readerAnchorJson),
+          durChapterTime: Value(book.durChapterTime),
+          progressTime: Value(book.progressTime),
+          syncTime: Value(book.syncTime),
+          totalChapterNum: withChapterCount
+              ? Value(book.totalChapterNum)
+              : const Value.absent(),
+        ),
+      );
+
+  /// 書架的自訂排序：照 [bookUrls] 的先後寫順序，只改這一欄。
+  Future<void> updateOrders(List<String> bookUrls) {
+    return transaction(() async {
+      for (var i = 0; i < bookUrls.length; i++) {
+        await (update(books)..where((t) => t.bookUrl.equals(bookUrls[i])))
+            .write(BooksCompanion(order: Value(i)));
+      }
+    });
+  }
+
   /// 編輯書名／作者時，書籤與標註跟著同一筆書改身分。
   /// 三者在同一交易內，避免書已改名但標記還留在舊名字。
+  /// 只寫編輯資訊改得到的欄位：編輯畫面開著時背景檢查更新寫進去的章節、
+  /// 同步來的進度不被編輯前讀到的那份蓋掉。
   Future<void> upsertEditedBookInfo(Book previous, Book next) {
     return transaction(() async {
-      await upsert(next);
+      await writeFields(
+        next,
+        BooksCompanion(
+          name: Value(next.name),
+          author: Value(next.author),
+          customIntro: Value(next.customIntro),
+          kind: Value(next.kind),
+          customTag: Value(next.customTag),
+          originName: Value(next.originName),
+          tocUrl: Value(next.tocUrl),
+          customCoverUrl: Value(next.customCoverUrl),
+          customCoverLocalPath: Value(next.customCoverLocalPath),
+        ),
+      );
       if (previous.recordName == next.recordName &&
           previous.author == next.author) {
         return;

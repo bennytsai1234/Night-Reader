@@ -79,9 +79,10 @@ extension AnalyzeByCssHelper on AnalyzeByCssBase {
         }
         break;
       default:
+        // 同 Legado：同一個值只留一個（分類「玄幻,玄幻」、插圖重複）。
         for (final el in elements) {
           final attr = el.attributes[attrName]?.trim();
-          if (attr != null && attr.isNotEmpty) {
+          if (attr != null && attr.isNotEmpty && !textS.contains(attr)) {
             textS.add(attr);
           }
         }

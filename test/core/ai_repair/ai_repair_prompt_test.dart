@@ -206,6 +206,19 @@ void main() {
       },
     );
 
+    test('the AI is told only the check, not test, tries a second book', () {
+      // 試抓是書源除錯，同 Legado 只走搜尋結果第一本；改試第二本的只有校驗。
+      // 原本寫「試抓與校驗都會改試第二本」，第一本下架時 AI 會以為兩本都打不開。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(
+          contains('test 只走搜尋結果的第一本'),
+          contains('校驗從第一本往下走'),
+          isNot(contains('試抓與校驗都從搜尋結果的第一本')),
+        ),
+      );
+    });
+
     test('the AI is told a failed connect is not the site answering 500', () {
       // 2026-11-14 實跑：望书阁、大白、色情小说、趣书网、饿狼小说兩件，AI 把
       // java.connect 連不上時夜讀填的 500 當成網站回的，多花一兩輪。

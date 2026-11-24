@@ -29,24 +29,42 @@ class ReaderSessionFacade {
     final anchor = location.hasContentIdentity
         ? location
         : ReaderOpenTarget.resume(book).location;
-    book.readerAnchorJson = anchor.hasContentIdentity
-        ? jsonEncode(
-            anchor.copyWith(visualOffsetPx: location.visualOffsetPx).toJson(),
-          )
-        : null;
     book.durChapterTime = DateTime.now().millisecondsSinceEpoch;
     book.progressTime = book.durChapterTime;
     if (book.syncTime == 0) {
       book.syncTime = DateTime.now().millisecondsSinceEpoch;
     }
-    if (chapters.isNotEmpty) {
-      book.totalChapterNum = chapters.length;
-    }
     book.isInBookshelf = true;
-    await bookDao.upsert(book);
-    if (chapters.isNotEmpty) {
-      await chapterDao.insertChapters(chapters);
-    }
+    await chapterDao.transaction(() async {
+      // 閱讀中在書籍詳情檢查過更新時，資料庫已經是新目錄：照它，閱讀位置照
+      // 章節網址對到新目錄的序號；還沒有目錄才存閱讀器手上這份。
+      final storedChapters = await chapterDao.insertChaptersIfNone(
+        book.bookUrl,
+        chapters,
+      );
+      final index = location.chapterIndex;
+      if (!storedChapters && index >= 0 && index < chapters.length) {
+        final moved = await chapterDao.indexOfUrl(
+          book.bookUrl,
+          chapters[index].url,
+        );
+        if (moved != null) book.chapterIndex = moved;
+      }
+      if (storedChapters) book.totalChapterNum = chapters.length;
+      book.readerAnchorJson = anchor.hasContentIdentity
+          ? jsonEncode(
+              anchor
+                  .copyWith(
+                    chapterIndex: book.chapterIndex,
+                    visualOffsetPx: location.visualOffsetPx,
+                  )
+                  .toJson(),
+            )
+          : null;
+      // 只寫閱讀器管的這幾欄：閱讀中在書籍詳情改的書名、封面不被手上這份
+      // 蓋回去。
+      await bookDao.saveShelfEntry(book, withChapterCount: storedChapters);
+    });
     AppEventBus().fire(AppEventBus.upBookshelf, data: book.bookUrl);
     onCompleted?.call();
   }

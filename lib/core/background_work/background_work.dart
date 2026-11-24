@@ -127,6 +127,10 @@ class BackgroundWork extends ChangeNotifier {
 
   BackgroundJob? _job;
 
+  /// [_job] 只是佔著位置、還沒開始（[reserve]）：不送通知、通知上的按鈕不轉給
+  /// 它，等它 [begin]。
+  bool _reserved = false;
+
   /// 現在要顯示的樣子，與最後真的送給系統的樣子。
   BackgroundWorkStatus? _shown;
   BackgroundWorkStatus? _sent;
@@ -152,11 +156,26 @@ class BackgroundWork extends ChangeNotifier {
 
   BackgroundJob? get current => _job;
 
-  /// 開始 [job]：已經有一件在跑時不開始，傳回 false。要在 App 看得到時
-  /// 呼叫（使用者剛按下去）：Android 不讓背景的 App 啟動前景服務。
-  bool begin(BackgroundJob job, BackgroundWorkStatus status) {
-    if (_job != null) return identical(_job, job);
+  /// 使用者按下去、頁面推入動畫還沒播完（ADR 0018）：先佔住位置，別件開不了、
+  /// 自動換源排在後面，但不送通知、不要權限，等 [begin] 才開始。已經有一件
+  /// 佔著時傳回 false。佔了之後一定要 [begin] 或 [end]。
+  bool reserve(BackgroundJob job) {
+    if (_job != null) return false;
     _job = job;
+    _reserved = true;
+    _shown = null;
+    notifyListeners();
+    return true;
+  }
+
+  /// 開始 [job]（[reserve] 佔住的那件也從這裡開始）：已經有別件佔著時不開始，
+  /// 傳回 false。要在 App 看得到時呼叫（使用者剛按下去、或推入動畫剛播完）：
+  /// Android 不讓背景的 App 啟動前景服務。
+  bool begin(BackgroundJob job, BackgroundWorkStatus status) {
+    if (_job != null && !identical(_job, job)) return false;
+    if (identical(_job, job) && !_reserved) return true;
+    _job = job;
+    _reserved = false;
     _shown = status;
     final request = _requestPermission;
     _requestPermission = null;
@@ -209,15 +228,17 @@ class BackgroundWork extends ChangeNotifier {
   /// [job] 做到哪裡了：內容和上一次一樣（同一個千分位）時不送；前一次還沒
   /// 送完時連續幾次變動只送最後一次。
   void update(BackgroundJob job, BackgroundWorkStatus status) {
-    if (!identical(_job, job) || status == _shown) return;
+    if (!identical(_job, job) || _reserved || status == _shown) return;
     _shown = status;
     _send(() => _flush(job));
   }
 
-  /// [job] 結束了（做完、停下或出錯）：收掉通知，位置空出來；有排隊的
-  /// （[beginAfterCurrent]）就換成它，通知不收。
+  /// [job] 結束了（做完、停下、出錯，或佔著還沒開始就不做了）：收掉通知，
+  /// 位置空出來；有排隊的（[beginAfterCurrent]）就換成它，通知不收。
   void end(BackgroundJob job) {
     if (!identical(_job, job)) return;
+    final reserved = _reserved;
+    _reserved = false;
     final queued = _queued;
     if (queued != null) {
       _queued = null;
@@ -230,10 +251,13 @@ class BackgroundWork extends ChangeNotifier {
     }
     _job = null;
     _shown = null;
-    _send(() async {
-      _sent = null;
-      await _platform!.hide();
-    });
+    // 只佔著的那件沒送過通知，沒有要收的。
+    if (!reserved) {
+      _send(() async {
+        _sent = null;
+        await _platform!.hide();
+      });
+    }
     notifyListeners();
   }
 
@@ -260,7 +284,8 @@ class BackgroundWork extends ChangeNotifier {
 
   void _handleAction(String action) {
     final job = _job;
-    if (job == null) return;
+    // 只佔著的那件還沒有自己的通知：晚到的按鈕是上一件的。
+    if (job == null || _reserved) return;
     switch (action) {
       case 'pause':
         job.pauseFromSystem();
