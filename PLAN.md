@@ -4,10 +4,6 @@
 
 到下一個正式版為止只收穩、不開新功能線，照下面的階段走；每一項定了什麼在 `docs/proposals/roadmap.md`。
 
-## 第一階段：三份清單（只讀不改）
-
-- **對照 Legado**：舊功能常常出了狀況才發現 Legado 早就做了；主動對照書源與文字書的閱讀，結果寫在 `docs/proposals/legado-*.md`。（分支 docs/legado-sources）
-
 ## 第二階段：修已知的
 
 - **有書源的目錄只抓到 50 章**：AI 找書讀到的「最後一章」其實是第 37～40 章；照 Legado 查是書源只給 50 章，還是夜讀沒抓目錄的下一頁。（分支 fix/catalog-50-chapters）
