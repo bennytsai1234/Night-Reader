@@ -1,9 +1,13 @@
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
@@ -64,6 +68,7 @@ void main() {
   Future<void> open(
     WidgetTester tester, {
     Brightness brightness = Brightness.light,
+    List<BookChapter>? toc,
   }) async {
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1;
@@ -73,7 +78,7 @@ void main() {
         theme: ThemeData(brightness: brightness),
         home: ComicReaderPage(
           book: book.copyWith(),
-          initialChapters: chapters,
+          initialChapters: toc ?? chapters,
           pageSource: FakeComicSource(),
         ),
       ),
@@ -111,6 +116,67 @@ void main() {
     expect(saved.chapterIndex, 1);
     expect(saved.charOffset, 3);
     expect(saved.durChapterTitle, '第2話');
+  });
+
+  testWidgets('閱讀中檢查更新換了目錄，存的第幾話照章節網址對到新目錄', (tester) async {
+    await open(tester);
+    // 開 App 的書架檢查更新在閱讀時換上新目錄：最前面多了一話，資料庫的
+    // 進度照網址對到新的序號 2。
+    await tester.runAsync(() async {
+      await getIt<ChapterDao>().replaceByBook(book.bookUrl, [
+        BookChapter(
+          url: 'local://comic/1/extra',
+          title: '番外',
+          bookUrl: book.bookUrl,
+          index: 0,
+        ),
+        for (final chapter in chapters)
+          chapter.copyWith(index: chapter.index + 1),
+      ]);
+      final stored = (await getIt<BookDao>().getByUrl(book.bookUrl))!
+        ..chapterIndex = 2;
+      await getIt<BookDao>().upsert(stored);
+    });
+
+    await tester.drag(find.byType(ComicStripView), const Offset(0, -700));
+    await settle(tester);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 600)),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await settle(tester);
+
+    final saved = (await tester.runAsync(
+      () => getIt<BookDao>().getByUrl(book.bookUrl),
+    ))!;
+    expect(saved.chapterIndex, 2);
+    expect(saved.durChapterTitle, '第2話');
+  });
+
+  testWidgets('選單與換章分隔的章名照繁簡轉換', (tester) async {
+    ChineseUtils.initializeFromDictionaryData([
+      for (final path in ChineseUtils.dictionaryAssetPaths)
+        File(path).readAsStringSync(),
+    ]);
+    await getIt<SharedPreferences>().setInt(PreferKey.readerChineseConvert, 1);
+    await open(
+      tester,
+      toc: [
+        for (final (i, title) in const ['第一话 开始', '第二话 归来', '第三话 开始'].indexed)
+          BookChapter(
+            url: 'local://comic/1/$i',
+            title: title,
+            bookUrl: book.bookUrl,
+            index: i,
+          ),
+      ],
+    );
+
+    await tester.tapAt(const Offset(200, 400));
+    await tester.pump(const Duration(milliseconds: 400));
+    await settle(tester);
+    expect(find.text('第二話 歸來'), findsWidgets);
+    expect(find.text('第二话 归来'), findsNothing);
   });
 
   /// 畫面上已經畫出來的漫畫圖各乘上什麼顏色。
