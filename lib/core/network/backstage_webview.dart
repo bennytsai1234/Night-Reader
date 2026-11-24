@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -66,8 +67,45 @@ class BackstageWebView {
   static bool overrideUrlMatches(String url, String overrideUrlRegex) =>
       RegExp('^(?:$overrideUrlRegex)\$').hasMatch(url);
 
+  /// 網頁載入過的資源網址裡第一個整段符合 [sourceRegex] 的（同 Legado
+  /// `onLoadResource` 的 `resUrl.matches(sourceRegex)`）；沒有是 null。
+  @visibleForTesting
+  static String? resourceMatching(List<String> loaded, String sourceRegex) {
+    final pattern = RegExp('^(?:$sourceRegex)\$');
+    for (final resource in loaded) {
+      if (pattern.hasMatch(resource)) return resource;
+    }
+    return null;
+  }
+
+  /// 網頁載入過的資源網址（瀏覽器的 Resource Timing：圖、程式、XHR、
+  /// fetch）。WebView 套件收不到 Legado 用的 `onLoadResource`，改讀這份。
+  static const _loadedResourcesJs =
+      'JSON.stringify(performance.getEntriesByType("resource")'
+      '.map(function (e) { return e.name; }))';
+
+  /// [controller] 的網頁載入過、整段符合 [sourceRegex] 的資源網址；還沒有或
+  /// 讀不到（網頁還在換頁）是 null。
+  static Future<String?> _loadedResource(
+    WebViewController controller,
+    String sourceRegex,
+  ) async {
+    try {
+      final loaded = await controller.runJavaScriptReturningResult(
+        _loadedResourcesJs,
+      );
+      final urls = jsonDecode(webViewJsResult(loaded));
+      if (urls is! List) return null;
+      return resourceMatching([
+        for (final u in urls) u.toString(),
+      ], sourceRegex);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// [sourceRegex] 在網頁內容裡找到的資源網址，有分組時取第一組；沒找到是
-  /// null。Legado 等的是網頁真的載入的資源網址，這裡在內容裡找，網址寫在
+  /// null。等網頁載入的資源（[_loadedResource]）之外的另一條路：網址寫在
   /// HTML 屬性裡，實體（`&amp;`）解開才是真的網址。
   @visibleForTesting
   static String? sourceIn(String content, String sourceRegex) {
@@ -180,15 +218,17 @@ class BackstageWebView {
           // SnifferWebClient，網頁載完只跑書源給的 JS，不交回網頁內容，
           // 等到符合的跳轉（[onNavigationRequest]）或逾時才結束。跳轉常在
           // 網頁跑了一陣子之後才發生（例如播放頁幾秒後才導向音訊）。
-          // 同時有 [sourceRegex] 的，照舊在網頁內容裡找，先到的為準（Legado
-          // 兩條路都在 SnifferWebClient 裡、先到先得）。
+          // 同時有 [sourceRegex] 的，也等網頁載入符合的資源、在網頁內容裡
+          // 找，先到的為準（Legado 兩條路都在 SnifferWebClient 裡、先到
+          // 先得）。
+          final regex = sourceRegex;
+          final waitsForResource = regex != null && regex.isNotEmpty;
           if (overrideUrlRegex?.isNotEmpty ?? false) {
             final js = javaScript;
             if (js != null && js.isNotEmpty) {
               unawaited(controller.runJavaScript(js).catchError((_) {}));
             }
-            final regex = sourceRegex;
-            if (regex != null && regex.isNotEmpty) {
+            if (waitsForResource) {
               try {
                 final content = webViewJsResult(
                   await controller.runJavaScriptReturningResult(
@@ -201,6 +241,18 @@ class BackstageWebView {
               } catch (_) {
                 // 網頁還在換頁、讀不到內容：照樣等跳轉。
               }
+              void pollResources() async {
+                if (isCompleted) return;
+                if (await _loadedResource(controller, regex)
+                    case final found?) {
+                  finish({'body': found, 'url': currentUrl, 'code': 200});
+                  return;
+                }
+                if (isCompleted) return;
+                _timer = Timer(const Duration(seconds: 1), pollResources);
+              }
+
+              pollResources();
             }
             return;
           }
@@ -209,24 +261,43 @@ class BackstageWebView {
               ? javaScript!
               : 'document.documentElement.outerHTML';
 
+          // 等資源時書源的 JS 只跑一次（它可能點按鈕、捲頁），之後只讀資源
+          // 清單；這是跑出來的網頁內容，等到最後都沒等到資源時用。
+          String? pageContent;
+
           void evaluateAndCheck() async {
             if (isCompleted) return;
             try {
-              final result = await controller.runJavaScriptReturningResult(
-                jsToRun,
-              );
-              if (result.toString().isNotEmpty && result.toString() != 'null') {
-                final content = webViewJsResult(result);
-
-                final regex = sourceRegex;
-                if (regex != null && regex.isNotEmpty) {
-                  if (sourceIn(content, regex) case final source?) {
-                    finish({'body': source, 'url': currentUrl, 'code': 200});
+              // 同 Legado：等網頁載入整段符合 sourceRegex 的資源，回應的
+              // 內容就是那個網址。
+              if (waitsForResource) {
+                if (await _loadedResource(controller, regex)
+                    case final found?) {
+                  finish({'body': found, 'url': currentUrl, 'code': 200});
+                  return;
+                }
+              }
+              if (!waitsForResource || pageContent == null) {
+                final result = await controller.runJavaScriptReturningResult(
+                  jsToRun,
+                );
+                if (result.toString().isNotEmpty &&
+                    result.toString() != 'null') {
+                  final content = webViewJsResult(result);
+                  if (!waitsForResource) {
+                    finish({'body': content, 'url': currentUrl, 'code': 200});
                     return;
                   }
+                  pageContent = content;
                 }
-
-                finish({'body': content, 'url': currentUrl, 'code': 200});
+              }
+              // 等到最後還沒載入符合的資源：在內容裡找，再沒有就交回內容。
+              if (waitsForResource && pageContent != null && retryCount > 30) {
+                finish({
+                  'body': sourceIn(pageContent!, regex) ?? pageContent,
+                  'url': currentUrl,
+                  'code': 200,
+                });
                 return;
               }
             } catch (e) {

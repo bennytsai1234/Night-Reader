@@ -107,6 +107,80 @@ void main() {
 
     await tester.pump(const Duration(seconds: 61));
   });
+
+  // R7：sourceRegex 等網頁真的載入、整段符合的資源網址（Legado
+  // onLoadResource）；WebView 套件收不到這個事件，改讀 Resource Timing。
+  testWidgets('a resource the page loads later is waited for, and the source '
+      'script runs once', (tester) async {
+    Map<String, dynamic>? result;
+    unawaited(
+      BackstageWebView(
+        url: 'https://site.test/read',
+        sourceRegex: r'https://api\.test/chapter\?.*',
+        javaScript: 'load()',
+      ).getStrResponse().then((value) => result = value),
+    );
+    await tester.pump();
+
+    webView.pageFinished('https://site.test/read');
+    await tester.pump(const Duration(milliseconds: 1100));
+    expect(result, isNull, reason: '還沒載入就不交回網頁內容');
+
+    webView.resources = [
+      'https://cdn.test/app.js',
+      'https://api.test/chapter?id=1',
+    ];
+    await tester.pump(const Duration(seconds: 2));
+    expect(result?['body'], 'https://api.test/chapter?id=1');
+    expect(webView.evaluated, ['load()']);
+
+    await tester.pump(const Duration(seconds: 61));
+  });
+
+  testWidgets('waiting for a redirect, a matching resource that loads later '
+      'ends the wait too', (tester) async {
+    Map<String, dynamic>? result;
+    unawaited(
+      BackstageWebView(
+        url: 'https://site.test/play',
+        overrideUrlRegex: r'.*\.mp3',
+        sourceRegex: r'.*\.m3u8.*',
+      ).getStrResponse().then((value) => result = value),
+    );
+    await tester.pump();
+
+    webView.pageFinished('https://site.test/play');
+    await tester.pump(const Duration(milliseconds: 1100));
+    expect(result, isNull);
+
+    webView.resources = ['https://cdn.test/a.m3u8?t=1'];
+    await tester.pump(const Duration(seconds: 2));
+    expect(result?['body'], 'https://cdn.test/a.m3u8?t=1');
+
+    await tester.pump(const Duration(seconds: 61));
+  });
+
+  testWidgets('when the resource never loads, an address in the page is '
+      'taken at the end', (tester) async {
+    webView.page = '<video src="https://cdn.test/v.m3u8"></video>';
+    Map<String, dynamic>? result;
+    unawaited(
+      BackstageWebView(
+        url: 'https://site.test/watch',
+        sourceRegex: r'https://cdn\.test/[^"]+\.m3u8',
+      ).getStrResponse().then((value) => result = value),
+    );
+    await tester.pump();
+
+    webView.pageFinished('https://site.test/watch');
+    await tester.pump(const Duration(seconds: 10));
+    expect(result, isNull, reason: '等的途中不交回');
+
+    await tester.pump(const Duration(seconds: 25));
+    expect(result?['body'], 'https://cdn.test/v.m3u8');
+
+    await tester.pump(const Duration(seconds: 61));
+  });
 }
 
 /// 記下網頁載完、跳轉的回呼，測試自己觸發；執行 JS 回一份固定的網頁。
@@ -121,6 +195,12 @@ class _RecordingWebView extends WebViewPlatform {
 
   /// 網頁內容（`outerHTML`）。
   String page = '<html>內容</html>';
+
+  /// 網頁載入過的資源網址（Resource Timing）。
+  List<String> resources = [];
+
+  /// 交回結果的 JS（`runJavaScriptReturningResult`）跑過的，不含讀資源清單。
+  final List<String> evaluated = [];
 
   void navigate(String url, {bool mainFrame = true}) => _onNavigationRequest
       ?.call(NavigationRequest(url: url, isMainFrame: mainFrame));
@@ -178,9 +258,14 @@ class _Controller extends PlatformWebViewController {
       _web.ran.add(javaScript);
 
   @override
-  Future<Object> runJavaScriptReturningResult(String javaScript) async =>
-      // 真的 WebView 把字串結果編成 JSON 字串交回。
-      jsonEncode(_web.page);
+  Future<Object> runJavaScriptReturningResult(String javaScript) async {
+    // 真的 WebView 把字串結果編成 JSON 字串交回。
+    if (javaScript.contains('getEntriesByType')) {
+      return jsonEncode(jsonEncode(_web.resources));
+    }
+    _web.evaluated.add(javaScript);
+    return jsonEncode(_web.page);
+  }
 }
 
 class _Delegate extends PlatformNavigationDelegate {
