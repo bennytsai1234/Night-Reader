@@ -82,66 +82,41 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
     return ruleList;
   }
 
+  /// 規則的 `##正則##取代`，同 Legado `AnalyzeRule.replaceRegex`：
+  ///
+  /// - `###`（[SourceRule.replaceFirst]）：找第一個對到的，只交出它換過的
+  ///   樣子，對不到是空字串；正則寫壞時交出取代式。
+  /// - `##`：每一處都換；正則寫壞時照純文字取代。
   String replaceRegexLogic(String result, SourceRule rule) {
     if (rule.replaceRegex.isEmpty) {
       return result;
     }
     final regex = _buildCachedRegex(rule.replaceRegex);
-    if (regex == null) {
-      return result;
-    }
     if (rule.replaceFirst) {
+      if (regex == null) return rule.replacement;
       final match = regex.firstMatch(result);
-      if (match == null) {
-        return rule.rule.isEmpty ? '' : result;
-      }
-      var replacement = rule.replacement;
-      for (var i = 0; i <= match.groupCount; i++) {
-        replacement = replacement.replaceAll('\$$i', match.group(i) ?? '');
-      }
-      if (rule.rule.isEmpty) {
-        return replacement;
-      }
-      return result.replaceFirstMapped(regex, (match) {
-        var res = rule.replacement;
-        for (var i = 0; i <= match.groupCount; i++) {
-          res = res.replaceAll('\$$i', match.group(i) ?? '');
-        }
-        return res;
-      });
-    } else {
-      return result.replaceAllMapped(regex, (match) {
-        var res = rule.replacement;
-        for (var i = 0; i <= match.groupCount; i++) {
-          res = res.replaceAll('\$$i', match.group(i) ?? '');
-        }
-        return res;
-      });
+      return match == null ? '' : _expand(rule.replacement, match);
     }
+    if (regex == null) {
+      return result.replaceAll(rule.replaceRegex, rule.replacement);
+    }
+    return result.replaceAllMapped(
+      regex,
+      (match) => _expand(rule.replacement, match),
+    );
   }
 
-  String replaceRegexListItemLogic(String result, SourceRule rule) {
-    if (!_isPureRegexCaptureReplacement(rule)) {
-      return replaceRegexLogic(result, rule);
-    }
-
-    final regex = _buildCachedRegex(rule.replaceRegex);
-    if (regex == null) {
-      return result;
-    }
-    final match = regex.firstMatch(result);
-    if (match == null) {
-      return '';
-    }
-    var replacement = rule.replacement;
+  /// 取代式裡的 `$0`、`$1`…換成 [match] 的分組。
+  static String _expand(String replacement, Match match) {
+    var res = replacement;
     for (var i = 0; i <= match.groupCount; i++) {
-      replacement = replacement.replaceAll('\$$i', match.group(i) ?? '');
+      res = res.replaceAll('\$$i', match.group(i) ?? '');
     }
-    return replacement;
+    return res;
   }
 
   /// `##` 之後的正則，同 Legado `toRegex()`：照 Java 的預設與開頭旗標
-  /// （[javaRegExp]）；寫錯的正則不取代。
+  /// （[javaRegExp]）；寫錯的正則是 null。
   RegExp? _buildCachedRegex(String pattern) {
     if (AnalyzeRuleBase.regexCache.containsKey(pattern)) {
       return AnalyzeRuleBase.regexCache[pattern];
@@ -153,11 +128,5 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
     } catch (_) {
       return null;
     }
-  }
-
-  bool _isPureRegexCaptureReplacement(SourceRule rule) {
-    return rule.replaceFirst &&
-        rule.replacement.isNotEmpty &&
-        RegExp(r'^(?:\$\d{1,2})+$').hasMatch(rule.replacement);
   }
 }

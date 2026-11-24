@@ -88,4 +88,70 @@ void main() {
       );
     }
   });
+  // Java 的 Pattern 不用開選項就認得 \p{…}；Dart 要開 unicode，沒開時 \p 是
+  // 字母 p。Java 專有的名稱換成 Dart 認得的寫法。
+  group(r'\p{…} 字元類別', () {
+    List<String> all(String pattern, String input) => [
+      for (final m in javaRegExp(pattern).allMatches(input)) m.group(0)!,
+    ];
+
+    test('一般分類：標點、文字、數字', () {
+      // { } 在 Unicode 是標點（Ps、Pe），Java 一樣對得到；p、P 是字母。
+      expect(all(r'[\p{P}]+', 'a,b。cpP{}'), [',', '。', '{}']);
+      expect(all(r'\p{L}+', '中文 abc'), ['中文', 'abc']);
+      expect(all(r'\pL+', '中文1'), ['中文']);
+      expect(all(r'\P{L}+', '中文12文'), ['12']);
+      expect(all(r'\p{IsP}', 'a！'), ['！']);
+      expect(all(r'\p{Nd}+', '第12章'), ['12']);
+    });
+
+    test('文字系統與 Unicode 區塊', () {
+      expect(all(r'\p{IsHan}+', 'abc漢字def'), ['漢字']);
+      expect(all(r'\p{script=Han}+', 'abc漢字'), ['漢字']);
+      expect(all(r'\p{InCJKUnifiedIdeographs}+', 'a漢字。'), ['漢字']);
+      expect(all(r'[^\p{InCJKUnifiedIdeographs}]+', '漢字，abc'), ['，abc']);
+    });
+
+    // Legado 跑在 Android 上，Java 的正則由 ICU 執行：POSIX 名稱照 Unicode
+    // 認（桌機的 JDK 只看 ASCII）。
+    test('POSIX 名稱照 Android（ICU）認 Unicode', () {
+      expect(all(r'\p{Punct}+', 'a,.b。'), [',.', '。']);
+      expect(all(r'\p{Alpha}+', 'abc中α1'), ['abc中α']);
+      expect(all(r'\p{Digit}+', 'a12３'), ['12３']);
+      expect(all(r'\p{Space}', 'a b　'), [' ', '　']);
+      expect(all(r'\p{Blank}+', 'a \t　b\n'), [' \t　']);
+      expect(all(r'\p{Alnum}+', '中3,'), ['中3']);
+      expect(all(r'\p{XDigit}+', 'xaF9g'), ['aF9']);
+      expect(all(r'\p{ASCII}+', 'ab中'), ['ab']);
+      expect(all(r'[^\P{Punct}]+', 'a。b'), ['。']);
+      expect(all(r'\p{Graph}+', 'a b'), ['a', 'b']);
+      expect(all(r'\p{Print}+', 'a b\n'), ['a b']);
+    });
+
+    test('Java 的 java… 名稱與不加 Is 的文字系統', () {
+      expect(all(r'\p{javaLowerCase}+', 'aBc'), ['a', 'c']);
+      expect(all(r'\p{javaWhitespace}+', 'a \tb'), [' \t']);
+      expect(all(r'\p{Han}+', 'ab漢字'), ['漢字']);
+    });
+
+    test(r'規則有 \p 時，其他 Java 寫法照樣能用', () {
+      expect(all(r'\p{L}\x{41}', '中A'), ['中A']);
+      expect(all(r'\p{L}\0101', '中A'), ['中A']);
+      expect(all(r'\p{L}\Q.*\E', '中.*'), ['中.*']);
+      expect(all(r'\p{L}\h\p{L}', '甲　乙'), ['甲　乙']);
+      expect(all(r'\p{L}\R', '甲\r\n'), ['甲\r\n']);
+      expect(all(r'\p{L}\e', '甲\u001B'), ['甲\u001B']);
+    });
+
+    test(r'規則裡其他 Java 的跳脫照樣能用', () {
+      expect(all(r'[\p{P}\-_]+', 'a-_,b'), ['-_,']);
+      expect(all(r'\p{P}\<\"', '，<"'), ['，<"']);
+      expect(all(r'[\w-]+\p{P}', 'ab-c。'), ['ab-c。']);
+      expect(all(r'\p{L}}', '中}'), ['中}']);
+    });
+
+    test('認不得的名稱丟出 FormatException', () {
+      expect(() => javaRegExp(r'\p{NoSuchThing}'), throwsFormatException);
+    });
+  });
 }
