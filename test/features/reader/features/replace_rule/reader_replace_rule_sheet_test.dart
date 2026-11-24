@@ -122,4 +122,33 @@ void main() {
     );
     expect(saved?.getReSegment(), isTrue);
   });
+
+  testWidgets('「本書重新分段」只存這本書的設定，閱讀中寫進去的別的欄位留著', (tester) async {
+    final book = Book(
+      bookUrl: 'https://b.test/1',
+      origin: 'https://b.test',
+      name: '舊書名',
+    )..totalChapterNum = 10;
+    // 閱讀中在書籍詳情檢查更新、改了書名：資料庫裡的比閱讀器手上的新。
+    await tester.runAsync(
+      () => BookDao(db).upsert(
+        book.copyWith()
+          ..name = '新書名'
+          ..totalChapterNum = 12
+          ..latestChapterTitle = '第十二章',
+      ),
+    );
+    await openSheet(tester, book: book);
+
+    await tester.tap(find.text('本書重新分段'));
+    await settle(tester);
+
+    final saved = await tester.runAsync(
+      () => BookDao(db).getByUrl('https://b.test/1'),
+    );
+    expect(saved?.getReSegment(), isTrue);
+    expect(saved?.name, '新書名');
+    expect(saved?.totalChapterNum, 12);
+    expect(saved?.latestChapterTitle, '第十二章');
+  });
 }

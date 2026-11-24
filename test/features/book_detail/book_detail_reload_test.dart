@@ -163,6 +163,26 @@ void main() {
     },
   );
 
+  test(
+    'saving a cover keeps what a background update check just wrote',
+    () async {
+      final provider = await openDetail();
+      // 背景檢查更新寫回新的章數與最新章節，詳情手上那份還是舊的。
+      final checked = (await db.bookDao.getByUrl(oldUrl))!
+        ..totalChapterNum = 12
+        ..latestChapterTitle = '第十二章';
+      await db.bookDao.upsert(checked);
+
+      final covered = await provider.updateCover('');
+      expect(covered.success, isTrue);
+
+      final stored = (await db.bookDao.getByUrl(oldUrl))!;
+      expect(stored.customCoverUrl, '');
+      expect(stored.totalChapterNum, 12);
+      expect(stored.latestChapterTitle, '第十二章');
+    },
+  );
+
   // 同 Legado（BookInfoEditActivity）：簡介欄和書源的一樣就不算自訂，書源的
   // 簡介不被蓋掉。預填的是整理過的簡介，只改書名時也不能把它固定下來。
   test('the intro becomes the reader\'s own only when it is edited', () async {

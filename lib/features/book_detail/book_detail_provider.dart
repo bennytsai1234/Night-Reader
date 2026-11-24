@@ -940,7 +940,7 @@ class BookDetailProvider extends ChangeNotifier {
     next.customCoverLocalPath = null;
     try {
       await _coverStorage.ensureDisplayCoverStored(next);
-      await _bookDao.upsert(next);
+      await _bookDao.saveCover(next);
       _book = next;
       AppEventBus().fire(AppEventBus.upBookshelf);
       notifyListeners();
@@ -1155,7 +1155,8 @@ class BookDetailProvider extends ChangeNotifier {
   Future<void> _storeDisplayCover() async {
     try {
       await _coverStorage.ensureDisplayCoverStored(_book);
-      await _bookDao.upsert(_book);
+      // 封面下載完才寫：只寫封面，這段期間背景檢查寫進去的不被蓋掉。
+      await _bookDao.saveCover(_book);
       _announceCover();
       if (hasReadyWorld) notifyListeners();
     } catch (error) {

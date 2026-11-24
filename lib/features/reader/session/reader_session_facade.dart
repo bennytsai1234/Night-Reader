@@ -43,7 +43,8 @@ class ReaderSessionFacade {
       book.totalChapterNum = chapters.length;
     }
     book.isInBookshelf = true;
-    await bookDao.upsert(book);
+    // 只寫閱讀器管的這幾欄：閱讀中在書籍詳情改的書名、封面不被手上這份蓋回去。
+    await bookDao.saveShelfEntry(book, withChapterCount: chapters.isNotEmpty);
     if (chapters.isNotEmpty) {
       await chapterDao.insertChapters(chapters);
     }

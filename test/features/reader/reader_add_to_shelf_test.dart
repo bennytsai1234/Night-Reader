@@ -104,4 +104,23 @@ void main() {
     expect(saved.readerAnchorJson, isNull);
     expect(saved.charOffset, 200);
   });
+
+  test('adding to the shelf keeps book info edited while reading', () async {
+    final book = unshelvedBook();
+    // 閱讀中從書籍詳情改了書名與封面：資料庫那一列已經是新的，閱讀器手上
+    // 還是開書時那一份。
+    await bookDao.upsert(
+      book.copyWith()
+        ..name = '新書名'
+        ..customCoverUrl = 'https://s.example/cover.jpg',
+    );
+
+    final saved = await addToShelf(book, reading);
+
+    expect(saved.isInBookshelf, isTrue);
+    expect(saved.charOffset, 200);
+    expect(saved.durChapterTitle, '第一章');
+    expect(saved.name, '新書名');
+    expect(saved.customCoverUrl, 'https://s.example/cover.jpg');
+  });
 }

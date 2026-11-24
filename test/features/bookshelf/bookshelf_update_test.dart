@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/constant/book_type.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -117,6 +118,37 @@ void main() {
   });
 
   tearDown(() => provider.dispose());
+
+  test(
+    'reordering in custom order keeps what a background check wrote',
+    () async {
+      await bookDao.upsert(shelfBook('https://a.example/1'));
+      await bookDao.upsert(shelfBook('https://a.example/2'));
+      final previousSort = provider.sortMode;
+      await provider.setSortMode(BookshelfSortMode.custom);
+      // 排序方式存在共用的偏好設定裡，之後的測試照預設的排序。
+      addTearDown(() async {
+        final prefs = GetIt.instance<SharedPreferences>();
+        await prefs.setInt(PreferKey.bookshelfSort, previousSort.index);
+      });
+      await provider.loadBooks();
+      final before = [for (final book in provider.books) book.bookUrl];
+      // 背景檢查寫回第一本的新章節，書架記憶體裡還是查之前的。
+      final checked = (await bookDao.getByUrl(before.first))!
+        ..totalChapterNum = 12
+        ..latestChapterTitle = '第十二章';
+      await bookDao.upsert(checked);
+
+      await provider.reorderBooks(1, 0);
+
+      final first = (await bookDao.getByUrl(before.first))!;
+      final second = (await bookDao.getByUrl(before.last))!;
+      expect(first.totalChapterNum, 12);
+      expect(first.latestChapterTitle, '第十二章');
+      expect(second.order, 0);
+      expect(first.order, 1);
+    },
+  );
 
   test('a download finishing while the shelf is covered reloads it only '
       'once uncovered', () async {

@@ -76,6 +76,63 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
   Future<void> upsert(Book book) =>
       into(books).insertOnConflictUpdate(_row(book));
 
+  /// 只寫 [fields] 這幾欄，其他欄位留著資料庫裡現在的：手上的 [book] 可能是
+  /// 打開畫面時讀的，之後背景檢查更新、同步、書籍詳情寫進去的不被它蓋掉。
+  /// 資料庫還沒有這本書（剛從搜尋打開、還沒存過）時整筆新增 [book]。
+  Future<void> writeFields(Book book, BooksCompanion fields) {
+    return transaction(() async {
+      final updated = await (update(
+        books,
+      )..where((t) => t.bookUrl.equals(book.bookUrl))).write(fields);
+      if (updated == 0) await upsert(book);
+    });
+  }
+
+  /// 存這本書自己的閱讀設定（替換規則、重新分段這類開關）。
+  Future<void> saveReadConfig(Book book) =>
+      writeFields(book, BooksCompanion(readConfig: Value(book.readConfig)));
+
+  /// 存封面：自訂封面網址與存在這台的封面檔。
+  Future<void> saveCover(Book book) => writeFields(
+    book,
+    BooksCompanion(
+      coverLocalPath: Value(book.coverLocalPath),
+      customCoverUrl: Value(book.customCoverUrl),
+      customCoverLocalPath: Value(book.customCoverLocalPath),
+    ),
+  );
+
+  /// 從閱讀器加入書架：閱讀位置與加入書架的記號；[withChapterCount] 時連目錄
+  /// 章數（閱讀器手上有目錄時）。
+  Future<void> saveShelfEntry(Book book, {required bool withChapterCount}) =>
+      writeFields(
+        book,
+        BooksCompanion(
+          isInBookshelf: Value(book.isInBookshelf),
+          chapterIndex: Value(book.chapterIndex),
+          charOffset: Value(book.charOffset),
+          visualOffsetPx: Value(_normalizeVisualOffsetPx(book.visualOffsetPx)),
+          durChapterTitle: Value(book.durChapterTitle),
+          readerAnchorJson: Value(book.readerAnchorJson),
+          durChapterTime: Value(book.durChapterTime),
+          progressTime: Value(book.progressTime),
+          syncTime: Value(book.syncTime),
+          totalChapterNum: withChapterCount
+              ? Value(book.totalChapterNum)
+              : const Value.absent(),
+        ),
+      );
+
+  /// 書架的自訂排序：照 [bookUrls] 的先後寫順序，只改這一欄。
+  Future<void> updateOrders(List<String> bookUrls) {
+    return transaction(() async {
+      for (var i = 0; i < bookUrls.length; i++) {
+        await (update(books)..where((t) => t.bookUrl.equals(bookUrls[i])))
+            .write(BooksCompanion(order: Value(i)));
+      }
+    });
+  }
+
   /// 編輯書名／作者時，書籤與標註跟著同一筆書改身分。
   /// 三者在同一交易內，避免書已改名但標記還留在舊名字。
   Future<void> upsertEditedBookInfo(Book previous, Book next) {
