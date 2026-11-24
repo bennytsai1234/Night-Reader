@@ -28,6 +28,15 @@ abstract final class Big5 {
     return -1;
   }
 
+  /// [decode] 在第 [i] 個位元組解出的那一個字佔幾個位元組（1 或 2）；表裡
+  /// 沒有的格解成替代字元，也佔 2 個。本地 TXT 照它算章節的位元組位置。
+  static int byteLengthAt(List<int> bytes, int i) {
+    final b = bytes[i];
+    if (b < 0x81 || b > 0xFE) return 1;
+    final trail = i + 1 < bytes.length ? _trailIndex(bytes[i + 1]) : -1;
+    return trail < 0 ? 1 : 2;
+  }
+
   static String decode(List<int> bytes) {
     final out = StringBuffer();
     var i = 0;

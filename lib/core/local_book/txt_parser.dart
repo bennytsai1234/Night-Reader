@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../utils/big5.dart';
 import '../utils/encoding_detect.dart';
 
 /// TxtParser - 高性能 TXT 解析器
@@ -323,6 +324,13 @@ class TxtParser {
       while (index < bytes.length) {
         final unit = _utf8UnitAt(bytes, index);
         advance(unit.byteLength, unit.codeUnits);
+      }
+      return completedOffsets();
+    }
+
+    if (Big5.names.contains(normalized)) {
+      while (index < bytes.length) {
+        advance(Big5.byteLengthAt(bytes, index), 1);
       }
       return completedOffsets();
     }

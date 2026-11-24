@@ -231,4 +231,21 @@ void main() {
     final content = await service.getContent(result.book, result.chapters[1]);
     expect(content, contains('乙他說：「我們走吧。」'));
   });
+
+  test('Big5 的 TXT 有表裡沒有的字（造字）時，後面的章照樣從對的地方讀', () async {
+    final dir = await Directory.systemTemp.createTemp('txt_big5_pua_');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/書.txt');
+    String body(String marker) => '　　$marker他說：「我們走吧。」她點了點頭，沒有說話。\n' * 40;
+    await file.writeAsBytes([
+      ...Big5.encode('第一章 開始\n${body('甲')}'),
+      0xC7, 0xFD, 0x0A, // 造字區一格，解成替代字元
+      ...Big5.encode('第二章 結束\n${body('乙')}'),
+    ]);
+    final service = LocalBookService();
+    final result = (await service.importBook(file.path))!;
+    expect(result.book.charset, 'Big5');
+    final content = await service.getContent(result.book, result.chapters[1]);
+    expect(content, startsWith('第二章 結束'));
+  });
 }

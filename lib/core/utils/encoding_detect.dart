@@ -138,9 +138,10 @@ class EncodingDetect {
     return getEncode(bytes);
   }
 
-  /// 偵測位元組陣列的編碼。有 BOM 照 BOM；沒有時照 Legado（ICU 的
-  /// `CharsetDetector`，[_IcuGuess]）在 UTF-8、沒有 BOM 的 UTF-16、GB18030 與
-  /// Big5 之間挑信心最高的。GB18030 回傳 `GBK`（同一套解法）。
+  /// 偵測位元組陣列的編碼。有 BOM 照 BOM；沒有時照 Legado 用的 ICU
+  /// `CharsetDetector` 裡的五個辨識器（[_IcuGuess]），在 UTF-8、沒有 BOM 的
+  /// UTF-16、GB18030 與 Big5 之間挑信心最高的。GB18030 回傳 `GBK`（同一套
+  /// 解法）。
   static String getEncode(Uint8List bytes) {
     if (bytes.isEmpty) return 'UTF-8';
 
@@ -213,11 +214,12 @@ class EncodingDetect {
       bytes.length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF;
 }
 
-/// Legado 偵測編碼用的 ICU `CharsetDetector`（`lib/icu4j/`）夜讀解得了的那幾
-/// 個辨識器：每個算一個 0～100 的信心，挑最高的；一樣高時挑 ICU 清單裡排在
-/// 後面的（ICU 照信心穩定排序再反過來），所以 Big5 贏 GB18030。其他語言的
-/// 單位元組與日韓編碼夜讀解不了，不搬。只看前 512KB（Legado 讀 TXT 時也
-/// 只拿這麼多去偵測）。
+/// Legado 偵測編碼用的 ICU `CharsetDetector`（`lib/icu4j/`）裡夜讀解得了的
+/// 五個辨識器：UTF-8、UTF-16BE、UTF-16LE、GB18030、Big5。每個算一個 0～100
+/// 的信心，挑最高的；一樣高時挑排在後面的（ICU 照信心穩定排序再反過來）。
+/// ICU 的其他辨識器（ISO-8859-x、KOI8-R、Shift_JIS、EUC、UTF-32）對應的編碼
+/// 夜讀解不了，不搬，所以純英文這類 Legado 判成 ISO-8859-1 的，夜讀判
+/// UTF-8，畫面上的字一樣。只看前 512KB（Legado 讀 TXT 時也只拿這麼多）。
 class _IcuGuess {
   _IcuGuess(Uint8List bytes)
     : _input = bytes.length > 512000
@@ -231,8 +233,11 @@ class _IcuGuess {
       ('UTF-8', _utf8()),
       ('UTF-16BE', _utf16(bigEndian: true)),
       ('UTF-16LE', _utf16(bigEndian: false)),
-      ('GBK', _mbcs(_gb18030Next, _gb18030Common)),
+      // 同分時排在後面的贏。ICU 是 Big5 在後；夜讀讓 GBK 贏：10 個字以內的
+      // 短文字兩邊都是 10 分、分不出來，照改用 ICU 之前的判斷當 GBK（Legado
+      // 在這種情況也常判錯）。
       ('Big5', _mbcs(_big5Next, _big5Common)),
+      ('GBK', _mbcs(_gb18030Next, _gb18030Common)),
     ];
     var best = 'UTF-8';
     var confidence = 0;

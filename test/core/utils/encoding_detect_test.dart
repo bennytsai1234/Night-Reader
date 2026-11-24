@@ -68,8 +68,17 @@ void main() {
       );
     });
 
-    test('只有幾個字的 Big5 也認得出', () {
-      expect(EncodingDetect.getEncode(Big5.encode('他說：「我們走吧。」')), 'Big5');
+    test('10 個字以內分不出 GBK 與 Big5，照改之前當 GBK', () {
+      expect(
+        EncodingDetect.getEncode(Uint8List.fromList(gbk.encode('你好世界'))),
+        'GBK',
+      );
+      expect(
+        EncodingDetect.getEncode(
+          Uint8List.fromList(gbk.encode('<html><body>你好世界</body></html>')),
+        ),
+        'GBK',
+      );
     });
 
     test('沒有 BOM 的 UTF-16LE', () {
@@ -84,11 +93,9 @@ void main() {
 
     test('UTF-8 照舊', () {
       expect(
-        EncodingDetect.getEncode(Uint8List.fromList(utf8Encode(traditional))),
+        EncodingDetect.getEncode(Uint8List.fromList(utf8.encode(traditional))),
         'UTF-8',
       );
     });
   });
 }
-
-List<int> utf8Encode(String text) => const Utf8Encoder().convert(text);
