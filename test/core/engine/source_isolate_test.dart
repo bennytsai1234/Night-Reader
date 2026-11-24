@@ -25,6 +25,7 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/engine/source_isolate/isolate_channel.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
@@ -746,6 +747,30 @@ void main() {
         'https://web.test|https://web.test',
       );
     }, skip: quickJsUnavailableReason());
+  });
+
+  // AI 修書源拿草稿試抓、校驗時，送進書源 isolate 的工作也寫草稿那一份
+  // 變數，不寫進正式的書源。
+  test('work sent from a draft uses the draft variables', () async {
+    final source = BookSource(
+      bookSourceUrl: 'https://draft.test',
+      bookSourceName: '草稿',
+    );
+    final inDraft = await BaseSource.inDraftVariables(
+      'd1',
+      () => SourceIsolate.run(
+        (_) async => BookSource(
+          bookSourceUrl: 'https://draft.test',
+          bookSourceName: '草稿',
+        ).ruleVariableCacheKey('k'),
+      ),
+    );
+
+    expect(
+      inDraft,
+      BaseSource.inDraftVariables('d1', () => source.ruleVariableCacheKey('k')),
+    );
+    expect(inDraft, isNot(source.ruleVariableCacheKey('k')));
   });
 
   test('logs reach the main isolate', () async {
