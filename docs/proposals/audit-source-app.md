@@ -16,6 +16,7 @@
 | 書源 3 | `lib/core/source_check/` | 6／6 | 2 |
 | 書源 3 | `lib/core/source_switch/` | 5／5 | 0 |
 | 書源 3 | `lib/features/source_manager/`（不含 `ai_repair/`） | 22／22 | 0（第 4 筆的入口在發現頁、書籍詳情） |
+| 書源 3 | `lib/features/search/`（含 `ai_find/` 畫面） | 15／15 | 1 |
 
 ## 問題
 
@@ -122,6 +123,31 @@
 **修法方向**：寫回時只寫校驗管的欄位（分組、註解、最後校驗時間、校驗改寫的類型與更新時間），用欄位更新而不是整列覆蓋；書源已經不在就不寫。同一個做法也套到逾時與意外出錯那兩條（`check_source_service.dart:730-745`、`772-782`，它們讀的是當下的書源，但同樣整列寫）。
 
 **輕重**：資料遺失或寫壞。
+
+#### 5. 停用的、或被校驗標成搜尋失效的書源，「在此書源中搜尋」一本都搜不到，也不說為什麼
+
+**會發生什麼**：書源管理長按一個停用的書源（或發現頁長按書源）選「在此書源中搜尋」，打了書名送出，搜尋馬上結束、寫「找不到相關書籍」。被校驗標成「搜尋失效」「已隔離」的書源也一樣，讀者想試它修好了沒，看到的是網站沒有這本書。Legado 在單一書源搜尋時不看啟用與否，直接用那個書源。
+
+**為什麼**：
+- 兩個入口都帶著那個書源打開搜尋頁（`lib/features/source_manager/source_manager_page.dart:738-743`、`lib/features/explore/explore_page.dart:514-520`），搜尋範圍是「名稱::網址」（`lib/features/search/search_page.dart:78-81`）。
+- 單一書源的範圍讀書源時多擋了一道，停用或校驗不准搜尋的回空清單（`lib/features/search/models/search_scope.dart:90-97`）：
+
+  ```dart
+  final source = await dao.getByUrl(url);
+  if (source == null || !source.isSearchEnabledByRuntime) {
+    return [];
+  }
+  ```
+
+  `isSearchEnabledByRuntime` 是「啟用、夜讀打得開、校驗准許搜尋」（`lib/core/models/source/book_source_logic.dart:725-726`）。
+- 書源是空的就直接結束、當成沒有結果（`lib/features/search/search_model.dart:332-335`），畫面是「找不到相關書籍」（`lib/features/search/search_page.dart:436`）。
+- Legado 的單一書源範圍是 `appDb.bookSourceDao.getBookSourcePart(url)`，不看啟用（`legado/app/src/main/java/io/legado/app/ui/book/search/SearchScope.kt:109-113`）；書源不在了才退回全部啟用的書源（`127-134`），夜讀這時也回空清單。
+
+**怎麼確認**：`test/features/search/search_scope_test.dart`（新檔或既有的範圍測試）放一個 `enabled: false` 的書源與一個分組帶「搜尋失效」的書源，`SearchScope.fromSource(...)` 各取一次 `getBookSources()`。斷言都回那一個書源；書源網址不在資料庫時回全部啟用的書源。
+
+**修法方向**：單一書源的範圍照 Legado：有這個書源就用它，不看啟用與校驗標記；不在了退回全部（同分組的退回，`onScopeNarrowed` 會把頁首改成全部）。
+
+**輕重**：功能沒反應或結果錯。
 
 ## 拿不準
 
