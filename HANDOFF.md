@@ -5,14 +5,14 @@
 - 這次換對話是使用者額度快用完，要求停手交接。
 
 ## 做到哪
-- 分支 `fix/background-work-register`（從 `origin/beta` `5085dc92`），還沒改程式；入口表查完，在 `TODO.md`。
-- 真正搶位置的只有自動換源（`beginAfterCurrent`）；共同原因是新工作到 `start()` 才佔位置，`RepairRun._launch` 不看 `BackgroundWork.begin` 的回傳。
+- 分支 `fix/background-work-register`，`beta` 已標分支；入口表在 `TODO.md`，目前只做過唯讀盤點，程式和測試都還沒改。
+- 修書源、AI 建立書源與 AI 找書都到轉場後才登記，而且共用的啟動流程在登記失敗後仍開跑；校驗則在登記前就結束了原本暫停的工作。
 
 ## 還沒定、這個對話自己判斷的
 - 改法：`BackgroundWork` 加「佔位置但不送通知」，`RepairRuns.adopt` 對新工作當場佔（入口已在同一段同步程式看過位置，失敗照舊收掉、不推頁、入口灰掉）；`start()` 才送通知、要通知權限（權限框不在轉場中跳）、開始重的工作。
-- `update()` 在還沒 `begin` 時不送；頁面在推入動畫播完前關掉時，頁面拆掉後（`scheduleMicrotask`）開始，照 ADR 0058「開始後返回照跑」。
+- 等轉場時先不送進度，也不能把舊通知的操作交給新工作；補測提早返回時如何在退場後啟動，避免一直佔著位置。
 - 校驗書源：先建 `SourceCheckJob` 並佔位置，再存設定、結束暫停中的那次；佔不到就不動暫停的那次。
-- 幀預算量 `test/frame_budget/source_manager_frame_budget_test.dart`、`search_frame_budget_test.dart`；測試在 `test/features/source_manager/repair_runs_test.dart` 的 `_FakePlatform` 上寫。
+- 書源管理和搜尋已有幀預算測試，接手時確認量測涵蓋實際按下開始到轉場結束；通知測試可沿用 `test/features/source_manager/repair_runs_test.dart` 的 `_FakePlatform`。
 
 ## 下一步
 - 先載入 `handoff`、`plan` 技能，把上面的理解講給使用者聽，使用者說可以再動手；接著照 `TODO.md`。

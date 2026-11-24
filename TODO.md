@@ -17,7 +17,7 @@ PLAN.md：背景工作在頁面轉場的空檔被別件搶先時照樣跑
 | 單一書源 AI 修復 `ai_repair_page.dart` `openAiRepair` | 按下去、讀完 AI 設定再看一次 | 推頁，推入動畫播完 `RepairRun.start()` | 沒處理：`_launch` 不看 `begin` 的回傳，照跑，兩件同時 |
 | 修復異常書源 `source_repair_page.dart` `openSourceRepair` | 同上 | 同上 | 同上 |
 | AI 建立書源 `ai_create_source_page.dart` `_start` | 讀設定、問同網站之後 | `pushReplacement` 後推入動畫播完 | 同上 |
-| AI 找書 `ai_find_page.dart` `_start` | 讀設定後；之後還有存偏好的 await 才 adopt | 下一幀 start | 同上 |
+| AI 找書 `ai_find_page.dart` `_start` | 讀設定後；之後還有存偏好的 await 才 adopt | 下一幀檢查路由動畫，動畫已播完才 start | 同上 |
 | 放到背景的搜尋 `search_provider.dart` `moveToBackground` | 按下去當下 | 同一段同步程式 | 不會失敗 |
 | 校驗書源（全部、選中）`source_manager_provider.dart` | 只有選單灰不灰 | 存設定、`pausedCheck.end()` 之後才 `SourceCheckJob.run()` 第一行 | 不開始、不說；暫停中的那次已被結束 |
 | 繼續暫停的校驗 | 按下去當下 | 同步 | 不會失敗 |
