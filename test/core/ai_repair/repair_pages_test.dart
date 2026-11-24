@@ -147,6 +147,24 @@ void main() {
       );
     });
 
+    // 兩次讀之間修復途中多讀到一個秘密：位置照原文算，接著讀不缺字。
+    test('the next part starts in the same place when the secrets change '
+        'between reads', () async {
+      final body = '前$left$right${'x' * 100}後';
+      final page = RepairPage(1, 'https://site.example/', body);
+
+      final first = await readRepairPage(page, raw: true, length: 50);
+      expect(first, contains('"from":50'));
+      final second = await readRepairPage(
+        page,
+        raw: true,
+        from: 50,
+        secrets: secrets,
+      );
+
+      expect(second.substring(second.indexOf('\n') + 1), '${'x' * 68}後');
+    });
+
     test('when finding in a page', () async {
       final body =
           '<div class="row"><span>${'字' * 270}$left$right${'字' * 60}</span>'

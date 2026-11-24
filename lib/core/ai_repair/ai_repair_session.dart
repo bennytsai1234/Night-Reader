@@ -957,7 +957,12 @@ class AiRepairSession extends ChangeNotifier {
       if (CancelToken.isCancel(error) || _halting) return null;
       rethrow;
     } finally {
-      await _refreshSecrets(job);
+      // 重讀不成不蓋掉這件事本身的結果或錯誤：舊的秘密照樣遮。
+      try {
+        await _refreshSecrets(job);
+      } catch (error) {
+        AppLog.w('AI 修書源重讀秘密失敗: ${error.runtimeType}');
+      }
     }
   }
 

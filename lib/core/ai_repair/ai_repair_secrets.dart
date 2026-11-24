@@ -77,6 +77,39 @@ String redactAiRepairSecrets(String text, Set<String> secrets) {
   return out;
 }
 
+/// [text] 從 [start] 到 [end] 的那一段，遮掉 [secrets] 給 AI 看（讀頁、讀
+/// 章節分段）。切點落在一段秘密中間時往外延到整段，前後兩段都只看得到遮過
+/// 的；位置照原文算，秘密清單在兩次讀之間變了，接著讀也不缺字、不重複。
+({String text, int start, int end}) aiRepairSlice(
+  String text,
+  int start,
+  int end,
+  Set<String> secrets,
+) {
+  final forms = {for (final secret in secrets) ..._forms(secret)};
+  int widen(int at, {required bool toEnd}) {
+    for (var moved = true; moved;) {
+      moved = false;
+      for (final form in forms) {
+        final from = (at - form.length + 1).clamp(0, text.length);
+        final found = text.indexOf(form, from);
+        if (found < 0 || found >= at || found + form.length <= at) continue;
+        at = toEnd ? found + form.length : found;
+        moved = true;
+      }
+    }
+    return at;
+  }
+
+  final from = widen(start, toEnd: false);
+  final to = widen(end, toEnd: true);
+  return (
+    text: redactAiRepairSecrets(text.substring(from, to), secrets),
+    start: from,
+    end: to,
+  );
+}
+
 /// 秘密在送出的文字裡可能長的樣子：原樣、網址編碼，與放進 JSON 字串後跳脫
 /// 一層、兩層的（書源標頭本身是 JSON 字串，放進書源 JSON 又跳脫一層）。
 Set<String> _forms(String secret) {

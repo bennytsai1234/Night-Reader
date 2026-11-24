@@ -117,6 +117,7 @@ class AppAiFindLibrary implements AiFindLibrary {
       for (final origin in {for (final book in books) ...book.origins})
         _source(origin).then<void>((_) {}, onError: (Object _) {}),
     ]);
+    await _refreshSecrets();
     return (
       books: books,
       tiers: [for (final book in books) searchRelevanceRank(book, keyword)],
@@ -587,7 +588,9 @@ class AppAiFindLibrary implements AiFindLibrary {
 
   /// 抓取的錯誤換成一句照實回給 AI 的話（[AiFindUnreadable]）；按了停止的
   /// 照樣丟出取消。
-  static Future<T> _describeFailure<T>(
+  ///
+  /// 做完（含出錯）先重讀讀過的書源的秘密（[_refreshSecrets]）。
+  Future<T> _describeFailure<T>(
     CancelToken cancelToken,
     Future<T> Function() body,
   ) async {
@@ -603,6 +606,21 @@ class AppAiFindLibrary implements AiFindLibrary {
     } on AppException catch (error) {
       // 付費章節、要登入、真人驗證、正文或目錄是空的：例外本身的話就是原因。
       throw AiFindUnreadable(error.message);
+    } finally {
+      await _refreshSecrets();
+    }
+  }
+
+  /// 重讀讀過的書源的秘密，併進 [secrets]：書源的規則跑的時候可能寫了新的
+  /// 登入資料、Cookie 或變數，工具的結果接著就送給 AI、寫進紀錄。舊的照樣遮。
+  Future<void> _refreshSecrets() async {
+    for (final pending in [..._sources.values]) {
+      try {
+        final source = await pending;
+        if (source != null) secrets.addAll(await _secretsOf(source));
+      } catch (_) {
+        // 讀不到書源的那次已經記過；下一次重讀。
+      }
     }
   }
 

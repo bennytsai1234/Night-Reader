@@ -74,8 +74,9 @@ final class RepairPages {
 /// 讀頁：[page] 從第 [from] 字起 [length] 字（最多 [maxReadLength]）。[raw]
 /// 給原文，否則給精簡後的（[digestPage]，在背景 isolate 做）。
 ///
-/// [secrets] 先在整頁遮掉再分段（ADR 0054）：分段切在一段秘密中間時，兩半
-/// 各自認不出來。字數與下一段從哪接都照遮過的那一份算。
+/// 給 AI 的那一段遮掉 [secrets]（ADR 0054），切點落在一段秘密中間時往外延
+/// 到整段（[aiRepairSlice]）：分段切在秘密中間，兩半各自認不出來。字數與
+/// 下一段從哪接照原文算。
 Future<String> readRepairPage(
   RepairPage page, {
   int from = 0,
@@ -84,16 +85,22 @@ Future<String> readRepairPage(
   Set<String> secrets = const {},
 }) async {
   final body = page.body;
-  final text = redactAiRepairSecrets(
-    raw ? body : await Isolate.run(() => digestPage(body)),
+  final text = raw ? body : await Isolate.run(() => digestPage(body));
+  final slice = aiRepairSlice(
+    text,
+    from.clamp(0, text.length),
+    (from.clamp(0, text.length) + length.clamp(1, maxReadLength)).clamp(
+      0,
+      text.length,
+    ),
     secrets,
   );
-  final start = from.clamp(0, text.length);
-  final end = (start + length.clamp(1, maxReadLength)).clamp(0, text.length);
+  final start = slice.start;
+  final end = slice.end;
   final kind = raw ? '原文' : '精簡後';
   final next = end < text.length ? '；下一段從 "from":$end 接著讀' : '，讀到結尾了';
   return '# 頁 ${page.id}（$kind）第 $start–$end 字，共 ${text.length} 字$next\n'
-      '${text.substring(start, end)}';
+      '${slice.text}';
 }
 
 /// 讀頁沒說要幾字時給的字數。
