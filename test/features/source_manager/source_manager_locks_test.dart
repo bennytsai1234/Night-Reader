@@ -329,6 +329,53 @@ void main() {
     expect(provider.totalSourceCount, 3);
   });
 
+  // 合併在等下載收尾時打開編輯：等它併完再讀，被併掉的不開——開了存的
+  // 修改會寫回已經併掉的書源，下次合併又隨它刪掉。
+  test('opening a source to edit while duplicates merge waits for the merge, '
+      'and one merged away does not open', () async {
+    final merge = _GatedMerge(dao);
+    final provider = await loaded(mergeDuplicates: merge.call);
+    await dao.upsert(_source('https://a.example#copy', order: 3));
+
+    final reload = provider.loadSources(showLoading: false);
+    await merge.started.future;
+    BookSource? opened = _source('沒有傳回');
+    var answered = false;
+    unawaited(
+      provider.beginEditing('https://a.example#copy').then((source) {
+        opened = source;
+        answered = true;
+      }),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(answered, isFalse, reason: '等合併');
+
+    merge.gate.complete();
+    await reload;
+    await _until(() => answered);
+    expect(opened, isNull);
+    expect(await dao.getByUrl('https://a.example#copy'), isNull);
+  });
+
+  // 編輯頁開著時不併：存的時候它還在；關掉後照常併。
+  test('while a source is open in the editor, duplicates wait until it '
+      'closes', () async {
+    final merge = _GatedMerge(dao)..gate.complete();
+    final provider = await loaded(mergeDuplicates: merge.call);
+    await dao.upsert(_source('https://a.example#copy', order: 3));
+
+    final opened = await provider.beginEditing('https://a.example#copy');
+    expect(opened?.bookSourceUrl, 'https://a.example#copy');
+    await provider.loadSources(showLoading: false);
+    expect(merge.calls, 0);
+    expect(await dao.getByUrl('https://a.example#copy'), isNotNull);
+
+    await provider.endEditing('https://a.example#copy', changed: false);
+    expect(merge.calls, 1);
+    expect(await dao.getByUrl('https://a.example#copy'), isNull);
+    expect(provider.totalSourceCount, 3);
+  });
+
   test('a reload that starts while duplicates merge waits for the merge '
       'and shows the merged list', () async {
     await dao.upsert(_source('https://a.example#copy', order: 3));
