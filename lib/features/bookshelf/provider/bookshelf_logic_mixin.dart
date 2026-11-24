@@ -179,10 +179,16 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
     }
     final item = books.removeAt(oldIndex);
     books.insert(newIndex, item);
-    for (var i = 0; i < books.length; i++) {
-      books[i].order = i;
-      await bookDao.upsert(books[i]);
+    // 照放下那一刻的清單算好順序、只寫順序：背景檢查更新剛寫進去的章節不被
+    // 記憶體裡的舊資料蓋掉，寫的途中書架重讀也不會換掉這份清單。
+    final ordered = List<Book>.of(books);
+    for (var i = 0; i < ordered.length; i++) {
+      ordered[i].order = i;
     }
+    await bookDao.updateOrders([for (final book in ordered) book.bookUrl]);
     notifyListeners();
+    // 放下之前已經開始的書架重讀會帶回舊的順序、換掉畫面上的清單：寫好之後
+    // 再讀一次，畫面照存下的順序。
+    await loadBooks();
   }
 }

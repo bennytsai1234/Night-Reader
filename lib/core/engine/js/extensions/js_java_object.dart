@@ -807,7 +807,9 @@ extension JsJavaObject on JsExtensionsBase {
         },
 
         // ─── sync: TTF query/replace (sync helpers) ──────────────
+        // data 可以是網址、Base64 或位元組（Legado 的 ByteArray）。
         queryTTF: function(data, useCache) {
+          if (Array.isArray(data) || ArrayBuffer.isView(data)) data = normalizeByteArray(data);
           var ttfId = sendMessage('queryTTF', JSON.stringify([data, useCache === undefined ? true : useCache]));
           return ttfId ? { _ttfId: ttfId } : null;
         },

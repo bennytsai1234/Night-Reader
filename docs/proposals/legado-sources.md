@@ -289,14 +289,14 @@
 - Legado：`L:model/analyzeRule/AnalyzeByJSonPath.kt:44-49`，`ctx.read` 拿到清單就 `joinToString("\n")`。
 - 夜讀：`N:lib/core/engine/parsers/analyze_by_json_path.dart:66-77`，只有一個結果時直接 `values[0].toString()`，那個結果是清單時就是 Dart 清單的寫法。
 
-### R5 `@get:{bookName}` 拿不到書名；沒有書的時候 `@put` 存不進書源（少數寫法才碰到）
+### R5 `@get:{bookName}` 拿不到書名；沒有書的時候 `@put` 存不進書源（少數寫法才碰到）（已修，#542）
 
 - 讀者會碰到：書源用 `@get:{bookName}`（或規則 JS 的 `java.get("bookName")`）組網址或比對書名時，Legado 拿到這本書的書名，夜讀拿到空的，網址組錯、抓不到。另外在沒有書的地方（例如登入檢查、發現分類的網址）用 `@put` 存的值，Legado 存進書源、之後的規則讀得到，夜讀只留在這一次解析裡。
 - Legado：`L:model/analyzeRule/AnalyzeRule.kt:740-769`，`get` 先看 `bookName`（書名）與 `title`（章名），`put`／`get` 依序找章節、書、`ruleData`、最後是書源（`source.put`，存進快取）；網址裡的 `java.get` 也認 `bookName`（`L:model/analyzeRule/AnalyzeUrl.kt:380-394`）。
 - 夜讀：`N:lib/core/engine/analyze_rule/analyze_rule_base.dart:89-131`，認 `key`、`page`、`baseUrl`、`redirectUrl`、`nextChapterUrl`、`title`，沒有 `bookName`；`put` 沒有章節與書時落到只活在這一次的 `transientVariables`（同檔 80-87）。規則 JS 的 `java.put` 另外寫進書源的快取（`N:lib/core/engine/js/extensions/js_extensions.dart:73-92`），`@put` 沒有。
 - 另一個方向的差別：夜讀先攔下 `key`、`page`、`baseUrl` 這幾個名字，書源自己 `@put:{page:…}` 再 `@get:{page}` 時拿到的是頁碼、不是存的值；Legado 不攔。
 
-### R6 取屬性時重複的值沒有去掉（少數寫法才碰到）
+### R6 取屬性時重複的值沒有去掉（少數寫法才碰到）（已修，#542）
 
 - 讀者會碰到：`a@href`、`img@src`、`span@title` 這類取屬性的規則碰到好幾個元素有同一個值時，Legado 只留一個，夜讀全部留著：分類變成「玄幻,玄幻」，正文的插圖重複出現。網址清單（下一頁）另外會去重，不受影響。
 - Legado：`L:model/analyzeRule/AnalyzeByJSoup.kt:270-276`，`if (url.isBlank() || textS.contains(url)) continue`。
@@ -324,7 +324,7 @@
 - 夜讀：`N:lib/core/engine/js/extensions/js_java_object.dart:805-806`（`reGetBook`）、`855-860`（rar、7z）。
 - 備註：rar、7z 多半出現在類型 3（文件）的書源，那一類夜讀本來就不支援（ADR 0051）；文字書源用到的少。
 
-### R10 詳情頁沒給目錄網址時，夜讀自己找「目錄」連結換過去（抓錯或抓不全）
+### R10 詳情頁沒給目錄網址時，夜讀自己找「目錄」連結換過去（抓錯或抓不全）（已修，#546）
 
 - 讀者會碰到：目錄就在詳情頁上、書源沒寫目錄網址規則，但頁面上另有一個「章节目录」「目录」連結（常是另一種版面的完整目錄）。Legado 用詳情頁本身解析目錄；夜讀改去抓那個連結，書源的目錄規則是照詳情頁寫的，對不上，目錄空白或只抓到一部分。
 - Legado：`L:model/webBook/BookInfo.kt:150-154`，目錄網址空時等於詳情頁網址，並把詳情頁直接當目錄頁用（`tocHtml = body`）。
@@ -336,7 +336,7 @@
 - Legado：`L:model/webBook/BookChapterList.kt:124-148`：先依閱讀設定倒序、編好章節序號，再跑 `formatJs`，綁 `gInt`（整份目錄共用，初值 0）、`index`（從 1 起）、`chapter`、`title`。
 - 夜讀：`N:lib/core/engine/web_book/web_book_service.dart:293-338`：`formatJs` 只拿到 `result`（章名）與 `page = i + 1`（306 行），之後才在 331 行依閱讀設定倒序；規則 JS 的變數清單沒有 `index`、`gInt`（`N:lib/core/engine/analyze_rule/analyze_rule_script.dart:70-91`）。
 
-### R12 「是不是卷、是不是付費」只認 true／yes／1／是（抓錯或抓不全）
+### R12 「是不是卷、是不是付費」只認 true／yes／1／是（抓錯或抓不全）（已修，#542）
 
 - 讀者會碰到：書源的 `isVolume`、`isVip`、`isPay` 規則回的是元素的文字或屬性（例如付費章節旁的鎖頭圖片網址、「VIP」字樣、卷名的 class），Legado 只要不是空的、不是 false／no／not／0 就算是；夜讀只認 true、yes、1、是。卷名當成一般章節顯示、點了抓不到；付費章節認不出來，校驗看不出這是付費書源（ADR 0057），閱讀時也不跳過。
 - Legado：`L:utils/StringExtensions.kt:74-79`（`isTrue`），目錄用在 `L:model/webBook/BookChapterList.kt:209-237`。

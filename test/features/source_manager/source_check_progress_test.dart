@@ -9,6 +9,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/core/source_check/source_check_isolate.dart';
+import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/core/background_work/paused_work_file.dart';
 import 'package:night_reader/features/source_manager/source_check_job.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
@@ -314,4 +315,77 @@ void main() {
     provider.dispose();
     slow.dispose();
   });
+
+  test('a check pressed after another job took the slot does not start, and '
+      'the paused check stays paused', () async {
+    final paused = PausedSourceCheck(file: _MemoryFile.new);
+    final pausedFile = _MemoryFile();
+    paused.hold(SourceCheckPlan([url]), pausedFile);
+    final provider = SourceManagerProvider(
+      entrance: Future<void>.value(),
+      pausedCheck: paused,
+    );
+    addTearDown(provider.dispose);
+    while (provider.isLoading || provider.totalSourceCount == 0) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    // 按下去之後、開始之前，別件（例如自動換源）佔了位置。
+    final other = _Other();
+    expect(
+      BackgroundWork.instance.begin(
+        other,
+        const BackgroundWorkStatus(title: '自動換源', text: ''),
+      ),
+      isTrue,
+    );
+    addTearDown(() => BackgroundWork.instance.end(other));
+
+    provider.toggleSelect(url);
+    await provider.checkAllSources();
+    await provider.checkSelectedSources();
+
+    expect(SourceCheckJob.current, isNull, reason: '沒開始');
+    expect(provider.selectedUrls, {url}, reason: '沒校驗，勾選留著');
+    expect(paused.isPaused, isTrue, reason: '新的沒開始，暫停的那次不結束');
+    expect(pausedFile.closed, isFalse);
+    expect(BackgroundWork.instance.current, same(other));
+  });
+
+  test('a paused check hears when another job frees the slot, so continue '
+      'turns on', () async {
+    final paused = PausedSourceCheck(file: _MemoryFile.new);
+    paused.hold(SourceCheckPlan([url]), _MemoryFile());
+    final provider = SourceManagerProvider(
+      entrance: Future<void>.value(),
+      pausedCheck: paused,
+    );
+    addTearDown(provider.dispose);
+    while (provider.isLoading || provider.totalSourceCount == 0) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    // AI 找書、自動換源這些不經過書源管理的工作。
+    final other = _Other();
+    BackgroundWork.instance.begin(
+      other,
+      const BackgroundWorkStatus(title: '自動換源', text: ''),
+    );
+    expect(provider.canResumeSourceCheck, isFalse);
+    var heard = 0;
+    provider.addListener(() => heard++);
+
+    BackgroundWork.instance.end(other);
+    expect(provider.canResumeSourceCheck, isTrue);
+    expect(heard, greaterThan(0), reason: '「繼續」跟著亮起來');
+  });
+}
+
+class _Other implements BackgroundJob {
+  @override
+  void pauseFromSystem() {}
+
+  @override
+  void endFromSystem() {}
+
+  @override
+  void openFromNotification() {}
 }

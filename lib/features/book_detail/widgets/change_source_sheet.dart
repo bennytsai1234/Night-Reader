@@ -488,7 +488,7 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
       final lenderBook = loaded.book;
       // 聚合源的書是哪一類抓完詳情才知道；作者兩邊都寫了才比。
       if (lenderBook.bookKind != BookSourceKind.novel ||
-          !isSameBook(
+          !isChangeSourceMatch(
             lenderBook.name,
             lenderBook.author,
             book.name,

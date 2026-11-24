@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:fast_gbk/fast_gbk.dart';
+import 'package:night_reader/core/utils/big5.dart';
 import 'package:night_reader/core/utils/encoding_detect.dart';
 
 /// 規則 JS 裡文字與位元組互轉（`java.strToBytes`、`bytesToStr`、加解密的
@@ -13,6 +14,7 @@ abstract final class Charsets {
       switch (_name(charset)) {
         'UTF-8' => Uint8List.fromList(utf8.encode(text)),
         'GBK' => Uint8List.fromList(gbk.encode(text)),
+        'BIG5' => Big5.encode(text),
         'UTF-16LE' => _utf16(text, littleEndian: true, bom: false),
         'UTF-16BE' => _utf16(text, littleEndian: false, bom: false),
         // Java 的 UTF-16 編碼時加上大端序的 BOM。
@@ -69,6 +71,7 @@ abstract final class Charsets {
       switch (_name(charset)) {
         'UTF-8' => utf8.decode(bytes, allowMalformed: true),
         'GBK' => EncodingDetect.decodeGbk(bytes),
+        'BIG5' => Big5.decode(bytes),
         'UTF-16LE' => _fromUtf16(bytes, littleEndian: true),
         'UTF-16BE' => _fromUtf16(bytes, littleEndian: false),
         'UTF-16' => _fromUtf16WithBom(bytes),
@@ -83,6 +86,7 @@ abstract final class Charsets {
   static bool supports(String? charset) => switch (_name(charset)) {
     'UTF-8' ||
     'GBK' ||
+    'BIG5' ||
     'UTF-16LE' ||
     'UTF-16BE' ||
     'UTF-16' ||
@@ -96,6 +100,7 @@ abstract final class Charsets {
     return switch (name) {
       '' || 'UTF-8' || 'UTF8' => 'UTF-8',
       'GBK' || 'GB2312' || 'GB18030' || 'CP936' => 'GBK',
+      _ when Big5.names.contains(name) => 'BIG5',
       'UTF-16LE' || 'UTF16LE' || 'UNICODELITTLEUNMARKED' => 'UTF-16LE',
       'UTF-16BE' || 'UTF16BE' || 'UNICODEBIGUNMARKED' => 'UTF-16BE',
       'UTF-16' || 'UTF16' || 'UNICODE' => 'UTF-16',

@@ -47,6 +47,20 @@ void main() {
         case '/empty':
           // 2026-11-13 酷匠阅读的搜尋介面回 0 位元組。
           break;
+        case '/s-var':
+          request.response.write(
+            '<div class="item"><a href="/b-var">變數書</a><i>42</i></div>',
+          );
+        case '/b-var':
+          request.response.write('<h1>詳情</h1>');
+        case '/toc-vol':
+          request.response.write(
+            '<div class="ch"><span class="v">true</span><span class="n">卷一</span></div>'
+            '<div class="ch"><span class="n"><a href="/c1">第一章</a></span></div>'
+            '<div class="ch"><span class="n"><a href="/c2">第二章</a></span></div>',
+          );
+        case '/c1' || '/c2':
+          request.response.write('<p class="t">正文</p>');
         case '/moved-down':
           request.response.statusCode = HttpStatus.found;
           request.response.headers.set(HttpHeaders.locationHeader, '/down');
@@ -156,6 +170,56 @@ void main() {
       reason: messages.join('\n'),
     );
   }, skip: quickJsUnavailableReason());
+
+  // Legado Debug.kt：搜尋結果接到詳情用 `searchBooks[0].toBook()`，搜尋規則
+  // 存的變數跟著帶過去。
+  test('the detail step keeps the variables the search rules stored', () async {
+    final messages = await debug(
+      BookSource(
+        bookSourceUrl: baseUrl,
+        bookSourceName: '搜尋存變數',
+        searchUrl: '/s-var',
+        ruleSearch: SearchRule(
+          bookList: '.item',
+          name: 'a@text',
+          bookUrl: 'a@href@put:{bid:i@text}',
+        ),
+        // 寫了 canReName，詳情頁讀到的變數才會換上書名（同 Legado）。
+        ruleBookInfo: BookInfoRule(name: '@get:{bid}', canReName: '1'),
+      ),
+    );
+
+    expect(messages, contains('︽詳情頁解析完成: 42'), reason: messages.join('\n'));
+  });
+
+  // Legado Debug.kt：目錄先拿掉沒有網址的卷名（網址是「卷名＋序號」的那種），
+  // 第一章與下一章都從拿掉之後的取。
+  test('the content step skips volume titles without a URL', () async {
+    final service = SourceDebugService();
+    final messages = <String>[];
+    final sub = service.logStream.listen((log) => messages.add(log.message));
+    await service.startDebug(
+      BookSource(
+        bookSourceUrl: baseUrl,
+        bookSourceName: '有分卷',
+        ruleToc: TocRule(
+          chapterList: '.ch',
+          chapterName: 'class.n@text',
+          chapterUrl: 'tag.a@href',
+          isVolume: 'class.v@text',
+        ),
+        ruleContent: ContentRule(content: 'class.t@text'),
+      ),
+      '++$baseUrl/toc-vol',
+    );
+    await Future<void>.delayed(Duration.zero);
+    await sub.cancel();
+
+    expect(messages, contains('  首章: 第一章'), reason: messages.join('\n'));
+    expect(messages, contains('︾開始解析正文頁: 第一章'), reason: messages.join('\n'));
+    expect(messages, contains('  正文 URL: $baseUrl/c1'));
+    expect(messages, contains('  下一章 URL: $baseUrl/c2'));
+  });
 
   test('requests sent straight through Dio are recorded', () async {
     // 規則 JS 的 `java.get`、`java.post` 不經過 AnalyzeUrl，直接用 Dio 送。

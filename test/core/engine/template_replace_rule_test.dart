@@ -38,7 +38,8 @@ void main() {
 
   test('組好的字之後的 ## 是整條規則的取代', () {
     expect(rule(book).getString(r"{{'甲乙丙'}}##乙"), '甲丙');
-    expect(rule(book).getString(r"{{'甲乙乙'}}##乙##丁###"), '甲丁乙');
+    // ### 只交出第一個對到的那段換過的樣子（Legado replaceFirst）。
+    expect(rule(book).getString(r"{{'甲乙乙'}}##乙##丁###"), '丁');
   });
 
   test(r'取代式是組出來的：$.title##{{…}} 照 JSON 取字再換', () {

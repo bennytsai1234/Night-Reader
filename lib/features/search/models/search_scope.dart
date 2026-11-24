@@ -88,13 +88,20 @@ class SearchScope {
     }
 
     if (_scope.contains('::')) {
-      // 單一書源
+      // 單一書源：同 Legado，使用者指定了就用它，不看啟用與校驗標記
+      // （停用的、被標搜尋失效的也能試它修好了沒）；夜讀打不開的類型
+      // 照樣不搜。書源不在了退回全部。
       final url = _scope.substring(_scope.indexOf('::') + 2);
       final source = await dao.getByUrl(url);
-      if (source == null || !source.isSearchEnabledByRuntime) {
-        return [];
+      if (source != null && source.isOpenableSource) {
+        return _sortSources([source]);
       }
-      return _sortSources([source]);
+      _scope = '';
+      return _sortSources(
+        (await dao.getEnabled())
+            .where((source) => source.isSearchEnabledByRuntime)
+            .toList(),
+      );
     }
 
     // 分組模式

@@ -106,6 +106,24 @@ class _BorrowedMeanwhile extends BookSourceService {
   }
 }
 
+/// 記下被要了幾次正文；拿假網址去抓時網站回一般頁面的字。
+class _CountingSite extends BookSourceService {
+  int fetches = 0;
+
+  @override
+  Future<String> getContent(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    String? nextChapterUrl,
+    int? pageConcurrency,
+    CancelToken? cancelToken,
+  }) async {
+    fetches += 1;
+    return '網站首頁的字';
+  }
+}
+
 /// 只有開頭的 PNG（寬 300、高 200），夠讀出寬高。
 final _png = Uint8List(24)
   ..setAll(0, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
@@ -160,6 +178,31 @@ void main() {
         service: BookSourceService(),
         getSource: () => source,
       );
+
+  // 同 Legado（WebBook.getContentAwait）：目錄給卷名的假網址（卷名＋序號）
+  // 的分卷標題不向書源抓，正文是空的也不算失敗，那一章只有卷名。
+  test('a volume title with a made-up address is not fetched and reads as '
+      'an empty chapter', () async {
+    final site = _CountingSite();
+    final volume = BookChapter(
+      url: '第一卷 風起0',
+      title: '第一卷 風起',
+      bookUrl: book.bookUrl,
+      isVolume: true,
+    );
+
+    final result = await ChapterContentPreparationPipeline(
+      book: book,
+      contentStore: store,
+      sourceDao: BookSourceDao(db),
+      service: site,
+      getSource: () => source,
+    ).prepare(chapterIndex: 0, chapter: volume);
+
+    expect(result.isReady, isTrue);
+    expect(result.content, isEmpty);
+    expect(site.fetches, 0);
+  });
 
   group('an automatic fetch that arrives after the reader borrowed the '
       'chapter hands back the borrowed text', () {

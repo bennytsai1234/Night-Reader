@@ -151,7 +151,11 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     final cachedResults = [
       for (final result in cached)
         if (sourcesByUrl.containsKey(result.origin) &&
-            _isSameBook(result.name, result.author, checkAuthor: true))
+            _isSameBook(
+              result.name,
+              result.author,
+              checkAuthor: checkAuthor && book.author.trim().isNotEmpty,
+            ))
           result,
     ];
     // 目錄抓到了才列（換源要抓目錄，抓不到的換不過去）：這次面板裡已經抓
@@ -206,7 +210,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
             final results = await _searchNames(
               source,
               names,
-              sameBookFilter(
+              changeSourceFilter(
                 book.name,
                 book.author,
                 checkAuthor: shouldCheckAuthor,
@@ -310,7 +314,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
   }
 
   bool _isSameBook(String name, String? author, {required bool checkAuthor}) =>
-      isSameBook(
+      isChangeSourceMatch(
         name,
         author,
         book.name,

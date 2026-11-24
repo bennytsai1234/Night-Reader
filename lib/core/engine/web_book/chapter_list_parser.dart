@@ -131,6 +131,7 @@ class ChapterListParser {
                 owner: rule,
                 nameRule: chapterNameRule,
                 urlRule: chapterUrlRule,
+                isVolumeRule: isVolumeRule,
                 isVipRule: isVipRule,
                 isPayRule: isPayRule,
               );
@@ -166,7 +167,8 @@ class ChapterListParser {
   }
 
   /// [elements] 從 [start] 起第一個書源標了付費、還沒買的章（[BookChapter.isLocked]）；
-  /// 沒有就是 null。只讀付費的兩條規則，找到了才讀章名與網址。
+  /// 沒有就是 null。先讀付費的兩條規則，標了付費的再讀章名與卷名：和完整
+  /// 解析一樣，沒有章名的不算章、卷名不算付費章節（卷名旁常寫著「VIP 卷」）。
   static BookChapter? _firstLockedAfter(
     List<dynamic> elements,
     int start, {
@@ -177,6 +179,7 @@ class ChapterListParser {
     required AnalyzeRule owner,
     required String nameRule,
     required String urlRule,
+    required String isVolumeRule,
     required String isVipRule,
     required String isPayRule,
   }) {
@@ -197,6 +200,8 @@ class ChapterListParser {
         chapter.isPay = _isTrue(_readString(itemRule, isPayRule));
         if (!chapter.isLocked) continue;
         chapter.title = _readString(itemRule, nameRule);
+        if (chapter.title.isEmpty) continue;
+        if (_isTrue(_readString(itemRule, isVolumeRule))) continue;
         final rawUrl = _readString(itemRule, urlRule);
         chapter.url = rawUrl.isEmpty
             ? pageUrl
@@ -212,13 +217,19 @@ class ChapterListParser {
     return null;
   }
 
-  /// 解析布林字串 (對標 Android String.isTrue)
-  /// 認可: true / yes / 1 / 是
+  /// 規則的結果算不算「是」（同 Legado `String.isTrue`）：空白與 `null` 不算，
+  /// 其他只要不是 false、no、not、0（不分大小寫）就算，所以規則回元素的文字
+  /// 或屬性（鎖頭圖片的網址、「VIP」字樣、卷名的 class）也算。
   static bool _isTrue(String s) {
-    if (s.isEmpty) return false;
-    final lower = s.trim().toLowerCase();
-    return lower == 'true' || lower == 'yes' || lower == '1' || lower == '是';
+    final trimmed = s.trim();
+    if (trimmed.isEmpty || s == 'null') return false;
+    return !_falseWords.hasMatch(trimmed);
   }
+
+  static final RegExp _falseWords = RegExp(
+    r'^(false|no|not|0)$',
+    caseSensitive: false,
+  );
 
   static String _readString(
     AnalyzeRule rule,

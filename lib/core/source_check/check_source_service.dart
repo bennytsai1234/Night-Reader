@@ -438,7 +438,11 @@ class CheckSourceService extends ChangeNotifier {
   final Set<String> _timedOutSourceUrls = <String>{};
   final Map<String, SourceCheckIsolateHandle> _activeTasks =
       <String, SourceCheckIsolateHandle>{};
-  final Map<String, BookSource> _pendingStatusWrites = <String, BookSource>{};
+
+  /// 等著寫進資料庫的校驗結果：校驗後的書源，與校驗有沒有改寫類型
+  /// （[_withCheckMarks]）。
+  final Map<String, ({BookSource checked, bool typeChanged})>
+  _pendingStatusWrites = {};
   Timer? _notifyTimer;
   bool _isDisposed = false;
 
@@ -674,7 +678,7 @@ class CheckSourceService extends ChangeNotifier {
       final result = await handle.result;
       final entry = result == null
           ? await _recordSourceTimeout(url, config)
-          : await _applyIsolateResult(url, result);
+          : await _applyIsolateResult(url, result, started: source);
       if (entry != null) onResult?.call(url, result);
       return entry;
     } finally {
@@ -684,15 +688,19 @@ class CheckSourceService extends ChangeNotifier {
 
   Future<SourceCheckEntry?> _applyIsolateResult(
     String url,
-    SourceCheckIsolateResult result,
-  ) async {
+    SourceCheckIsolateResult result, {
+    required BookSource started,
+  }) async {
     if (_shouldIgnoreSourceUpdate(url)) return null;
     final source = BookSource.fromJson(result.updatedSourceJson)
       ..lastCheckTime = DateTime.now().millisecondsSinceEpoch;
     for (final log in result.logs) {
       _appendLog(log, sourceUrl: url);
     }
-    await _queueStatusWrite(source);
+    await _queueStatusWrite(
+      source,
+      typeChanged: source.bookSourceType != started.bookSourceType,
+    );
     // AI 已確認網站不穩定的結論要保留到使用者清除校驗標記。
     // 校驗本次偶爾成功，不會將「無法修復、可移除」改寫成健康。
     final confirmedUnstable = source.hasGroupTag(unstableSourceGroupTag);
@@ -817,7 +825,10 @@ class CheckSourceService extends ChangeNotifier {
     await _queueStatusWrite(source);
   }
 
-  Future<void> _queueStatusWrite(BookSource source) async {
+  Future<void> _queueStatusWrite(
+    BookSource source, {
+    bool typeChanged = false,
+  }) async {
     // 「網站不穩定」由 AI 根據多次請求證據判定；單次重新校驗不能推翻。
     // 只有使用者明確清除校驗標記，才允許重新判定。
     if (source.hasGroupTag(aiUnfixableSourceGroupTag)) {
@@ -830,7 +841,10 @@ class CheckSourceService extends ChangeNotifier {
           ..addErrorComment(saved!.errorComment ?? 'AI：網站不穩定，無法修復');
       }
     }
-    _pendingStatusWrites[source.bookSourceUrl] = source;
+    _pendingStatusWrites[source.bookSourceUrl] = (
+      checked: source,
+      typeChanged: typeChanged,
+    );
     if (_pendingStatusWrites.length >= _statusWriteBatchSize) {
       await _flushPendingStatusWrites();
     }
@@ -840,7 +854,48 @@ class CheckSourceService extends ChangeNotifier {
     if (_pendingStatusWrites.isEmpty) return;
     final writes = _pendingStatusWrites.values.toList(growable: false);
     _pendingStatusWrites.clear();
-    await _sourceDao.upsertAll(writes);
+    // 校驗帶回來的是開始時那一份書源：這段時間別處（發現頁、書籍詳情的書源
+    // 編輯器、同步）改了或刪了它，照現在的那一份只寫校驗管的欄位，刪掉的
+    // 不寫回來。讀與寫在同一個交易裡。
+    await _sourceDao.transaction(() async {
+      final merged = <BookSource>[];
+      for (final write in writes) {
+        final current = await _sourceDao.getByUrl(write.checked.bookSourceUrl);
+        if (current == null) continue;
+        merged.add(
+          _withCheckMarks(
+            current,
+            write.checked,
+            typeChanged: write.typeChanged,
+          ),
+        );
+      }
+      if (merged.isNotEmpty) await _sourceDao.upsertAll(merged);
+    });
+  }
+
+  /// [current] 換上 [checked] 的校驗結果：狀態標記、錯誤註解與校驗時間；
+  /// 校驗照正文改寫了類型（[typeChanged]，ADR 0051）時連類型與更新時間。
+  /// 其他欄位（名稱、使用者的分組、規則、開關）照 [current]。
+  static BookSource _withCheckMarks(
+    BookSource current,
+    BookSource checked, {
+    required bool typeChanged,
+  }) {
+    current
+      ..removeInvalidGroups()
+      ..removeErrorComment()
+      ..lastCheckTime = checked.lastCheckTime;
+    final marks = splitSourceGroups(checked.bookSourceGroup)
+        .where(sourceRuntimeStatusTags.contains);
+    if (marks.isNotEmpty) current.addGroup(marks.join(','));
+    if (checked.errorComment case final error?) current.addErrorComment(error);
+    if (typeChanged) {
+      current
+        ..bookSourceType = checked.bookSourceType
+        ..lastUpdateTime = checked.lastUpdateTime;
+    }
+    return current;
   }
 
   /// 書源的校驗標記被清掉後，上次的摘要已經對不上，一併收起。

@@ -236,10 +236,21 @@ class SourceCheckJob implements BackgroundJob {
     );
   }
 
+  /// 開始新的一次：按下去先佔住位置，佔到了才存設定、結束暫停中的那次，再
+  /// [run]；佔不到時什麼都不動，暫停中的那次照舊。
+  bool reserve() => _work.reserve(this);
+
+  /// [reserve] 了卻沒走到 [run]（途中出錯）：位置還回去。開始過的由 [run]
+  /// 自己收。
+  void release() {
+    if (_phase == WorkPhase.ready) _work.end(this);
+  }
+
   /// 校驗 [plan] 還沒做完的，跑的時候佔著背景工作的位置、更新通知；回傳
   /// 做完、結束或暫停好的時刻。
   Future<void> run() async {
-    // 一次一件（ADR 0058）：入口已經擋住，這裡是最後一道。
+    // 一次一件（ADR 0058）：入口已經擋住（新的一次已經 [reserve]），這裡是最後
+    // 一道。
     if (!_work.begin(this, status)) return;
     current = this;
     _phase = WorkPhase.running;

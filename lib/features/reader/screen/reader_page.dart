@@ -145,6 +145,9 @@ class _ReaderPageState extends State<ReaderPage>
       ValueNotifier<ProgressSnapshot?>(null);
   Size? _lastViewportSize;
   String? _visibleNoticeMessage;
+
+  /// 畫面上那則提示；收起時只清自己的（被下一則換掉的不清）。
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _visibleNotice;
   bool _rebuildQueued = false;
   StreamSubscription<String>? _settingsSaveFailures;
   StreamSubscription<String>? _hostNotices;
@@ -714,7 +717,9 @@ class _ReaderPageState extends State<ReaderPage>
     if (!mounted) return;
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (messenger == null) return;
-    if (_visibleNoticeMessage == message) return;
+    // 同樣的字還在畫面上就不再跳（同一個錯一直重複時）；帶按鈕的提示（例如
+    // 「復原」）每一則綁著不同的資料，照樣換上這一則。
+    if (action == null && _visibleNoticeMessage == message) return;
     _visibleNoticeMessage = message;
     messenger.hideCurrentSnackBar();
     final controller = messenger.showSnackBar(
@@ -731,11 +736,12 @@ class _ReaderPageState extends State<ReaderPage>
         duration: duration,
       ),
     );
+    _visibleNotice = controller;
     unawaited(
       controller.closed.then<void>((_) {
-        if (_visibleNoticeMessage == message) {
-          _visibleNoticeMessage = null;
-        }
+        if (!identical(_visibleNotice, controller)) return;
+        _visibleNotice = null;
+        _visibleNoticeMessage = null;
       }),
     );
   }

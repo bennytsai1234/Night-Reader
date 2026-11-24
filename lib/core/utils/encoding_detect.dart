@@ -5,8 +5,11 @@ import '../diagnostics/app_log_service.dart';
 
 import 'package:fast_gbk/fast_gbk.dart';
 
+import 'big5.dart';
+
 /// EncodingDetect - 簡易編碼偵測工具
-/// 針對中文書源優化，支援 UTF-8、UTF-16LE／BE 與 GBK 識別。
+/// 針對中文書源優化，支援 UTF-8、UTF-16LE／BE 與 GBK 識別；網站或檔案標明
+/// Big5 時照 Big5 解。
 class EncodingDetect {
   /// 執行安全解碼，避免崩潰 (原 Android EncodingDetect.getEncode)
   static String decode(Uint8List bytes) {
@@ -32,6 +35,7 @@ class EncodingDetect {
           normalized == 'GB18030') {
         return decodeGbk(data);
       }
+      if (Big5.names.contains(normalized)) return Big5.decode(data);
       final offset = _hasUtf8Bom(data) ? 3 : 0;
       return utf8.decode(data.sublist(offset), allowMalformed: true);
     } catch (_) {
@@ -87,6 +91,7 @@ class EncodingDetect {
         normalized == 'GB18030') {
       return Uint8List.fromList(gbk.encode(text));
     }
+    if (Big5.names.contains(normalized)) return Big5.encode(text);
     return Uint8List.fromList(utf8.encode(text));
   }
 

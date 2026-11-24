@@ -71,7 +71,11 @@ class AnalyzeByJsonPath {
 
           final values = matches.map((m) => m.value).toList();
           if (values.length == 1) {
-            return values[0].toString(); // 自動轉字串 (含數字)
+            // 對到的是陣列時一項一行，同 Legado `ob.joinToString("\n")`。
+            final value = values[0];
+            return value is List
+                ? value.map((v) => '$v').join('\n')
+                : value.toString();
           } else {
             return values.map((v) => v.toString()).join('\n');
           }

@@ -287,6 +287,8 @@ class LocalBookSync {
     var done = 0;
     var shelfChanged = false;
     var stopped = false;
+    // 這一輪已經上傳、改寫過雲端紀錄的書。
+    final uploaded = <String>{};
     for (final (index, task) in plan.tasks.indexed) {
       if (cancelled?.call() ?? false) {
         stopped = true;
@@ -297,17 +299,25 @@ class LocalBookSync {
         switch (task.action) {
           case LocalBookAction.upload:
             // 原檔傳上去、小紀錄還沒寫成時先記著：這台之後移出書架的話，
-            // 下次按的時候照它刪掉雲端沒人記著的原檔。
-            base[task.fingerprint] = _entry(0, task.extension);
+            // 下次按的時候照它刪掉雲端沒人記著的原檔。已經同步過的（本地
+            // 漫畫補了幾話）留著上次的時間：傳不上去時雲端紀錄沒變，移出
+            // 書架後才認得出是這台移出的，不會當成雲端有新的而下載回來。
+            base.putIfAbsent(task.fingerprint, () => _entry(0, task.extension));
             await _bases.write(kind, base);
             base[task.fingerprint] = _entry(
               await _upload(task),
               task.extension,
             );
+            uploaded.add(task.fingerprint);
           case LocalBookAction.download:
             await _download(task);
             shelfChanged = true;
-            base[task.fingerprint] = _entry(task.remoteTime, task.extension);
+            // 本地漫畫兩邊互補時同一輪先上傳：雲端紀錄已經換成上傳寫的那一筆，
+            // 留著它的時間。記回比對時的舊時間的話，之後在這台移出書架，下次
+            // 會被當成雲端有新的而整本下載回來。
+            if (!uploaded.contains(task.fingerprint)) {
+              base[task.fingerprint] = _entry(task.remoteTime, task.extension);
+            }
           case LocalBookAction.removeHere:
             await _removeHere(task);
             shelfChanged = true;

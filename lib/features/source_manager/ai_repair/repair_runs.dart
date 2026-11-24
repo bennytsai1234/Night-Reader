@@ -74,7 +74,8 @@ double repairBatchProgress(SourceRepairBatch batch) {
 /// 頁面那層自己記的：工作不知道的那幾段。做著時頁面與通知讀工作本身的階段
 /// （[RepairRun.workPhase]）。
 enum _RunStage {
-  /// 頁面剛推入，推入動畫還沒播完。
+  /// 頁面剛推入，推入動畫還沒播完；由入口開的新工作已經佔著位置
+  /// （[RepairRuns.adopt]），還沒有通知。
   notStarted,
 
   /// 工作在跑（含正在暫停、正在結束）。
@@ -123,6 +124,8 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
 
   @override
   void dispose() {
+    // 佔著位置卻沒開始就不做了：位置還回去。
+    if (_stage == _RunStage.notStarted) _work.end(this);
     _work.removeListener(_slotChanged);
     super.dispose();
   }
@@ -231,22 +234,50 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
   /// 這一件的頁面。
   Widget page();
 
+  /// 推這一件的頁面都用這個路由：推入動畫播完前（連第一幀都還沒畫、頁面還沒
+  /// 建立）就返回的，返回動畫播完後在背景開始。頁面建立過的由 [detach] 接手。
+  Route<void> pageRoute() {
+    final route = MaterialPageRoute<void>(builder: (_) => page());
+    unawaited(route.completed.then((_) => _startIfLeft()));
+    return route;
+  }
+
+  /// 佔著位置、沒有頁面開著卻還沒開始：使用者按了開始，照樣在背景跑（同開始後
+  /// 返回）。
+  void _startIfLeft() {
+    if (_pages == 0 &&
+        _stage == _RunStage.notStarted &&
+        identical(_work.current, this)) {
+      start();
+    }
+  }
+
   /// 做完之後在結果頁刪了、併了幾次書源：書源管理看到它變了就重讀清單。
   int get sourceEdits => 0;
 
   /// 工作本身（批次、單一修復）做完之後放掉資源。
   void disposeWork();
 
-  /// 推入動畫播完才開始（ADR 0018）：頁面呼叫。要在 App 看得到時開始，
-  /// Android 才肯開前景服務。
+  /// 入口按下去就佔住位置（[RepairRuns.adopt]），推入動畫播完才開始。
+  bool _reserve() => _work.reserve(this);
+
+  /// 推入動畫播完才開始（ADR 0018）：頁面呼叫；動畫播完前就返回的，頁面拆掉後
+  /// 開始（[detach]）。要在 App 看得到時開始，Android 才肯開前景服務。
   void start() {
     if (_stage != _RunStage.notStarted) return;
     _launch();
   }
 
   void _launch() {
+    // 先換成做著：通知照做著的樣子送。
+    final before = _stage;
     _stage = _RunStage.working;
-    _work.begin(this, status);
+    if (!_work.begin(this, status)) {
+      // 入口佔過位置、繼續也看過位置空著，走到這裡是漏掉了一條路。
+      _stage = before;
+      AppLog.e('RepairRun: 背景工作的位置被別件佔著，沒開始');
+      return;
+    }
     WorkPhase ended = WorkPhase.finished;
     unawaited(
       run().then((value) => ended = value).whenComplete(() {
@@ -336,6 +367,12 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
     _pages--;
     if (_pages > 0) return;
     _topRoute = null;
+    // 推入動畫播完前就返回：頁面還在拆，拆完再開始；開始前又打開了頁面的，由
+    // 那一頁開始。
+    if (_stage == _RunStage.notStarted) {
+      scheduleMicrotask(_startIfLeft);
+      return;
+    }
     // 頁面還在拆：等它的監聽都拿掉，再讓書源管理收掉這一件。
     if (isDone) scheduleMicrotask(notifyListeners);
   }
@@ -352,7 +389,7 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
     if (navigator == null) return;
     final top = _topRoute;
     if (top != null && top.isCurrent) return;
-    unawaited(navigator.push(MaterialPageRoute<void>(builder: (_) => page())));
+    unawaited(navigator.push(pageRoute()));
   }
 }
 
@@ -902,8 +939,12 @@ class RepairRuns extends ChangeNotifier {
 
   /// 修完但還沒看過結果時，不允許新工作覆蓋舊結果。
   /// 回傳 false 時由呼叫端收掉尚未開始的新工作。
+  ///
+  /// 入口開的新工作在這裡佔住背景工作的位置（推入動畫播完才開始）：位置被別件
+  /// 佔了也回傳 false，暫停中的那件照舊。讀回的暫停中、做完的不佔。
   bool adopt(RepairRun run) {
     if (!canStartNew) return false;
+    if (run._stage == _RunStage.notStarted && !run._reserve()) return false;
     final previous = _current;
     if (previous != null && previous.isPaused) {
       _current = null;

@@ -39,6 +39,9 @@ class _FakeBookDao extends Fake implements BookDao {
 
   @override
   Future<void> upsert(Book book) async {}
+
+  @override
+  Future<void> saveCover(Book book) async {}
 }
 
 class _FakeChapterDao extends Fake implements ChapterDao {

@@ -306,6 +306,7 @@ class DownloadService extends DownloadBase
       task.status = DownloadTask.statusPaused;
     }
     tasks.removeWhere((t) => t.bookUrl == bookUrl);
+    cancelRun(bookUrl);
     downloadDao.deleteByUrl(bookUrl);
     update();
   }

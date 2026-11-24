@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
@@ -11,13 +12,16 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/engine/js/legacy_js_syntax.dart';
 import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/engine/web_book/book_info_parser.dart';
 import 'package:night_reader/core/engine/web_book/chapter_list_parser.dart';
 import 'package:night_reader/core/engine/web_book/login_wall.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/models/source/rule_data.dart';
 import 'package:night_reader/core/network/str_response.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 
 /// WebBook - 書源抓取業務調度 (對標 Android model/webBook/WebBook.kt)
 ///
@@ -44,11 +48,14 @@ class WebBook {
       throw SourceException('搜尋 URL 不能為空', sourceUrl: source.bookSourceUrl);
     }
 
+    // 網址的 JS 用 java.put 存的變數，搜到的每本書都帶著（同 Legado）。
+    final ruleData = RuleData();
     final analyzeUrl = AnalyzeUrl(
       searchUrl,
       source: source,
       key: key,
       page: page,
+      ruleData: ruleData,
     );
 
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
@@ -60,6 +67,8 @@ class WebBook {
       body: res.body,
       baseUrl: res.url,
       isSearch: true,
+      variable: ruleData.variableJson,
+      requestUrl: _requestUrl(analyzeUrl, res),
       filter: filter,
       shouldBreak: shouldBreak,
     );
@@ -73,7 +82,13 @@ class WebBook {
     int? page = 1,
     CancelToken? cancelToken,
   }) async {
-    final analyzeUrl = AnalyzeUrl(url, source: source, page: page);
+    final ruleData = RuleData();
+    final analyzeUrl = AnalyzeUrl(
+      url,
+      source: source,
+      page: page,
+      ruleData: ruleData,
+    );
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
@@ -83,9 +98,19 @@ class WebBook {
       body: res.body,
       baseUrl: res.url,
       isSearch: false,
+      variable: ruleData.variableJson,
+      requestUrl: _requestUrl(analyzeUrl, res),
     );
     return results;
   }
+
+  /// 這一頁直接是一本書的詳情時，書的網址（同 Legado `BookList.getInfoItem`）：
+  /// 轉址過就是轉址後的網址，沒有就是請求的網址，含網址選項（POST、
+  /// 標頭），之後打開這本書才照原樣請求。
+  static String _requestUrl(AnalyzeUrl analyzeUrl, StrResponse res) =>
+      res.isRedirect
+      ? res.url
+      : NetworkUtils.getAbsoluteURL(analyzeUrl.url, analyzeUrl.ruleUrl);
 
   /// 獲取書籍資訊 (對標 getBookInfoAwait)
   static Future<Book> getBookInfoAwait(
@@ -289,43 +314,6 @@ class WebBook {
       // distinct until the source provides evidence that they are duplicates;
       // guessing from adjacent names can irreversibly delete real chapters.
 
-      // formatJs (對標 Android BookChapterList.formatJs)
-      final formatJs = source.ruleToc?.formatJs;
-      if (formatJs != null && formatJs.isNotEmpty) {
-        for (var i = 0; i < deduped.length; i++) {
-          final ch = deduped[i];
-          AnalyzeRule? fmtRule;
-          try {
-            // 透過 AnalyzeRule 的 evalJS 管道執行 formatJs，
-            // 以 chapter title 作為 result 傳入，方便 JS 存取原標題。
-            // 同時以 evalJS 內部機制注入 index / title 作為全域變數。
-            fmtRule = AnalyzeRule(
-              source: source,
-              ruleData: book,
-            ).setChapter(ch);
-            fmtRule.page = i + 1;
-            final newTitle = fmtRule.evalJS(formatJs, ch.title);
-            if (newTitle != null && newTitle.toString().isNotEmpty) {
-              deduped[i] = ch.copyWith(title: newTitle.toString());
-            }
-          } on AppException catch (error, stackTrace) {
-            AppLog.e(
-              '目錄 formatJs 規則失敗，保留原標題',
-              error: error,
-              stackTrace: stackTrace,
-            );
-          } on TimeoutException catch (error, stackTrace) {
-            AppLog.e(
-              '目錄 formatJs 執行逾時，保留原標題',
-              error: error,
-              stackTrace: stackTrace,
-            );
-          } finally {
-            fmtRule?.dispose();
-          }
-        }
-      }
-
       // legado 會在書源規則歸一後，再依 book.reverseToc 決定最終顯示順序。
       // 預設 reverseToc=false，因此會再 reverse 一次，讓大多數來源維持正序。
       final reverseToc = book.readConfig?.reverseToc ?? false;
@@ -341,10 +329,67 @@ class WebBook {
         deduped[i] = deduped[i].copyWith(index: i);
       }
 
+      _formatTitles(source, book, deduped);
+
       // 從既有的 DB 資料回填 wordCount (對標 Android BookChapterList.getWordCount)
       await _fillWordCount(deduped, book);
 
       return deduped;
+    } finally {
+      rule.dispose();
+    }
+  }
+
+  /// 目錄的 `formatJs`，同 Legado `BookChapterList.analyzeChapterList`：目錄
+  /// 排成最後的順序、編好號之後逐章跑，`index` 從 1 起、`title` 是原章名、
+  /// `chapter` 是這一章，`gInt` 是整份目錄共用、從 0 起的計數。傳回值不是
+  /// 空的就是新的章名；某一章出錯時那一章留著原章名。
+  ///
+  /// `index`、`gInt` 宣告成包住書源程式的區域變數，再用 `eval` 跑書源的程式：
+  /// 規則 JS 結束時會清掉新增的全域變數，`gInt` 照這樣一章一章傳下去。
+  static void _formatTitles(
+    BookSource source,
+    Book book,
+    List<BookChapter> chapters,
+  ) {
+    final formatJs = source.ruleToc?.formatJs;
+    if (formatJs == null || formatJs.trim().isEmpty) return;
+    final code = jsonEncode(LegacyJsSyntax.normalize(formatJs));
+    final rule = AnalyzeRule(source: source, ruleData: book);
+    try {
+      Object? gInt = 0;
+      for (var i = 0; i < chapters.length; i++) {
+        final chapter = chapters[i];
+        try {
+          // `page` 是夜讀原本給的序號（Legado 沒有這個變數），照舊給。
+          rule
+            ..setChapter(chapter)
+            ..page = i + 1;
+          final out = rule.evalJS(
+            'var index = ${i + 1}; var gInt = ${jsonEncode(gInt)};'
+            ' var __lrTitle = eval($code);'
+            ' JSON.stringify([__lrTitle == null ? null : String(__lrTitle), gInt])',
+            chapter.title,
+          );
+          final [title, counter] = jsonDecode('$out') as List;
+          gInt = counter;
+          if (title is String && title.isNotEmpty) {
+            chapters[i] = chapter.copyWith(title: title);
+          }
+        } on AppException catch (error, stackTrace) {
+          AppLog.e(
+            '目錄 formatJs 規則失敗，保留原標題',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        } on TimeoutException catch (error, stackTrace) {
+          AppLog.e(
+            '目錄 formatJs 執行逾時，保留原標題',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }
+      }
     } finally {
       rule.dispose();
     }

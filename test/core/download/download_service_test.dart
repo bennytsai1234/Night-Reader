@@ -459,6 +459,49 @@ void main() {
     },
   );
 
+  test('a task removed from the queue while its run was planning is not '
+      'written back when the run sets its chapter count', () async {
+    const origin = 'https://removed-task.example';
+    final book = Book(
+      bookUrl: '$origin/book/1',
+      origin: origin,
+      name: '刪掉的任務',
+      isInBookshelf: true,
+    );
+    await GetIt.instance<BookSourceDao>().upsert(
+      BookSource.fromJson({'bookSourceName': '刪', 'bookSourceUrl': origin}),
+    );
+    await GetIt.instance<BookDao>().upsert(book);
+    await GetIt.instance<ChapterDao>().insertChapters([
+      for (var i = 0; i < 3; i++)
+        BookChapter(
+          url: 'unsupported://removed/$i',
+          title: '第 $i 章',
+          index: i,
+          bookUrl: book.bookUrl,
+        ),
+    ]);
+    final service = DownloadService();
+    // 排進來時還沒有目錄（總數 0）；讀者在這一輪抓目錄時從佇列刪掉了它，
+    // 資料庫裡已經沒有這一列。
+    final task = DownloadTask(bookUrl: book.bookUrl, bookName: book.name);
+    service.tasks.add(task);
+    service.isDownloading = true;
+    addTearDown(() {
+      service.isDownloading = false;
+      service.tasks.removeWhere((t) => t.bookUrl == book.bookUrl);
+    });
+
+    await service.processTask(task);
+
+    expect(
+      (await GetIt.instance<DownloadDao>().getAll()).where(
+        (t) => t.bookUrl == book.bookUrl,
+      ),
+      isEmpty,
+    );
+  });
+
   group('keepShelfBookDownloaded', () {
     const origin = 'https://shelf.example';
 

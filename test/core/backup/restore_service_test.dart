@@ -406,6 +406,44 @@ void main() {
     ]);
   });
 
+  test('cover files that are not on this phone fall back to the cover '
+      'address; the ones still here are kept', () async {
+    final here = File('${tempDir.path}/cover-here.jpg')
+      ..writeAsBytesSync([1, 2, 3]);
+    final gone = '${tempDir.path}/gone/cover.jpg';
+    Map<String, Object?> book(String url, Map<String, Object?> covers) => {
+      'bookUrl': url,
+      'origin': 'https://cover.example',
+      'name': url,
+      'isInBookshelf': 1,
+      'coverUrl': 'https://cover.example/$url.jpg',
+      ...covers,
+    };
+    final zip = await writeZip('covers.zip', {
+      'manifest.json': jsonEncode({'schemaVersion': db.schemaVersion}),
+      'bookshelf.json': jsonEncode([
+        // 新手機：書本資料夾不在備份裡。
+        book('stored', {'coverLocalPath': gone}),
+        // 從相簿選的自訂封面：網址本身也是那台的檔。
+        book('gallery', {
+          'customCoverUrl': 'file://$gone',
+          'customCoverLocalPath': gone,
+        }),
+        // 同一台手機還原：檔案還在。
+        book('same-phone', {'coverLocalPath': here.path}),
+      ]),
+    });
+
+    final result = await RestoreService().restoreFromZip(zip);
+
+    expect(result.failedFiles, isEmpty);
+    Future<String?> cover(String url) async =>
+        (await BookDao(db).getByUrl(url))!.getDisplayCover();
+    expect(await cover('stored'), 'https://cover.example/stored.jpg');
+    expect(await cover('gallery'), 'https://cover.example/gallery.jpg');
+    expect(await cover('same-phone'), 'local://${here.path}');
+  });
+
   test('restored text with illustrations (not in the backup) is queued for '
       'the shelf download until every illustration was tried', () async {
     AppStoragePaths.useRoots((

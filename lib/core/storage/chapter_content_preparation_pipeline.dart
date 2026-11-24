@@ -272,6 +272,13 @@ class ChapterContentPreparationPipeline {
         );
       }
 
+      // 目錄給卷名的假網址（卷名＋序號，`ChapterListParser`）的分卷標題
+      // 沒有正文，不向書源抓，那一章只有卷名；同 Legado
+      // `WebBook.getContentAwait`（正文是目錄的更新時間欄，通常是空的）。
+      if (chapter.isVolume && chapter.url.startsWith(chapter.title)) {
+        return ChapterContentPreparationResult.ready(chapter.tag ?? '');
+      }
+
       var source = sourceOverride ?? getSource?.call();
       source ??= await sourceDao.getByUrl(book.origin);
       if (source != null) {

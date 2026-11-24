@@ -1,4 +1,3 @@
-import 'package:html/parser.dart' as html_parser;
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
@@ -54,11 +53,11 @@ class BookInfoParser {
         }
       }
 
-      // 書架上的書名與作者以使用者看到（可能改過）的為準，除非書源規則
-      // 宣告 canReName（同 legado）；搜尋結果進詳情時仍以詳情頁為準。
+      // 已經有書名、作者時不拿詳情頁的蓋掉，書源寫了 canReName 才換（同
+      // Legado BookInfo）：搜尋結果的書名常比詳情頁的乾淨（詳情頁多了
+      // 「《》最新章節」），書名加作者也是書架、同步與換源認書的身分。
       final keepNames =
-          book.isInBookshelf &&
-          (infoRule.canReName == null || infoRule.canReName!.trim().isEmpty);
+          infoRule.canReName == null || infoRule.canReName!.trim().isEmpty;
       String pick(String parsed, String current) =>
           parsed.isEmpty || (keepNames && current.isNotEmpty)
           ? current
@@ -107,13 +106,11 @@ class BookInfoParser {
       );
       if (coverUrl.isNotEmpty) working.coverUrl = coverUrl;
 
-      // tocUrl: 若規則解析結果為空，以 bookUrl 作為預設目錄頁 (對標 Android 邏輯)
-      working.tocUrl = _resolveFallbackTocUrl(
-        tocUrl: rule.getString(infoRule.tocUrl ?? '', isUrl: true),
-        body: body,
-        baseUrl: pageUrl,
-        bookUrl: book.bookUrl,
-      );
+      // 同 Legado（BookInfo.kt）：目錄網址規則沒有結果時，詳情頁就是目錄的
+      // 第一頁。不照頁面上「目录」這類連結的字另找目錄頁：書源的目錄規則是
+      // 照詳情頁寫的，換了起點，下一頁的規則就接不上。
+      final tocUrl = rule.getString(infoRule.tocUrl ?? '', isUrl: true);
+      working.tocUrl = tocUrl.isEmpty ? baseUrl : tocUrl;
       return working;
     } finally {
       rule.dispose();
@@ -143,43 +140,5 @@ class BookInfoParser {
       if (url.isNotEmpty) return NetworkUtils.getAbsoluteURL(baseUrl, url);
     }
     return '';
-  }
-
-  static String _resolveFallbackTocUrl({
-    required String tocUrl,
-    required String body,
-    required String baseUrl,
-    required String bookUrl,
-  }) {
-    if (tocUrl.isNotEmpty && tocUrl != bookUrl) {
-      return tocUrl;
-    }
-
-    final document = html_parser.parse(body);
-    for (final anchor in document.querySelectorAll('a[href]')) {
-      final text = anchor.text.trim();
-      if (!_looksLikeTocLinkText(text)) {
-        continue;
-      }
-      final href = anchor.attributes['href']?.trim() ?? '';
-      if (href.isEmpty) {
-        continue;
-      }
-      final resolved = NetworkUtils.getAbsoluteURL(baseUrl, href);
-      if (resolved.isNotEmpty) {
-        return resolved;
-      }
-    }
-    return bookUrl;
-  }
-
-  static bool _looksLikeTocLinkText(String text) {
-    if (text.isEmpty) {
-      return false;
-    }
-    return text.contains('章节目录') ||
-        text.contains('章節目錄') ||
-        text == '目录' ||
-        text == '目錄';
   }
 }

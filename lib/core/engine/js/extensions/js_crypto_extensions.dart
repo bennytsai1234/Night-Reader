@@ -41,7 +41,8 @@ extension JsCryptoExtensions on JsExtensions {
       return result is List<int> ? jsonEncode(result.toList()) : result;
     });
 
-    // 加密沒給 IV、沒給金鑰時照 Java／Hutool 用隨機的。
+    // 加密沒給 IV、沒給金鑰時照 Java／Hutool 用隨機的；java.security.SecureRandom
+    // 也用它。
     runtime.onMessage('_randomBytes', (dynamic args) {
       final random = Random.secure();
       final count = args is num ? args.toInt() : int.parse(args.toString());
@@ -203,12 +204,6 @@ extension JsCryptoExtensions on JsExtensions {
           List<int>.from(payload[2] as List),
         ).toList(),
       );
-    });
-    // java.security.SecureRandom：n 個隨機位元組。
-    runtime.onMessage('_randomBytes', (dynamic args) {
-      final random = Random.secure();
-      final count = args is num ? args.toInt() : int.tryParse('$args') ?? 0;
-      return jsonEncode([for (var i = 0; i < count; i++) random.nextInt(256)]);
     });
     // java.util.zip.Inflater／InflaterInputStream：zlib，nowrap 時是沒有
     // 標頭的 deflate。

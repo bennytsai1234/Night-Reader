@@ -92,6 +92,7 @@ class AnalyzeUrl {
     this.baseUrl = '',
     this.source,
     this.ruleData,
+    Map<String, String>? headers,
   }) {
     final optionStart = _paramPattern.firstMatch(baseUrl);
     _givenBaseUrl = optionStart == null
@@ -100,8 +101,16 @@ class AnalyzeUrl {
     _jsBaseUrl = _givenBaseUrl;
     try {
       // 書源標頭與登入標頭只在建立時放一次；initUrl 重跑時沿用，同 Legado。
-      _initSourceHeaders();
-      _initLoginHeaders();
+      // 給了 [headers]（`java.connect` 的標頭，Legado `headerMapF`）就用它
+      // 取代這兩份；網址選項的標頭照樣再蓋過去。
+      if (headers != null) {
+        headerMap
+          ..addAll(headers)
+          ..remove('proxy');
+      } else {
+        _initSourceHeaders();
+        _initLoginHeaders();
+      }
       initUrl();
     } finally {
       _releaseJsRule();
@@ -696,6 +705,7 @@ class AnalyzeUrl {
         sourceRegex: sourceRegex,
         headerMap: Map.of(headerMap),
         delayTime: webViewDelayTime,
+        tag: source?.getKey(),
       ).getStrResponse(),
       cancelToken,
     );

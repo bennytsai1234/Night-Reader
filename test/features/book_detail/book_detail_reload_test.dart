@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
@@ -58,6 +59,7 @@ void main() {
       chapterDao: db.chapterDao,
       sourceDao: db.bookSourceDao,
       chapterContentDao: db.readerChapterContentDao,
+      downloadService: _Downloads(),
     );
     addTearDown(provider.dispose);
     while (!provider.hasReadyWorld) {
@@ -163,6 +165,64 @@ void main() {
     },
   );
 
+  test(
+    'saving a cover keeps what a background update check just wrote',
+    () async {
+      final provider = await openDetail();
+      // 背景檢查更新寫回新的章數與最新章節，詳情手上那份還是舊的。
+      final checked = (await db.bookDao.getByUrl(oldUrl))!
+        ..totalChapterNum = 12
+        ..latestChapterTitle = '第十二章';
+      await db.bookDao.upsert(checked);
+
+      final covered = await provider.updateCover('');
+      expect(covered.success, isTrue);
+
+      final stored = (await db.bookDao.getByUrl(oldUrl))!;
+      expect(stored.customCoverUrl, '');
+      expect(stored.totalChapterNum, 12);
+      expect(stored.latestChapterTitle, '第十二章');
+    },
+  );
+
+  test(
+    'editing book info keeps what a background update check just wrote',
+    () async {
+      final provider = await openDetail();
+      final checked = (await db.bookDao.getByUrl(oldUrl))!
+        ..totalChapterNum = 12
+        ..latestChapterTitle = '第十二章';
+      await db.bookDao.upsert(checked);
+
+      final edited = await provider.updateBookInfo('新書名', '作者', '', '');
+      expect(edited.success, isTrue);
+
+      final stored = (await db.bookDao.getByUrl(oldUrl))!;
+      expect(stored.name, '新書名');
+      expect(stored.totalChapterNum, 12);
+      expect(stored.latestChapterTitle, '第十二章');
+    },
+  );
+
+  test('adding to the shelf keeps the table of contents an update check '
+      'just stored', () async {
+    final provider = await openDetail();
+    // 詳情開著時檢查更新換了目錄：第 3 章被拿掉、多了兩章。
+    await db.chapterDao.deleteByBook(oldUrl);
+    final newer = [
+      for (final (i, id) in const ['c0', 'c1', 'c3', 'c4'].indexed)
+        BookChapter(url: '$oldUrl/$id', title: id, bookUrl: oldUrl, index: i),
+    ];
+    await db.chapterDao.insertChapters(newer);
+
+    final added = await provider.setInBookshelf(true);
+    expect(added.success, isTrue);
+
+    final stored = await db.chapterDao.getByBook(oldUrl);
+    expect([for (final c in stored) c.url], [for (final c in newer) c.url]);
+    expect((await db.bookDao.getByUrl(oldUrl))!.isInBookshelf, isTrue);
+  });
+
   // 同 Legado（BookInfoEditActivity）：簡介欄和書源的一樣就不算自訂，書源的
   // 簡介不被蓋掉。預填的是整理過的簡介，只改書名時也不能把它固定下來。
   test('the intro becomes the reader\'s own only when it is edited', () async {
@@ -200,4 +260,16 @@ void main() {
     // 下次開編輯頁拿到的是存過的規則，不會蓋掉剛才的修改。
     expect(provider.currentSource?.bookSourceName, '新名字');
   });
+}
+
+/// 加入書架時排的整本下載：這裡不下載。
+class _Downloads implements DownloadService {
+  @override
+  Future<void> keepShelfBookDownloaded(
+    String bookUrl, {
+    bool hasNewChapters = false,
+  }) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

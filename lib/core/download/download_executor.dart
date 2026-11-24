@@ -425,9 +425,13 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       if (cancelToken.cancelError case final cancelled?) throw cancelled;
       // 進度是範圍裡每一章各算一次：已經有正文的直接算完成。總數照這次
       // 換算的範圍：排進來時可能還沒有目錄，排隊期間目錄也可能多了章節。
+      // 只改還在的那一列：這一輪抓目錄時被讀者從佇列刪掉的，不寫回來。
       if (plan.total != task.totalCount) {
         task.totalCount = plan.total;
-        await downloadDao.upsert(task);
+        await downloadDao.updateProgress(
+          task.bookUrl,
+          totalCount: task.totalCount,
+        );
       }
       if (plan.ready > 0) {
         task.successCount = plan.ready;

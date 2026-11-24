@@ -38,12 +38,98 @@ abstract class BaseSource {
   static String _ruleVariablePrefix(String key) => 'v_${key}_';
 
   String get loginInfoCacheKey => _loginInfoKey(getKey());
-  String get variableCacheKey => _variableKey(getKey());
   String get loginHeaderCacheKey => _loginHeaderKey(getKey());
 
-  /// 規則 JS 用 `source.put`、`java.put` 存的變數 [name]。
+  /// 書源變數（`source.setVariable`）。在草稿裡（[inDraftVariables]）是草稿
+  /// 那一份。
+  String get variableCacheKey => _variableKey(_variableIdentity(getKey()));
+
+  /// 規則 JS 用 `source.put`、`java.put` 存的變數 [name]。在草稿裡
+  /// （[inDraftVariables]）是草稿那一份。
   String ruleVariableCacheKey(String name) =>
-      '${_ruleVariablePrefix(getKey())}$name';
+      '${_ruleVariablePrefix(_variableIdentity(getKey()))}$name';
+
+  // ── 草稿的變數 ─────────────────────────────────────────────────────
+  //
+  // AI 修書源拿還沒套用的草稿試抓、解析、跑程式與校驗時，規則存的書源變數
+  // 與規則變數寫在草稿自己的一份，修好套用時才換掉書源的（[commitDraftVariables]）；
+  // 沒套用就丟掉（[discardDraftVariables]）。登入資訊、登入標頭與 Cookie
+  // 照書源的。
+
+  static const Symbol _draftKey = #sourceDraftVariables;
+
+  /// 現在這段程式在哪一份草稿裡（[inDraftVariables]）；不在草稿裡是 null。
+  /// 送到書源 isolate 的工作跟著帶過去（`SourceWorker.run`）。
+  static String? get draftVariables => Zone.current[_draftKey] as String?;
+
+  /// 在草稿 [draft] 裡跑 [body]：裡面的書源變數與規則變數都是草稿那一份。
+  static R inDraftVariables<R>(String draft, R Function() body) =>
+      runZoned(body, zoneValues: {_draftKey: draft});
+
+  /// 草稿的變數以這個身分存；一份草稿只修一個書源，不分網址。
+  static String _draftIdentity(String draft) => 'draft:$draft';
+
+  static String _variableIdentity(String key) => switch (draftVariables) {
+    final draft? => _draftIdentity(draft),
+    null => key,
+  };
+
+  /// 草稿 [draft] 從書源 [key] 現在的書源變數與規則變數開始；傳回抄進草稿
+  /// 的每個鍵與值，套用時只寫回草稿改過的（[commitDraftVariables]）。
+  static Future<Map<String, String>> startDraftVariables(
+    String draft,
+    String key,
+  ) async {
+    final started = <String, String>{};
+    for (final (from, to) in await _variablePairs(key, _draftIdentity(draft))) {
+      final cache = CacheManager();
+      if (await cache.copy(from, to)) started[to] = (await cache.get(to))!;
+    }
+    return started;
+  }
+
+  /// 修好套用了：草稿 [draft] 改過的變數（和開始時抄進來的 [started] 不同、
+  /// 或新存的）寫進書源 [key]（網址換了開頭時是新的網址），再丟掉草稿。
+  /// 沒改過的不寫：修復這段時間書源自己存的（開場的校驗與試抓、閱讀）不被
+  /// 開始時的舊值蓋回去。
+  static Future<void> commitDraftVariables(
+    String draft,
+    String key, {
+    required Map<String, String> started,
+  }) async {
+    final cache = CacheManager();
+    for (final (from, to) in await _variablePairs(_draftIdentity(draft), key)) {
+      final value = await cache.get(from);
+      if (value == null || started[from] == value) continue;
+      await cache.copy(from, to);
+    }
+    await discardDraftVariables(draft);
+  }
+
+  /// 丟掉草稿 [draft] 的變數。
+  static Future<void> discardDraftVariables(String draft) async {
+    final identity = _draftIdentity(draft);
+    final cache = CacheManager();
+    await cache.delete(_variableKey(identity));
+    for (final key in await cache.keysStartingWith(
+      _ruleVariablePrefix(identity),
+    )) {
+      await cache.delete(key);
+    }
+  }
+
+  /// 身分 [from] 的書源變數與每個規則變數，各配上身分 [to] 的同一個鍵。
+  static Future<List<(String, String)>> _variablePairs(
+    String from,
+    String to,
+  ) async {
+    final fromPrefix = _ruleVariablePrefix(from);
+    return [
+      (_variableKey(from), _variableKey(to)),
+      for (final key in await CacheManager().keysStartingWith(fromPrefix))
+        (key, '${_ruleVariablePrefix(to)}${key.substring(fromPrefix.length)}'),
+    ];
+  }
 
   /// 書源換了身分（[getKey] 從 [from] 變成 [to]，例如書源改了網址）：以舊身分
   /// 存的登入資訊、登入標頭、書源變數與規則變數搬到新身分，不用重新登入。

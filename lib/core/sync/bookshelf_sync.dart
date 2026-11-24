@@ -137,8 +137,12 @@ class BookshelfSync extends SyncKind {
       (shelf[ProgressSync.keyOf(book)] ??= []).add(book);
     }
     _localBooks = localBooks;
+    _networkBooks = shelf;
     return shelf;
   }
+
+  /// 這台書架上的網路書，照鍵（[_shelf] 最近一次讀到的）。
+  Map<String, List<Book>> _networkBooks = const {};
 
   /// 這台書架上的本地書，照書名加作者（[_shelf] 最近一次讀到的）。
   Map<String, List<Book>> _localBooks = const {};
@@ -185,11 +189,33 @@ class BookshelfSync extends SyncKind {
       final sentLocalBook = (_localBooks[key] ?? const <Book>[]).any(
         (book) => _fingerprintOf(recordOf(book)) == base[key]!.local,
       );
-      if (sentLocalBook || (cloud != null && _isLocalRecord(cloud))) {
+      if (sentLocalBook ||
+          (cloud != null && _isLocalRecord(cloud)) ||
+          _heldUnderAnotherKey(key, cloud, local)) {
         base.remove(key);
       }
     }
     return local;
+  }
+
+  /// 雲端 [key] 那筆的書（同一個網址）在這台書架上用另一個鍵，又不是這台把
+  /// 它從 [key] 改名過去的：上次同步的紀錄是舊版把另一台的異名書、或沒帶
+  /// 類別的舊鍵記成這台同步過（[apply] 現在只記這台真的有的鍵）。照常比會
+  /// 當成這台移出書架、送出刪除，刪掉另一台的書。
+  bool _heldUnderAnotherKey(
+    String key,
+    SyncRecord? cloud,
+    Map<String, SyncRecord> local,
+  ) {
+    if (cloud == null || cloud.deleted) return false;
+    final url = cloud.data['bookUrl'];
+    if (url is! String || url.isEmpty) return false;
+    for (final MapEntry(key: held, value: books) in _networkBooks.entries) {
+      if (held == key || !books.any((book) => book.bookUrl == url)) continue;
+      final renamedFrom = local[held]?.data['renamedFrom'];
+      return !(renamedFrom is List && renamedFrom.contains(key));
+    }
+    return false;
   }
 
   /// 舊版把本地書（帶著那台手機上的路徑）也送進了書架同步，另一台加進來是
@@ -240,6 +266,13 @@ class BookshelfSync extends SyncKind {
       if (incoming.bookUrl.isEmpty) continue;
       // 這台曾經看過、沒加進書架的同一本（同一個網址）：留著它的目錄與進度。
       final existing = await _bookDao.getByUrl(incoming.bookUrl);
+      // 同一本書在這台書架上用另一個書名或作者（開同步之前、停用同步期間
+      // 改過名，沒有改名紀錄）：兩台各留各的名字，這一筆留在雲端不動。記成
+      // 套用了的話，這台沒有這個鍵的書，下次同步會被當成這台移出書架、送出
+      // 刪除，刪掉另一台的書。
+      if (existing != null && existing.isInBookshelf) continue;
+      // 這台開著它（播放器聽著沒加進書架的有聲書）：不在背景改名、加進書架。
+      if (existing != null && _isOpen(ProgressSync.keyOf(existing))) continue;
       if (existing != null) {
         // 另一台把這本書改過名：跟著用新名字，鍵才和雲端這筆對得上。
         if (ProgressSync.keyOf(existing) != key &&
@@ -259,21 +292,35 @@ class BookshelfSync extends SyncKind {
         await _writeUserFields(from: incoming, to: existing);
         await _bookDao.updateInBookshelf(existing.bookUrl, true);
         existing.isInBookshelf = true;
-        applied[key] = recordOf(existing);
+        _reportIfHeld(applied, key, existing);
       } else {
         if (incoming.syncTime == 0) {
           incoming.syncTime = DateTime.now().millisecondsSinceEpoch;
         }
         incoming.isInBookshelf = true;
         await _bookDao.upsert(incoming);
-        applied[key] = recordOf(incoming);
+        _reportIfHeld(applied, key, incoming);
       }
       added.add(incoming.bookUrl);
     }
-    // 沒有套用任何一本就不通知：書架與開著的頁面不必為了沒變的資料重讀。
-    if (applied.isNotEmpty) AppEventBus().fire(AppEventBus.upBookshelf);
+    // 沒有加入或套用任何一本就不通知：書架與開著的頁面不必為了沒變的資料
+    // 重讀。
+    if (applied.isNotEmpty || added.isNotEmpty) {
+      AppEventBus().fire(AppEventBus.upBookshelf);
+    }
     added.forEach(_download);
     return applied;
+  }
+
+  /// 加進書架的書鍵和雲端這筆相同才回報成套用了。不同的（舊版沒帶類別的
+  /// 漫畫、有聲書，ADR 0053）書照它自己的鍵加進來，這一筆不記成這台同步過：
+  /// 這台沒有這個鍵的書，下次同步會被當成這台移出書架、送出刪除。
+  static void _reportIfHeld(
+    Map<String, SyncRecord> applied,
+    String key,
+    Book book,
+  ) {
+    if (ProgressSync.keyOf(book) == key) applied[key] = recordOf(book);
   }
 
   /// 另一台改了書名或作者：雲端這批裡，舊鍵被刪、新鍵帶著 `renamedFrom` 指向

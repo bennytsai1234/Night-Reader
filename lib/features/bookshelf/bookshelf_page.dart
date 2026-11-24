@@ -725,25 +725,15 @@ class _BookshelfPageState extends State<BookshelfPage>
         File(path),
       );
       if (!context.mounted) return;
-      final importedTotal =
-          imported.books +
-          imported.chapters +
-          imported.sources +
-          imported.contents;
-      if (importedTotal == 0) {
+      final summary = imported.summary;
+      if (summary == null) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: UiText('未找到可匯入的書架資料')));
         return;
       }
       unawaited(context.read<BookshelfProvider>().loadBooks());
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: UiText(
-            '已匯入 ${imported.books} 本書、${imported.chapters} 個章節、${imported.sources} 個書源'
-            '${imported.contents > 0 ? '，${imported.contents} 份正文快取' : ''}',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: UiText(summary)));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)

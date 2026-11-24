@@ -16,6 +16,7 @@ import 'package:night_reader/core/models/book/reader_chapter_content.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/network/network_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:share_plus/share_plus.dart';
 
 class BookshelfImportResult {
@@ -24,12 +25,29 @@ class BookshelfImportResult {
   final int sources;
   final int contents;
 
+  /// 檔裡已經在這台書架上、照這台留著的書（不算進 [books]）。
+  final int alreadyOnShelf;
+
   const BookshelfImportResult({
     required this.books,
     required this.chapters,
     required this.sources,
     this.contents = 0,
+    this.alreadyOnShelf = 0,
   });
+
+  /// 給讀者看的一句結果；什麼都沒寫進來、也沒有已在書架上的書時是 null。
+  String? get summary {
+    final added = [
+      if (books > 0) '$books 本書',
+      if (chapters > 0) '$chapters 個章節',
+      if (sources > 0) '$sources 個書源',
+      if (contents > 0) '$contents 份正文快取',
+    ];
+    final kept = alreadyOnShelf > 0 ? '$alreadyOnShelf 本已經在書架上，照這台的留著' : null;
+    if (added.isEmpty) return kept;
+    return ['已匯入 ${added.join('、')}', ?kept].join('，');
+  }
 }
 
 class BookshelfExchangeService {
@@ -69,9 +87,19 @@ class BookshelfExchangeService {
       'chapters': chapters.map((e) => e.toJson()).toList(),
       'chapterContents': contentDao == null
           ? const <Map<String, dynamic>>[]
-          : (await contentDao.getEntriesByBookUrls(
-              shelfBooks.map((book) => book.bookUrl),
-            )).map((e) => e.toJson()).toList(),
+          : [
+              // 只帶存好的正文、而且是這本書現在用的書源的（同備份）。
+              for (final entry in await contentDao.getEntriesByBookUrls(
+                shelfBooks.map((book) => book.bookUrl),
+              ))
+                if (entry.isReady &&
+                    shelfBooks.any(
+                      (book) =>
+                          book.bookUrl == entry.bookUrl &&
+                          book.origin == entry.origin,
+                    ))
+                  entry.toJson(),
+            ],
       'sources': sourcesByUrl.values.map((e) => e.toJson()).toList(),
     };
 
@@ -177,7 +205,15 @@ class BookshelfExchangeService {
       }
     }
 
+    // 匯入書架檔是「加入這些書」：這台書架上已經有的書（同一個網址）照這台
+    // 的，閱讀進度、分組、封面、目錄與已下載的正文都不拿檔裡的舊資料蓋掉。
+    final kept = <String>{
+      for (final book in books)
+        if ((await _bookDao.getByUrl(book.bookUrl))?.isInBookshelf ?? false)
+          book.bookUrl,
+    };
     for (final book in books) {
+      if (kept.contains(book.bookUrl)) continue;
       final normalized =
           book.copyWith(
             isInBookshelf: true,
@@ -188,19 +224,46 @@ class BookshelfExchangeService {
             for (final chapter in chapters)
               if (chapter.bookUrl == book.bookUrl) chapter,
           ]);
+      // 書架檔多半是別台匯出的：那台存好的封面檔這台沒有，改用網址。
+      await BookCoverStorageService.dropMissingCoverFiles(normalized);
       await _bookDao.upsert(normalized);
     }
     // 書源在書之後存：存書源時書跟著它的類型（ADR 0053），書已經在才跟得到。
     for (final source in sources) {
       await _sourceDao.upsert(source);
     }
-    if (chapters.isNotEmpty) {
-      await _chapterDao.insertChapters(chapters);
+    // 書架上已有的書，目錄只在這台還沒有時寫；其他的書照檔裡寫（書與目錄
+    // 一起換成檔裡的，閱讀進度才對得上目錄）。
+    final noToc = <String, bool>{};
+    final newChapters = <BookChapter>[
+      for (final chapter in chapters)
+        if (!kept.contains(chapter.bookUrl) ||
+            (noToc[chapter.bookUrl] ??= (await _chapterDao.getByBook(
+              chapter.bookUrl,
+            )).isEmpty))
+          chapter,
+    ];
+    if (newChapters.isNotEmpty) {
+      await _chapterDao.insertChapters(newChapters);
     }
+    // 正文只寫存好的，而且這台那一章還沒有存好的正文時才寫：舊版匯出的檔
+    // 帶著抓失敗的紀錄，不拿它換掉這台已經下載好的。
+    var contents = 0;
     final contentDao = _contentDao;
     if (contentDao != null) {
       for (final content in chapterContents) {
-        await contentDao.upsertEntry(content);
+        if (!content.isReady) continue;
+        if (await contentDao.fillContent(
+          contentKey: content.contentKey,
+          origin: content.origin,
+          bookUrl: content.bookUrl,
+          chapterUrl: content.chapterUrl,
+          chapterIndex: content.chapterIndex,
+          content: content.content ?? '',
+          updatedAt: content.updatedAt,
+        )) {
+          contents++;
+        }
       }
     }
     // 匯入的書就是加入書架的書：整本下載（ADR 0008）。
@@ -212,11 +275,13 @@ class BookshelfExchangeService {
       }
     }
 
+    // 照實際寫進來的算；書架上已有、照這台留著的另外算。
     return BookshelfImportResult(
-      books: books.length,
-      chapters: chapters.length,
+      books: books.length - kept.length,
+      alreadyOnShelf: kept.length,
+      chapters: newChapters.length,
       sources: sources.length,
-      contents: chapterContents.length,
+      contents: contents,
     );
   }
 

@@ -174,7 +174,8 @@ class _AudiobookPageState extends State<AudiobookPage> {
 
   Future<void> _loadDownloaded() async {
     try {
-      final files = await BookChapterFiles.downloaded(widget.book);
+      final book = _player.isCurrent(widget.book) ? _player.book! : widget.book;
+      final files = await BookChapterFiles.downloaded(book);
       if (mounted) setState(() => _downloaded = files.keys.toSet());
     } catch (_) {
       // 讀不到資料夾就當作都沒下載；播放時照樣從網路抓。
@@ -304,6 +305,9 @@ class _AudiobookPageState extends State<AudiobookPage> {
         await Navigator.of(context).push<bool>(
           MaterialPageRoute(builder: (_) => SourceEditorPage(source: source)),
         );
+        // 改了書源網址的話，書本資料夾跟著搬了：照新網址重讀已下載的集數。
+        await _player.reloadBookOrigin();
+        if (mounted) unawaited(_loadDownloaded());
       case _MoreAction.log:
         await Navigator.of(context)
             .push<void>(MaterialPageRoute(builder: (_) => const AppLogPage()));
@@ -1033,11 +1037,22 @@ class _ControlDock extends StatelessWidget {
   }
 }
 
-/// 進度條與已播／總長；播著時只有這一塊跟著位置重建。
-class _ProgressBar extends StatelessWidget {
+/// 進度條與已播／總長；播著時只有這一塊跟著位置重建。拖動時畫拖到的位置
+/// （[_scrubbing]），不跟著播放位置跳回去，放開才跳過去（同漫畫的進度條）。
+class _ProgressBar extends StatefulWidget {
   const _ProgressBar({required this.player});
 
   final AudiobookPlayer player;
+
+  @override
+  State<_ProgressBar> createState() => _ProgressBarState();
+}
+
+class _ProgressBarState extends State<_ProgressBar> {
+  /// 拖到的位置（毫秒）；沒在拖時是 null。
+  double? _scrubbing;
+
+  AudiobookPlayer get player => widget.player;
 
   @override
   Widget build(BuildContext context) {
@@ -1049,8 +1064,12 @@ class _ProgressBar extends StatelessWidget {
     );
     return ValueListenableBuilder<Duration>(
       valueListenable: player.position,
-      builder: (context, at, _) {
+      builder: (context, played, _) {
         final max = total?.inMilliseconds ?? 0;
+        final scrubbing = _scrubbing;
+        final at = scrubbing == null
+            ? played
+            : Duration(milliseconds: scrubbing.round());
         final value = max <= 0
             ? 0.0
             : at.inMilliseconds.clamp(0, max).toDouble();
@@ -1077,14 +1096,15 @@ class _ProgressBar extends StatelessWidget {
                   max: max <= 0 ? 1 : max.toDouble(),
                   onChanged: max <= 0
                       ? null
-                      : (ms) => player.position.value = Duration(
-                          milliseconds: ms.round(),
-                        ),
+                      : (ms) => setState(() => _scrubbing = ms),
                   onChangeEnd: max <= 0
                       ? null
-                      : (ms) => unawaited(
-                          player.seek(Duration(milliseconds: ms.round())),
-                        ),
+                      : (ms) {
+                          setState(() => _scrubbing = null);
+                          unawaited(
+                            player.seek(Duration(milliseconds: ms.round())),
+                          );
+                        },
                 ),
               ),
             ),

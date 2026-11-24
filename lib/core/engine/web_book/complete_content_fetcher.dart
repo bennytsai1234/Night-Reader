@@ -44,6 +44,7 @@ final class CompleteContentFetcher {
     final pendingUrls = ListQueue<String>()..add(chapter.url);
     final concurrency = math.max(1, pageConcurrency ?? _defaultPageConcurrency);
     String? firstRedirectUrl;
+    String? title;
     var fetchedPages = 0;
 
     while (pendingUrls.isNotEmpty) {
@@ -79,6 +80,7 @@ final class CompleteContentFetcher {
       for (final page in pages) {
         if (page.content.isNotEmpty) contentParts.add(page.content);
         firstRedirectUrl ??= page.baseUrl;
+        title ??= page.title;
         for (final nextUrl in page.nextUrls) {
           if (queuedUrls.add(nextUrl)) pendingUrls.add(nextUrl);
         }
@@ -97,6 +99,10 @@ final class CompleteContentFetcher {
       redirectUrl: firstRedirectUrl,
     );
     LoginWall.checkContent(null, content);
+    // 正文規則從第一頁取到的章名（Legado `BookContent`）：整章抓完、沒被
+    // 登入牆擋住才換，失敗時目錄不存進登入提示這類字。呼叫端照規則改過的
+    // 章節欄位存回目錄。
+    if (title != null) chapter.title = title;
     return content;
   }
 
@@ -153,8 +159,17 @@ final class CompleteContentFetcher {
     String? nextChapterUrl,
     CancelToken? cancelToken,
   }) async {
+    // 同 Legado `WebBook.getContentAwait`：章節網址那一頁照正文規則的
+    // `webJs`、`sourceRegex` 抓（網址開了 webView 才用得到），也從它取章名
+    // （`title`，見 [fetch]）；下一頁照一般的請求抓。
+    final firstPage = url == chapter.url;
+    final contentRule = source.ruleContent;
     final analyzeUrl = AnalyzeUrl(url, source: source, ruleData: book);
-    var response = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
+    var response = await analyzeUrl.getStrResponse(
+      cancelToken: cancelToken,
+      jsStr: firstPage ? contentRule?.webJs : null,
+      sourceRegex: firstPage ? contentRule?.sourceRegex : null,
+    );
     response = runLoginCheckJs(analyzeUrl, response);
 
     final result = await ContentParser.parse(
@@ -165,6 +180,7 @@ final class CompleteContentFetcher {
       baseUrl: url,
       redirectUrl: response.url,
       nextChapterUrl: nextChapterUrl,
+      readTitle: firstPage,
     );
     // 任何一頁被登入牆擋住，整章失敗，不存半章。
     LoginWall.checkContent(response, result.content);
@@ -172,6 +188,7 @@ final class CompleteContentFetcher {
       content: result.content,
       nextUrls: result.nextUrls,
       baseUrl: response.url,
+      title: result.title,
     );
   }
 }
@@ -181,9 +198,11 @@ class _FetchedContentPage {
     required this.content,
     required this.nextUrls,
     required this.baseUrl,
+    this.title,
   });
 
   final String content;
   final List<String> nextUrls;
   final String baseUrl;
+  final String? title;
 }

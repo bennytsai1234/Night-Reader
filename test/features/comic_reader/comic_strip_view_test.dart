@@ -24,6 +24,7 @@ class _Harness {
 
   final FakeComicSource source;
   final ComicStripModel model;
+  final ComicStripController controller = ComicStripController();
   final List<ComicLocation> locations = [];
   final List<ComicTapRegion> taps = [];
 
@@ -41,6 +42,7 @@ class _Harness {
         home: Scaffold(
           body: ComicStripView(
             model: model,
+            controller: controller,
             foreground: Colors.black,
             accent: Colors.orange,
             onLocation: locations.add,
@@ -98,6 +100,47 @@ void main() {
     expect(comicTapRegionOf(const Offset(150, 450), size), ComicTapRegion.menu);
     expect(comicTapRegionOf(const Offset(250, 450), size), ComicTapRegion.next);
     expect(comicTapRegionOf(const Offset(50, 800), size), ComicTapRegion.next);
+  });
+
+  // 文字閱讀器同樣的兩道（ReaderAutoPageController）：一幀最多推進 0.08 秒
+  // 的量，退到背景就停。
+  testWidgets('自動捲動遇到停很久的一幀不一口氣補上', (tester) async {
+    final harness = _Harness(FakeComicSource(pagesPerChapter: 3));
+    await harness.pump(tester);
+    harness.controller.setAutoScroll(0.1);
+    for (var i = 0; i < 3; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    final before = _scrollPixels(tester);
+
+    // App 在背景、螢幕關著時不畫幀；回來的第一幀和上一幀差了一分鐘。
+    await tester.pump(const Duration(minutes: 1));
+
+    final moved = _scrollPixels(tester) - before;
+    expect(moved, greaterThan(0));
+    expect(moved, lessThanOrEqualTo(0.1 * _screen.height * 0.08 + 0.01));
+    harness.controller.setAutoScroll(0);
+  });
+
+  testWidgets('自動捲動在退到背景時停下', (tester) async {
+    final harness = _Harness(FakeComicSource(pagesPerChapter: 3));
+    var stopped = false;
+    harness.controller.onAutoScrollStopped = () => stopped = true;
+    await harness.pump(tester);
+    harness.controller.setAutoScroll(0.1);
+    await tester.pump(const Duration(milliseconds: 16));
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump();
+    final before = _scrollPixels(tester);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 16));
+
+    expect(stopped, isTrue);
+    expect(_scrollPixels(tester), before);
   });
 
   testWidgets('開在錨點那一張，往下捲接上下一話，換章分隔寫兩話章名', (tester) async {
