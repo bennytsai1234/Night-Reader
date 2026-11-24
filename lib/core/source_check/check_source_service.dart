@@ -440,7 +440,7 @@ class CheckSourceService extends ChangeNotifier {
       <String, SourceCheckIsolateHandle>{};
 
   /// 等著寫進資料庫的校驗結果：校驗後的書源，與校驗有沒有改寫類型
-  /// （[_withCheckMarks]）。
+  /// （[withCheckMarks]）。
   final Map<String, ({BookSource checked, bool typeChanged})>
   _pendingStatusWrites = {};
   Timer? _notifyTimer;
@@ -863,7 +863,7 @@ class CheckSourceService extends ChangeNotifier {
         final current = await _sourceDao.getByUrl(write.checked.bookSourceUrl);
         if (current == null) continue;
         merged.add(
-          _withCheckMarks(
+          withCheckMarks(
             current,
             write.checked,
             typeChanged: write.typeChanged,
@@ -876,8 +876,9 @@ class CheckSourceService extends ChangeNotifier {
 
   /// [current] 換上 [checked] 的校驗結果：狀態標記、錯誤註解與校驗時間；
   /// 校驗照正文改寫了類型（[typeChanged]，ADR 0051）時連類型與更新時間。
-  /// 其他欄位（名稱、使用者的分組、規則、開關）照 [current]。
-  static BookSource _withCheckMarks(
+  /// 其他欄位（名稱、使用者的分組、規則、開關）照 [current]。修復異常書源
+  /// 重新校驗後也照這個接回寫進去的那一份。
+  static BookSource withCheckMarks(
     BookSource current,
     BookSource checked, {
     required bool typeChanged,

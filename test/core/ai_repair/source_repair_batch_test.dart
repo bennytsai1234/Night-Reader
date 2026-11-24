@@ -62,10 +62,12 @@ bool _good(BookSource source) =>
     source.ruleContent?.content == 'class.txt@text' ||
     source.bookSourceUrl.contains('new.example');
 
-SourceCheckIsolateResult _checked(BookSource source) {
+/// [type] 給了時校驗照正文改寫書源類型（ADR 0051）。
+SourceCheckIsolateResult _checked(BookSource source, {int? type}) {
   final healthy = _good(source);
   final copy = BookSource.fromJson(source.toJson())
     ..addHealthGroups(healthy ? SourceRuntimeHealth.healthy : _broken);
+  if (type != null) copy.bookSourceType = type;
   return SourceCheckIsolateResult(
     stage: healthy ? 'done' : 'content',
     message: healthy ? '校驗成功' : '正文為空',
@@ -104,6 +106,7 @@ void main() {
   late List<String> rechecked;
   late List<String> checkedOriginals;
   late List<List<String>> deleted;
+  late List<BookSource> originals;
   late AiRepairBackups backups;
 
   setUp(() async {
@@ -117,11 +120,13 @@ void main() {
     rechecked = [];
     checkedOriginals = [];
     deleted = [];
+    originals = [];
   });
 
   SourceRepairBatch batch(
     List<BookSource> sources, {
     Map<String, SourceRuntimeHealth> recheck = const {},
+    Map<String, int> retype = const {},
     Map<String, SiteCheck> sites = const {},
     List<String> Function(String url)? replies,
     DateTime Function()? now,
@@ -142,7 +147,7 @@ void main() {
         for (final url in urls) {
           final source = sources.firstWhere((s) => s.bookSourceUrl == url);
           if ((recheck[url] ?? _broken) != SourceRuntimeHealth.healthy) {
-            onResult(url, _checked(source));
+            onResult(url, _checked(source, type: retype[url]));
           }
         }
         return [for (final url in urls) _entry(url, recheck[url] ?? _broken)];
@@ -172,7 +177,10 @@ void main() {
             asked.add(source.bookSourceUrl);
             return fakeAiReply(answers[next++ % answers.length]);
           },
-          apply: (repaired, original) async => saved.add(repaired),
+          apply: (repaired, original) async {
+            originals.add(original);
+            saved.add(repaired);
+          },
           secrets: (_) async => const {},
           backups: backups,
           recheckDelay: Duration.zero,
@@ -670,6 +678,22 @@ void main() {
     expect(b.count(RepairOutcome.aiFixed), 2);
     expect(checkedOriginals, ['https://fresh.example']);
     expect([for (final item in b.items) item.priorCheck], [null, null]);
+  });
+
+  // 重新校驗照正文把書源類型改了、寫回去（ADR 0051）：交給 AI 與存檔前
+  // 比對都照寫回後的那一份，不然自己改的類型會被當成修的期間別處改過，
+  // 修好的規則存不進去。
+  test('a type the recheck corrected is what the AI repairs and what the '
+      'save compares with', () async {
+    final b = batch(
+      [_source('https://comic.example')],
+      retype: {'https://comic.example': 2},
+    );
+
+    await b.start();
+
+    expect(b.count(RepairOutcome.aiFixed), 1);
+    expect([for (final o in originals) o.bookSourceType], [2]);
   });
 
   test('the sources whose site is gone are deleted in one go', () async {
