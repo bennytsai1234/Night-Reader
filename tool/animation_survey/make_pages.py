@@ -78,10 +78,12 @@ def build_area(area, steps):
         for s in chunk:
             for mode in ('light', 'dark'):
                 src = os.path.join(REC, f"{s['key']}-{mode}")
+                dst = os.path.join(page, f"{s['key']}-{mode}")
+                # 上一次留下的同一段先拿掉：這次沒錄到（測試失敗）的照「沒有錄到」列，
+                # 不拿舊的錄影冒充這一次的。
+                if os.path.isdir(dst):
+                    shutil.rmtree(dst)
                 if os.path.isdir(src):
-                    dst = os.path.join(page, f"{s['key']}-{mode}")
-                    if os.path.isdir(dst):
-                        shutil.rmtree(dst)
                     shutil.move(src, dst)
         config = {
             'title': f'{area} 第 {n}/{len(chunks)} 頁',
@@ -125,7 +127,7 @@ def overview():
                     with open(meta_path, encoding='utf-8') as f:
                         meta = json.load(f)
                     row[mode] = {'costs': meta['costs'], 'slice': meta.get('slice', []),
-                                 'phases': meta['phases']}
+                                 'phases': meta['phases'], 'moving': meta.get('moving')}
             rows.append(row)
     # 還在錄、還沒做成頁面的步驟（錄影資料夾裡的 meta.json）也列進來。
     done = {r['key'] for r in rows}
@@ -140,7 +142,7 @@ def overview():
                     with open(meta_path, encoding='utf-8') as f:
                         meta = json.load(f)
                     row[mode] = {'costs': meta['costs'], 'slice': meta.get('slice', []),
-                                 'phases': meta['phases']}
+                                 'phases': meta['phases'], 'moving': meta.get('moving')}
             rows.append(row)
     out =os.path.join(PAGES, 'overview.json')
     with open(out, 'w', encoding='utf-8', newline='\n') as f:

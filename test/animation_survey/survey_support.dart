@@ -217,7 +217,8 @@ Future<void> surveyStep(
   await action();
   final tapMs = clock.elapsedMicroseconds / 1000;
   List<double> costs;
-  List<String> phases;
+  // 畫面在變的幀（ADR 0037，`frame_budget.dart` 照圖層判斷），和儀表板同一個判斷。
+  List<bool> moving;
   if (_warming) {
     await recordFrames(
       tester,
@@ -245,7 +246,7 @@ Future<void> surveyStep(
       realAsync: true,
     );
     costs = [for (final c in result) c.judged / 1000];
-    phases = [for (final c in result) c.note ?? ''];
+    moving = [for (final c in result) c.moving];
     // ignore: avoid_print
     print(describeFrames('$area/$key', result));
   } else {
@@ -276,18 +277,18 @@ Future<void> surveyStep(
       for (final (i, c) in (meta['costs'] as List).indexed)
         (c as num).toDouble() - at(slice, i) / 2,
     ];
-    phases = [for (final p in meta['phases'] as List) p as String];
+    moving = [for (final m in meta['moving'] as List) m as bool];
   }
-  // 照 ADR 0036：只看畫面在動的格子，第 0 格（點下去後的第一格）可以重、
-  // 不算；排版切片照實算後和 4.2ms 比。
-  const still = {'靜止', '紙', '骨架停住'};
+  // 照 ADR 0036、0037：只看畫面在變的幀，第 0 幀（點下去後的第一幀）可以重、
+  // 不算；排版切片照實算後和 4.2ms 比。換頁最後一幀段落已經是「靜止」、畫面
+  // 還在變，所以照錄影量到的畫面變化判斷，不照段落名稱。
   final limit = frameLimit.inMicroseconds / 1000;
-  final moving = [
+  final animated = [
     for (final (i, c) in costs.indexed)
-      if (i > 0 && i < phases.length && !still.contains(phases[i])) c,
+      if (i > 0 && i < moving.length && moving[i]) c,
   ];
-  final peak = moving.fold<double>(0, (a, b) => a > b ? a : b);
-  final over = moving.where((c) => c > limit).length;
+  final peak = animated.fold<double>(0, (a, b) => a > b ? a : b);
+  final over = animated.where((c) => c > limit).length;
   // ignore: avoid_print
   print(
     'SURVEY $area/$key 「$label」 $surveyMode 格數=${costs.length} '
