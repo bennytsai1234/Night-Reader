@@ -666,6 +666,32 @@ void main() {
         expect(next.of(LocalBookAction.deleteRemote), hasLength(1));
       });
 
+      test('a new chapter that failed to go up, then the comic removed here: '
+          'the next press still deletes it from the cloud', () async {
+        await importComic(a, ['第1話', '第2話']);
+        await sync(a);
+        await sync(b);
+        await importComic(b, ['第1話', '第2話', '第3話']);
+        final mine = (await b.shelf()).single;
+        final third = (await b.chapters.getByBook(mine.bookUrl))
+            .firstWhere((c) => c.title == '第3話');
+        store.failingBlobs[LocalBookSync.comicChapterName(third.url)] =
+            const SyncStoreException.file('同步空間拒絕存取這份檔案（HTTP 403）');
+        final up = await b.localBooks().plan();
+        expect(up.of(LocalBookAction.upload), hasLength(1));
+        expect((await b.localBooks().run(up)).failures, hasLength(1));
+
+        b.use();
+        await BookStorageService(
+          bookDao: b.books,
+          chapterDao: b.chapters,
+        ).discardBook(mine);
+        final next = await b.localBooks().plan();
+
+        expect(next.of(LocalBookAction.download), isEmpty);
+        expect(next.of(LocalBookAction.deleteRemote), hasLength(1));
+      });
+
       test('both uploaded under their own keys before seeing each other: '
           'they settle on one key and every chapter file stays', () async {
         await importComic(a, ['第1話', '第2話']);

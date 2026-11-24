@@ -299,8 +299,10 @@ class LocalBookSync {
         switch (task.action) {
           case LocalBookAction.upload:
             // 原檔傳上去、小紀錄還沒寫成時先記著：這台之後移出書架的話，
-            // 下次按的時候照它刪掉雲端沒人記著的原檔。
-            base[task.fingerprint] = _entry(0, task.extension);
+            // 下次按的時候照它刪掉雲端沒人記著的原檔。已經同步過的（本地
+            // 漫畫補了幾話）留著上次的時間：傳不上去時雲端紀錄沒變，移出
+            // 書架後才認得出是這台移出的，不會當成雲端有新的而下載回來。
+            base.putIfAbsent(task.fingerprint, () => _entry(0, task.extension));
             await _bases.write(kind, base);
             base[task.fingerprint] = _entry(
               await _upload(task),
