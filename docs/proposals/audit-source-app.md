@@ -3,7 +3,7 @@
 把書源管理、搜尋、發現、書源校驗、自動換源、登入、網頁驗證、AI 修復、AI 建立書源與 AI 找書的程式讀一遍，列出讀者會碰到的錯。只列不修；每一筆都從觸發點走到出錯的那一行，查過以前的 issue 沒報過。
 
 - 範圍：`docs/agents/auto-audit.md`「舊程式」表上的書源 3、書源 4，檔案以表上為準。
-- 讀的是 `origin/beta` 的 `fff55f9c3ad30947f9b3d76012fb84989d98c095`，下面的「檔案:行號」都是這個提交的。
+- 讀的是 `origin/beta` 的 `fff55f9c3ad30947f9b3d76012fb84989d98c095`，下面的「檔案:行號」都是這個提交的；書源 4 的檔案與它們引用到的書源 3 檔案，到 `40386e30` 都沒改過。
 - 標準照 `docs/agents/auto-audit.md`「算問題的」「不報的」；`PLAN.md` 第二、第四階段已列的（背景工作互搶、AI 的幾條）不重列。
 
 ## 進度表
@@ -17,6 +17,14 @@
 | 書源 3 | `lib/core/source_switch/` | 5／5 | 0 |
 | 書源 3 | `lib/features/source_manager/`（不含 `ai_repair/`） | 22／22 | 0（第 4 筆的入口在發現頁、書籍詳情） |
 | 書源 3 | `lib/features/search/`（含 `ai_find/` 畫面） | 15／15 | 1 |
+| 書源 3 | `lib/features/explore/` | 8／8 | 0 |
+| 書源 4 | `lib/features/source_login/` | 4／4 | 0（另 1 筆在 #529） |
+| 書源 4 | `lib/core/ai_repair/` | 23／23 | 1（另 6 筆在 #529） |
+| 書源 4 | `lib/core/ai_find/` | 4／4 | 0 |
+| 書源 4 | `lib/features/source_manager/ai_repair/` | 5／5 | 0（另 1 筆在 #529） |
+| 書源 4 | `lib/core/source/` 的 `source_login_session`、`source_interaction` | 2／2 | 0 |
+| 書源 4 | `lib/core/network/` 的 `cookie_store`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service` | 4／4 | 1（另 2 筆在 #529） |
+| 書源 4 | `lib/core/backup/login_data_backup.dart` | 1／1 | 0 |
 
 ## 問題
 
@@ -149,6 +157,80 @@
 
 **輕重**：功能沒反應或結果錯。
 
+### 書源 4
+
+和 GPT 那份（#529）重複的不重寫，在「和 #529 重複的」一節列對照。
+
+#### 6. 網址選項開了 `webView` 的請求，網頁寫下的 Cookie 沒存回書源，之後不開網頁的請求帶不到、被網站擋下
+
+**會發生什麼**：網站用網頁程式寫一個通行 Cookie 才放行（常見的 JS 防護頁），書源在搜尋或詳情開 `webView` 讓網頁跑過一次，目錄、正文用一般請求。Legado 把網頁跑完的 Cookie 存進這個書源，之後的一般請求帶著它就過了；夜讀的一般請求沒有這個 Cookie，又拿到防護頁，目錄或正文解析不出東西。
+
+**為什麼**：
+- 開了 `webView` 的請求交給背景網頁，沒有帶書源（`lib/core/engine/analyze_url.dart:688-700`）；規則的 `java.webView` 也一樣（`lib/core/engine/js/extensions/js_blocking_tasks.dart:296`）。
+- 背景網頁跑完只交回內容，沒有讀網頁的 Cookie（`lib/core/network/backstage_webview.dart:115-123`）：
+
+  ```dart
+  void finish(Map<String, dynamic> result) {
+    if (!isCompleted) {
+      isCompleted = true;
+      _timer?.cancel();
+      controller.loadHtmlString('<html></html>');
+      completer.complete(result);
+    }
+  }
+  ```
+
+- 一般請求只從 `CookieStore` 與 Cookie 檔拿 Cookie（`lib/core/engine/analyze_url.dart:731-742`），網頁那一份的 Cookie 只有 Cloudflare 檢查（`lib/core/network/webview_cloudflare_solver.dart:97`）與網頁登入（`lib/features/source_login/source_browser_page.dart:146-158`）會讀回來。
+- Legado 每次網頁載完就把那一頁的 Cookie 存進書源（`legado/app/src/main/java/io/legado/app/help/http/BackstageWebView.kt:139-145` 的 `setCookie`，在 `onPageFinished` 呼叫，`165-166`、`296-297`）；`tag` 由 `AnalyzeUrl` 與 `java.webView` 傳書源的 key（`legado/app/src/main/java/io/legado/app/model/analyzeRule/AnalyzeUrl.kt:426、436`，`legado/app/src/main/java/io/legado/app/help/JsExtensions.kt:180、198、222`）。
+
+**怎麼確認**：`test/core/network/backstage_webview_test.dart` 換掉 `WebViewNative` 的平台頻道，讓 `getCookies` 回 `jsl=abc`；用假的 WebView 平台讓一次 `webView` 請求載完。斷言之後 `CookieStore().getCookie(書源網址)` 含 `jsl=abc`；現在是空字串。
+
+**修法方向**：照 Legado，背景網頁帶上書源的 key，每次載完把那一頁的 Cookie 存進書源的 `CookieStore`（Legado 是 `CookieStore.setCookie`，整個換成網頁那一份）；網址選項與三個 `java.webView*` 入口一起改。主 isolate 替書源 isolate 開網頁的那一段（`lib/core/engine/source_isolate/source_isolate.dart:668-669`）只交回內容，也沒有另外存。
+
+**相關**：`docs/proposals/legado-sources.md` 第 63 列把 `webView` 記成「開瀏覽器、跑 JS、延遲一樣」，沒對到存 Cookie 這一段；同一份的 R8（存著的 Cookie 照請求的網址拿）修好之前，存在書源名下的 Cookie 也只有書源網址那個網域的請求帶得到。
+
+**輕重**：功能沒反應或結果錯。
+
+#### 7. AI 修書源的提示詞說試抓「第一本打不開會改試第二本」，試抓其實只走第一本，AI 照它把一本書的問題當成規則壞了
+
+**會發生什麼**：搜尋結果第一本剛好下架或打不開時，AI 用 test 試抓看到詳情或正文失敗。提示詞說試抓與校驗都會改試第二本、兩本都打不開才算壞，AI 照這句會以為兩本都打不開，回頭改本來沒壞的詳情、目錄或正文規則，或判成網站壞了放棄；同一段提示詞前面又叫它自己用 from info 拿另一本試，兩句互相矛盾。
+
+**為什麼**：
+- 系統提示「用哪個工具」最後一條（`lib/core/ai_repair/ai_repair_prompt.dart:566`）：
+
+  ```
+  submit 後夜讀跑一次書源校驗才套用：試抓與校驗都從搜尋結果的第一本往下走，第一本打不開（詳情、目錄或正文失效）會改試第二本，兩本都打不開才算壞。
+  ```
+
+- test 走的試抓是書源除錯（`lib/core/ai_repair/source_probe.dart:282-290`），除錯只拿搜尋結果第一本往下走，沒有第二本（`lib/core/source/source_debug_service.dart:150-155`，發現頁那一段 `171-176` 一樣）；失敗就寫 `state: -1`、試抓算沒抓到（`source_probe.dart:75-79`）。
+- 只有書源校驗會改試第二本（`lib/core/source_check/source_checker.dart:279-300`）。
+- 同一段提示詞前面兩行（`ai_repair_prompt.dart:564`）寫的是「第一本是下架或打不開的書時，用 test 的 from info 拿另一本試」，和 566 行的說法相反。
+
+**怎麼確認**：`test/core/ai_repair/source_probe_test.dart` 用本機伺服器：搜尋回兩本，第一本的詳情頁回 404，第二本正常。`probeSource` 之後斷言紀錄裡沒有第二本的詳情網址，`succeeded` 是 false；再斷言 `aiRepairSystemPrompt` 不再說試抓會改試第二本。
+
+**修法方向**：提示詞照程式寫：只有 submit 後的校驗會改試第二本，試抓只走第一本，第一本打不開時照 564 行用 from info 換一本。不改試抓本身：試抓是書源除錯，照 Legado 只走第一本。
+
+**輕重**：功能沒反應或結果錯（AI 修錯規則、多花輪數）。
+
+## 和 #529 重複的
+
+讀到、走過一遍，GPT 那份已經報了的：
+
+| 這份 | #529 | 一句話 |
+|---|---|---|
+| 書源 3 第 4 筆 | 第 36 項 | 校驗寫回蓋掉改動、刪掉的書源回來 |
+| 書源 4 `backstage_webview` | 第 43 項 | `java.webView` 這三個入口沒帶書源標頭 |
+| 書源 4 `backstage_webview` | 第 44 項 | 等跳轉網址的寫法一秒就交回整頁 HTML |
+| 書源 4 `source_login_page` | 第 45 項 | 登入只換了 Cookie 檔裡的 Cookie 時當成沒變、不重抓 |
+| 書源 4 `repair_pages`、`ai_repair_log` | 第 47 項 | 讀頁與紀錄先截字再遮秘密，跨邊界的秘密留下兩半 |
+| 書源 4 `ai_repair_log` | 第 48 項 | 開新紀錄時修剪資料夾不保護還在寫的紀錄 |
+| 書源 4 `source_repair_batch`、`ai_repair_apply` | 第 49 項 | 整批重新校驗改了類型，AI 修好的規則被當成「修的時候被改過」存不進去 |
+| 書源 4 `site_check` | 第 50 項 | 網站檢查把沒呼叫的登出函式當成轉址去抓 |
+| 書源 4 `site_check` | 第 51 項 | 空殼判斷只認小寫 `<script`，大寫的單頁式網站被判失效 |
+| 書源 4 `ai_repair_session`、`repair_agent` | 第 52 項 | 修到一半拿到的新登入值，先寫進紀錄才重讀秘密 |
+| 書源 4 `ai_create_source_page`、`ai_repair_settings_page` | 第 53 項 | 改 AI 服務返回後，開始前顯示的「送到」還是舊的 |
+
 ## 拿不準
 
-（還沒有）
+- **書源校驗的整體時限可能把慢但能用的書源判成逾時**：一個書源整個校驗最多 120 秒（`lib/core/source_check/check_source_service.dart:303-313`），開了正文抽查時要搜兩次、讀完整目錄、抓最多八、九章正文（每章可能分頁、失敗再重試一次），每段又各自有時限。卡在：沒有實際的書源量過一次要多久，說不出多慢的網站會超過；逾時的書源會被隔離、建議移除（ADR 0081）。
+- **網址選項開了 `webView` 的背景網頁沒有接到畫面上，網頁的計時器可能不跑**：背景網頁建好瀏覽器後只把它放進一個靜態欄位（`lib/core/network/backstage_webview.dart:210-218` 的 `_hiddenWebViewWidget`），整個 App 沒有地方畫它（`grep hiddenWebViewWidget` 只有這個檔）；Cloudflare 檢查那一個則掛在 App 根部，註解寫明「瀏覽器要接在畫面上，網頁的計時器與動畫幀才照常跑」（`lib/core/network/webview_cloudflare_solver.dart:170-176`，ADR 0033）。卡在：Legado 的背景網頁也沒接到畫面上（`legado/app/src/main/java/io/legado/app/help/http/BackstageWebView.kt:108-110` 直接 `WebView(appCtx)`）照樣能用；靠計時器或動畫幀才把內容填進去的網頁，在夜讀的 Android 與 iPhone 上會不會停住，要在手機上實際開一次才知道。

@@ -13,6 +13,7 @@
 | 介面 0 | `lib/shared/widgets/skeleton/` 11 個檔 | 0 |
 | 介面 1 | `lib/shared/widgets/` 其餘 35 個檔（`glass/`、`lists/`、`popups/`、`book/`、`text/` 與根目錄 4 個）、`lib/shared/navigation/` 10 個、`theme/` 9 個、`layout/` 2 個，共 56 個 | 1 |
 | 介面 2 | `lib/features/bookshelf/` 10 個、`book_detail/` 19 個、`home/` 2 個，共 31 個 | 2 |
+| 介面 3 | `lib/features/settings/` 14 個、`about/` 11 個、`association/` 6 個、`replace_rule/` 5 個，共 36 個 | 1 |
 
 ## 問題
 
@@ -122,6 +123,24 @@
 
 **輕重**：畫面錯。
 
+### 介面 3：設定、關於、檔案關聯、替換規則
+
+`replace_rule/` 沒有找到：試跑每次開新的 isolate、被下一次或關面板取代時結束舊的並傳回 null、逾時計時與接收埠在交出結果時一起收掉（`replace_rule_preview.dart`、`replace_rule_deadline.dart`）；編輯表單、開關與測試區三個元件只畫畫面，控制器由呼叫端的編輯面板建立與放掉。表單驗證的錯誤訊息沒照介面語言轉換已在 #527。
+
+#### 3-1. 「關於夜讀 → 權限」的權限狀態卡片，最後兩列沒有列首圖示
+
+**會發生什麼**：權限狀態那張卡片上面每一列權限都有列首圖示，下面的「開啟系統設定」「重新整理」兩列沒有，字往左縮、和上面的列對不齊。規格是同一張卡片有一列帶列首圖示，其他列也帶（`docs/design/components.md`「分組清單」的「圖示跟著同一張卡片」，強調色的動作用強調色的同大小線條圖示）。#489 補這條規則時漏了這一頁。
+
+**為什麼**：`lib/features/about/privacy_pages.dart:192-196` 每一列權限給 `leading: SizedBox(width: AppGrouped.iconTile, child: Icon(...))`；同一張卡片的 `:177` 「開啟系統設定」與 `:183` 「重新整理」兩列沒有 `leading`。
+
+**怎麼確認**：在 `test/features/about/` 打開權限頁、等狀態查完，斷言「權限狀態」卡片裡每一列 `GroupedRow` 都有 `leading`。
+
+**修法方向**：兩列各給一個同大小的線條圖示（強調色），照權限列包在 `AppGrouped.iconTile` 寬的方塊裡。
+
+**輕重**：畫面錯。
+
 ## 拿不準
 
-（目前沒有）
+- **備份與同步：備份或還原進行中，清單下方是一個置中轉圈**（`lib/features/settings/backup_sync_page.dart:180`）。`DESIGN.md` 原則 4 說不放置中轉圈，但那條講的是載入；這是一件操作的進度，規格沒寫該用什麼，卡在「算不算違反規格」。
+- **外部匯入的提示框標題是「外部匯入」**（`lib/features/association/handlers/association_dialog_helper.dart:82`，「無法辨識」同理）。`docs/design/components.md`「提示框」要求標題直接問要做什麼（「匯入這個書源？」），說明只寫一句後果；這裡說明是三段。是規格不符還是用詞意見，沒有把握。
+- **打開「新增規則」「編輯規則」時，規則除錯的結果區先寫「(無結果)」才換成套用後的字**。編輯面板一開就試跑（`lib/features/reader/features/replace_rule/reader_replace_rule_editor_sheet.dart:106`），試跑在新開的 isolate 裡、結果一定晚於第一幀回來；在那之前結果是空字串（`:72`），測試區把「還沒跑出來」和「規則把字全刪光」都寫成「(無結果)」（`lib/features/replace_rule/widgets/replace_edit_test_panel.dart:53`）；面板沒有骨架進場，第一幀就看得到。替換規則面板不受影響（按「執行測試」才出現結果區，`docs/design/reader.md:47`）。至少一幀是確定的，但持續幾幀看開 isolate 多快，要在手機上看才知道看不看得出來，所以放這裡。
