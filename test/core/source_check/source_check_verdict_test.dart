@@ -44,6 +44,38 @@ void main() {
       expect(issue.health, loginRequiredSourceHealth);
     });
 
+    test('規則或網址帶 vip 字樣的出錯不算要登入', () {
+      // 解析錯誤的字串帶著規則與網址；網站叫 vipxs、規則提到 vip 時，一般的
+      // 規則出錯被判成「需要登入」，書源留在搜尋裡、也不交給 AI 修。
+      final parsing = classify(
+        ParsingException(
+          'TypeError',
+          rule: 'class.vip-list@text',
+          url: 'https://www.vipxs.la/book/1',
+        ),
+      );
+      expect(parsing.health.label, detailBrokenSourceGroupTag);
+
+      // 連不上：錯誤字串帶著主機名稱。
+      final refused = classify(
+        Exception('Connection refused, address = www.vipxs.la'),
+        stage: 'content',
+      );
+      expect(refused.health, isNot(loginRequiredSourceHealth));
+    });
+
+    test('規則 JS 包住的登入牆照樣算要登入', () {
+      final wrapped = classify(
+        ParsingException(
+          'Error: 正文${LoginCheckException.marker}後閱讀',
+          rule: '@js:java.ajax(url)',
+          url: 'https://example.com/c/1',
+        ),
+        stage: 'content',
+      );
+      expect(wrapped.health, loginRequiredSourceHealth);
+    });
+
     test('搜尋到的書打不開會隔離書源，發現到的只標發現失效', () {
       final error = Exception('解析失敗');
       for (final (stage, label) in [
