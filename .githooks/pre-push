@@ -1,5 +1,5 @@
 #!/bin/sh
-# 推送前檢查：說明文件寫到的技能找不找得到，與 analyze。全套測試交給 CI：CI 分四台
+# 推送前檢查：說明文件寫到的技能找不找得到、ADR 索引列齊了沒，與 analyze。全套測試交給 CI：CI 分四台
 # 同時跑約 2 分鐘，本機在 Windows 上要 5 到 10 分鐘，一個 PR 推三次就多等半小時，合併前本來就要等 CI 通過（ADR 0049）。
 # 改完先跑受影響的測試（AGENTS.md「驗證」）。更新說明在發測試版時才檢查（ADR 0049）。
 # 啟用：git config core.hooksPath .githooks
@@ -7,6 +7,9 @@ set -e
 
 # 技能只裝在本機，CI 檢查不到，所以放在這裡，只改說明文件的推送也跑。
 sh tool/skill_refs.sh
+
+# ADR 常只改文件、直接推上 beta，CI 不跑只改文件的推送，所以也放在這裡。
+sh tool/adr_index.sh
 
 # Git 從標準輸入每行給一個要推的 ref：<local ref> <local sha> <remote ref> <remote sha>。
 # 刪除遠端分支時 local sha 全是 0，不必檢查。只改說明文件（任何 .md 與 docs/）
