@@ -135,6 +135,9 @@ dependency_overrides:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # iPhone 模擬器上的最小自動檢查（integration_test/ios_smoke_test.dart，ADR 0003）。
+  integration_test:
+    sdk: flutter
   flutter_lints: ^6.0.0
 
   build_runner: ^2.16.2
