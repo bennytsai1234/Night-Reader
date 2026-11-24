@@ -234,29 +234,29 @@
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| 換源搜哪些書源（全部、分組） | | |
-| 篩選結果 | | |
-| 停止、重新開始 | | |
-| 檢查作者 | | |
-| 載入字數 | | |
-| 載入詳情、載入目錄（看最新章） | | |
-| 結果排序 | | |
-| 結果的選單（置頂、置底、編輯、停用、刪除書源） | | |
-| 只換一章 | | |
-| 換源後回到讀的那一章 | | |
-| 換源的搜尋結果存著 | | |
+| 換源搜哪些書源（全部、分組） | 一樣 | 全部或一個分組；夜讀只搜同一類加聚合源（ADR 0053、0056）。 |
+| 篩選結果 | 一樣 | 打字篩清單。 |
+| 停止、重新開始 | 少一個選項 | 夜讀只有「重新搜尋」，搜到一半不能停（`L:ui/book/changesource/ChangeBookSourceViewModel.kt:437`）。 |
+| 檢查作者 | 結果不對 | Legado 留作者「含」這本書作者的，夜讀只留相等的，見 R22；預設 Legado 關、夜讀開（`N:lib/features/book_detail/source/book_detail_change_source_provider.dart:63`）。 |
+| 載入字數 | 少一個選項 | Legado 抓每個書源讀到的那一章、列出字數並照它排（`L:ui/book/changesource/ChangeBookSourceViewModel.kt:315-347`），看得出哪個書源這一章完整；夜讀的「不列字數差太多的」比的是整本書的字數（同檔 531）。 |
+| 載入詳情、載入目錄（看最新章） | 拿不準 | Legado 是兩個開關、預設關；夜讀一律抓到目錄才列（`docs/design/screens.md`「換源面板」，使用者 2026-11-16 選），刻意不同但沒有 ADR，見檔尾。 |
+| 結果排序 | 拿不準 | Legado 照讀者給的分數（置頂置底）、書源分數、書源順序（`L:ui/book/changesource/ChangeBookSourceViewModel.kt:86-97`）；夜讀照回應時間（同上的畫面規格），見檔尾。 |
+| 結果的選單（置頂、置底、編輯、停用、刪除書源） | 少一個選項 | 夜讀的換源清單沒有長按選單。 |
+| 只換一章 | 一樣 | 單章借源（ADR 0080）。 |
+| 換源後回到讀的那一章 | 結果不對 | 章號寫成中文數字、或章名前綴不同時對不到，見 R23。 |
+| 換源的搜尋結果存著 | 拿不準 | 都存著、打開時先列；Legado 有存著的就不搜、按「重新整理」才搜（`L:ui/book/changesource/ChangeBookSourceViewModel.kt:127`），夜讀每次打開都全部重搜（`N:lib/features/book_detail/source/book_detail_change_source_provider.dart:141-240`），見檔尾。 |
 
 ### 檢查新章節、下載、快取
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| 書架檢查新章節（同時幾本） | | |
-| 每本書可以不檢查更新 | | |
-| 下載範圍（後面幾章、全部、指定） | | |
-| 下載同時幾章 | | |
-| 下載失敗重試 | | |
-| 閱讀時預先下載後面幾章 | | |
-| 清除快取 | | |
+| 書架檢查新章節（同時幾本） | 一樣 | Legado 照「線程數」（預設 16，`L:ui/main/MainViewModel.kt:126`），夜讀固定 4 本（`N:lib/features/bookshelf/provider/bookshelf_update_mixin.dart:17`）；已有目錄網址時 Legado 不重抓詳情，見「有更好的做法」。 |
+| 每本書可以不檢查更新 | 一樣 | 書架長按的「檢查更新」打勾（`N:lib/features/bookshelf/provider/bookshelf_update_mixin.dart:103`）。 |
+| 下載範圍（後面幾章、全部、指定） | 一樣 | 從目前章起、後 10 章、後 50 章、全書、指定範圍（`N:lib/features/book_detail/book_detail_page.dart:712-737`）。 |
+| 下載同時幾章 | 一樣 | 都有上限；Legado 照「線程數」設定，見「少一個選項」第 1 條。 |
+| 下載失敗重試 | 一樣 | 每章最多 3 次（`L:model/CacheBook.kt:271`、`N:lib/core/download/download_executor.dart:585`）；夜讀另外照 ADR 0008 之後再試。 |
+| 閱讀時預先下載後面幾章 | 刻意不同（書架上的書） | 書架上的書整本下載、新章節跟著下載（ADR 0008）；Legado 是「預下載章節數」設定（預設 10，`L:model/ReadBook.kt:931-948`）。不在書架上的書閱讀時預先抓幾章沒追到，見檔尾。 |
+| 清除快取 | 一樣 | 每本書「清除已下載的正文」（`N:lib/features/book_detail/book_detail_page.dart:543`）；Legado 另有一次清全部。 |
 
 ## 結果不對
 
@@ -398,6 +398,18 @@
 - Legado：`L:ui/association/ImportBookSourceViewModel.kt:135-150`（物件先讀 `$.sourceUrls`，讀到就逐一 `importSourceUrl`），`191-195`（`#requestWithoutUA`）。
 - 夜讀：`N:lib/features/source_manager/source_manager_provider.dart:35-66`，物件包成一個元素的清單，沒有書源網址或名稱的跳過。
 
+### R22 換源的「校驗作者」只留作者完全相同的（少數寫法才碰到）
+
+- 讀者會碰到：這本書的作者是「張三」，另一個書源寫成「張三（著）」「張三／李四」這類多了字的。Legado 開著校驗作者時留作者「含」張三的，夜讀只留正規化後完全一樣的，那個書源換不過去。夜讀的校驗作者預設開著，碰到的機會比 Legado 多。
+- Legado：`L:ui/book/changesource/ChangeBookSourceViewModel.kt:268`（`fName == name && (!checkAuthor || fAuthor.contains(author))`）。
+- 夜讀：`N:lib/core/source_switch/same_book.dart:34-46`（`normalizeSearchText(author) == normalizeSearchText(bookAuthor)`）；自動換源（ADR 0069）與單章借源用同一個判斷。
+
+### R23 換源後對回讀到的那一章：章號是中文數字或章名前綴不同時對不到（抓錯或抓不全）
+
+- 讀者會碰到：舊書源的章名是「第100章 風起」，新書源寫「第一百章 風起」或「100、風起」。Legado 去掉章號比對章名本身（相似度），對不到再比章號（認中文數字與「100、」這種寫法），跳到同一章；夜讀只認一模一樣的章名與阿拉伯數字的「第 N 章」，都對不上就照章數比例估一個位置，可能差好幾章。
+- Legado：`L:help/book/BookHelp.kt:499-546`（`getDurChapter`：估計位置前後 10 章內比 `getPureChapterName` 的相似度，不到 0.96 再比 `getChapterNum`），`557-583`（章號認中文數字、「100、」）。
+- 夜讀：`N:lib/core/models/book/chapter_alignment.dart:8-50`（同名、同章號、照比例），章號只認 `第\s*(\d+)\s*[章節篇回集話]`（同檔 63）。同一個函式也用在書籤、標註、閱讀器的進度對回與單章借源的估計章（`book_logic.dart`、`bookmark_dao.dart`、`highlight_dao.dart`、`reader_runtime.dart`、`change_source_sheet.dart`）。
+
 ## 少一個選項
 
 （使用者勾了才做。）
@@ -422,4 +434,7 @@
   - 插圖挑哪個網址：夜讀先取懶載入屬性（`data-original`、`data-src`、`data-lazy-src`），再取 `src`（`N:lib/core/utils/html_formatter.dart:25-35`）；Legado 是同一個標籤裡寫在後面的那個（`L:utils/HtmlFormatter.kt:16-19`）。網頁把佔位圖放在 `src` 時夜讀抓得到真的圖。
   - 校驗不寫回應時間：Legado 校驗完寫（`L:service/CheckSourceService.kt:151`），夜讀只有搜尋時寫（`N:lib/features/search/search_model.dart` 的 `_smoothedRespondTime`）；書源管理沒有「回應時間」排序，只影響搜尋時先送哪個。
   - 書源管理的小差異：「按名稱」夜讀照字碼排、Legado 照拼音（`cnCompare`，`L:ui/book/source/manage/BookSourceActivity.kt:343`）；「按更新時間」夜讀舊的在前、Legado 新的在前（同檔 348）；搜尋框 Legado 也比分組名稱。都不是書源抓不抓得到，也不是少一個開關，不知道算哪一類。
+  - 換源面板：一律抓到目錄才列、照回應時間排、每次打開都全部重搜、「校驗作者」預設開（`docs/design/screens.md`「換源面板」，使用者 2026-11-16 選了目錄那一項）；Legado 載入目錄、詳情、字數是三個預設關的開關，照讀者的置頂置底與書源順序排，有存著的結果就不重搜。
+- **不在書架上的書閱讀時預先抓幾章**：書架上的書照 ADR 0008 整本下載；從搜尋直接打開、沒加書架的書，閱讀器往後預先抓幾章沒追到（`N:lib/features/reader/chapter/reader_chapter_repository.dart` 的 `preloadContent` 沒有人呼叫）。Legado 照「預下載章節數」抓後面 10 章。
+- **閱讀時走到卷名那一列**：Legado 不抓網頁，正文是那一列的更新時間欄（`L:model/webBook/WebBook.kt:310-313`）；夜讀下載與校驗會跳過卷名（`N:lib/core/storage/reader_chapter_content_store.dart:9-10`），閱讀器翻到那一列時怎麼處理沒追到。
 
