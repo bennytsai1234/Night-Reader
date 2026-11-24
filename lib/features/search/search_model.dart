@@ -52,7 +52,16 @@ int searchRelevanceRank(SearchBook book, String key) {
   return 2;
 }
 
-String _normalizeBookUrl(String value) => value.trim().toLowerCase();
+/// 同一本書的網址：協定與主機不分大小寫，路徑與參數照原樣（`/book/A`、
+/// `/book/a` 是兩本不同的書）。
+String _normalizeBookUrl(String value) {
+  final url = value.trim();
+  final uri = Uri.tryParse(url);
+  if (uri == null || !uri.hasScheme || uri.host.isEmpty) return url;
+  return uri
+      .replace(scheme: uri.scheme.toLowerCase(), host: uri.host.toLowerCase())
+      .toString();
+}
 
 /// 同源去重的索引：同一書源裡網址相同（兩邊都有網址時），或任一邊沒有網址
 /// 而書名與作者相同，就算同一本。每個書源回來都要比對，用雜湊查找，不逐本

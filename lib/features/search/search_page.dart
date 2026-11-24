@@ -267,7 +267,10 @@ class _SearchViewState extends State<SearchView> {
               _inputFocus.unfocus();
               // 回來時這次找書可能已經存成「過去的找書」的一筆。
               unawaited(
-                openAiFind(context).then((_) => provider.loadPastFinds()),
+                openAiFind(
+                  context,
+                  scope: provider.searchScope,
+                ).then((_) => provider.loadPastFinds()),
               );
             },
           ),

@@ -123,6 +123,39 @@ void main() {
     );
   });
 
+  // 同一輪幾個工具一起跑：後到的也要等書源的秘密讀好才交出結果，不然結果
+  // 在秘密收進來之前就接進對話、沒遮掉。
+  test('a second lookup of a source waits for its secrets', () async {
+    await addSource('https://a.test');
+    final secretsRead = Completer<Set<String>>();
+    final library = AppAiFindLibrary(
+      scope: SearchScope(),
+      service: _Sites({
+        'https://a.test': Book(
+          bookUrl: 'https://a.test/x',
+          name: '獵魔人',
+          origin: 'https://a.test',
+          kind: '玄幻',
+          intro: '簡介',
+          wordCount: '10萬字',
+        ),
+      }),
+      secretsOf: (_) => secretsRead.future,
+    );
+    final book = found('https://a.test', '獵魔人');
+    final first = library.detail(book, CancelToken());
+    await pumpEventQueue();
+    Set<String>? secretsWhenSecondDone;
+    final second = library
+        .detail(book, CancelToken())
+        .then((_) => secretsWhenSecondDone = {...library.secrets});
+    await pumpEventQueue();
+    secretsRead.complete({'token-abc-123456'});
+    await Future.wait([first, second]);
+
+    expect(secretsWhenSecondDone, {'token-abc-123456'});
+  });
+
   test('a detail without a word count or intro fills them from the other '
       'sources of the same book, keeping the main one', () async {
     for (final url in ['https://a.test', 'https://b.test', 'https://c.test']) {
