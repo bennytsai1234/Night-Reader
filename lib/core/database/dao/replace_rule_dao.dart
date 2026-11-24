@@ -42,6 +42,17 @@ class ReplaceRuleDao extends DatabaseAccessor<AppDatabase>
     return into(replaceRules).insert(_toInsertable(rule));
   });
 
+  /// 新增一條規則，排在現有規則最後（最大的順序號加一：中間刪過的空號
+  /// 不會讓它插到舊規則前面先套用），回傳它的 id。
+  Future<int> append(ReplaceRule rule) => transaction(() async {
+    final last = replaceRules.order.max();
+    final row = await (selectOnly(
+      replaceRules,
+    )..addColumns([last])).getSingle();
+    rule.order = (row.read(last) ?? -1) + 1;
+    return insert(rule);
+  });
+
   /// 照每條自己的編號存（匯入、還原、同步）；沒有編號的配新的。
   Future<void> upsertAll(List<ReplaceRule> rules) => transaction(() async {
     await _assignIds(rules);

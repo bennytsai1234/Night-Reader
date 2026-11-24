@@ -287,9 +287,7 @@ class _ReaderReplaceRuleSheetState extends State<ReaderReplaceRuleSheet> {
                   context,
                   constraints: widget.sheetConstraints,
                   onSave: (rule) async {
-                    final nextOrder = (await widget.replaceDao.getAll()).length;
-                    rule.order = nextOrder;
-                    await widget.replaceDao.upsert(rule);
+                    await widget.replaceDao.append(rule);
                     saved = true;
                   },
                 );
