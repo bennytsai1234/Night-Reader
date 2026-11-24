@@ -1529,6 +1529,26 @@ void main() {
         expect(await b.books.getByUrl('src'), isNull);
       });
 
+      test('titles that already differed before the first sync keep both '
+          'books on both phones', () async {
+        // 開同步之前，A 就把這本改了名；兩台都還沒同步過，沒有改名紀錄。
+        await a.addBook('src', toc: toc, time: 200, name: '新夜航');
+        await b.addBook('src', toc: toc, time: 100);
+
+        await a.sync.syncAll();
+        await b.sync.syncAll();
+        await b.sync.syncAll();
+        await a.sync.syncAll();
+        await syncBoth();
+
+        expect(a.discarded, isEmpty);
+        expect(b.discarded, isEmpty);
+        expect((await a.book('src')).isInBookshelf, isTrue);
+        expect((await b.book('src')).isInBookshelf, isTrue);
+        expect(await a.chapters.titlesByBook('src'), toc);
+        expect(await b.chapters.titlesByBook('src'), toc);
+      });
+
       test('an old title the other phone added again is not renamed', () async {
         await a.addBook('src', toc: toc, time: 200);
         await b.addBook('src', toc: toc, time: 100);

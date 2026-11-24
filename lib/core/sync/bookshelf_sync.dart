@@ -240,6 +240,11 @@ class BookshelfSync extends SyncKind {
       if (incoming.bookUrl.isEmpty) continue;
       // 這台曾經看過、沒加進書架的同一本（同一個網址）：留著它的目錄與進度。
       final existing = await _bookDao.getByUrl(incoming.bookUrl);
+      // 同一本書在這台書架上用另一個書名或作者（開同步之前、停用同步期間
+      // 改過名，沒有改名紀錄）：兩台各留各的名字，這一筆留在雲端不動。記成
+      // 套用了的話，這台沒有這個鍵的書，下次同步會被當成這台移出書架、送出
+      // 刪除，刪掉另一台的書。
+      if (existing != null && existing.isInBookshelf) continue;
       if (existing != null) {
         // 另一台把這本書改過名：跟著用新名字，鍵才和雲端這筆對得上。
         if (ProgressSync.keyOf(existing) != key &&
