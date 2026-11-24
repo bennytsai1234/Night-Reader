@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/services.dart';
+import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/core/comic/comic_chapter_download.dart';
 import 'package:night_reader/core/comic/comic_chapter_numbers.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -313,20 +314,35 @@ class _ComicReaderPageState extends State<ComicReaderPage>
 
   Future<void> _save(ComicLocation location) async {
     final title = _titleOf(location.chapterIndex);
-    final movedAt = await getIt<BookDao>().updateProgress(
-      _book.bookUrl,
-      location.chapterIndex,
-      title,
-      location.pageIndex,
-      visualOffsetPx: location.fraction,
-    );
+    final index = location.chapterIndex;
+    final url = index >= 0 && index < _chapters.length
+        ? _chapters[index].url
+        : null;
+    // 閱讀器開著時檢查更新可能已換上新目錄、話數重新編號（書源在前面插了
+    // 幾話）；閱讀器手上仍是開書時的目錄。寫進資料庫的序號照章節網址換成
+    // 目前目錄的，下次開書才落在同一話；新目錄裡沒有這一話時照閱讀器的
+    // 序號寫。同文字閱讀器（`ReaderProgressController`）。
+    final chapterDao = getIt<ChapterDao>();
+    int? movedAt;
+    await chapterDao.transaction(() async {
+      final stored = url == null
+          ? null
+          : await chapterDao.indexOfUrl(_book.bookUrl, url);
+      movedAt = await getIt<BookDao>().updateProgress(
+        _book.bookUrl,
+        stored ?? index,
+        title,
+        location.pageIndex,
+        visualOffsetPx: location.fraction,
+      );
+    });
     _book
       ..chapterIndex = location.chapterIndex
       ..charOffset = location.pageIndex
       ..visualOffsetPx = location.fraction
       ..durChapterTitle = title
       ..durChapterTime = DateTime.now().millisecondsSinceEpoch;
-    if (movedAt != null) _book.progressTime = movedAt;
+    if (movedAt case final time?) _book.progressTime = time;
   }
 
   Future<void> _flush() async {
@@ -336,8 +352,16 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     if (pending != null) await _save(pending);
   }
 
+  /// 目錄裡的章名（存進度、換源、算缺幾話用）。
   String _titleOf(int index) =>
       index >= 0 && index < _chapters.length ? _chapters[index].title : '';
+
+  /// 畫面上的章名：照閱讀偏好的繁簡轉換（同文字閱讀器的
+  /// `ReaderChapterInfo.chapterTitleAt`）。
+  String _shownTitleOf(int index) => ChineseDisplay.convert(
+    _titleOf(index),
+    convertType: _settings.chineseConvert,
+  );
 
   int _gapBetween(int from, int to) =>
       ComicChapterNumbers.gapBetween(_titleOf(from), _titleOf(to));
@@ -809,7 +833,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       chapterCount: _chapters.length,
       current: _currentChapter,
       scrub: _scrub,
-      titleFor: _titleOf,
+      titleFor: _shownTitleOf,
     );
     return ReaderSidePanel(
       controller: _chapterPanel,
@@ -817,7 +841,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
         shown: _chapterPanel.shown,
         chapters: _chapters,
         currentChapter: _currentChapter,
-        titleFor: _titleOf,
+        titleFor: _shownTitleOf,
         onChapterTap: (index) {
           // 付費章節不跳，目錄留著、只提示（ADR 0057）。
           if (_chapters[index].isLocked) {
@@ -840,7 +864,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
               initialFraction: _initialFraction,
               onLocation: _onLocation,
               onTap: _onTap,
-              titleOf: _titleOf,
+              titleOf: _shownTitleOf,
               gapBetween: _gapBetween,
               webUrlOpener: (url) => unawaited(_openWeb(url)),
               remedyFor: (error) =>
@@ -854,7 +878,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
             top: 0,
             child: ReaderTopMenu(
               controlsVisible: _menuVisible,
-              bookName: _book.name,
+              bookName: context.zh(_book.name),
               navigation: navigation,
               // 本地漫畫同本地書寫「本地」（ADR 0059），不能點。
               originName: _book.isLocal ? '本地' : _book.originName,
