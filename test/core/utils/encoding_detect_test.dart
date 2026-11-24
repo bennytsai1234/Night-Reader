@@ -24,4 +24,20 @@ void main() {
     final text = Charsets.decode(bytes, 'gbk');
     expect(text, '第一章 学\uFFFD</p><p>后面的正文');
   });
+
+  // 網站標著 charset=big5（台灣、香港的舊網站）：照 Big5 解，同 Legado 的
+  // String(bytes, "big5")；孤立的位元組只換掉它自己。
+  test('a Big5 page decodes as Big5', () {
+    final big5 = [0xA9, 0x5D, 0xC5, 0xAA, 0xAE, 0xD1]; // 夜讀書
+    expect(EncodingDetect.decodeWithCharset(big5, 'Big5'), '夜讀書');
+    expect(EncodingDetect.decodeWithCharset(big5, 'big5-hkscs'), '夜讀書');
+    expect(
+      EncodingDetect.decodeWithCharset([0xA9, 0x3C, 0x70, 0x3E], 'big5'),
+      '\uFFFD<p>',
+    );
+    expect(EncodingDetect.encodeWithCharset('夜讀書', 'Big5'), big5);
+    expect(Charsets.decode(big5, 'big5'), '夜讀書');
+    expect(Charsets.encode('夜讀書a', 'BIG5'), [...big5, 0x61]);
+    expect(Charsets.supports('big5'), isTrue);
+  });
 }

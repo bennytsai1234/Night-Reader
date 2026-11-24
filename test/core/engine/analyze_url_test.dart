@@ -39,6 +39,19 @@ void main() {
       expect(analyzeUrl.charset, 'gbk');
     });
 
+    // Legado 用 Java 的字元集，台灣、香港的舊網站常用的 Big5 也送得出。
+    test('選項指定 Big5 時查詢參數以 Big5 位元組編碼', () {
+      final analyzeUrl = AnalyzeUrl(
+        'https://example.com/s?q={{key}},{"charset":"big5"}',
+        key: '夜讀書',
+      );
+
+      expect(
+        analyzeUrl.requestUrl,
+        'https://example.com/s?q=%A9%5D%C5%AA%AE%D1',
+      );
+    });
+
     test('已經編碼過的查詢參數照原樣送出', () {
       expect(
         AnalyzeUrl('https://example.com/s?q=%E8%A5%BF&a=1|2').requestUrl,
