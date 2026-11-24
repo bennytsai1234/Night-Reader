@@ -58,7 +58,7 @@
 
 ### 隱私說明
 
-#### 3. 隱私說明的「同步」列了會同步哪些資料，漏了 AI 找書「不想看的」清單與書架、搜尋的設定
+#### 3. 隱私說明的「同步」列了會同步哪些資料，漏了 AI 找書「不想看的」清單與書架、搜尋的設定（已修，#531）
 
 - **文件寫的**：「書架上的書（…）、閱讀進度、書籤（…）、標註（…）、書源、替換規則、閱讀與外觀設定、閱讀統計、書源的登入資料、過去的找書，以及 AI 服務設定（…）會存到你自己的同步空間」（`PRIVACY.md:43`；App 內同一段在 `lib/features/about/privacy_pages.dart:53`）。這一段是逐項列，讀者會以為沒列的不會離開手機。
 - **程式做的**：同步的設定還有 AI 找書每次都送給 AI 的「不想看的」清單，與書架、搜尋的設定（含搜尋屏蔽的字）。`lib/core/sync/settings_sync.dart:39-48`、`:97-100`：
@@ -76,7 +76,7 @@
 
 - **該改哪一邊**：改文件，兩處（`PRIVACY.md` 與 App 的「隱私說明」）一起補上「AI 找書不想看的清單、書架與搜尋設定」。
 
-#### 4. App 的「權限」說哪些工作會用通知，漏了 AI 建立書源與自動換源
+#### 4. App 的「權限」說哪些工作會用通知，漏了 AI 建立書源與自動換源（已修，#531）
 
 - **文件寫的**：「朗讀的播放控制，與修書源、校驗書源、AI 找書、放到背景的搜尋的進度會使用通知權限；…在 Android 上，它們跑的時候會開前景服務」（`lib/features/about/privacy_pages.dart:130`）。
 - **程式做的**：AI 建立書源與自動換源也是背景工作，跑的時候一樣在通知欄顯示進度、開前景服務。AI 建立書源按下「開始建立」就建一件背景工作（`lib/features/source_manager/ai_repair/ai_create_source_page.dart:162-163`：`final run = SingleRepairRun(session); if (!_runs.adopt(run)) …`，`SingleRepairRun` 是 `RepairRun`，`RepairRun implements BackgroundJob`，`lib/features/source_manager/ai_repair/repair_runs.dart:103`）；自動換源是 `class AutoSourceSwitch implements BackgroundJob`，「跑的時候佔背景工作的位置、只有『結束』」（`lib/core/source_switch/auto_source_switch.dart:24-28`）。
