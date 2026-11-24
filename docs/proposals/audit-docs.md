@@ -2,9 +2,8 @@
 
 這份是全面檢查「文件」那一段的清單：給讀者看的說明（`README.md`、`website/index.html`、`PRIVACY.md`）、`docs/design/` 的規格、ADR 索引、給 agent 看的文件，以及 `.github/workflows/`、`.githooks/`、`tool/` 的腳本，和程式實際做的不一樣的地方。只讀、只列，不修。
 
-- 讀的是 `origin/beta` 的 `fff55f9c`。
+- 讀的是 `origin/beta`：README 到 `docs/design/` 是 `fff55f9c`，ADR 索引以後的四類是 `de5f8e51`。
 - 標準照 `docs/agents/auto-audit.md` 的「算問題的」「不報的」；每一筆都對過程式，兩邊附 `檔案:行號`，並用 `gh issue list --state all --search` 查過沒報過。GPT 這一波開的 #525（文件）沒有拿來比對，照交辦不處理。
-- **還沒讀完**：做到一半交接，進度表標「還沒讀」的類別要接著讀，見分支 `docs/audit-docs` 的 `HANDOFF.md`。
 
 ## 進度
 
@@ -21,7 +20,7 @@
 | `docs/design/reader.md` | 全文；抽查預設值、選單順序、高亮、定時；畫面字全部比對 | 1 |
 | `docs/design/screens.md` | 全文；書架、關於夜讀、背景工作逐條對；其他段只比對畫面字 | 3 |
 | `docs/design/website.md` | 全文；功能數 | 0 |
-| ADR 索引 | 還沒讀 | — |
+| ADR 索引 | `docs/adr/README.md` 與 `docs/adr/` 每個檔逐一比對；所有文件、程式、腳本裡寫到的 ADR 號碼都對過有這一份；被取代的幾份開頭有沒有標 | 1 |
 | 給 agent 看的文件 | 還沒讀（`docs/design/` 的日期與經過也還沒評） | — |
 | CI 與腳本 | 還沒讀 | — |
 | 沒排進分段的程式 | 還沒列 | — |
@@ -115,6 +114,15 @@
 - **AI 服務的測試連線**：`docs/design/screens.md:84` 寫成功時提示「連得上：模型名」；程式是「連線與工具呼叫正常：模型名」（`lib/features/source_manager/ai_repair/ai_repair_settings_page.dart:320`），#369 改的。
 - **閱讀統計**：`docs/design/screens.md:147` 寫「沒聽過時一組「累積閱讀時間」」；程式沒聽過有聲書時那一組沒有名稱（`lib/features/bookmarks/reading_stats_view.dart:245-248`：`if (listened.isEmpty) GroupedSection(children: [for (final record in read) _row(context, record)])`），#487 拿掉分組標題。
 - **該改哪一邊**：改文件，照程式現在的字寫。
+
+### ADR 索引
+
+#### 8. ADR 0079（書架「列表併成一面」做成一般選項）沒有列進索引
+
+- **文件寫的**：索引開頭要求「新增後把它加進下面的索引」（`docs/adr/README.md:3`）；前後的 0074、0077、0078 都列在「正文排版」那張表（`docs/adr/README.md:51`、`:55`、`:58`），就是沒有 0079。
+- **程式做的**：`docs/adr/0079-shelf-merged-list-is-an-option.md` 存在，#512 加的；書架的「列表併成一面」照它做（`lib/shared/shelf_look.dart:1`「「整理」選單的「列表併成一面」（ADR 0079）」），`docs/design/screens.md:8` 也引用它。照 `auto-audit.md` 開工前只讀索引的 agent 看不到這一份。
+- **同一個原因**：CI 的「Check ADR numbers are unique」只查檔名格式與編號重複（`.github/workflows/ci.yml:215-230`），不查每一份都在索引裡，所以漏了也不會擋。
+- **該改哪一邊**：改文件，索引補一行 0079（放「介面與動畫」）。要不要讓 CI 一起查索引由使用者定。
 
 ## 沒排進分段的程式
 
