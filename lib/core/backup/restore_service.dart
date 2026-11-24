@@ -344,27 +344,6 @@ class RestoreService {
     'charOffset': ?item['durChapterPos'],
   };
 
-  /// Legado 書籤的附註（`content`）：夜讀的附註寫在標註的備忘（ADR 0044），
-  /// 有附註的書籤另存一筆同一句的標註。選到的字（`bookText`）是空的就沒有
-  /// 可以畫的字，只留書籤。
-  static Highlight? _noteOfLegadoBookmark(
-    Bookmark bookmark,
-    Map<String, dynamic> item,
-  ) {
-    final note = readJsonString(item['content'])?.trim() ?? '';
-    if (note.isEmpty || bookmark.excerpt.isEmpty) return null;
-    return Highlight(
-      id: bookmark.id * 1000,
-      bookName: bookmark.bookName,
-      bookAuthor: bookmark.bookAuthor,
-      chapterIndex: bookmark.chapterIndex,
-      chapterTitle: bookmark.chapterTitle,
-      charOffset: bookmark.charOffset,
-      quote: bookmark.excerpt,
-      note: note,
-    );
-  }
-
   Future<bool> _importListData(
     String fileName,
     List<dynamic> list, {
@@ -429,11 +408,6 @@ class RestoreService {
             final bookmark = Bookmark.fromJson(item);
             if (bookmark.id > 0 && bookmark.bookName.isNotEmpty) {
               await _bookmarkDao.upsertAll([bookmark]);
-              if (fromLegado) {
-                if (_noteOfLegadoBookmark(bookmark, item) case final note?) {
-                  await _highlightDao.upsertAll([note]);
-                }
-              }
             }
             break;
           case 'highlight.json':

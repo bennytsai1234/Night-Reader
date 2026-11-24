@@ -609,22 +609,15 @@ void main() {
       );
     });
 
-    test('書籤的附註變成同一句的標註備忘，書籤照留', () async {
+    test('書籤的位置與原文照 Legado 的欄位還原', () async {
       await RestoreService().restoreFromZip(await legadoZip('legado-mark.zip'));
-      final bookmarks = await BookmarkDao(db).getAll();
-      expect(
-        bookmarks.where((b) => b.bookName == '雪中悍刀行').map((b) => b.excerpt),
-        containsAll(['天下第二', '開頭']),
-      );
-      final highlights = (await HighlightDao(
+      final bookmarks = (await BookmarkDao(
         db,
-      ).getAll()).where((h) => h.bookName == '雪中悍刀行').toList();
-      expect(highlights, hasLength(1));
-      expect(highlights.single.quote, '天下第二');
-      expect(highlights.single.note, '這句要記住');
-      expect(highlights.single.chapterIndex, 3);
-      expect(highlights.single.chapterTitle, '第四章');
-      expect(highlights.single.charOffset, 20);
+      ).getAll()).where((b) => b.bookName == '雪中悍刀行').toList();
+      expect(bookmarks.map((b) => b.excerpt), containsAll(['天下第二', '開頭']));
+      final first = bookmarks.firstWhere((b) => b.excerpt == '天下第二');
+      expect(first.chapterTitle, '第四章');
+      expect(first.charOffset, 20);
     });
 
     test('閱讀時長從毫秒換成秒，同一本書各台的時間加起來', () async {
