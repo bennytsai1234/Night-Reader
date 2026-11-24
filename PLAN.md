@@ -6,7 +6,7 @@
 
 ## 第一階段：三份清單（只讀不改）
 
-- **全面檢查**：自動巡檢這一波停著，改成現在把全部程式讀一遍、問題一次列完；六個對話各讀一個範圍，結果寫在 `docs/proposals/audit-*.md`。（分支 docs/audit-source-engine、docs/audit-source-app、docs/audit-reader）
+- **全面檢查**：自動巡檢這一波停著，改成現在把全部程式讀一遍、問題一次列完；六個對話各讀一個範圍，結果寫在 `docs/proposals/audit-*.md`。（分支 docs/audit-source-engine、docs/audit-reader）
 - **對照 Legado**：舊功能常常出了狀況才發現 Legado 早就做了；主動對照書源與文字書的閱讀，結果寫在 `docs/proposals/legado-*.md`。（分支 docs/legado-sources、docs/legado-reading）
 - **全部設定盤一遍**：設定只增不減；每個設定列出建議留、拿掉或合併，給使用者挑，結果寫在 `docs/proposals/settings-inventory.md`。（分支 docs/settings-inventory）
 
