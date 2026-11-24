@@ -267,6 +267,7 @@ extension JsNetworkExtensions on JsExtensions {
           javaScript: _stringAt(payload, 2),
           sourceRegex: sourceRegex,
           overrideUrlRegex: overrideUrlRegex,
+          tag: source?.getKey(),
         ),
       ) as String;
     } catch (e) {

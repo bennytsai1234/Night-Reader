@@ -14,6 +14,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/js/js_encode_utils.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
@@ -95,6 +96,24 @@ Future<Object?> _backstageInSourceIsolate(String html) => SourceIsolate.run(
     sourceRegex: 'b+',
   ).getStrResponse())['body'],
 );
+
+/// 在書源 isolate 裡照網址選項開 `webView` 抓一頁、跑規則 JS 的
+/// `java.webView`，傳回主 isolate 收到的兩個請求各帶的書源 key。
+Future<Object?> _webViewTagsInSourceIsolate(Map<String, dynamic> sourceJson) =>
+    SourceIsolate.run((_) async {
+      final source = BookSource.fromJson(sourceJson);
+      final option = await AnalyzeUrl(
+        'https://web.test/p,{"webView":true}',
+        source: source,
+      ).getStrResponse();
+      final rule = AnalyzeRule(source: source);
+      final js = rule.evalJS(
+        'java.webView(null, "https://web.test/q", null)',
+        null,
+      );
+      rule.dispose();
+      return '${option.body}|$js';
+    });
 
 /// 在書源 isolate 裡照書源校驗的方式記請求與回應，抓 [chapterUrl] 的正文；
 /// 傳回記下的行與看起來是暫時性失敗的回應數。
@@ -714,6 +733,19 @@ void main() {
 
       expect(await _backstageInSourceIsolate('<p>aa</p>'), '<p>aa</p>|b+');
     });
+
+    // 同 Legado：背景網頁帶著書源的 key，載完把網頁寫的 Cookie 存進書源。
+    test('webView pages carry the source key', () async {
+      BackstageWebView.delegate = (request) async => {'body': request.tag};
+
+      expect(
+        await _webViewTagsInSourceIsolate({
+          'bookSourceUrl': 'https://web.test',
+          'bookSourceName': '網頁',
+        }),
+        'https://web.test|https://web.test',
+      );
+    }, skip: quickJsUnavailableReason());
   });
 
   test('logs reach the main isolate', () async {

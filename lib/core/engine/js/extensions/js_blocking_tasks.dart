@@ -292,6 +292,7 @@ BlockingTask backstagePage({
   String? javaScript,
   String? sourceRegex,
   String? overrideUrlRegex,
+  String? tag,
 }) => () async {
   final webView = BackstageWebView(
     html: html,
@@ -299,6 +300,7 @@ BlockingTask backstagePage({
     javaScript: javaScript,
     sourceRegex: sourceRegex,
     overrideUrlRegex: overrideUrlRegex,
+    tag: tag,
   );
   final response = await untilCancelled(
     webView.getStrResponse(),
