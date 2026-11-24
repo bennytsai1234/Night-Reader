@@ -221,8 +221,12 @@ final class AiRepairLog {
     return '$head：${_clip(body, _responseHead)}';
   }
 
-  static String _clip(String text, int length) =>
-      text.length <= length ? text : '${text.substring(0, length)}…';
+  /// 摘要裡截短的一段：先遮秘密再截（[redact]），截在一段秘密中間時，留下
+  /// 的半段認不出來。
+  String _clip(String text, int length) {
+    final shown = redact(text);
+    return shown.length <= length ? shown : '${shown.substring(0, length)}…';
+  }
 
   void _write(String text) {
     final redacted = redact(text);

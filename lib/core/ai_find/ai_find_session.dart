@@ -889,7 +889,8 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     }
     if (chapter.number == chapter.total) found.lastTried = true;
     if (chapter.total == 1) found.readTried = true;
-    final text = chapter.text;
+    // 先遮秘密再分段：分段切在一段秘密中間時，兩半各自認不出來。
+    final text = redact(chapter.text);
     final from = command.from.clamp(0, text.length);
     final to = (from + aiFindReadLength).clamp(0, text.length);
     final next = to < text.length ? '，下一段從 $to 讀' : '，這章讀完了';
