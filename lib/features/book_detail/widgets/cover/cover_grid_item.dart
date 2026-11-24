@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/book/book_cover_widget.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 
 import '../../change_cover_sheet.dart';
@@ -30,10 +30,10 @@ class CoverGridItem extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: ClipRRect(
-              borderRadius: AppRadius.cardSm,
-              child: isDefault
-                  ? Container(
+            child: isDefault
+                ? ClipRRect(
+                    borderRadius: AppRadius.cardSm,
+                    child: Container(
                       color: Theme.of(context).colorScheme.primary
                           .withValues(alpha: 0.1),
                       child: Center(
@@ -43,25 +43,19 @@ class CoverGridItem extends StatelessWidget {
                           size: 32,
                         ),
                       ),
-                    )
-                  : CachedNetworkImage(
-                      imageUrl: result.book.coverUrl!,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
-                        color: chrome.groupedSurface,
-                        child: const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                      errorWidget: (context, url, error) => Container(
-                        color: chrome.groupedSurface,
-                        child: Icon(
-                          Icons.broken_image,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
                     ),
-            ),
+                  )
+                // 同 App 其他封面：載入中鋪骨架的底色、到了淡入，載不到畫
+                // 預設封面（Legado 換封面的候選也是）。
+                : BookCoverWidget(
+                    coverUrl: result.book.coverUrl,
+                    bookName: result.book.name,
+                    author: result.book.author,
+                    kind: result.book.bookKind,
+                    width: double.infinity,
+                    height: double.infinity,
+                    borderRadius: AppRadius.cardSm,
+                  ),
           ),
           const SizedBox(height: 4),
           DragOverflowText(

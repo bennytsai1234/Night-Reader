@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
@@ -22,7 +23,67 @@ Color shownColor(WidgetTester tester, String text) {
   return color.withValues(alpha: alpha);
 }
 
+/// [finder] 畫面上實際的透明度：祖先 [Opacity] 乘起來。
+double shownOpacity(WidgetTester tester, Finder finder) {
+  var alpha = 1.0;
+  tester.element(finder).visitAncestorElements((element) {
+    if (element.widget case Opacity(:final opacity)) alpha *= opacity;
+    return true;
+  });
+  return alpha;
+}
+
 void main() {
+  // 灰掉全 App 只有一種深淺：整列灰掉時，列裡自己會灰掉的開關與字不再降一次。
+  testWidgets('a disabled row does not dim its switch or grey text twice', (
+    tester,
+  ) async {
+    final theme = buildAppTheme(AppStyle.plain, Brightness.light);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: Scaffold(
+          body: Column(
+            children: [
+              GroupedSwitchRow(
+                title: '離開時蓋住畫面',
+                value: true,
+                enabled: false,
+                onChanged: (_) {},
+              ),
+              const GroupedSwitch(value: true, onChanged: null),
+              GroupedRow(
+                title: '整列灰掉',
+                enabled: false,
+                trailing: Builder(
+                  builder: (context) => Text(
+                    '列尾',
+                    style: TextStyle(color: context.disabledForeground),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final tracks = find.descendant(
+      of: find.byType(GroupedSwitch),
+      matching: find.byType(AnimatedContainer),
+    );
+    expect(tracks, findsNWidgets(2));
+    for (final track in [tracks.first, tracks.last]) {
+      expect(shownOpacity(tester, track), AppDisabled.opacity);
+    }
+    expect(
+      shownColor(tester, '列尾').toARGB32(),
+      theme.colorScheme.onSurface
+          .withValues(alpha: AppDisabled.opacity)
+          .toARGB32(),
+    );
+  });
+
   // DESIGN.md 原則 5「選單只有一種樣子」：不能按的東西不管原本是危險色、
   // 強調色還是一般字色，都和選單裡不能用的項目是同一種中性灰。
   for (final brightness in Brightness.values) {

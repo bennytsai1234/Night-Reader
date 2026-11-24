@@ -12,6 +12,8 @@
 | 資料 0 資料庫與模型 | `lib/core/database/`（19 檔，不含 `*.g.dart`；另把 `app_tables.dart` 和初版 `5a4c55ee` 逐欄比過，後加的欄位都有升級步驟）、`lib/core/models/`（34 檔）、`lib/core/storage/` 的 `app_cache`、`app_storage_paths`、`reader_layout_cache`、`storage_metrics`（4 檔） | 0 |
 | 資料 1 下載與儲存 | `lib/core/download/` 的 `book_update_service`、`download_base`、`download_executor`、`download_failure`、`download_scheduler`、`download_service`（6 檔，`audio_chapter_download` 在閱讀器 4）、`lib/features/downloads/download_manager_page.dart`（1 檔）、`lib/core/utils/cache_manager.dart`、`lib/core/storage/` 的 `book_storage_service`、`book_chapter_files`、`reader_chapter_content_store`、`reader_chapter_content_storage`、`book_illustration_storage`、`book_cover_storage_service`、`bookshelf_state_tracker`、`books_in_use`（8 檔） | 2 |
 | 資料 2 備份還原、本地書與更新 | `lib/core/local_book/`（5 檔）、`lib/core/backup/` 的 `backup_service`、`restore_service`、`bookshelf_exchange_service`、`export_book_service`、`highlight_export`（5 檔，`login_data_backup` 在書源 4）、`lib/core/app_update/`（4 檔）、`lib/core/playback/tts_service.dart`（1 檔） | 2 |
+| 資料 3 啟動、背景工作與 Android | `lib/main.dart`、`lib/app_providers.dart`、`lib/core/` 的 `startup/`（1）、`di/`（1）、`config/`（1）、`constant/`（5）、`exception/`（2）、`fonts/`（2）、`base/`（1）、`background_work/`（4）、`diagnostics/`（4）、`platform/`（2）、`app_lock/`（1）；`android/app/src/main/` 的 Kotlin（7 檔）與 `AndroidManifest.xml`；`lib/core/utils/` 的 `encoder_utils`、`lru_map`；`lib/core/storage/resource_service.dart` | 0 |
+| 資料 4 同步 | `lib/core/sync/`（21 檔）；另走了呼叫端 `lib/features/settings/local_book_sync_dialog.dart`、`lib/features/book_detail/change_cover_sheet.dart`、`lib/shared/widgets/book/book_cover_widget.dart`、`BookStorageService.discardBook` | 3 |
 
 ## 問題
 
@@ -112,7 +114,7 @@
 
 **怎麼確認**：`test/core/backup/restore_service_test.dart` 加一項：書架上一本網路書有 `coverUrl`，`coverLocalPath` 指著暫存資料夾裡的一個檔；建備份 ZIP，刪掉那個檔與書（模擬新裝），還原；斷言還原後這本書的 `getDisplayCover()` 不是指向不存在檔案的 `local://`（應該是 `coverUrl`）。
 
-**修法方向**：修在最初出錯的地方：本機檔案路徑是這台手機的東西，不該跟著書出去。備份與書架匯出寫書時拿掉 `coverLocalPath`、`customCoverLocalPath`；還原與匯入時也把讀進來的這兩欄清掉（舊備份已經帶著），下次顯示就用網址、詳情頁再照常存一份。同步也送書架（資料 4 另看）。
+**修法方向**：修在最初出錯的地方：本機檔案路徑是這台手機的東西，不該跟著書出去。備份與書架匯出寫書時拿掉 `coverLocalPath`、`customCoverLocalPath`；還原與匯入時也把讀進來的這兩欄清掉（舊備份已經帶著），下次顯示就用網址、詳情頁再照常存一份。從相簿選的自訂封面連 `customCoverUrl` 本身都是這台的檔案路徑（`file://…`），拿掉本機路徑後仍畫成預設封面，和 4-1 一起修。書架同步沒有這個問題：加書只帶 `_addFields`，不含兩個本機路徑（`lib/core/sync/bookshelf_sync.dart:67-84`）。
 
 **輕重**：畫面錯
 
@@ -142,6 +144,103 @@
 
 **輕重**：資料遺失或寫壞
 
+### 資料 3 啟動、背景工作與 Android
+
+沒有找到。
+
+### 資料 4 同步
+
+#### 4-1. 從相簿選的自訂封面，全面同步到另一台後畫成預設封面，再也換不回來
+
+**會發生什麼**：讀者在書籍詳情「換封面」從相簿選一張圖。按「立即全面同步」後，另一台書架上的同一本書（或同步新加進去的這本）改畫預設封面，原本書源的封面也不見了；在那台打開書籍詳情也補不回來，要在那台重新換一次封面。
+
+**為什麼**：
+1. 從相簿選的封面記成這台 App 暫存資料夾裡的檔案路徑，當成封面網址存：`lib/features/book_detail/change_cover_sheet.dart:81-83`
+   ```dart
+   final image = await _picker.pickImage(source: ImageSource.gallery);
+   if (image == null || !mounted) return;
+   await applyCoverFromSheet(context, 'file://${image.path}');
+   ```
+   → `BookDetailProvider.updateCover` 寫進 `customCoverUrl`，再複製一份到書本資料夾記在 `customCoverLocalPath`（`lib/features/book_detail/book_detail_provider.dart:937-944`）。這台顯示的是那份複本。
+2. 書架同步把 `customCoverUrl` 當成「使用者自己改的」送給別台：`lib/core/sync/bookshelf_sync.dart:87-93`（`_userFields`）、`98-108`（`recordOf`）。
+3. 另一台套用：書架上已有這本書時 `_writeUserFields`（同檔 `357-369`）→ `BookDao.updateUserFields` 寫入這串路徑，並因為封面網址換了清掉那台的 `customCoverLocalPath`（`lib/core/database/dao/book_dao.dart:204-225`）；沒有這本書時照雲端那筆整本加入（`bookshelf_sync.dart:263-269`），同樣帶著這串路徑。
+4. 顯示時自訂封面網址排在書源封面前面（`lib/core/models/book/book_extensions.dart:47-58`），`file://` 指著另一台手機的檔，讀不到就畫預設封面：`lib/shared/widgets/book/book_cover_widget.dart:436-451` 的 `errorBuilder` → `_buildFailedCover`（同檔 `521-532`）。
+5. 那台打開書籍詳情時 `_storeDisplayCover` → `ensureCustomCoverStored`（`lib/core/storage/book_cover_storage_service.dart:52-66`）→ `_storeCoverSource`（同檔 `148-167`）讀這串路徑失敗、傳回 null，`customCoverLocalPath` 一直是空的。
+
+同一個原因：備份與書架匯出也用 `Book.toJson` 帶著 `customCoverUrl`（`lib/core/models/book/book_serialization.dart:41`），還原或匯入到新手機一樣畫成預設封面（見 2-1）。
+
+**怎麼確認**：`test/core/sync/` 的兩台手機書架測試加一項：A 書架上一本書的 `customCoverUrl` 是 `file://` 開頭、指著 A 的暫存資料夾裡的檔；A、B 依序全面同步；斷言 B 那本書的 `getDisplayCover()` 不是指著 B 上不存在檔案的路徑（應該是 B 自己的封面）。
+
+**修法方向**：修在最初出錯的地方：從相簿選的圖不是網址，是這台的檔案，不該當成「使用者改的封面網址」離開這台。書架同步、備份、書架匯出送出書時，`file://` 開頭的 `customCoverUrl` 不送（別台保留自己的封面）；收到舊版送來的 `file://` 自訂封面時也不套用。要讓別台也看到這張圖，得另外把圖檔本身帶過去，那是新功能，不在這次。
+
+**輕重**：畫面錯
+
+#### 4-2. 兩台互相補齊同一本本地漫畫後，在這台移出書架，下次按「同步本地書」整本又被下載回來
+
+**會發生什麼**：同一本本地漫畫兩台各有對方沒有的話（例如一台之後補了前面幾話），按「同步本地書」會同時上傳這台多的、下載雲端多的。之後在這台把這本移出書架，再按一次「同步本地書」，確認框列的是「下載」而不是刪掉雲端的：開始同步後整本重新下載、加回書架，雲端那本也沒刪，另一台不會跟著移出。
+
+**為什麼**：
+1. 兩邊都有、各有對方沒有的話時排兩件事：`lib/core/sync/local_book_sync.dart:688-706`
+   ```dart
+   if (uploads) tasks.add(_localTask(LocalBookAction.upload, print, mine));
+   if (downloads) {
+     tasks.add(_remoteTask(LocalBookAction.download, print, theirs));
+   }
+   ```
+   下載那件帶著比對當時雲端紀錄的時間（`_remoteTask` 的 `remoteTime`，同檔 `832-849`）。同一種排序照動作，上傳先做（同檔 `759-762`）。
+2. 上傳把雲端紀錄寫成新的時間，上次同步的紀錄也記這個新時間：同檔 `298-306` → `_uploadComic` 寫紀錄（`507-523`，`time: _clock()...`）。
+3. 接著下載把上次同步的紀錄改回比對當時的舊時間：同檔 `307-310`
+   ```dart
+   case LocalBookAction.download:
+     await _download(task);
+     shelfChanged = true;
+     base[task.fingerprint] = _entry(task.remoteTime, task.extension);
+   ```
+   按鈕跑完不再比對一次（`lib/features/settings/local_book_sync_dialog.dart:59-63`、`92-100`），舊時間就留著。
+4. 移出書架後再按，比對看到這台沒有、雲端那筆的時間和上次同步記的不同，判成「雲端是新的」而下載，不是「這台移出了」：`local_book_sync.dart:726-735`
+   ```dart
+   final removedHere = last != null && last.time == theirs.time;
+   ```
+   → `_downloadComic`（同檔 `528-583`）把每一話重新下載、匯入成一本書。
+
+只有「互相補齊之後、下一次按『同步本地書』之前就移出書架」才會碰到；中間有再按過一次的話，第 2 步那個新時間會在比對時記回來（同檔 `698-700`、`211-213`）。
+
+**怎麼確認**：`test/core/sync/local_book_sync_test.dart` 加一項：這台一本本地漫畫有 a、b 兩話，雲端那筆有 a、c；`plan()` 後 `run()`；把這本移出書架，再 `plan()`；斷言這本的任務是 `deleteRemote`，不是 `download`。
+
+**修法方向**：修在第 3 步：下載寫上次同步的紀錄時，同一輪已經上傳過這本的，留著上傳寫的時間（或兩件都做完後照雲端紀錄現在的時間記），不拿比對當時的舊時間蓋掉。
+
+**輕重**：功能沒反應或結果錯
+
+#### 4-3. 同一本網路書在兩台的書名不同時，全面同步幾次後，其中一台的那本被移出書架、已下載的章節全部刪掉
+
+**會發生什麼**：同一本網路書（書的網址相同）在兩台的書名或作者不一樣，而且不是「兩台都同步過之後才改名」：例如在開始用同步之前，在一台「編輯資訊」改過書名，或那台的書源更新了書名。開同步後，兩台各按幾次「立即全面同步」，其中一台會把書名不同的那一本當成「另一台移出書架了」：那台的這本被移出書架，已下載的正文、目錄、封面都刪掉；接著可能照另一台的書名重新加入、整本重新下載（閱讀進度換成另一台的），也可能下一輪連另一台的那本一起刪掉，兩台都沒有這本書。沒網路或書源失效時，原本離線可讀的章節就讀不到了。
+
+**為什麼**（以 A 上叫「乙」、B 上叫「甲」為例，鍵是書名加作者）：
+1. B 第一次全面同步：雲端有 A 送的「乙」，B 沒有這個鍵、也沒同步過，判成要套用（`lib/core/sync/sync_records.dart:152-156`）。這不是同步裡記到的改名：A 改名時還沒同步過，沒有「甲」的刪除紀錄可對（`lib/core/sync/bookshelf_sync.dart:307-310`）。
+2. 套用時用書的網址找到 B 書架上的那本「甲」，因為它在書架上，不改名，只寫使用者改的欄位，卻照樣把它回報成「乙」那一筆套用好了：`bookshelf_sync.dart:240-262`
+   ```dart
+   final existing = await _bookDao.getByUrl(incoming.bookUrl);
+   if (existing != null) {
+     if (ProgressSync.keyOf(existing) != key &&
+         ProgressSync.keyOf(incoming) == key &&
+         !existing.isInBookshelf) {
+       ...
+     }
+     ...
+     applied[key] = recordOf(existing);
+   ```
+   同步服務照它記下「『乙』在 B 同步過」（`lib/core/sync/sync_service.dart:804-813`）。
+3. B 下一次全面同步：書架上還是只有「甲」，上次同步的紀錄有「乙」、現在沒有，補成這台刪掉了（`lib/core/sync/sync_merge.dart:171-175`；`BookshelfSync.reconcile` 只作廢本地書的舊紀錄，`bookshelf_sync.dart:182-191`）；雲端那筆沒變、這台變了，送出「乙」的刪除紀錄（`sync_records.dart:163-167`）。
+4. A 下一次全面同步：雲端的「乙」被刪、A 沒改過，套用刪除（`sync_records.dart:169`）→ `bookshelf_sync.dart:218-224` 對 A 的「乙」呼叫 `discardBook`，刪掉下載任務、正文、目錄、書本身與書本資料夾（`lib/core/storage/book_storage_service.dart:49-55`）。B 第一次同步送上去的「甲」在同一輪套用：先處理到「甲」的話，A 的那本也走第 2 步、被記成「甲」同步過，接著被刪，下一輪 A 再送出「甲」的刪除、刪掉 B 的；先處理到「乙」的刪除的話，「甲」被當成新書加入、整本下載（`bookshelf_sync.dart:263-271`）。
+
+在停用同步或換同步空間期間改名也可能走到這裡（看兩台同步的先後，另一種順序會由 `_applyRenames` 原地改名）：上次同步的紀錄清掉了，舊名字沒有刪除紀錄，第 1 步一樣認不出是改名。已經同步過再改名的情形是 #206，已修好，走的是 `_applyRenames`；用 `gh issue list --state all` 搜過「改名 同步 移出書架」「書名 不同 同步」「discardBook」等，沒有報過書名在同步前就不同的情形。
+
+**怎麼確認**：`test/core/sync/sync_service_test.dart` 的兩台手機書架測試加一項：A、B 書架上同一個 `bookUrl` 的書，A 叫「乙」、B 叫「甲」，B 有已下載的正文；兩台都沒同步過。A、B、B、A 依序全面同步；斷言 A、B 都還有這本書（`discardBook` 沒被呼叫），B 的正文還在。
+
+**修法方向**：修在第 2 步：這台書架上的那本書鍵不同時，不要回報成套用了這個鍵（這台沒有這個鍵的書，就不該記成同步過）；要嘛照雲端那筆原地改名、兩台統一成同一個書名，要嘛這一筆留在雲端不動。同一個原因要一起看 `existing` 不在書架上時改名的那條（同檔 `245-258`），兩條對同一個網址的處理要一致。
+
+**輕重**：資料遺失或寫壞
+
 ## 拿不準
 
-（還沒有）
+- **這台從沒同步過（剛開始用、重裝、停用後再打開、換了同步空間）時，雲端有刪除紀錄的那一筆，這台手上的會被刪掉**：例如另一台幾個月前把某本書移出書架、刪了某個書源，這台後來自己加了同名同作者的書、匯入了同一個書源，第一次全面同步就被移出書架或刪掉。路徑：沒同步過、雲端也有這個鍵的那筆時間算 0（`lib/core/sync/sync_merge.dart:164-165`），和刪除紀錄比時間雲端贏（`lib/core/sync/sync_records.dart:160-161`），套用刪除（書架 `lib/core/sync/bookshelf_sync.dart:218-224`、書源 `lib/core/sync/source_sync.dart:155`）。拿不準的是這算不算刻意的：ADR 0039「修改時間照上次同步推算」寫了「從沒同步過的這台和雲端內容不同時雲端的贏」，又寫「這台才有的照樣送上去」，雲端只剩刪除紀錄時算哪一種沒寫。同步本地書在同一個情形有比「加進書架的時間」和刪除時間（`lib/core/sync/local_book_sync.dart:716-723`），書架與書源沒有。要使用者定：從沒同步過的這台遇到雲端的刪除紀錄，是照雲端刪掉，還是當成這台才有的送上去。

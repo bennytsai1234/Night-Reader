@@ -10,7 +10,7 @@
 
 - **資料庫**：主 isolate 用 `DriftIsolate.spawn` 開一個執行查詢的 drift isolate，以 `DatabaseConnection.delayed` 連上；書源 isolate 拿它的連接埠以 `AppDatabase.connected` 連上同一個。書源 isolate 寫進的目錄與書，會更新主 isolate 的 `watch()`。
 - **Cookie 檔與書源限流**：在主 isolate。書源 isolate 的請求經由代理的 cookie jar 向主 isolate 讀寫 Cookie，發請求前向主 isolate 借限流紀錄、結束時交回。
-- **WebView**：平台發給 Dart 的訊息只送到主 isolate（背景 isolate 的 `setMessageHandler` 直接丟錯），網址選項 `webView` 與 `java.webView` 由書源 isolate 請主 isolate 渲染（`HeadlessWebViewService.delegate`、`BackstageWebView.delegate`）。
+- **WebView**：平台發給 Dart 的訊息只送到主 isolate（背景 isolate 的 `setMessageHandler` 直接丟錯），網址選項 `webView` 與 `java.webView` 由書源 isolate 請主 isolate 渲染（`BackstageWebView.delegate`）。
 - **紀錄**：`AppLog` 在書源 isolate 的紀錄與提示送回主 isolate（`AppLog.delegate`）；沒被接住的錯誤寫進主 isolate 的錯誤紀錄。
 - **記憶體快取**：`CacheManager` 與 `CookieStore` 的記憶體層兩邊各一份，寫入互相轉送；資料庫與檔案這兩層本來就共用。
 - **繁簡字典與規則的 fetch polyfill**：背景 isolate 沒有 `rootBundle`，由主 isolate 讀好傳過去（`flutter_js` fork 的 `fetchPolyfillSource`，`PATCHES.md` 的 `nightreader.4`）。

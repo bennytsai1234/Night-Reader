@@ -88,9 +88,7 @@ class ComicPaperTintRow extends StatelessWidget implements GroupedSkeletonItem {
       ],
     );
     if (enabled) return row;
-    return IgnorePointer(
-      child: Opacity(opacity: AppDisabled.opacity, child: row),
-    );
+    return IgnorePointer(child: DisabledDim(child: row));
   }
 
   Widget _swatch(
