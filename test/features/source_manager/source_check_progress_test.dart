@@ -347,6 +347,33 @@ void main() {
     expect(pausedFile.closed, isFalse);
     expect(BackgroundWork.instance.current, same(other));
   });
+
+  test('a paused check hears when another job frees the slot, so continue '
+      'turns on', () async {
+    final paused = PausedSourceCheck(file: _MemoryFile.new);
+    paused.hold(SourceCheckPlan([url]), _MemoryFile());
+    final provider = SourceManagerProvider(
+      entrance: Future<void>.value(),
+      pausedCheck: paused,
+    );
+    addTearDown(provider.dispose);
+    while (provider.isLoading || provider.totalSourceCount == 0) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    // AI 找書、自動換源這些不經過書源管理的工作。
+    final other = _Other();
+    BackgroundWork.instance.begin(
+      other,
+      const BackgroundWorkStatus(title: '自動換源', text: ''),
+    );
+    expect(provider.canResumeSourceCheck, isFalse);
+    var heard = 0;
+    provider.addListener(() => heard++);
+
+    BackgroundWork.instance.end(other);
+    expect(provider.canResumeSourceCheck, isTrue);
+    expect(heard, greaterThan(0), reason: '「繼續」跟著亮起來');
+  });
 }
 
 class _Other implements BackgroundJob {

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -601,6 +602,7 @@ class SourceManagerProvider with ChangeNotifier {
     checkService.addListener(_handleCheckServiceChanged);
     _repairRuns.addListener(_handleRepairRunsChanged);
     this.pausedCheck.addListener(notifyListeners);
+    BackgroundWork.instance.addListener(_handleSlotChanged);
     unawaited(
       entrance.then((_) {
         if (_disposed) return;
@@ -695,6 +697,7 @@ class SourceManagerProvider with ChangeNotifier {
     checkService.removeListener(_handleCheckServiceChanged);
     _repairRuns.removeListener(_handleRepairRunsChanged);
     pausedCheck.removeListener(notifyListeners);
+    BackgroundWork.instance.removeListener(_handleSlotChanged);
     if (_listeningSync) SourceSync.applied.removeListener(_handleSourcesSynced);
     duplicatesMerged.dispose();
     super.dispose();
@@ -909,6 +912,12 @@ class SourceManagerProvider with ChangeNotifier {
       checkService.cancel();
     }
     clearSelection();
+  }
+
+  /// 別件背景工作（AI 找書、自動換源…）佔住或空出位置：暫停中校驗的「繼續」
+  /// 跟著灰掉或亮起來。
+  void _handleSlotChanged() {
+    if (pausedCheck.isPaused) notifyListeners();
   }
 
   /// 暫停中的校驗按了繼續：沒有別的背景工作在跑才接著校驗剩下的。
