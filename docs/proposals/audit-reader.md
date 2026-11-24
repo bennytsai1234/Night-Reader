@@ -12,6 +12,8 @@
 | 閱讀器 0：正文層 | `lib/features/reader/text_view/` 全部 41 個檔（`anchor/`、`core/`、`geometry/`、`illustration/`、`layout/`、`measure/`、`overlay/`、`paragraph/`、`pipeline/`、`progress/`、`pump/`、`text/`、`view/` 與 `reader_text_view.dart`） | 1 |
 | 閱讀器 1：功能、書籤、朗讀 | `lib/features/reader/features/` 全部 35 個檔（`auto_page/`、`bookmark/`、`brightness/`、`highlight/`、`illustration/`、`menu/`、`replace_rule/`、`settings/`、`tts/`）、`lib/features/bookmarks/` 2 個檔、`lib/core/engine/reader/` 1 個檔、`lib/core/playback/` 4 個檔（`tts_service` 在資料 2）、`lib/core/chinese/` 3 個檔 | 2 |
 | 閱讀器 2：畫面與視窗 | `lib/features/reader/screen/` 全部 16 個檔（含 `dependencies/`）、`lib/features/reader/viewport/` 2 個檔 | 2 |
+| 閱讀器 3：章節與排版 | 還沒讀（`reader/chapter/`、`session/`、`layout/`、`use_cases/` 等，範圍見 `docs/agents/auto-audit.md`）；只為核對前面幾筆看過 `session/reader_progress_controller.dart`、`reader_runtime.dart` 的 `applyPresentation`／`reloadContentPreservingLocation`、`layout/reader_layout_spec.dart` 的簽章 | — |
+| 閱讀器 4：漫畫與有聲書 | 還沒讀 | — |
 
 ## 閱讀器 0：正文層
 
@@ -145,4 +147,6 @@
 
 ## 拿不準
 
-（還沒有）
+- **朗讀換句時引擎晚到的「念完」會不會跳過一句**：`ReaderTtsController._readFromAfterStopping` 先停引擎再開新的一句（`lib/features/reader/features/tts/reader_tts_controller.dart:219-223`），`_handleSpeechCompleted` 只看現在是不是在念一句（`:308-324`）。如果系統引擎在新的一句開始後才補報被停掉那一句的「念完」，會直接跳到下一句。卡在要看 `lib/core/playback/tts_service.dart`（資料 2）停止時會不會送 completion。
+- **自動翻頁在正文重排時會不會自己停掉**：`ReaderAutoPageController._step` 只在跳章或紙蓋著時跳過這一步（`lib/features/reader/features/auto_page/reader_auto_page_controller.dart:134-138`）；正文在排版中（`ReaderTextView` 的 `_LayingOut`）時 `isTextCovered` 是 false、捲動命令都回 false，這一步就 `stop()`。卡在沒有確認自動翻頁開著、選單收著時，有哪些操作會讓正文回到排版中（背景下載換了正文、旋轉）。
+- **目錄中間插章、章數不變時書籤記號不重算**：`ReaderControllerHost._onControllerChanged` 只在章數、頭尾章節網址變了才重算書籤與標註落在哪一章（`lib/features/reader/screen/reader_controller_host.dart:142-157`）。卡在沒有確認閱讀中目錄會不會這樣換（換目錄的路徑在閱讀器 3）。
