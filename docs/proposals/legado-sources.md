@@ -190,44 +190,45 @@
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| 校驗關鍵字 | | |
-| 校驗逾時 | | |
-| 校驗哪幾項（搜尋、發現、詳情、目錄、正文） | | |
-| 校驗結果的標記與分組 | | |
-| 校驗選取的區間 | | |
-| 同時校驗幾個 | | |
-| 回應時間更新 | | |
+| 校驗關鍵字 | 一樣 | 書源寫了 `checkKeyWord` 用它，否則用設定的（預設「我的」）（`L:service/CheckSourceService.kt:160`、`N:lib/core/source_check/source_checker.dart:166`）；夜讀另外多搜一個不可能有的詞（ADR 0064）。 |
+| 校驗逾時 | 拿不準 | 都可以改；預設 Legado 整個書源 180 秒（`L:model/CheckSource.kt:17`），夜讀每一段 20 秒，沒有 ADR，見檔尾。 |
+| 校驗哪幾項（搜尋、發現、詳情、目錄、正文） | 一樣 | 五項可勾，詳情關掉就不驗目錄與正文（`N:lib/core/source_check/check_source_service.dart:255-284`）；夜讀另外抓只抓到第一頁的（ADR 0068）與有付費章節的（ADR 0057）。 |
+| 校驗結果的標記與分組 | 刻意不同 | 夜讀用自己的標記、別的 App 留下的拿掉（ADR 0067），連不上與網站不在了的建議移除（ADR 0081）；Legado 寫成「搜索失效」這類分組。 |
+| 校驗選取的區間 | 一樣 | Legado 的「校驗所選區間」，夜讀是多選的「連續選取」（`N:lib/features/source_manager/widgets/select_action_bar.dart:149`）再「校驗選中」。 |
+| 同時校驗幾個 | 一樣 | Legado 照「線程數」設定（預設 16，`L:service/CheckSourceService.kt:116`），夜讀固定 8（`N:lib/core/source_check/check_source_service.dart:420`）；設定見「少一個選項」第 1 條。 |
+| 回應時間更新 | 拿不準 | Legado 校驗完把這次的回應時間寫回書源（`L:service/CheckSourceService.kt:151`），夜讀只有搜尋時寫，見檔尾。 |
 
 ### 書源管理
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| 排序（手動、智慧、名稱、網址、更新時間、回應時間、啟用）與反向 | | |
-| 篩選（啟用、停用、需要登入、沒分組、啟用發現、停用發現、各分組） | | |
-| 搜尋框篩選 | | |
-| 分組管理（新增、改名、刪除） | | |
-| 新建書源 | | |
-| 匯入（本地檔、網址、QR） | | |
-| 匯入預覽（新分組、選新的、選更新的、保留原名、保留分組、保留啟用狀態） | | |
-| 匯入的格式（陣列、單一、純文字夾多個） | | |
-| 照網域分組顯示 | | |
-| 單筆選單（置頂、置底、登入、搜尋、除錯、刪除、啟用發現） | | |
-| 多選（啟用、停用、加分組、移除分組、啟用發現、停用發現、置頂、置底、匯出、分享、校驗、選取區間） | | |
-| 拖曳排序 | | |
+| 排序（手動、智慧、名稱、網址、更新時間、回應時間、啟用）與反向 | 少一個選項 | 手動、自動（權重）、名稱、網址、更新時間與倒序都有（`N:lib/features/source_manager/widgets/source_manager_menus.dart:70-76`）；少「回應時間」「是否啟用」。名稱與更新時間排出來的順序也不同，見檔尾。 |
+| 篩選（啟用、停用、需要登入、沒分組、啟用發現、停用發現、各分組） | 少一個選項 | 少「需要登入」（`N:lib/features/source_manager/widgets/source_manager_menus.dart:10-17`）；夜讀另外有類型與校驗標記的篩選。 |
+| 搜尋框篩選 | 拿不準 | 名稱、網址、說明都比（`N:lib/features/source_manager/source_manager_provider.dart:327-336`）；Legado 也比分組名稱（`L:data/dao/BookSourceDao.kt:40`），夜讀分組另有篩選，見檔尾。 |
+| 分組管理（新增、改名、刪除） | 一樣 | 夜讀另外可分享一個分組的書源。 |
+| 新建書源 | 一樣 | |
+| 匯入（本地檔、網址、QR） | 一樣 | 本地檔、網址都有，夜讀另有剪貼簿；QR 夜讀整個沒有，見「Legado 有、夜讀完全沒有的功能」。 |
+| 匯入預覽（新分組、選新的、選更新的、保留原名、保留分組、保留啟用狀態） | 少一個選項 | 新的、比這台新的、比這台舊的分開勾一樣；少自訂分組（加進或取代）、保留原名、保留分組、保留啟用狀態（`L:ui/association/ImportBookSourceViewModel.kt:88-121`；夜讀只保留手動排序，`N:lib/features/source_manager/source_manager_provider.dart:212-235`）。 |
+| 匯入的格式（陣列、單一、純文字夾多個） | 結果不對（少數） | 陣列、單一物件一樣；列出好幾個書源檔網址的 `{"sourceUrls": […]}` 不認，見 R21。 |
+| 照網域分組顯示 | 一樣 | 「按域名分組」。 |
+| 單筆選單（置頂、置底、登入、搜尋、除錯、刪除、啟用發現） | 一樣 | 都有；「啟用發現」夜讀在多選裡。 |
+| 多選（啟用、停用、加分組、移除分組、啟用發現、停用發現、置頂、置底、匯出、分享、校驗、選取區間） | 一樣 | 都有，見「校驗選取的區間」。 |
+| 拖曳排序 | 一樣 | 手動排序時可以拖（`N:lib/features/source_manager/source_manager_page.dart:583`）。 |
 
 ### 書源編輯與除錯
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| 編輯頁：儲存、除錯、登入、搜尋 | | |
-| 清除 Cookie | | |
-| 自動補全 | | |
-| 複製、貼上書源 | | |
-| 設定書源變數 | | |
-| QR 匯入、QR 分享、文字分享 | | |
-| 除錯：搜尋、詳情、目錄、正文、發現 | | |
-| 除錯：看各步的原始網頁 | | |
-| 除錯：掃 QR、重新整理發現 | | |
+| 編輯頁：儲存、除錯、登入、搜尋 | 少一個選項 | 只有儲存與除錯（`docs/design/screens.md` 第 58 行）；登入、搜尋要回書源管理長按。 |
+| 清除 Cookie | 少一個選項 | 只有登入頁的「登出」連登入資料一起清，沒有登入網址的書源清不了它存的 Cookie。 |
+| 自動補全 | 少一個選項 | |
+| 複製、貼上書源 | 少一個選項 | 編輯頁沒有；書源管理的「分享選中」「剪貼簿匯入」做得到同樣的事。 |
+| 設定書源變數 | 少一個選項 | 夜讀沒有地方看或改書源變數，`variableComment` 也沒有地方顯示。 |
+| QR 匯入、QR 分享、文字分享 | 一樣 | 文字分享在書源管理的「分享選中」；QR 見「Legado 有、夜讀完全沒有的功能」。 |
+| 編輯頁能改的欄位 | 少一個選項 | 夜讀的編輯頁只列一部分欄位，其餘照存、改不到，見「少一個選項」。 |
+| 除錯：搜尋、詳情、目錄、正文、發現 | 一樣 | 關鍵字、網址、`名稱::網址`、`++`、`--` 都認（`N:lib/core/source/source_debug_service.dart:109-120`）；從書源編輯除錯時固定搜「我的世界」（`N:lib/features/source_manager/source_editor_page.dart:352`），見「少一個選項」。 |
+| 除錯：看各步的原始網頁 | 少一個選項 | Legado 選單有搜尋、詳情、目錄、正文四頁的原始碼；夜讀只有「複製完整日誌」「重新除錯」。 |
+| 除錯：掃 QR、重新整理發現 | 少一個選項（重新整理發現） | 掃 QR 見「Legado 有、夜讀完全沒有的功能」。 |
 
 ### 換源
 
@@ -391,6 +392,12 @@
 - Legado：`L:data/dao/BookSourceDao.kt:84-88`，發現頁只看 `enabledExplore = 1 and hasExploreUrl = 1`，不看 `enabled`。
 - 夜讀：`N:lib/core/models/source/book_source_logic.dart:551-556`，`canParticipateInDiscovery` 要 `enabled && enabledExplore && hasExploreUrl`，另外要校驗沒擋下；沒有 ADR 記這個決定。
 
+### R21 匯入列出好幾個書源檔網址的 `{"sourceUrls": […]}` 時什麼都沒匯入（少數寫法才碰到）
+
+- 讀者會碰到：書源倉庫或別人分享的匯入內容是一個物件，裡面 `sourceUrls` 列著幾個書源檔的網址。Legado 逐一下載匯入；夜讀把它當成一個書源，沒有書源網址就略過，結果是「未解析到有效書源」。網址後面接 `#requestWithoutUA`（下載時不送瀏覽器標識）的，夜讀也照原字串去抓。
+- Legado：`L:ui/association/ImportBookSourceViewModel.kt:135-150`（物件先讀 `$.sourceUrls`，讀到就逐一 `importSourceUrl`），`191-195`（`#requestWithoutUA`）。
+- 夜讀：`N:lib/features/source_manager/source_manager_provider.dart:35-66`，物件包成一個元素的清單，沒有書源網址或名稱的跳過。
+
 ## 少一個選項
 
 （使用者勾了才做。）
@@ -413,4 +420,6 @@
   - 每個書源等多久：搜尋、換源每次搜尋與校驗每一段都等 20 秒（`N:lib/core/constant/source_wait.dart:1-3`，使用者 2026-11-13）；Legado 搜尋 30 秒、校驗整個書源 180 秒。
   - 目錄一次給好幾頁時：夜讀同時抓 4 頁（`N:lib/core/engine/web_book/web_book_service.dart:31`），其中一頁抓不到就略過、先給抓到的部分，檢查新章節時才整份失敗（同檔 202）；Legado 同時抓的頁數照「線程數」設定（預設 16，`L:model/webBook/BookChapterList.kt:99`），一頁抓不到整份失敗。閱讀時的目錄可能少幾章，讀者看不出來。
   - 插圖挑哪個網址：夜讀先取懶載入屬性（`data-original`、`data-src`、`data-lazy-src`），再取 `src`（`N:lib/core/utils/html_formatter.dart:25-35`）；Legado 是同一個標籤裡寫在後面的那個（`L:utils/HtmlFormatter.kt:16-19`）。網頁把佔位圖放在 `src` 時夜讀抓得到真的圖。
+  - 校驗不寫回應時間：Legado 校驗完寫（`L:service/CheckSourceService.kt:151`），夜讀只有搜尋時寫（`N:lib/features/search/search_model.dart` 的 `_smoothedRespondTime`）；書源管理沒有「回應時間」排序，只影響搜尋時先送哪個。
+  - 書源管理的小差異：「按名稱」夜讀照字碼排、Legado 照拼音（`cnCompare`，`L:ui/book/source/manage/BookSourceActivity.kt:343`）；「按更新時間」夜讀舊的在前、Legado 新的在前（同檔 348）；搜尋框 Legado 也比分組名稱。都不是書源抓不抓得到，也不是少一個開關，不知道算哪一類。
 
