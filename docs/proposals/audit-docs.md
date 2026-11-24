@@ -22,8 +22,8 @@
 | `docs/design/website.md` | 全文；功能數 | 0 |
 | ADR 索引 | `docs/adr/README.md` 與 `docs/adr/` 每個檔逐一比對；所有文件、程式、腳本裡寫到的 ADR 號碼都對過有這一份；被取代的幾份開頭有沒有標 | 1 |
 | 給 agent 看的文件 | `AGENTS.md`、`DESIGN.md`、`CODING_STANDARDS.md`、`docs/agents/` 十七份全文，寫到的路徑、指令、函式與設定逐一對程式；ADR 本文、`GLOSSARY.md`、`docs/state-machines.md` 只機械比對（寫到的路徑與類別、函式名稱在不在程式裡），沒逐條對行為；`DESIGN.md` 的原則只抽查「我的」九個入口；`docs/design/` 的日期與經過照 `DESIGN.md` 自己的規則評 | 6 |
-| CI 與腳本 | 還沒讀 | — |
-| 沒排進分段的程式 | 還沒列 | — |
+| CI 與腳本 | 全文：`.github/workflows/` 四份、`.githooks/` 三支、`tool/changelog.sh`、`flutter_test.sh`、`skill_refs.sh`；`frame_budget_compare.sh` 只讀檔頭與參數；`tool/` 其餘只對過每一支都有文件或程式指到、文件寫的用法與參數；四份 workflow 的 Flutter 版本一致（3.47.2）；跑過 `changelog_test.sh`、`frame_budget_compare_test.sh`、`skill_refs.sh`，都通過 | 0（兩處檢查的缺口併在第 8、13 筆） |
+| 沒排進分段的程式 | `lib/features/` 17 個、`lib/core/` 31 個資料夾，`lib/core/source/` 9、`storage/` 15、`utils/` 12 個檔，逐一對 `docs/agents/auto-audit.md` 的分段表；表上寫的檔名反過來也都對過還在 | 交辦範圍內 0；範圍外 3 處 |
 
 ## 問題
 
@@ -170,11 +170,18 @@
 
 ## 沒排進分段的程式
 
-還沒列。
+交辦要列的三類（`lib/features/`、`lib/core/` 底下的資料夾，`lib/core/source/`、`storage/`、`utils/` 裡的檔）都在 `docs/agents/auto-audit.md` 的分段表上，沒有漏的。
+
+交辦範圍外、順手看到也沒有段會讀的：
+
+- `lib/shared/shelf_look.dart`：書架「列表併成一面」與書架順序的設定（#512 加的）。介面 1 只排了 `lib/shared/` 底下的 `widgets/`、`navigation/`、`theme/`、`layout/` 四個資料夾（`auto-audit.md:41`），這個檔在 `lib/shared/` 最上層。
+- `ios/Runner/AppDelegate.swift`（280 行，斷詞、網頁、電量、閱讀器裝置、系統列的平台通道）與 `SceneDelegate.swift`：資料 3 只排了 Android 那一半（`auto-audit.md:38`）。
+- `third_party/flutter_tts/`、`file_picker/`、`xpath_selector/` 的修補：只有 `flutter_js` 排進書源 0（`auto-audit.md:25`）；「不報的」說 `PATCHES.md` 記的修補可以看，但沒有段會看到（見第 11 筆）。
 
 ## 拿不準
 
 - **第 1 筆**的「用檔案開書」是照「從檔案管理員選用夜讀開啟」讀的；作者原意若是 App 裡選檔，這筆不成立。
 - **隱私說明**只核對了同步、備份、送給 AI 的長度上限與遮掉的資料、日誌遮罩；「AI 改書源之前的那一份不進備份、不同步」（`ai_repair_backups.dart` 存在哪）、WebDAV 帳密存在哪、AI 找書只送作品名稱到維基百科、讀章節的正文不存不算閱讀時間，都還沒對程式。
 - **ADR 本文與 `docs/state-machines.md` 的日期與經過**：76 份 ADR 共 342 處日期、`state-machines.md` 18 處，照 `auto-audit.md` 也算沉積；但 ADR 照它的索引就是記「考慮過什麼、否決了什麼」（`docs/adr/README.md:3`），`state-machines.md` 是每做完一個狀態機加一節的紀錄（`docs/state-machines.md:3`），沒算進第 14 筆。類別名稱也沒算：`docs/design/` 寫了不少（例如 `components.md:22` 的 `DragOverflowText`），是不是沉積和日期一樣由使用者定。
+- **只改 `.gitignore` 這類檔也會發測試版**：`tool/changelog.sh` 的 `is_app_path` 把文件、網站、測試、hook、工具與三份 workflow 以外的路徑都算 App 內容（`tool/changelog.sh:32-40`），`.gitignore`、`.gitattributes`、`LICENSE`、`.metadata` 也算；上一個發布之後只改了這些時，`android-release.yml` 仍會發一版（`.github/workflows/android-release.yml:79-88`、`:202`）。實際有沒有碰過、要不要排除沒查。
 - **這台 Linux 電腦**：`docs/agents/environment.md`、`emulator.md`、`phone.md` 只寫了家裡與公司兩台 Windows（Legado 在 `C:\…`、模擬器在 `C:/Android/Sdk`、Git Bash、「家裡這台沒有 `jq`」）；這台有 `jq`、沒有模擬器、Legado 在 `~/.cache/audit-legado/legado`。是不是會長期用的電腦不知道，沒列成問題。`issue-tracker.md:8` 要用 `jq` 過濾留言，和 `environment.md:24`「家裡這台沒有 `jq`」也對不上。
