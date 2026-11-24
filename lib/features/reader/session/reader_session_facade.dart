@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
+import 'package:night_reader/features/reader/session/reader_open_target.dart';
 
 class ReaderSessionFacade {
   const ReaderSessionFacade();
@@ -21,7 +24,16 @@ class ReaderSessionFacade {
     book.charOffset = location.charOffset;
     book.visualOffsetPx = location.visualOffsetPx;
     book.durChapterTitle = chapterTitle;
-    book.readerAnchorJson = null;
+    // 重開時照前後文字找回同一句（ADR 0042）：[location] 自己帶著就用它的，
+    // 沒帶時留下退出前剛存、指著同一個位置的那份；都沒有才只存章節與字數。
+    final anchor = location.hasContentIdentity
+        ? location
+        : ReaderOpenTarget.resume(book).location;
+    book.readerAnchorJson = anchor.hasContentIdentity
+        ? jsonEncode(
+            anchor.copyWith(visualOffsetPx: location.visualOffsetPx).toJson(),
+          )
+        : null;
     book.durChapterTime = DateTime.now().millisecondsSinceEpoch;
     book.progressTime = book.durChapterTime;
     if (book.syncTime == 0) {
