@@ -192,10 +192,7 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           if (made.replaceRegex.isNotEmpty) {
             if (result is List) {
               result = result
-                  .map(
-                    (e) =>
-                        replaceRegexListItemLogic(stringifyRuleResult(e), made),
-                  )
+                  .map((e) => replaceRegexLogic(stringifyRuleResult(e), made))
                   .toList();
             } else {
               result = replaceRegexLogic(
