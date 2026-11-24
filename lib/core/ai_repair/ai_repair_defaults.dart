@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'agent_loop.dart';
 import 'ai_chat_client.dart';
+import 'ai_repair_secrets.dart';
 import 'ai_repair_prompt.dart';
 import 'ai_repair_settings.dart';
 import 'repair_pages.dart';
@@ -74,6 +75,7 @@ abstract final class AiRepairDefaults {
       keyword: start ?? source.getCheckKeyword(config.keyword),
       timeout: config.sourceTimeoutDuration,
       cancelToken: cancelToken,
+      secrets: currentAiRepairSecrets,
     );
   }
 
@@ -89,6 +91,7 @@ abstract final class AiRepairDefaults {
       keyword: source.getCheckKeyword(config.keyword),
       timeout: config.sourceTimeoutDuration,
       cancelToken: cancelToken,
+      secrets: currentAiRepairSecrets,
     );
   }
 
@@ -97,7 +100,6 @@ abstract final class AiRepairDefaults {
     String stage,
     RepairPage page,
     CancelToken cancelToken,
-    Set<String> secrets,
   ) async => parseRepairPage(
     source,
     stage: stage,
@@ -105,7 +107,7 @@ abstract final class AiRepairDefaults {
     url: page.url,
     timeout: (await _config()).sourceTimeoutDuration,
     cancelToken: cancelToken,
-    secrets: secrets,
+    secrets: currentAiRepairSecrets,
   );
 
   static Future<String> runJs(
@@ -113,14 +115,13 @@ abstract final class AiRepairDefaults {
     String code,
     Map<int, String> pages,
     CancelToken cancelToken,
-    Set<String> secrets,
   ) async => runRepairJs(
     source,
     code: code,
     pages: pages,
     timeout: (await _config()).sourceTimeoutDuration,
     cancelToken: cancelToken,
-    secrets: secrets,
+    secrets: currentAiRepairSecrets,
   );
 
   static AgentAsk ask(AiService service) {

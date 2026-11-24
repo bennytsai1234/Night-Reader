@@ -158,6 +158,7 @@ Future<SourceProbeReport> probeSource(
   required String keyword,
   required Duration timeout,
   CancelToken? cancelToken,
+  Set<String> secrets = const {},
   @visibleForTesting Future<DriftIsolate>? database,
   @visibleForTesting Duration workerGrace = _workerGrace,
 }) async {
@@ -227,7 +228,10 @@ Future<SourceProbeReport> probeSource(
   );
   unawaited(
     worker
-        .run(_probeTask(source.toJson(), keyword, timeout), onProgress: collect)
+        .run(
+          _probeTask(source.toJson(), keyword, timeout, secrets),
+          onProgress: collect,
+        )
         .then(
           (outcome) => finish(
             walked(
@@ -267,6 +271,7 @@ Future<_ProbeOutcome> Function(CancelToken) _probeTask(
   Map<String, dynamic> sourceJson,
   String keyword,
   Duration timeout,
+  Set<String> secrets,
 ) => (_) async {
   final debug = SourceDebugService();
   final progress = currentSourceProgress;
@@ -276,6 +281,7 @@ Future<_ProbeOutcome> Function(CancelToken) _probeTask(
     keepPages: true,
     sentHeaders: true,
     live: true,
+    secrets: secrets,
   );
   var timedOut = false;
   try {
@@ -327,12 +333,15 @@ Future<AiPage> fetchPageForAi(
   required Duration timeout,
   CancelToken? cancelToken,
   int pageLength = 12000,
+  Set<String> secrets = const {},
+  @visibleForTesting Future<DriftIsolate>? database,
 }) async {
   final SourceWorker worker;
   try {
     worker = await SourceWorker.spawn(
       debugName: 'SourceFetch',
       withDictionaries: false,
+      database: database,
       cancelToken: cancelToken,
     );
   } catch (error) {
@@ -350,7 +359,7 @@ Future<AiPage> fetchPageForAi(
     );
     final map = await worker
         .run(
-          _fetchTask(source.toJson(), url, keyword, pageLength),
+          _fetchTask(source.toJson(), url, keyword, pageLength, secrets),
           cancelToken: cancelToken,
         )
         .timeout(
@@ -378,12 +387,14 @@ Future<Map<String, Object?>> Function(CancelToken) _fetchTask(
   String url,
   String keyword,
   int pageLength,
+  Set<String> secrets,
 ) => (_) async {
   final requests = RequestLog(
     responsePreview: pageLength,
     digestPages: true,
     keepPages: true,
     sentHeaders: true,
+    secrets: secrets,
   );
   try {
     await requests.run(

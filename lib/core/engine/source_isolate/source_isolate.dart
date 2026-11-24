@@ -13,6 +13,7 @@ import 'package:native_synchronization/mailbox.dart';
 import 'package:native_synchronization/sendable.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/js/js_extensions.dart';
 import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/network/request_log.dart';
@@ -896,6 +897,10 @@ void _main(SendPort mainPort) {
               zoneValues: {_taskProgressZoneKey: ?sink},
             );
           } finally {
+            // 規則 JS 的寫入（快取、Cookie、登入資料、變數）不等；交回之前寫完：
+            // 呼叫的一方常在拿到結果後就收掉這個 worker，Cookie 這類轉送回主
+            // isolate 的也要排在結果前面，主 isolate 拿到結果時就讀得到。
+            await JsExtensions.settleWrites();
             tasks.remove(id);
           }
         case _Perform(

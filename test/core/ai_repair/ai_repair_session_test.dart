@@ -731,11 +731,11 @@ void main() {
           contentUsable: report.contentUsable,
         );
       },
-      parsePage: (source, stage, page, _, _) async {
+      parsePage: (source, stage, page, _) async {
         parsed.add((stage, page.body, source.ruleToc?.chapterList));
         return '解析成目錄頁：1 章';
       },
-      runJs: (_, code, pages, _, _) async {
+      runJs: (_, code, pages, _) async {
         ran.add((code, pages));
         return '傳回：${pages[1]!.length}';
       },
