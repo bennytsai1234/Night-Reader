@@ -463,13 +463,40 @@ jobs:
           echo "udid=$udid" >> "$GITHUB_OUTPUT"
 
       - name: Open the app and walk through it
+        # 夜讀一開就閃退時 flutter test 會一直等它連上、不會結束：看到模擬器留下的閃退
+        # 報告，或建置完 3 分鐘還沒開始走，就印出報告、判失敗。
         env:
           UDID: ${{ steps.simulator.outputs.udid }}
-        run: >-
-          flutter test integration_test/ios_smoke_test.dart
-          --no-pub
-          --reporter expanded
-          -d "$UDID"
+        run: |
+          set -uo pipefail
+          log="$RUNNER_TEMP/ios-smoke.log"
+          reports="$HOME/Library/Logs/DiagnosticReports"
+          marker="$RUNNER_TEMP/ios-smoke.start"
+          touch "$marker"
+          flutter test integration_test/ios_smoke_test.dart \
+            --no-pub --reporter expanded -d "$UDID" > >(tee "$log") 2>&1 &
+          test_pid=$!
+          built_at=""
+          while kill -0 "$test_pid" 2>/dev/null; do
+            crash="$(find "$reports" -name 'Runner*' -newer "$marker" 2>/dev/null | head -n 1)"
+            if [[ -n "$crash" ]]; then
+              echo "::error::夜讀在 iPhone 模擬器上閃退，閃退報告：$crash"
+              head -n 120 "$crash"
+              kill "$test_pid"
+              exit 1
+            fi
+            if [[ -z "$built_at" ]] && grep -q 'Xcode build done' "$log"; then
+              built_at=$SECONDS
+            fi
+            if [[ -n "$built_at" ]] && ! grep -q '打開夜讀、匯入 TXT' "$log" &&
+               (( SECONDS - built_at > 180 )); then
+              echo "::error::建置完 3 分鐘，夜讀還沒在 iPhone 模擬器上打開。"
+              kill "$test_pid"
+              exit 1
+            fi
+            sleep 5
+          done
+          wait "$test_pid"
 
       - name: Screenshot the simulator
         if: failure() && steps.simulator.outputs.udid != ''
