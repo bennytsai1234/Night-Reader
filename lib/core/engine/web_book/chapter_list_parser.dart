@@ -131,6 +131,7 @@ class ChapterListParser {
                 owner: rule,
                 nameRule: chapterNameRule,
                 urlRule: chapterUrlRule,
+                isVolumeRule: isVolumeRule,
                 isVipRule: isVipRule,
                 isPayRule: isPayRule,
               );
@@ -166,7 +167,8 @@ class ChapterListParser {
   }
 
   /// [elements] 從 [start] 起第一個書源標了付費、還沒買的章（[BookChapter.isLocked]）；
-  /// 沒有就是 null。只讀付費的兩條規則，找到了才讀章名與網址。
+  /// 沒有就是 null。先讀付費的兩條規則，標了付費的再讀章名與卷名：和完整
+  /// 解析一樣，沒有章名的不算章、卷名不算付費章節（卷名旁常寫著「VIP 卷」）。
   static BookChapter? _firstLockedAfter(
     List<dynamic> elements,
     int start, {
@@ -177,6 +179,7 @@ class ChapterListParser {
     required AnalyzeRule owner,
     required String nameRule,
     required String urlRule,
+    required String isVolumeRule,
     required String isVipRule,
     required String isPayRule,
   }) {
@@ -197,6 +200,8 @@ class ChapterListParser {
         chapter.isPay = _isTrue(_readString(itemRule, isPayRule));
         if (!chapter.isLocked) continue;
         chapter.title = _readString(itemRule, nameRule);
+        if (chapter.title.isEmpty) continue;
+        if (_isTrue(_readString(itemRule, isVolumeRule))) continue;
         final rawUrl = _readString(itemRule, urlRule);
         chapter.url = rawUrl.isEmpty
             ? pageUrl
