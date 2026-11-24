@@ -214,6 +214,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     await sub.cancel();
 
+    expect(messages, contains('  首章: 第一章'), reason: messages.join('\n'));
     expect(messages, contains('︾開始解析正文頁: 第一章'), reason: messages.join('\n'));
     expect(messages, contains('  正文 URL: $baseUrl/c1'));
     expect(messages, contains('  下一章 URL: $baseUrl/c2'));

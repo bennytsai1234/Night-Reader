@@ -204,18 +204,17 @@ class SourceDebugService {
       targetBook,
     );
     log('︽目錄頁解析完成，共 ${chapters.length} 章', state: 30);
-    if (chapters.isNotEmpty) {
-      log('  首章: ${chapters.first.title}');
-      log('  末章: ${chapters.last.title}');
-    }
-
-    // 同 Legado：沒有網址的卷名（網址是「卷名＋序號」）不是正文，第一章與
-    // 下一章都從拿掉它們之後的目錄取。
+    // 同 Legado：沒有網址的卷名（網址是「卷名＋序號」）不是正文，首章、末章、
+    // 要抓的第一章與下一章都從拿掉它們之後的目錄取。
     final toc = [
       for (final chapter in chapters)
         if (!(chapter.isVolume && chapter.url.startsWith(chapter.title)))
           chapter,
     ];
+    if (toc.isNotEmpty) {
+      log('  首章: ${toc.first.title}');
+      log('  末章: ${toc.last.title}');
+    }
     if (toc.isNotEmpty) {
       final firstChapter = toc.first;
       final nextChapterUrl = toc.length > 1 ? toc[1].url : null;
