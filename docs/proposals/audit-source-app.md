@@ -20,7 +20,7 @@
 | 書源 3 | `lib/features/explore/` | 8／8 | 0 |
 | 書源 4 | `lib/features/source_login/` | 4／4 | 0（另 1 筆在 #529） |
 | 書源 4 | `lib/core/ai_repair/` | 0／23 | 還沒讀 |
-| 書源 4 | `lib/core/ai_find/` | 0／4 | 還沒讀 |
+| 書源 4 | `lib/core/ai_find/` | 4／4 | 0 |
 | 書源 4 | `lib/features/source_manager/ai_repair/` | 0／5 | 還沒讀 |
 | 書源 4 | `lib/core/source/` 的 `source_login_session`、`source_interaction` | 2／2 | 0 |
 | 書源 4 | `lib/core/network/` 的 `cookie_store`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service` | 4／4 | 1（另 2 筆在 #529） |
