@@ -71,15 +71,17 @@ class Bookmark {
     'excerpt': excerpt,
   };
 
-  /// 也讀得懂 2026-09 以前的備份（`bookmark.json`）：那時的編號是流水號、
-  /// 建立時間在 `time`，位置與內容是 `chapterPos`、`chapterName`、`bookText`。
+  /// 也讀得懂 2026-09 以前的備份與 Legado 的書籤（`bookmark.json`）：那時的
+  /// 編號是流水號、建立時間在 `time`，位置與內容是 `chapterPos`、
+  /// `chapterName`、`bookText`。現在的備份為了 Legado 也寫這幾欄，有
+  /// `excerpt` 的就是現在的格式，編號照 `id`。
   factory Bookmark.fromJson(Map<String, dynamic> json) {
     String readString(String key, [String? legacy]) {
       final value = json[key] ?? (legacy == null ? null : json[legacy]);
       return value is String ? value : '';
     }
 
-    final legacyTime = json['time'];
+    final legacyTime = json.containsKey('excerpt') ? null : json['time'];
     final anchor = json['anchor'];
     return Bookmark(
       id: legacyTime != null
