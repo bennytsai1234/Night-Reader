@@ -39,5 +39,7 @@ void main() {
     expect(Charsets.decode(big5, 'big5'), '夜讀書');
     expect(Charsets.encode('夜讀書a', 'BIG5'), [...big5, 0x61]);
     expect(Charsets.supports('big5'), isTrue);
+    // 「十」「卅」在 Big5 有兩個位置，Java 編成 A451、A4CA。
+    expect(Charsets.encode('十卅', 'big5'), [0xA4, 0x51, 0xA4, 0xCA]);
   });
 }

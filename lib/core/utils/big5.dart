@@ -64,7 +64,9 @@ abstract final class Big5 {
         map.putIfAbsent(unit, () => ((row + 0x81) << 8) | trail);
       }
     }
-    return map;
+    // 同一個字有兩個位置時，Java 不一定取前面的（「十」是 A451，不是數字
+    // 符號區的 A2CC）。
+    return map..addAll(big5EncodeOverrides);
   }();
 
   static Uint8List encode(String text) {
