@@ -9,6 +9,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/local_book/local_book_fingerprint.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/engine/book/book_help.dart';
 import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:path/path.dart' as p;
@@ -489,24 +490,26 @@ class LocalBookService {
       return await parser.splitChapters();
     }, file);
     final book = _localBook(file.path)..charset = result.charset;
-    return LocalBookImportResult(
-      book: book,
-      chapters: _chapters(book, [
-        for (final (i, chapter) in result.chapters.indexed)
-          (
-            title: chapter['title'] as String? ?? '第 $i 章',
-            start: chapter['start'] as int,
-            end: chapter['end'] as int,
-          ),
-      ]),
-    );
+    final chapters = _chapters(book, [
+      for (final (i, chapter) in result.chapters.indexed)
+        (
+          title: chapter['title'] as String? ?? '第 $i 章',
+          start: chapter['start'] as int,
+          end: chapter['end'] as int,
+        ),
+    ]);
+    for (final (i, chapter) in result.chapters.indexed) {
+      chapters[i].isVolume = chapter['isVolume'] == true;
+    }
+    return LocalBookImportResult(book: book, chapters: chapters);
   }
 
   Future<LocalBookImportResult> _importEpub(String path) async {
     final book = _localBook(path)..charset = 'utf-8';
     final info = await EpubParser.convert(path, await epubTextPath(book));
+    // 書名照 Legado：書裡沒寫時用檔名，不拆。
     book
-      ..name = info.title ?? book.name
+      ..name = info.title ?? p.basenameWithoutExtension(path)
       ..author = info.author ?? book.author;
     return LocalBookImportResult(
       book: book,
@@ -517,15 +520,47 @@ class LocalBookService {
   }
 
   Book _localBook(String path) {
+    final (:name, :author) = nameAndAuthorFromFileName(
+      p.basenameWithoutExtension(path),
+    );
     return Book(
       bookUrl: 'local://$path',
-      name: p.basenameWithoutExtension(path),
-      author: '本地',
+      name: name,
+      author: author.isEmpty ? '本地' : author,
       origin: BookType.localOrigin,
       originName: '本地',
       isInBookshelf: true,
       type: 0,
     );
+  }
+
+  static final _nameAuthorPatterns = [
+    RegExp(r'(.*?)《([^《》]+)》.*?作者：(.*)'),
+    RegExp(r'(.*?)《([^《》]+)》(.*)'),
+    RegExp(r'(^)(.+) 作者：(.+)$'),
+    RegExp(r'(^)(.+) by (.+)$'),
+  ];
+
+  /// 從檔名（不含副檔名）拆出書名與作者，照 Legado
+  /// `LocalBook.analyzeNameAuthor`：「《書名》作者：某某」「書名 作者：某某」
+  /// 「書名 by 某某」；都不合時書名去掉「作者…」這類字樣。拆不出作者時
+  /// 作者是空字串。
+  static ({String name, String author}) nameAndAuthorFromFileName(
+    String fileName,
+  ) {
+    for (final pattern in _nameAuthorPatterns) {
+      final match = pattern.firstMatch(fileName);
+      if (match == null) continue;
+      return (
+        name: match.group(2)!,
+        author: BookHelp.formatBookAuthor(
+          '${match.group(1) ?? ''}${match.group(3) ?? ''}',
+        ),
+      );
+    }
+    final name = BookHelp.formatBookName(fileName);
+    final author = BookHelp.formatBookAuthor(fileName.replaceAll(name, ''));
+    return (name: name, author: author.length == fileName.length ? '' : author);
   }
 
   List<BookChapter> _chapters(
