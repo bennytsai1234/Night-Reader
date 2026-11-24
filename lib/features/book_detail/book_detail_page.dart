@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/features/replace_rule/replace_rule_deadline.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/features/reader/chapter/reader_content_transformer.dart';
@@ -687,10 +689,12 @@ class _BookDetailPageState extends State<BookDetailPage> {
     setState(() => _exportProgress = 0);
     try {
       final book = provider.book;
-      final rules = await getIt<ReplaceRuleDao>().getEnabledForBook(
-        book.name,
-        book.origin,
-      );
+      final ruleDao = getIt<ReplaceRuleDao>();
+      final rules = [
+        ...await ruleDao.getEnabledForBook(book.name, book.origin),
+      ];
+      // 跑太久的規則照閱讀器停用，之後的章不再帶它。
+      final disabled = <ReplaceRule>[];
       await ExportBookService().exportToTxt(
         book,
         present: (chapter, raw) => ReaderContentTransformer.exportChapter(
@@ -698,6 +702,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
           chapter: chapter,
           rawContent: raw,
           enabledRules: rules,
+          onRuleTimedOut: (rule) {
+            rules.removeWhere((candidate) => candidate.id == rule.id);
+            disabled.add(rule);
+            unawaited(ruleDao.updateEnabled(rule.id, false));
+          },
         ),
         fetchMissingRemote: fetchMissingRemote,
         onProgress: (progress) {
@@ -705,8 +714,16 @@ class _BookDetailPageState extends State<BookDetailPage> {
         },
       );
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: UiText('已建立匯出檔案')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: UiText(
+            [
+              '已建立匯出檔案',
+              for (final rule in disabled) replaceRuleDisabledNotice(rule),
+            ].join('\n'),
+          ),
+        ),
+      );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)

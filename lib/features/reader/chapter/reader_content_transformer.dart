@@ -1,3 +1,6 @@
+import 'package:flutter_js/flutter_js.dart' show fetchPolyfillSource;
+import 'package:night_reader/core/engine/js/replacement_js.dart';
+
 import 'dart:async';
 import 'dart:isolate';
 
@@ -743,11 +746,14 @@ class ReaderContentTransformer {
   /// 匯出書用的一章：照 Legado（`ExportBookService.getExportData`）套這本書
   /// 的替換規則與標題規則、拿掉正文開頭重複的章名，不做繁簡轉換、不重新
   /// 分段，插圖不放（ADR 0050）。[text] 是每段前面空兩格、一段一行。
+  /// 有規則跑超過它的逾時就略過它、照其他規則處理完，並呼叫
+  /// [onRuleTimedOut]（同閱讀器）。
   static Future<({String title, String text})> exportChapter({
     required Book book,
     required BookChapter chapter,
     required String rawContent,
     required List<ReplaceRule> enabledRules,
+    void Function(ReplaceRule rule)? onRuleTimedOut,
   }) async {
     final result = await ReaderContentTransformWorker.instance.process({
       'chapterIndex': chapter.index,
@@ -759,7 +765,7 @@ class ReaderContentTransformer {
       'useReplaceRules': book.getUseReplaceRule(),
       'reSegmentEnabled': false,
       'chineseConvertType': 0,
-    });
+    }, onRuleTimedOut: onRuleTimedOut);
     final document = result['document']! as ReaderContent;
     return (
       title: document.title,
@@ -822,12 +828,21 @@ class ReaderContentTransformer {
       'useReplaceRules': book.getUseReplaceRule(),
       'reSegmentEnabled': book.getReSegment(),
     };
-    return Isolate.run(() => _ruleStageParagraphsInBackground(args));
+    return Isolate.run(() {
+      try {
+        return _ruleStageParagraphsInBackground(args);
+      } finally {
+        disposeReplacementJs();
+      }
+    });
   }
 
   static RuleStageText _ruleStageParagraphsInBackground(
     Map<String, Object?> args,
   ) {
+    // 在 Isolate.run 開的 isolate 跑，同 [ReaderContentTransformWorker] 沒有
+    // rootBundle。
+    fetchPolyfillSource ??= '';
     final bookName = args['bookName'] as String? ?? '';
     final bookOrigin = args['bookOrigin'] as String? ?? '';
     final chapterTitle = args['chapterTitle'] as String? ?? '';
@@ -935,7 +950,7 @@ class ReaderContentTransformer {
     for (final rule in rules) {
       started = true;
       onRule?.call(rule._sourceIndex);
-      final next = rule.apply(result);
+      final next = rule.apply(result, runJs: runReplacementJs);
       if (keep == null || keep(next)) result = next;
     }
     if (started) onRule?.call(null);
@@ -1369,6 +1384,9 @@ class ReaderContentTransformWorker {
   }
 
   static void _workerMain(SendPort replyPort) {
+    // 這個 isolate 沒有 rootBundle：替換規則的 `@js:` 用不到 fetch，給空的
+    // 補丁，JS 引擎才建得起來（書源 isolate 是主 isolate 讀好再傳過去）。
+    fetchPolyfillSource ??= '';
     final commands = ReceivePort();
     replyPort.send(commands.sendPort);
     commands.listen((Object? message) {

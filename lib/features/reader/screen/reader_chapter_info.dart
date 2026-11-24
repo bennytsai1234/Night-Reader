@@ -50,13 +50,19 @@ final class ReaderChapterInfo {
         .toInt();
   }
 
-  /// 目錄、選單與資訊列顯示用的章節標題，套用閱讀設定的繁簡轉換。
+  /// 目錄顯示用的章節標題，套用閱讀設定的繁簡轉換。
   String chapterTitleAt(int index) {
     return ChineseDisplay.convert(
       rawChapterTitleAt(index),
       convertType: _chineseConvert(),
     );
   }
+
+  /// 頁首頁尾與選單顯示的章名：已經載好的章用排好的章名（套過標題規則，
+  /// 同 Legado），還沒載入的照 [chapterTitleAt]。目錄照原章名（Legado 目錄
+  /// 預設不套標題規則）。
+  String displayTitleAt(int index) =>
+      _runtime()?.displayTitleFor(index) ?? chapterTitleAt(index);
 
   /// 目錄還沒載入時（從書架開書，目錄在開書途中才從資料庫讀出），上次讀到
   /// 的那一章用書的閱讀紀錄裡的章名：開書時頁首頁尾的骨架照它量。
@@ -97,7 +103,8 @@ final class ReaderChapterInfo {
     return _lastInfoTarget = ReaderInfoTarget(
       chapterIndex: chapterIndex,
       chapterCount: loaded > 0 ? loaded : _book.totalChapterNum,
-      title: chapterTitleAt(chapterIndex),
+      // 骨架照換上來的那個章名量（已載好的章是套過標題規則的）。
+      title: displayTitleAt(chapterIndex),
       shares: runtime?.chapterShares.value,
     );
   }

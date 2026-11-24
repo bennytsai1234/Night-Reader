@@ -1,3 +1,6 @@
+import 'package:flutter_js/flutter_js.dart' show fetchPolyfillSource;
+import 'package:night_reader/core/engine/js/replacement_js.dart';
+
 import 'dart:async';
 import 'dart:isolate';
 
@@ -131,11 +134,14 @@ class _PreviewRun {
 }
 
 void _previewMain((SendPort, List<ReplaceRule>, String) args) {
+  // 這個 isolate 沒有 rootBundle：替換規則的 `@js:` 用不到 fetch。
+  fetchPolyfillSource ??= '';
   final (reply, rules, input) = args;
   var text = input;
   for (var i = 0; i < rules.length; i++) {
     reply.send(('rule', i));
-    text = rules[i].apply(text);
+    text = rules[i].apply(text, runJs: runReplacementJs);
   }
+  disposeReplacementJs();
   reply.send(('done', text));
 }

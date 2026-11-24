@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_preview.dart';
 
+import '../../test_helper.dart';
+
 void main() {
   // 不匹配時要回溯 2^30 次：在測試的 isolate 直接跑會卡很久。
   ReplaceRule backtracking({int timeout = 200}) => ReplaceRule(
@@ -19,6 +21,17 @@ void main() {
     ], '包含 junk123 內容');
     expect(result, isA<ReplaceRulePreviewDone>());
     expect(result!.display, '包含 一二三 內容');
+  });
+
+  test('「替換為」寫 @js: 的規則試跑時照樣跑 JS', skip: quickJsUnavailableReason(), () async {
+    final result = await ReplaceRulePreview().run([
+      ReplaceRule(
+        pattern: r'\d+',
+        replacement: '@js:String(Number(result) * 2)',
+      ),
+    ], '走了 21 步');
+    expect(result, isA<ReplaceRulePreviewDone>());
+    expect(result!.display, '走了 42 步');
   });
 
   test('跑超過執行期限就停下，說是哪一條', () async {

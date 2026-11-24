@@ -128,6 +128,7 @@ class ReaderRuntime extends ChangeNotifier {
 
   BookChapter? chapterAt(int index) => repository.chapterAt(index);
   String titleFor(int index) => repository.titleFor(index);
+  String? displayTitleFor(int index) => repository.displayTitleFor(index);
   String chapterUrlAt(int index) => chapterAt(index)?.url ?? '';
 
   // -- Viewport bridge delegation --

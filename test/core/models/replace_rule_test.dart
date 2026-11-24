@@ -1,5 +1,9 @@
+import 'package:flutter_js/flutter_js.dart' show fetchPolyfillSource;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/engine/js/replacement_js.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
+
+import '../../test_helper.dart';
 
 void main() {
   ReplaceRule regex(String pattern, [String replacement = '']) =>
@@ -57,5 +61,78 @@ void main() {
       '甲乙\n廣告',
     );
     expect(plain.isValid(), isTrue);
+  });
+
+  test(r'規則寫 \p{P}、\p{IsHan} 這類 Java 的字元類別也對得到（#553 的轉換）', () {
+    expect(regex(r'\p{P}', '#').apply('你好，世界！'), '你好#世界#');
+    expect(regex(r'\p{IsHan}+', '字').apply('abc中文def'), 'abc字def');
+  });
+
+  group('「替換為」照 Java 的取代字串（同 Legado）', () {
+    String apply(String pattern, String replacement, String content) =>
+        ReplaceRule(pattern: pattern, replacement: replacement).apply(content);
+
+    test(r'${名稱} 取具名群組', () {
+      expect(apply(r'(?<num>\d+)章', r'第${num}回', '12章'), '第12回');
+    });
+
+    test(r'\ 跳脫下一個字：\$ 是錢字號、\\ 是反斜線', () {
+      expect(apply('元', r'\$\\', '十元'), r'十$\');
+    });
+
+    test(r'$12 只有一個群組時是第 1 組接著字「2」', () {
+      expect(apply(r'(a)', r'$12', 'a'), 'a2');
+    });
+
+    test(r'$1 到 $n 與 $0 照舊', () {
+      expect(apply(r'(甲)(乙)', r'$2$1$0', '甲乙'), '乙甲甲乙');
+    });
+
+    test('寫錯的取代字串（沒有的群組、結尾落單的 \\）整條規則不套，正文照舊', () {
+      expect(apply(r'(a)', r'$2', 'abc'), 'abc');
+      expect(apply(r'(a)', r'${none}', 'abc'), 'abc');
+      expect(apply('a', r'x\', 'abc'), 'abc');
+    });
+  });
+
+  group('「替換為」寫 @js: 時每一處跑那段 JS（同 Legado）', () {
+    final skip = quickJsUnavailableReason();
+    // 測試沒有 rootBundle，替換規則的 JS 用不到 fetch。
+    setUpAll(() => fetchPolyfillSource ??= '');
+
+    test('對到的字放在 result，傳回的字照字面替換', skip: skip, () {
+      final rule = ReplaceRule(
+        pattern: r'\d+',
+        replacement: r'@js:String(Number(result) * 2) + "$1"',
+      );
+      expect(rule.apply('第5章、第12章', runJs: runReplacementJs), r'第10$1章、第24$1章');
+    });
+
+    test('JS 出錯時這條規則不套，正文照舊', skip: skip, () {
+      final rule = ReplaceRule(
+        pattern: 'a',
+        replacement: '@js:throw new Error("x")',
+      );
+      expect(rule.apply('abc', runJs: runReplacementJs), 'abc');
+    });
+
+    test('JS 沒有傳回值時這條規則不套', skip: skip, () {
+      final rule = ReplaceRule(pattern: 'a', replacement: '@js:null');
+      expect(rule.apply('abc', runJs: runReplacementJs), 'abc');
+    });
+
+    test('沒有 JS 可以跑時不套，不把 JS 原文貼進正文', () {
+      final rule = ReplaceRule(pattern: 'a', replacement: '@js:result + 1');
+      expect(rule.apply('abc'), 'abc');
+    });
+
+    test('純文字規則的 @js: 照字面（Legado 只有正則規則認 @js:）', () {
+      final rule = ReplaceRule(
+        pattern: 'a',
+        replacement: '@js:x',
+        isRegex: false,
+      );
+      expect(rule.apply('abc', runJs: runReplacementJs), '@js:xbc');
+    });
   });
 }

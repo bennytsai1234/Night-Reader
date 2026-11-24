@@ -237,6 +237,13 @@ class ReaderChapterRepository {
     return chapterAt(chapterIndex)?.title ?? '';
   }
 
+  /// 已經載好的這一章排好的章名：套過標題規則與繁簡轉換（同 Legado 頁首
+  /// 頁尾與選單用的章名）；還沒載入時傳回 null。
+  String? displayTitleFor(int chapterIndex) {
+    final title = _contentCache[chapterIndex]?.title;
+    return title == null || title.isEmpty ? null : title;
+  }
+
   Future<ReaderContent> loadContent(int chapterIndex) async {
     await ensureChapters();
     final safeIndex = _normalizeChapterIndex(chapterIndex);

@@ -94,35 +94,108 @@ class ReplaceRule {
   /// 套用這一條規則：正文、標題與試跑都用它。正則照 Java 預設（同
   /// Legado）：`.` 不跨段、`^`／`$` 不逐行，開頭寫 `(?s)`、`(?m)` 才開
   /// （[javaRegExp]）。
-  String apply(String content) {
+  ///
+  /// 正則規則的「替換為」寫 `@js:` 時，每一處交給 [runJs]（對到的字當
+  /// `result`）算出要換成的字，照字面替換（同 Legado）；沒給 [runJs] 或 JS
+  /// 出錯時這條不套，正文照舊。
+  String apply(
+    String content, {
+    String Function(String code, String matched)? runJs,
+  }) {
     if (pattern.isEmpty) return content;
     try {
       if (isRegex) {
         final reg = javaRegExp(pattern);
-        return content.replaceAllMapped(reg, (match) {
-          // 替換 $0 為整個匹配項，替換 $1...$N 為捕獲組
-          return replacement.replaceAllMapped(RegExp(r'\\\$|\$(\d+)'), (m) {
-            final hit = m.group(0)!;
-            if (hit == r'\$') {
-              return r'$';
-            } else {
-              final groupIndex = int.tryParse(m.group(1)!) ?? 0;
-              if (groupIndex == 0) {
-                return match.group(0) ?? '';
-              }
-              if (groupIndex > 0 && groupIndex <= match.groupCount) {
-                return match.group(groupIndex) ?? '';
-              }
-              return hit;
-            }
-          });
-        });
+        if (replacement.startsWith('@js:')) {
+          if (runJs == null) return content;
+          final code = replacement.substring(4);
+          try {
+            return content.replaceAllMapped(
+              reg,
+              (match) => runJs(code, match.group(0)!),
+            );
+          } on Object {
+            return content;
+          }
+        }
+        return content.replaceAllMapped(
+          reg,
+          (match) => _javaReplacement(replacement, match as RegExpMatch),
+        );
       } else {
         return content.replaceAll(pattern, replacement);
       }
     } on FormatException {
       return content;
     }
+  }
+
+  /// 照 Java `Matcher.appendReplacement`（Legado 用的）展開「替換為」：
+  /// `\` 讓下一個字照字面；`$n` 取第 n 組，後面的數字只在群組夠多時才併進
+  /// 編號（只有一組時 `$12` 是第 1 組接著「2」）；`${名稱}` 取具名群組。
+  /// 沒有的群組、落單的 `\` 或 `$` 丟 [FormatException]，這條規則整條不套
+  /// （[apply]）。
+  static String _javaReplacement(String replacement, RegExpMatch match) {
+    final out = StringBuffer();
+    var i = 0;
+    while (i < replacement.length) {
+      final char = replacement[i];
+      if (char == r'\') {
+        if (i + 1 >= replacement.length) {
+          throw const FormatException('character to be escaped is missing');
+        }
+        out.write(replacement[i + 1]);
+        i += 2;
+        continue;
+      }
+      if (char != r'$') {
+        out.write(char);
+        i += 1;
+        continue;
+      }
+      i += 1;
+      if (i >= replacement.length) {
+        throw const FormatException(
+          'Illegal group reference: group index is missing',
+        );
+      }
+      if (replacement[i] == '{') {
+        final close = replacement.indexOf('}', i);
+        if (close < 0) {
+          throw const FormatException(
+            "named capturing group is missing trailing '}'",
+          );
+        }
+        final name = replacement.substring(i + 1, close);
+        if (!match.groupNames.contains(name)) {
+          throw FormatException('No group with name {$name}');
+        }
+        out.write(match.namedGroup(name) ?? '');
+        i = close + 1;
+        continue;
+      }
+      var number = _digit(replacement, i);
+      if (number == null) {
+        throw const FormatException('Illegal group reference');
+      }
+      i += 1;
+      while (i < replacement.length) {
+        final next = _digit(replacement, i);
+        if (next == null || number! * 10 + next > match.groupCount) break;
+        number = number * 10 + next;
+        i += 1;
+      }
+      if (number! > match.groupCount) {
+        throw FormatException('No group $number');
+      }
+      out.write(match.group(number) ?? '');
+    }
+    return out.toString();
+  }
+
+  static int? _digit(String text, int index) {
+    final unit = text.codeUnitAt(index);
+    return unit >= 0x30 && unit <= 0x39 ? unit - 0x30 : null;
   }
 
   factory ReplaceRule.fromJson(Map<String, dynamic> json) {
