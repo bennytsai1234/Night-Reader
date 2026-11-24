@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/app_lock/app_lock.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -33,6 +34,8 @@ class _ReaderReadTimeScopeState extends State<ReaderReadTimeScope>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // 鎖的畫面蓋著時不算在讀（ADR 0083）。
+    AppLock.instance.lockState.addListener(_syncTimer);
     _appInForeground =
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
@@ -93,7 +96,9 @@ class _ReaderReadTimeScopeState extends State<ReaderReadTimeScope>
   }
 
   void _syncTimer() {
-    if (_appInForeground && _routeVisible) {
+    if (_appInForeground &&
+        _routeVisible &&
+        !AppLock.instance.lockState.value.covering) {
       _controller.start();
     } else {
       unawaited(_controller.stop());
@@ -104,6 +109,7 @@ class _ReaderReadTimeScopeState extends State<ReaderReadTimeScope>
   void dispose() {
     appRouteObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
+    AppLock.instance.lockState.removeListener(_syncTimer);
     unawaited(_controller.close());
     super.dispose();
   }

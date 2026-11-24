@@ -42,4 +42,44 @@ void main() {
       AppPermissionTarget.notification,
     );
   });
+
+  test(
+    'only iPhone lists Face ID, and a refusal points to the settings',
+    () async {
+      Future<List<AppPermissionItem>> rows({
+        required bool iOS,
+        String? faceId,
+      }) async {
+        final service = AppPermissionService(
+          gateway: _FakeGateway(AppPermissionState.granted),
+          isAndroid: () => !iOS,
+          isIOS: () => iOS,
+          faceIdStatus: () async => faceId,
+        );
+        final loading = service.loadingSnapshot().items;
+        final loaded = (await service.loadSnapshot()).items;
+        expect(
+          loaded.map((item) => item.title),
+          loading.map((item) => item.title),
+          reason: 'the skeleton has the same rows',
+        );
+        return loaded;
+      }
+
+      expect(
+        (await rows(iOS: false)).map((item) => item.title),
+        isNot(contains('Face ID')),
+      );
+      AppPermissionItem faceIdRow(List<AppPermissionItem> items) =>
+          items.firstWhere((item) => item.title == 'Face ID');
+      expect(
+        faceIdRow(await rows(iOS: true, faceId: 'available')).status,
+        '可用',
+      );
+      final denied = faceIdRow(await rows(iOS: true, faceId: 'denied'));
+      expect(denied.status, '未允許');
+      expect(denied.action, AppPermissionAction.openSettings);
+      expect(faceIdRow(await rows(iOS: true, faceId: 'none')).status, '不適用');
+    },
+  );
 }

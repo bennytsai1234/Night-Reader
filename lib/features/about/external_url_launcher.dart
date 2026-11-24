@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/services.dart';
+import 'package:night_reader/core/app_lock/app_lock.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
@@ -12,6 +13,8 @@ Future<bool> launchExternalUrlWithFeedback(
 }) async {
   try {
     final uri = Uri.parse(url);
+    // 夜讀自己打開的瀏覽器，回來不算離開（ADR 0083）。
+    if (launcher == null) await AppLock.instance.markOwnExcursion();
     final opened = launcher == null
         ? await launchUrl(uri, mode: LaunchMode.externalApplication)
         : await launcher(uri);
@@ -22,6 +25,7 @@ Future<bool> launchExternalUrlWithFeedback(
   } catch (error, stackTrace) {
     AppLog.e('開啟外部連結失敗: $url', error: error, stackTrace: stackTrace);
   }
+  if (launcher == null) await AppLock.instance.clearOwnExcursion();
 
   if (!context.mounted) return false;
   final messenger = ScaffoldMessenger.of(context);

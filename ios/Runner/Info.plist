@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>用 Face ID 解鎖夜讀。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>從相簿選一張圖片當作書籍封面。</string>
 	<key>UIBackgroundModes</key>

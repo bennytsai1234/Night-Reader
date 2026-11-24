@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
+import 'package:night_reader/core/app_lock/app_lock.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -306,7 +307,12 @@ class _AppTransitionState extends State<_AppTransition>
 
   @override
   bool handleStartBackGesture(PredictiveBackEvent backEvent) {
-    if (backEvent.isButtonEvent || !_canStart) return false;
+    // 鎖的畫面蓋著時不動底下的頁面（ADR 0083）。
+    if (backEvent.isButtonEvent ||
+        !_canStart ||
+        AppLock.instance.lockState.value.covering) {
+      return false;
+    }
     _begin();
     _back
       ..clear()

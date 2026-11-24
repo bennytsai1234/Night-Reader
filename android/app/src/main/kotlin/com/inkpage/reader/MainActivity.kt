@@ -18,14 +18,16 @@ import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.WebSettings
 import androidx.core.content.FileProvider
-import com.ryanheise.audioservice.AudioServiceActivity
+import android.content.IntentSender
+import com.ryanheise.audioservice.AudioServiceFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.util.Locale
 
-class MainActivity : AudioServiceActivity() {
+// 系統的辨識框（local_auth）要 FragmentActivity；audio_service 兩種都有提供。
+class MainActivity : AudioServiceFragmentActivity() {
     // 音量鍵翻頁：由閱讀器在狀態變化時設定（reader_volume_keys.dart）；
     // 新的 Activity 從不攔開始。
     private var volumeKeyPaging = false
@@ -38,9 +40,51 @@ class MainActivity : AudioServiceActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppPrivacyWindow.apply(this)
         requestHighestRefreshRate()
         openBackgroundWorkIfAsked(intent)
         deleteRetiredNotificationChannels()
+    }
+
+    override fun onPause() {
+        AppPrivacyWindow.onPause(this)
+        super.onPause()
+    }
+
+    override fun onResume() {
+        AppPrivacyWindow.onResume(this)
+        super.onResume()
+    }
+
+    override fun onStop() {
+        AppPrivacyWindow.onStop(this)
+        super.onStop()
+    }
+
+    // 夜讀自己打開的畫面（套件選檔案、分享、開網址、系統設定都經過這裡）
+    // 回來不算離開（ADR 0083）。startActivity 也會走到這裡。
+    @Deprecated("Deprecated in Java")
+    @Suppress("DEPRECATION")
+    override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
+        AppPrivacyWindow.markOwnExcursion()
+        super.startActivityForResult(intent, requestCode, options)
+    }
+
+    @Deprecated("Deprecated in Java")
+    @Suppress("DEPRECATION")
+    override fun startIntentSenderForResult(
+        intent: IntentSender,
+        requestCode: Int,
+        fillInIntent: Intent?,
+        flagsMask: Int,
+        flagsValues: Int,
+        extraFlags: Int,
+        options: Bundle?,
+    ) {
+        AppPrivacyWindow.markOwnExcursion()
+        super.startIntentSenderForResult(
+            intent, requestCode, fillInIntent, flagsMask, flagsValues, extraFlags, options,
+        )
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -79,6 +123,7 @@ class MainActivity : AudioServiceActivity() {
         BackgroundWork.install(this, flutterEngine.dartExecutor.binaryMessenger)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
         ProcessExits.install(this, messenger)
+        AppPrivacyWindow.install(this, messenger)
         val readerDevice = MethodChannel(messenger, "night_reader/reader_device")
         this.readerDevice = readerDevice
         readerDevice.setMethodCallHandler { call, result ->
@@ -333,7 +378,8 @@ class MainActivity : AudioServiceActivity() {
             KeyEvent.KEYCODE_VOLUME_UP -> false
             else -> return super.dispatchKeyEvent(event)
         }
-        if (!volumeKeyPaging) return super.dispatchKeyEvent(event)
+        // 鎖住時底下的閱讀器不翻頁，音量鍵照常調音量。
+        if (!volumeKeyPaging || AppPrivacyWindow.locked) return super.dispatchKeyEvent(event)
         if (event.action == KeyEvent.ACTION_DOWN) {
             readerDevice?.invokeMethod("volumeKey", forward)
         }

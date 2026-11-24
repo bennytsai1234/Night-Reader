@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:night_reader/core/app_lock/app_lock.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
@@ -355,11 +356,13 @@ class _MainPageState extends State<MainPage>
   }
 
   /// 開 App 的準備工作：書架讀完、繁簡字典載入完、系統播放資訊的媒體工作
-  /// 階段開好（[LaunchEntrance.prepared]、[SystemPlayback.ready]）。
+  /// 階段開好（[LaunchEntrance.prepared]、[SystemPlayback.ready]）；開著
+  /// 「解鎖才能打開」時還要等解鎖、鎖的畫面淡出播完（ADR 0083）。
   Future<void> _launchPrepared() => Future.wait([
     context.read<BookshelfProvider>().firstLoad,
     ChineseDisplay.loaded,
     SystemPlayback.instance.ready(),
+    AppLock.instance.whenOpen(),
   ]);
 
   /// 點分頁（或返回鍵回書架）換頁：不滑過中間的分頁，直接換過去，播
@@ -547,6 +550,7 @@ class _MainPageState extends State<MainPage>
   @override
   bool handleStartBackGesture(PredictiveBackEvent backEvent) {
     if (backEvent.isButtonEvent ||
+        AppLock.instance.lockState.value.covering ||
         _currentIndex == 0 ||
         _tabBarHidden.value ||
         _outgoing != null ||

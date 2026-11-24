@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
+import 'package:night_reader/core/app_lock/app_lock.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/app_update/app_version.dart';
@@ -149,6 +150,24 @@ class _AboutPageState extends State<AboutPage> {
     if (picked != null) await _setUpdateMode(picked);
   }
 
+  Future<void> _pickLockMode(BuildContext rowContext) async {
+    final lock = AppLock.instance;
+    final picked = await showGlassMenu<AppLockMode>(
+      context: rowContext,
+      anchor: globalRectOf(rowContext),
+      entries: [
+        for (final mode in AppLockMode.values)
+          GlassMenuItem(
+            value: mode,
+            label: mode.label,
+            checked: mode == lock.mode,
+          ),
+      ],
+    );
+    // 從不鎖改成鎖之前先辨識一次；沒過就維持原樣，系統的辨識框已經說了原因。
+    if (picked != null) await lock.setMode(picked);
+  }
+
   bool _clearingWebData = false;
 
   /// 書源登入用的 Cookie、WebView 的 localStorage 與快取一起清掉。原本是三個
@@ -275,6 +294,41 @@ class _AboutPageState extends State<AboutPage> {
                 ),
               ),
             ],
+          ),
+          // 這台手機自己的兩個設定（ADR 0083）：不同步、不進備份。
+          ValueListenableBuilder(
+            valueListenable: AppLock.instance.settingsVersion,
+            builder: (context, _, _) {
+              final lock = AppLock.instance;
+              final locking = lock.mode != AppLockMode.off && lock.supported;
+              return GroupedSection(
+                children: [
+                  GroupedSwitchRow(
+                    leading: const GroupedIconTile(
+                      Icons.visibility_off_outlined,
+                      tint: AppTint.ink,
+                    ),
+                    title: '離開時蓋住畫面',
+                    value: lock.coverEffective,
+                    enabled: !locking,
+                    onChanged: lock.setCover,
+                  ),
+                  Builder(
+                    builder: (rowContext) => GroupedRow(
+                      leading: const GroupedIconTile(
+                        Icons.lock_outline_rounded,
+                        tint: AppTint.ink,
+                      ),
+                      title: '解鎖才能打開',
+                      value: lock.mode.label,
+                      showChevron: false,
+                      enabled: lock.supported,
+                      onTap: () => _pickLockMode(rowContext),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           GroupedSection(
             children: [
