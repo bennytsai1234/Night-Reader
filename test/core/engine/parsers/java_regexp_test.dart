@@ -112,11 +112,35 @@ void main() {
       expect(all(r'[^\p{InCJKUnifiedIdeographs}]+', '漢字，abc'), ['，abc']);
     });
 
-    test('POSIX 名稱只看 ASCII', () {
-      expect(all(r'\p{Punct}+', 'a,.b。'), [',.']);
-      expect(all(r'\p{Alpha}+', 'abc中'), ['abc']);
-      expect(all(r'\p{Digit}+', 'a12３'), ['12']);
-      expect(all(r'\p{Space}', 'a b　'), [' ']);
+    // Legado 跑在 Android 上，Java 的正則由 ICU 執行：POSIX 名稱照 Unicode
+    // 認（桌機的 JDK 只看 ASCII）。
+    test('POSIX 名稱照 Android（ICU）認 Unicode', () {
+      expect(all(r'\p{Punct}+', 'a,.b。'), [',.', '。']);
+      expect(all(r'\p{Alpha}+', 'abc中α1'), ['abc中α']);
+      expect(all(r'\p{Digit}+', 'a12３'), ['12３']);
+      expect(all(r'\p{Space}', 'a b　'), [' ', '　']);
+      expect(all(r'\p{Blank}+', 'a \t　b\n'), [' \t　']);
+      expect(all(r'\p{Alnum}+', '中3,'), ['中3']);
+      expect(all(r'\p{XDigit}+', 'xaF9g'), ['aF9']);
+      expect(all(r'\p{ASCII}+', 'ab中'), ['ab']);
+      expect(all(r'[^\P{Punct}]+', 'a。b'), ['。']);
+      expect(all(r'\p{Graph}+', 'a b'), ['a', 'b']);
+      expect(all(r'\p{Print}+', 'a b\n'), ['a b']);
+    });
+
+    test('Java 的 java… 名稱與不加 Is 的文字系統', () {
+      expect(all(r'\p{javaLowerCase}+', 'aBc'), ['a', 'c']);
+      expect(all(r'\p{javaWhitespace}+', 'a \tb'), [' \t']);
+      expect(all(r'\p{Han}+', 'ab漢字'), ['漢字']);
+    });
+
+    test(r'規則有 \p 時，其他 Java 寫法照樣能用', () {
+      expect(all(r'\p{L}\x{41}', '中A'), ['中A']);
+      expect(all(r'\p{L}\0101', '中A'), ['中A']);
+      expect(all(r'\p{L}\Q.*\E', '中.*'), ['中.*']);
+      expect(all(r'\p{L}\h\p{L}', '甲　乙'), ['甲　乙']);
+      expect(all(r'\p{L}\R', '甲\r\n'), ['甲\r\n']);
+      expect(all(r'\p{L}\e', '甲\u001B'), ['甲\u001B']);
     });
 
     test(r'規則裡其他 Java 的跳脫照樣能用', () {

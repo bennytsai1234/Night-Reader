@@ -15,7 +15,9 @@
 ///   Java 專有的名稱（`IsHan`、`InCJKUnifiedIdeographs`、`Punct` 這類）換成
 ///   Dart 認得的寫法，認不得的丟 [FormatException]；開了 `unicode` 之後 Dart
 ///   不收的 Java 寫法（`\-`、`\<` 這類多餘的跳脫、單獨的 `}`、`]`、字元集合裡
-///   緊鄰 `\w` 的 `-`）換成同義的寫法。
+///   緊鄰 `\w` 的 `-`、`\x{…}`、`\Q…\E`、八進位、`\e`、`\h`、`\R`）換成同義
+///   的寫法。字元類別照 Legado 實際跑的 Android（ICU）認，POSIX 名稱也看
+///   Unicode。
 ///
 /// [wholeInput] 同 Java `matches()`：整段都要符合。寫錯的 [pattern] 一樣丟
 /// [FormatException]：先照原樣編一次再包，不然 `[abc` 這類少了括號的寫法
@@ -106,9 +108,24 @@ String _translate(
           pattern[i + 1] == '{') {
         final close = pattern.indexOf('}', i + 2);
         if (close != -1) {
-          out.write(pattern.substring(i - 1, close + 1));
+          // unicode 模式只認 \u{…}；Java 的 \x{…} 是同一個意思。
+          out.write(
+            unicode
+                ? '\\u${pattern.substring(i + 1, close + 1)}'
+                : pattern.substring(i - 1, close + 1),
+          );
           i = close;
           lastWasQuantifier = false;
+          continue;
+        }
+      }
+      if (unicode) {
+        final converted = _javaOnlyEscape(pattern, i, inClass: inClass);
+        if (converted != null) {
+          out.write(converted.text);
+          i = converted.end - 1;
+          lastWasQuantifier = false;
+          lastWasClassEscape = false;
           continue;
         }
       }
@@ -274,27 +291,128 @@ String _unicodeEscape(String next, {required bool inClass}) {
 
 const String _syntaxCharacters = r'^$\.*+?()[]{}|/';
 
+/// unicode 模式下 Dart 不認得、Java 認得的跳脫（[index] 是反斜線後面那個
+/// 字）：`\Q…\E`（中間照字面）、八進位 `\0nn`、`\e`、`\a`、`\h`、`\H`、
+/// `\R`。換成同義的寫法與下一個要讀的位置；不是這幾種時是 null。
+({String text, int end})? _javaOnlyEscape(
+  String pattern,
+  int index, {
+  required bool inClass,
+}) {
+  final next = pattern[index];
+  switch (next) {
+    case 'Q':
+      final close = pattern.indexOf(r'\E', index + 1);
+      final quoted = pattern.substring(
+        index + 1,
+        close == -1 ? pattern.length : close,
+      );
+      final text = StringBuffer();
+      for (final rune in quoted.runes) {
+        final char = String.fromCharCode(rune);
+        text.write(
+          _syntaxCharacters.contains(char) || (inClass && char == '-')
+              ? '\\$char'
+              : char,
+        );
+      }
+      return (text: '$text', end: close == -1 ? pattern.length : close + 2);
+    case '0':
+      var end = index + 1;
+      var value = 0;
+      while (end < pattern.length &&
+          end < index + 4 &&
+          pattern.codeUnitAt(end) >= 0x30 &&
+          pattern.codeUnitAt(end) <= 0x37 &&
+          value * 8 + pattern.codeUnitAt(end) - 0x30 <= 0xFF) {
+        value = value * 8 + pattern.codeUnitAt(end) - 0x30;
+        end++;
+      }
+      if (end == index + 1) return null;
+      return (text: '\\u{${value.toRadixString(16)}}', end: end);
+    case 'e':
+      return (text: r'\u{1B}', end: index + 1);
+    case 'a':
+      return (text: r'\u{7}', end: index + 1);
+    case 'h' || 'H':
+      return (
+        text: _renderSet(
+          const _CharSet.union(_horizontalSpace),
+          negated: next == 'H',
+          inClass: inClass,
+          name: next,
+        ),
+        end: index + 1,
+      );
+    case 'R' when !inClass:
+      return (
+        text: '(?:\\r\\n|[\\n\\u{B}\\f\\r\\u{85}\\u{2028}\\u{2029}])',
+        end: index + 1,
+      );
+  }
+  return null;
+}
+
+/// Java `\h` 的水平空白。
+const String _horizontalSpace =
+    r' \t\u{A0}\u{1680}\u{180E}\u{2000}-\u{200A}\u{202F}\u{205F}\u{3000}';
+
+/// Java 的字元類別換成 Dart unicode 模式能寫的樣子：一個屬性（[token]，
+/// 在哪裡都能取反）、一組字（[body] 是字元集合裡的內容），或一組字以外的
+/// 字（[complement]）。
+final class _CharSet {
+  const _CharSet.token(String this.token) : body = null, complement = false;
+  const _CharSet.union(String this.body) : token = null, complement = false;
+  const _CharSet.except(String this.body) : token = null, complement = true;
+
+  final String? token;
+  final String? body;
+  final bool complement;
+}
+
+/// [set] 寫成正則：字元集合外面包成 `[…]`、`[^…]`；字元集合裡面只能寫出
+/// 不用取反的那一種，另一種丟 [FormatException]。
+String _renderSet(
+  _CharSet set, {
+  required bool negated,
+  required bool inClass,
+  required String name,
+}) {
+  if (set.token case final token?) {
+    return '\\${negated ? 'P' : 'p'}{$token}';
+  }
+  final body = set.body!;
+  final excluded = set.complement != negated;
+  if (!inClass) return excluded ? '[^$body]' : '[$body]';
+  if (excluded) {
+    throw FormatException('字元集合裡的這種寫法不支援：$name');
+  }
+  return body;
+}
+
 /// Java 的字元類別 `\p{name}`（[negated] 是 `\P`）換成 Dart unicode 模式的
-/// 寫法。Dart 只認一般分類、文字系統與二元屬性，Java 另有的 Unicode 區塊
-/// （`In…`）與 POSIX 名稱（只看 ASCII）換成範圍；範圍在字元集合裡不能取反。
+/// 寫法。Legado 跑在 Android 上，Java 的正則由 ICU 執行：POSIX 名稱照
+/// Unicode 認，不加 `Is` 的名稱先找一般分類、再找文字系統。Dart 只認一般
+/// 分類、文字系統與二元屬性，Unicode 區塊（`In…`）換成範圍；認不得的丟
+/// [FormatException]。
 String _unicodeProperty(
   String name, {
   required bool negated,
   required bool inClass,
-}) {
-  String property(String body) => '\\${negated ? 'P' : 'p'}{$body}';
-  String range(String body) {
-    if (!inClass) return negated ? '[^$body]' : '[$body]';
-    if (negated) {
-      throw FormatException('字元集合裡的 \\P{$name} 不支援');
-    }
-    return body;
-  }
+}) => _renderSet(
+  _javaProperty(name),
+  negated: negated,
+  inClass: inClass,
+  name: '\\p{$name}',
+);
 
-  final key = name.replaceAll(RegExp(r'[\s_-]'), '').toLowerCase();
-  final posix = _posixClasses[name];
-  if (posix != null) return range(posix);
-  if (_generalCategories.contains(name)) return property(name);
+_CharSet _javaProperty(String name) {
+  String compact(String text) =>
+      text.replaceAll(RegExp(r'[\s_-]'), '').toLowerCase();
+  final key = compact(name);
+  if (_posixClasses[name] case final posix?) return posix;
+  if (_javaClasses[name] case final java?) return java;
+  if (_generalCategories.contains(name)) return _CharSet.token(name);
 
   final eq = name.indexOf('=');
   if (eq > 0) {
@@ -302,26 +420,31 @@ String _unicodeProperty(
     final value = name.substring(eq + 1);
     switch (kind) {
       case 'gc' || 'general_category':
-        if (_generalCategories.contains(value)) return property(value);
+        if (_generalCategories.contains(value)) return _CharSet.token(value);
       case 'sc' || 'script':
-        return property('Script=${_scriptName(value)}');
+        return _CharSet.token('Script=${_scriptName(value)}');
       case 'blk' || 'block':
-        final block =
-            _blocks[value.replaceAll(RegExp(r'[\s_-]'), '').toLowerCase()];
-        if (block != null) return range(block);
+        if (_blocks[compact(value)] case final block?) {
+          return _CharSet.union(block);
+        }
     }
     throw FormatException('認不得的字元類別 \\p{$name}');
   }
   if (key.startsWith('in')) {
-    final block = _blocks[key.substring(2)];
-    if (block != null) return range(block);
+    if (_blocks[key.substring(2)] case final block?) {
+      return _CharSet.union(block);
+    }
   }
   if (name.startsWith('Is') && name.length > 2) {
     final rest = name.substring(2);
-    if (_generalCategories.contains(rest)) return property(rest);
-    final binary = _binaryProperties[key.substring(2)];
-    if (binary != null) return property(binary);
-    return property('Script=${_scriptName(rest)}');
+    if (_generalCategories.contains(rest)) return _CharSet.token(rest);
+    if (_binaryProperties[key.substring(2)] case final binary?) {
+      return _CharSet.token(binary);
+    }
+    return _CharSet.token('Script=${_scriptName(rest)}');
+  }
+  if (RegExp(r'^[A-Za-z][A-Za-z_]*$').hasMatch(name)) {
+    return _CharSet.token('Script=${_scriptName(name)}');
   }
   throw FormatException('認不得的字元類別 \\p{$name}');
 }
@@ -361,21 +484,40 @@ const Map<String, String> _binaryProperties = {
   'assigned': 'Assigned',
 };
 
-/// Java 的 POSIX 字元類別：只看 ASCII（沒開 UNICODE_CHARACTER_CLASS）。
-const Map<String, String> _posixClasses = {
-  'Lower': 'a-z',
-  'Upper': 'A-Z',
-  'ASCII': r'\u{0}-\u{7F}',
-  'Alpha': 'a-zA-Z',
-  'Digit': '0-9',
-  'Alnum': 'a-zA-Z0-9',
-  'Punct': r'!-\/:-@\[-`{-~',
-  'Graph': '!-~',
-  'Print': ' -~',
-  'Blank': r' \t',
-  'Cntrl': r'\u{0}-\u{1F}\u{7F}',
-  'XDigit': '0-9a-fA-F',
-  'Space': r' \t\n\u{B}\f\r',
+/// POSIX 字元類別，照 ICU（Android）的定義認 Unicode。
+const Map<String, _CharSet> _posixClasses = {
+  'Lower': _CharSet.token('Lowercase'),
+  'Upper': _CharSet.token('Uppercase'),
+  'ASCII': _CharSet.union(r'\u{0}-\u{7F}'),
+  'Alpha': _CharSet.token('Alphabetic'),
+  'Digit': _CharSet.token('Nd'),
+  'Alnum': _CharSet.union(r'\p{Alphabetic}\p{Nd}'),
+  'Punct': _CharSet.token('P'),
+  'Graph': _CharSet.except(r'\p{White_Space}\p{Cc}\p{Cs}\p{Cn}'),
+  'Print': _CharSet.except(r'\p{Cc}\p{Cs}\p{Cn}\p{Zl}\p{Zp}'),
+  'Blank': _CharSet.union(r'\p{Zs}\t'),
+  'Cntrl': _CharSet.token('Cc'),
+  'XDigit': _CharSet.union(r'\p{Nd}\p{Hex_Digit}'),
+  'Space': _CharSet.token('White_Space'),
+};
+
+/// Java 的 `\p{javaXxx}`（照 `Character.isXxx`）。
+const Map<String, _CharSet> _javaClasses = {
+  'javaLowerCase': _CharSet.token('Lowercase'),
+  'javaUpperCase': _CharSet.token('Uppercase'),
+  'javaTitleCase': _CharSet.token('Lt'),
+  'javaAlphabetic': _CharSet.token('Alphabetic'),
+  'javaIdeographic': _CharSet.token('Ideographic'),
+  'javaDigit': _CharSet.token('Nd'),
+  'javaLetter': _CharSet.token('L'),
+  'javaLetterOrDigit': _CharSet.union(r'\p{L}\p{Nd}'),
+  'javaSpaceChar': _CharSet.token('Z'),
+  'javaMirrored': _CharSet.token('Bidi_Mirrored'),
+  // Character.isWhitespace：不含不斷行空白（U+00A0、U+2007、U+202F）。
+  'javaWhitespace': _CharSet.union(
+    r'\t\n\u{B}\f\r\u{1C}-\u{20}\u{1680}\u{2000}-\u{2006}'
+    r'\u{2008}-\u{200A}\u{2028}\u{2029}\u{205F}\u{3000}',
+  ),
 };
 
 /// 書源規則常用的 Unicode 區塊（名稱去掉空白、底線、連字號，小寫）。
