@@ -304,7 +304,9 @@ class ReaderRuntime extends ChangeNotifier {
     final stagedSpec = stateMachine.effectiveLayoutSpec;
     if (stagedSpec.presentationSignature == spec.presentationSignature) return;
 
-    final sameTextLayout = stagedSpec.layoutSignature == spec.layoutSignature;
+    final sameTextLayout =
+        stagedSpec.layoutSignature == spec.layoutSignature &&
+        !_illustrationsResize(stagedSpec, spec);
     if (sameTextLayout) {
       if (stateMachine.updateViewportSpec(spec)) {
         _viewportGeometryNotifier.notifyListeners();
@@ -330,6 +332,13 @@ class ReaderRuntime extends ChangeNotifier {
       _rethrowOperationFailure(token, error, stackTrace);
     }
   }
+
+  /// 開著「顯示插圖」時正文區高也排進版面：比正文區高的插圖等比縮到正文區
+  /// 高（`IllustrationBox`），正文區高變了（狀態列、頁首頁尾的設定）就照新的
+  /// 高度重排，不只換畫面範圍。沒開時換行與高度都和正文區高無關。
+  bool _illustrationsResize(ReaderLayoutSpec from, ReaderLayoutSpec to) =>
+      from.contentHeight != to.contentHeight &&
+      repository.currentShowIllustrations();
 
   /// 重新整理目前這一章並停在原位。[refetch] 先向書源重抓（見
   /// [ReaderChapterRepository.reloadContent]）；抓不到時保留原本的正文，
