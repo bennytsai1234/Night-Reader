@@ -75,29 +75,29 @@
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| 綁好的變數（`java`、`cookie`、`cache`、`source`、`book`、`result`、`baseUrl`、`chapter`、`title`、`src`、`nextChapterUrl`） | | |
-| 網路：`ajax`、`ajaxAll`、`connect`、`get`、`head`、`post` | | |
-| 網頁：`webView`、`webViewGetSource`、`webViewGetOverrideUrl` | | |
-| 網頁驗證：`startBrowser`、`startBrowserAwait`、`getVerificationCode` | | |
-| `importScript`、`cacheFile` | | |
-| Cookie：`java.getCookie` 與 `cookie.*` | | |
-| 檔案：`downloadFile`、`getFile`、`readFile`、`readTxtFile`、`deleteFile` | | |
-| 壓縮檔：`unzipFile`、`un7zFile`、`unrarFile`、`unArchiveFile`、`getTxtInFolder`、`get{Zip,Rar,7z}{String,ByteArray}Content` | | |
-| 編碼：`strToBytes`、`bytesToStr`、`base64*`、`hex*`、`encodeURI`、`htmlFormat` | | |
-| 時間：`timeFormat`、`timeFormatUTC` | | |
-| 繁簡：`t2s`、`s2t` | | |
-| 字型：`queryTTF`、`queryBase64TTF`、`replaceFont` | | |
-| `toNumChapter`、`toURL` | | |
-| 提示與紀錄：`toast`、`longToast`、`log`、`logType` | | |
-| `randomUUID`、`androidId`、`getWebViewUA`、`openUrl` | | |
-| 加解密：`md5Encode*`、AES／DES／3DES、`digest*`、`HMac*`、`createSymmetricCrypto`、`createAsymmetricCrypto`、`createSign` | | |
-| `source.*`（變數、登入資訊、登入標頭、`getHeaderMap`、`put`／`get`） | | |
-| `cache.*`（`put`、`get`、`delete`、`putMemory`、`getFromMemory`、`putFile`、`getFile`） | | |
-| `book`／`chapter` 的變數（`putVariable`、`getVariable`、超過一萬字存檔案） | | |
-| `java.getString`、`getStringList`、`getElement(s)`、`setContent`、`put`、`get`、`reGetBook`、`refreshTocUrl` | | |
-| `java.get("bookName")`、`java.get("title")` | | |
-| Rhino 的 `Packages`、`importClass`、`JavaImporter` 與 Java 類別 | | |
-| 程式庫共用的作用域 | | |
+| 綁好的變數（`java`、`cookie`、`cache`、`source`、`book`、`result`、`baseUrl`、`chapter`、`title`、`src`、`nextChapterUrl`） | 一樣 | 都有；夜讀另外給 `key`、`page`、`redirectUrl`。目錄的 `formatJs` 少了 `index`、`gInt`，在「目錄」寫。 |
+| 網路：`ajax`、`ajaxAll`、`connect`、`get`、`head`、`post` | 一樣 | 等網路時書源 isolate 停住，拿到的就是結果（ADR 0034）。 |
+| 網頁：`webView`、`webViewGetSource`、`webViewGetOverrideUrl` | 結果不對（`webViewGetSource`） | 這個函式靠 `sourceRegex`，同 R7；另外兩個一樣。 |
+| 網頁驗證：`startBrowser`、`startBrowserAwait`、`getVerificationCode` | 刻意不同 | 背景工作從不等人，只在使用者打開的頁面裡驗證（ADR 0038）。 |
+| `importScript`、`cacheFile` | 一樣 | 網址抓回來存著，原樣交給書源 `eval`。 |
+| Cookie：`java.getCookie` 與 `cookie.*` | 一樣 | 函式都有；存放照網域的二級網域，同 Legado。 |
+| 檔案：`downloadFile`、`getFile`、`readFile`、`readTxtFile`、`deleteFile` | 一樣 | 在快取資料夾裡。 |
+| 壓縮檔：`unzipFile`、`un7zFile`、`unrarFile`、`unArchiveFile`、`getTxtInFolder`、`get{Zip,Rar,7z}{String,ByteArray}Content` | 結果不對（rar、7z） | zip 照做；rar 與 7z 的六個函式直接丟錯誤，見 R9。 |
+| 編碼：`strToBytes`、`bytesToStr`、`base64*`、`hex*`、`encodeURI`、`htmlFormat` | 一樣 | 含 Android `Base64` 的旗標。 |
+| 時間：`timeFormat`、`timeFormatUTC` | 一樣 | |
+| 繁簡：`t2s`、`s2t` | 一樣 | |
+| 字型：`queryTTF`、`queryBase64TTF`、`replaceFont` | 一樣 | 有自己的 TTF 讀取（`N:lib/core/engine/js/ttf/`）。 |
+| `toNumChapter`、`toURL` | 一樣 | |
+| 提示與紀錄：`toast`、`longToast`、`log`、`logType` | 一樣 | |
+| `randomUUID`、`androidId`、`getWebViewUA`、`openUrl` | 一樣 | `openUrl` 照 `startBrowser` 開。 |
+| 加解密：`md5Encode*`、AES／DES／3DES、`digest*`、`HMac*`、`createSymmetricCrypto`、`createAsymmetricCrypto`、`createSign` | 一樣 | 函式都有；認不得的模式與填充丟錯誤（`N:lib/core/engine/js/encode/`）。 |
+| `source.*`（變數、登入資訊、登入標頭、`getHeaderMap`、`put`／`get`） | 一樣 | 登入標頭的 Cookie 怎麼存見 R8 附帶。 |
+| `cache.*`（`put`、`get`、`delete`、`putMemory`、`getFromMemory`、`putFile`、`getFile`） | 一樣 | |
+| `book`／`chapter` 的變數（`putVariable`、`getVariable`、超過一萬字存檔案） | 一樣 | 讀到的值相同；夜讀超過 5000 字另外寫一份檔案、但從來不讀它，見「有更好的做法」。 |
+| `java.getString`、`getStringList`、`getElement(s)`、`setContent`、`put`、`get`、`reGetBook`、`refreshTocUrl` | 結果不對（`reGetBook`） | `reGetBook` 直接丟錯誤，見 R9；其餘一樣。 |
+| `java.get("bookName")`、`java.get("title")` | 結果不對 | `bookName` 拿不到，見 R5。 |
+| Rhino 的 `Packages`、`importClass`、`JavaImporter` 與 Java 類別 | 一樣 | 書源常用的類別有對應（`N:lib/core/engine/js/extensions/js_java_classes.dart`）；直接開 Socket 不支援。 |
+| 程式庫共用的作用域 | 一樣 | 見「程式庫」。 |
 
 ### 搜尋
 
@@ -313,6 +313,13 @@
 - Legado：`L:model/analyzeRule/AnalyzeUrl.kt:134` 決定 `domain = NetworkUtils.getSubDomain(source?.getKey() ?: url)`，`setCookie()` 用它找存著的 Cookie（同檔 607-623），自動存的 Cookie 罐也照它存（同檔 635-644）。登入標頭裡的 Cookie 存在書源網址底下（`L:data/entities/BaseSource.kt:150-156`）。
 - 夜讀：`N:lib/core/engine/analyze_url.dart:731-741`，`CookieStore().getCookie(url)` 照這次請求的網址；登入標頭的 Cookie 存在書源網址底下（`N:lib/core/models/source/base_source.dart:158-160`），兩邊對不上。
 - 附帶：登入標頭的 Cookie Legado 是併進舊的（`replaceCookie`），夜讀是整個蓋掉（`setCookie`），同一個網站先前存的其他 Cookie 會不見。
+
+### R9 規則 JS 的 `java.reGetBook()` 與 rar、7z 壓縮檔函式直接丟錯誤（少數寫法才碰到）
+
+- 讀者會碰到：書源在目錄的預整理 JS（`preUpdateJs`）裡呼叫 `java.reGetBook()`（書的網址會變的網站，靠它重新搜一次同名書、換上新網址）時，Legado 換好網址照常抓目錄，夜讀目錄更新失敗。書源用 `java.unrarFile`、`java.un7zFile` 或 `java.get{Rar,7z}{String,ByteArray}Content` 讀網站給的壓縮檔時，夜讀丟錯誤、抓不到。
+- Legado：`L:model/analyzeRule/AnalyzeRule.kt:845-864`（`reGetBook` 用精準搜尋找回同名同作者的書，換上 `bookUrl` 與變數）；`L:help/JsExtensions.kt:628-645, 700-729`（rar、7z）。
+- 夜讀：`N:lib/core/engine/js/extensions/js_java_object.dart:805-806`（`reGetBook`）、`855-860`（rar、7z）。
+- 備註：rar、7z 多半出現在類型 3（文件）的書源，那一類夜讀本來就不支援（ADR 0051）；文字書源用到的少。
 
 ## 少一個選項
 
