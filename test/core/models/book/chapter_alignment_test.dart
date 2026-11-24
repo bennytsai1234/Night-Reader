@@ -52,23 +52,38 @@ void main() {
       newChapters: toc(titles),
     );
 
-    test('章號寫成中文數字', () {
-      const names = ['風起', '雲湧'];
-      final titles = numbered(
-        (n) => '第${_chinese(n)}章 ${names[n % 2]}${n == 100 ? '' : n}',
-      );
-      expect(align('第100章 風起', titles), 104);
+    test('章號寫成中文數字（章名也不同，要靠章號）', () {
+      final titles = numbered((n) => '第${_chinese(n)}章 新版章名$n');
+      expect(align('第100章 舊版的名字', titles), 104);
     });
 
-    test('章號寫成「100、」', () {
-      final titles = numbered((n) => '第$n章 章名$n');
-      expect(align('100、章名100', titles), 104);
+    test('章號寫成「100、」（章名也不同，要靠章號）', () {
+      final titles = numbered((n) => '第$n章 新版章名$n');
+      expect(align('100、舊版的名字', titles), 104);
     });
 
     test('章號對不上、章名本身一樣（網站多算一章）', () {
       final titles = numbered((n) => '第$n章 章名${n - 1}');
       // 舊的是「第100章 章名100」，新目錄的「第101章 章名100」才是同一章。
       expect(align('第100章 章名100', titles), 105);
+    });
+
+    test('好幾章去掉章號後都一樣時，章號相同的優先', () {
+      final titles = numbered((n) => '第$n章 正文（已校）');
+      expect(align('第100章 正文', titles), 104);
+    });
+
+    test('舊的位置超過新目錄長度時不出界', () {
+      final titles = ['第1章 甲', '第2章 乙', '第3章 丙'];
+      expect(
+        alignChapterIndex(
+          oldIndex: 50,
+          oldTitle: '第51章 庚',
+          oldTotalCount: 60,
+          newChapters: toc(titles),
+        ),
+        inInclusiveRange(0, 2),
+      );
     });
 
     test('章名外面多了括號裡的字', () {

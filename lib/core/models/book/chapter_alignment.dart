@@ -45,6 +45,9 @@ int alignChapterIndex({
   }
 
   // 同 Legado：估計位置與原本的位置前後 10 章裡，比去掉章號與括號的章名。
+  // 好幾章一樣像時（每章都叫「正文」、短的「上」「下」），章號相同的優先，
+  // 再取離估計位置最近的（Legado 取第一個）。
+  final oldChapterNumber = _extractChapterNumber(oldTitle);
   final windowStart = math.max(0, math.min(oldIndex, estimatedIndex) - 10);
   final windowEnd = math.min(
     newSize - 1,
@@ -54,23 +57,31 @@ int alignChapterIndex({
   if (oldPure.isNotEmpty) {
     int? best;
     var bestSimilarity = _similarEnough;
+    var bestSameNumber = false;
     for (var i = windowStart; i <= windowEnd; i++) {
-      final similarity = _jaccard(
-        oldPure,
-        _pureChapterName(newChapters[i].title),
-      );
-      if (similarity > bestSimilarity ||
-          (best != null &&
-              similarity == bestSimilarity &&
-              (i - estimatedIndex).abs() < (best - estimatedIndex).abs())) {
-        bestSimilarity = similarity;
+      final title = newChapters[i].title;
+      final similarity = _jaccard(oldPure, _pureChapterName(title));
+      if (similarity <= _similarEnough) continue;
+      final sameNumber =
+          oldChapterNumber != null &&
+          _extractChapterNumber(title) == oldChapterNumber;
+      final better =
+          best == null ||
+          similarity > bestSimilarity ||
+          (similarity == bestSimilarity &&
+              (sameNumber && !bestSameNumber ||
+                  sameNumber == bestSameNumber &&
+                      (i - estimatedIndex).abs() <
+                          (best - estimatedIndex).abs()));
+      if (better) {
         best = i;
+        bestSimilarity = similarity;
+        bestSameNumber = sameNumber;
       }
     }
     if (best != null) return best;
   }
 
-  final oldChapterNumber = _extractChapterNumber(oldTitle);
   if (oldChapterNumber != null) {
     final numbered = nearest(
       (chapter) => _extractChapterNumber(chapter.title) == oldChapterNumber,
