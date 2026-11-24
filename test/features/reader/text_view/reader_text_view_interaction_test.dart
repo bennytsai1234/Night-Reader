@@ -1290,6 +1290,57 @@ void main() {
     await _pumpReveal(tester);
   });
 
+  // 轉螢幕、分割畫面這類改了正文寬度的重排：紙蓋著、正文在排版中，自動
+  // 捲動等它排好，不當成到了書尾而停下。
+  testWidgets('auto-scroll keeps going through a re-layout', (tester) async {
+    await pumpReader(tester);
+    await settle(tester);
+    ReaderFrameCallback? tick;
+    final auto = ReaderAutoPageController(
+      runtime: runtime,
+      viewportController: viewport,
+      viewportExtent: () => _viewport.height,
+      frameSource: (callback) {
+        tick = callback;
+        return () => tick = null;
+      },
+    );
+    addTearDown(auto.dispose);
+    auto.start();
+    var elapsed = Duration.zero;
+    tick!(elapsed);
+
+    // 正文欄變窄（同轉螢幕、分割畫面改了寬度）：排版簽章跟著變。
+    final narrower = ReaderLayoutSpec.fromViewport(
+      viewportSize: _viewport,
+      style: ReaderLayoutStyle(
+        fontSize: _style.fontSize,
+        lineHeight: _style.lineHeight,
+        letterSpacing: _style.letterSpacing,
+        paragraphSpacing: _style.paragraphSpacing,
+        paddingTop: _style.paddingTop,
+        paddingBottom: _style.paddingBottom,
+        paddingLeft: _style.paddingLeft + 40,
+        paddingRight: _style.paddingRight + 40,
+        textIndent: _style.textIndent,
+      ),
+    );
+    final applied = runtime.applyPresentation(spec: narrower);
+    for (
+      var frame = 0;
+      frame < 2000 && runtime.stateMachine.currentOperation != null;
+      frame++
+    ) {
+      elapsed += const Duration(milliseconds: 16);
+      tick?.call(elapsed);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await applied;
+    expect(auto.isRunning, isTrue);
+    auto.stop();
+    await settle(tester);
+  });
+
   testWidgets('opening mid-chapter does not wait for adjacent chapters', (
     tester,
   ) async {

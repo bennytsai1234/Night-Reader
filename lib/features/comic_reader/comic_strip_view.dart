@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/scheduler.dart';
+import 'package:night_reader/features/reader/features/auto_page/reader_auto_page_controller.dart';
 import 'package:night_reader/features/source_login/source_failure_remedy.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 
@@ -189,9 +190,13 @@ class _ComicStripViewState extends State<ComicStripView>
   Map<ComicImageKey, ComicPageItem> _windowItems = const {};
   Object? _windowSignature;
 
+  /// 退到背景就停自動捲動（同文字閱讀器）：回來時不從背景的那段時間接著捲。
+  late final AppLifecycleListener _lifecycle;
+
   @override
   void initState() {
     super.initState();
+    _lifecycle = AppLifecycleListener(onHide: _stopAutoScroll);
     widget.controller?._state = this;
     widget.model.addListener(_onModel);
     _resetScroll(widget.initialFraction);
@@ -220,6 +225,7 @@ class _ComicStripViewState extends State<ComicStripView>
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     widget.controller?._state = null;
     widget.model.removeListener(_onModel);
     _zoomAnimation?.dispose();
@@ -724,7 +730,12 @@ class _ComicStripViewState extends State<ComicStripView>
   }
 
   void _onAutoScrollTick(Duration elapsed) {
-    final dt = (elapsed - _autoScrollLast).inMicroseconds / 1e6;
+    // 一幀最多推進 [ReaderAutoPageController.maxFrameSeconds] 的量：停很久的
+    // 那一幀（卡頓、沒畫幀的期間）不一口氣補上。
+    final dt = math.min(
+      (elapsed - _autoScrollLast).inMicroseconds / 1e6,
+      ReaderAutoPageController.maxFrameSeconds,
+    );
     _autoScrollLast = elapsed;
     if (!_scroll.hasClients || dt <= 0) return;
     final position = _scroll.position;
