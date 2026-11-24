@@ -89,6 +89,11 @@ abstract class DownloadBase extends ChangeNotifier {
     _runCancelTokens[bookUrl]?.cancel('這本書的下載已停止');
   }
 
+  /// 讀者從佇列刪掉了這本書的任務：停下正在跑的那一輪，不再抓、也不再寫
+  /// 進度。
+  void cancelRun(String bookUrl) =>
+      _runCancelTokens[bookUrl]?.cancel('這本書的下載已從佇列刪除');
+
   /// 開始一輪下載，拿到這一輪的取消訊號；跑完交給 [endRun]。
   CancelToken beginRun(String bookUrl) =>
       _runCancelTokens[bookUrl] = CancelToken();

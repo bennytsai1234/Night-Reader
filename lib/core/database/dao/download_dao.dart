@@ -53,6 +53,7 @@ class DownloadDao extends DatabaseAccessor<AppDatabase>
     int? currentChapterIndex,
     int? successCount,
     int? errorCount,
+    int? totalCount,
     DownloadTask? failureOf,
   }) {
     return (update(
@@ -68,6 +69,9 @@ class DownloadDao extends DatabaseAccessor<AppDatabase>
             : const Value.absent(),
         errorCount: errorCount != null
             ? Value(errorCount)
+            : const Value.absent(),
+        totalCount: totalCount != null
+            ? Value(totalCount)
             : const Value.absent(),
         lastErrorReason: failureOf != null
             ? Value(failureOf.lastErrorReason)
