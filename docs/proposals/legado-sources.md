@@ -103,16 +103,16 @@
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| 沒有搜尋網址的書源不搜 | | |
+| 沒有搜尋網址的書源不搜 | 一樣 | |
 | 多個書源同時搜（同時幾個） | | |
 | 搜尋範圍：分組、單一書源 | | |
-| 精準搜尋 | | |
+| 精準搜尋 | 結果不對 | Legado 留書名或作者「含」關鍵字的，夜讀只留「等於」的，見 R16。 |
 | 同一本書合併成一筆 | | |
 | 結果排序 | | |
-| 搜尋直接跳到詳情頁（`bookUrlPattern`、清單抓不到時當詳情頁） | | |
+| 搜尋直接跳到詳情頁（`bookUrlPattern`、清單抓不到時當詳情頁） | 結果不對（少數） | 判斷一樣；書的網址取法不同，用 POST 搜尋的會丟掉選項，見 R15。 |
 | 書名、作者清理 | | |
 | 結果的分類、字數、最新章節、簡介整理 | | |
-| 搜尋結果的變數帶到詳情 | | |
+| 搜尋結果的變數帶到詳情 | 結果不對 | 搜尋網址裡存的變數 Legado 帶給每本書，夜讀沒帶，見 R14。 |
 | 停止搜尋、逾時 | | |
 
 ### 詳情
@@ -122,8 +122,8 @@
 | `init` 規則 | | |
 | 各欄位（書名、作者、簡介、分類、最新章節、更新時間、封面、目錄網址、字數） | | |
 | 詳情抓不到書名時沿用搜尋結果 | | |
-| 目錄網址空時等於詳情網址、同一頁不重抓 | | |
-| `canReName`（書架上的書可以改名） | | |
+| 目錄網址空時等於詳情網址、同一頁不重抓 | 結果不對 | 夜讀會自己在詳情頁找「目錄」連結換過去，見 R10。 |
+| `canReName`（書架上的書可以改名） | 結果不對 | 沒寫 `canReName` 時 Legado 不拿詳情頁的書名蓋掉搜尋結果的，夜讀會蓋，見 R13。 |
 | `downloadUrls`（檔案書源） | | |
 | 簡介的 HTML 整理 | | |
 
@@ -131,15 +131,15 @@
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| 章節清單與 `-` 倒序 | | |
+| 章節清單與 `-` 倒序 | 一樣 | 兩次倒序與去重的順序相同。 |
 | 目錄下一頁（`nextTocUrl`，一個網址接一個與一次給多個） | | |
 | 章名、章節網址（空時等於目錄網址） | | |
-| 卷名（`isVolume`） | | |
-| 付費章節（`isVip`、`isPay`） | | |
+| 卷名（`isVolume`） | 結果不對 | 「是不是卷」怎麼判不同，見 R12。 |
+| 付費章節（`isVip`、`isPay`） | 結果不對 | 同 R12，付費章節認不出來。 |
 | 章節的更新時間 | | |
-| `formatJs` | | |
-| `preUpdateJs` | | |
-| 同網址章節去重 | | |
+| `formatJs` | 結果不對 | 少了 `index`、`gInt`，而且在最後一次倒序之前跑，見 R11。 |
+| `preUpdateJs` | 結果不對（`reGetBook`） | 見 R9；Legado 只在書架上的書與閱讀時跑，夜讀每次抓目錄都跑，結果應相同。 |
+| 同網址章節去重 | 一樣 | 照網址。 |
 | 目錄抓不到時的錯誤 | | |
 | 最新章節與新章節數 | | |
 
@@ -321,6 +321,49 @@
 - 夜讀：`N:lib/core/engine/js/extensions/js_java_object.dart:805-806`（`reGetBook`）、`855-860`（rar、7z）。
 - 備註：rar、7z 多半出現在類型 3（文件）的書源，那一類夜讀本來就不支援（ADR 0051）；文字書源用到的少。
 
+### R10 詳情頁沒給目錄網址時，夜讀自己找「目錄」連結換過去（抓錯或抓不全）
+
+- 讀者會碰到：目錄就在詳情頁上、書源沒寫目錄網址規則，但頁面上另有一個「章节目录」「目录」連結（常是另一種版面的完整目錄）。Legado 用詳情頁本身解析目錄；夜讀改去抓那個連結，書源的目錄規則是照詳情頁寫的，對不上，目錄空白或只抓到一部分。
+- Legado：`L:model/webBook/BookInfo.kt:150-154`，目錄網址空時等於詳情頁網址，並把詳情頁直接當目錄頁用（`tocHtml = body`）。
+- 夜讀：`N:lib/core/engine/web_book/book_info_parser.dart:111-116, 148-186`，目錄網址空或等於詳情網址時，在頁面裡找文字是「章节目录／章節目錄／目录／目錄」的連結，找到就換成它；從第一版就這樣，沒有 ADR。
+
+### R11 目錄的 `formatJs` 拿不到 `index`、`gInt`，而且序號是倒過來算的（抓錯或抓不全）
+
+- 讀者會碰到：書源用 `formatJs` 替章名補序號（例如 `'第' + index + '章 ' + title`）或用 `gInt` 累計時，Legado 章名照順序編號；夜讀的 JS 找不到 `index`、`gInt` 出錯，章名維持原樣。就算改成能讀到序號，夜讀是在最後一次倒序之前跑，第一章拿到的是最後一個號碼。
+- Legado：`L:model/webBook/BookChapterList.kt:124-148`：先依閱讀設定倒序、編好章節序號，再跑 `formatJs`，綁 `gInt`（整份目錄共用，初值 0）、`index`（從 1 起）、`chapter`、`title`。
+- 夜讀：`N:lib/core/engine/web_book/web_book_service.dart:293-338`：`formatJs` 只拿到 `result`（章名）與 `page = i + 1`（306 行），之後才在 331 行依閱讀設定倒序；規則 JS 的變數清單沒有 `index`、`gInt`（`N:lib/core/engine/analyze_rule/analyze_rule_script.dart:70-91`）。
+
+### R12 「是不是卷、是不是付費」只認 true／yes／1／是（抓錯或抓不全）
+
+- 讀者會碰到：書源的 `isVolume`、`isVip`、`isPay` 規則回的是元素的文字或屬性（例如付費章節旁的鎖頭圖片網址、「VIP」字樣、卷名的 class），Legado 只要不是空的、不是 false／no／not／0 就算是；夜讀只認 true、yes、1、是。卷名當成一般章節顯示、點了抓不到；付費章節認不出來，校驗看不出這是付費書源（ADR 0057），閱讀時也不跳過。
+- Legado：`L:utils/StringExtensions.kt:74-79`（`isTrue`），目錄用在 `L:model/webBook/BookChapterList.kt:209-237`。
+- 夜讀：`N:lib/core/engine/web_book/chapter_list_parser.dart:217-222`（`_isTrue`），用在同檔 105、115-116、196-197 行。
+
+### R13 沒寫 `canReName` 時，詳情頁的書名、作者蓋掉搜尋結果的（少數寫法才碰到）
+
+- 讀者會碰到：搜尋結果的書名是乾淨的，詳情頁的書名規則抓到的多了字（「《書名》最新章節」）或略有不同。Legado 已經有書名就不換（書源寫了 `canReName` 才換）；夜讀不在書架上的書一律換成詳情頁的，書名與書架、同步、換源用的身分（書名加作者）跟著變。
+- Legado：`L:model/webBook/BookInfo.kt:65-79`：`mCanReName = canReName && !infoRule.canReName.isNullOrBlank()`，書名作者只在 `mCanReName` 或原本是空的時候寫入。
+- 夜讀：`N:lib/core/engine/web_book/book_info_parser.dart:57-77`：只有書在書架上、又沒寫 `canReName` 時才保留原名，其他時候用詳情頁的。
+
+### R14 搜尋網址裡存的變數沒帶到搜尋結果（少數寫法才碰到）
+
+- 讀者會碰到：書源在搜尋網址的 JS 裡 `java.put` 一個值（常見是 token、加密用的鑰匙），之後詳情、目錄、正文再 `java.get` 它。Legado 每本搜尋結果都帶著這些變數；夜讀的搜尋結果是空白的，只靠書源層的記憶體快取補（只在同一個書源 isolate 裡讀得到），`@put` 存的完全沒有，後面的請求組錯、抓不到。
+- Legado：`L:model/webBook/WebBook.kt:35-44`（搜尋網址用一個 `RuleData` 收變數），`L:model/webBook/BookList.kt:56, 80, 94, 211`（`SearchBook(variable = variable)`，每本書帶著）。
+- 夜讀：`N:lib/core/engine/web_book/web_book_service.dart:47-52`（搜尋網址沒有 `ruleData`），`N:lib/core/engine/web_book/book_list_parser.dart:110-120`（每本書新建、沒有變數）；發現網址同樣（`web_book_service.dart:76`）。
+
+### R15 搜尋直接跳詳情頁時，書的網址取法不同（少數寫法才碰到）
+
+- 讀者會碰到：用 POST 搜尋（網址後面接 `,{"method":"POST",…}`）、搜到唯一一本時網站直接給詳情頁的書源。Legado 沒轉址時把書的網址記成搜尋網址（含 POST 選項），也把這一頁存起來直接用；夜讀記成回應的網址、不存這一頁，打開書時用 GET 重抓，抓到的不是詳情頁。
+- Legado：`L:model/webBook/BookList.kt:166-169`（`isRedirect` 才用 `baseUrl`，否則 `getAbsoluteURL(analyzeUrl.url, analyzeUrl.ruleUrl)`），`66-68`（`searchBook.infoHtml = body`）。
+- 夜讀：`N:lib/core/engine/web_book/book_list_parser.dart:185-212`（`Book(bookUrl: baseUrl)`，`baseUrl` 是回應的網址；沒存 `infoHtml`）。
+
+### R16 精準搜尋只留書名或作者「完全等於」關鍵字的（抓錯或抓不全）
+
+- 讀者會碰到：開精準搜尋搜「斗羅大陸」，Legado 留下書名或作者「含」這幾個字的（含續作、外傳），夜讀只留完全一樣的。
+- Legado：`L:model/webBook/SearchModel.kt:95-96`（`!precision || name.contains(searchKey) || author.contains(searchKey)`）。
+- 夜讀：`N:lib/features/search/search_model.dart:36-41`（正規化後 `==`）。
+- 備註：夜讀比對前先正規化（繁簡、空白），這點比 Legado 寬；只有「含」與「等於」的差別。
+
 ## 少一個選項
 
 （使用者勾了才做。）
@@ -334,3 +377,10 @@
 （一行一個，不展開。）
 
 ## 拿不準
+
+- **XPath**：判斷模式與組合一樣，但 Legado 用 JXDocument、夜讀用 `xpath_selector`，支援的函式（`text()`、`contains()`、位置、軸）沒有逐一對（`N:lib/core/engine/parsers/analyze_by_xpath.dart`、`L:model/analyzeRule/AnalyzeByXPath.kt`）。
+- **R7 的補法**：在網頁裡讀 `performance.getEntriesByType('resource')` 能不能拿到所有資源網址（含 iframe、XHR 之後才發的），沒有試。
+- **規則 JS 的 `java.put` 寫進書源層的快取**（`N:lib/core/engine/js/extensions/js_extensions.dart:73-112`）：讀甲書時存的值，讀乙書時 `java.get` 會拿到，Legado 拿到空的；沒找到會因此出錯的書源。
+- **`@put` 的值是空的時**：Legado 照樣存空字串，夜讀不存、留著舊值（`N:lib/core/engine/analyze_rule/analyze_rule_string.dart:38-45`）；影響多大沒查。
+- **搜尋一類沒對完**：多個書源同時搜、範圍、合併、排序、書名作者清理、逾時讀到一半（`N:lib/features/search/search_model.dart`），結論留空。
+
