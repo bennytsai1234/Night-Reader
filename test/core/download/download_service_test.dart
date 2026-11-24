@@ -459,8 +459,8 @@ void main() {
     },
   );
 
-  test('a task removed from the queue while its run fetched the TOC does not '
-      'come back after a restart', () async {
+  test('a task removed from the queue while its run was planning is not '
+      'written back when the run sets its chapter count', () async {
     const origin = 'https://removed-task.example';
     final book = Book(
       bookUrl: '$origin/book/1',
