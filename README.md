@@ -28,7 +28,7 @@
 <summary><b>iOS 怎麼裝</b></summary>
 <br>
 
-同一個 [Release](https://github.com/bennytsai1234/Night-Reader/releases/latest) 附未簽章的 `.ipa`，用 AltStore 或 Sideloadly 以自己的 Apple ID 簽章安裝，免費帳號每 7 天重簽一次。iOS 版沒有 App 內更新、分享進 App 與用檔案開書，也沒在 iPhone 上試過。
+同一個 [Release](https://github.com/bennytsai1234/Night-Reader/releases/latest) 附未簽章的 `.ipa`，用 AltStore 或 Sideloadly 以自己的 Apple ID 簽章安裝，免費帳號每 7 天重簽一次。iOS 版沒有 App 內更新與分享進 App，也沒在 iPhone 上試過。
 
 </details>
 
@@ -36,7 +36,7 @@
 <summary><b>書源與本地書</b></summary>
 <br>
 
-夜讀不附書源，剛安裝時書架與搜尋都是空的。在 Android 上從書源網站點「一鍵導入」，或在「我的 → 書源管理」用網址、檔案、剪貼簿匯入；書源格式相容 [Legado](https://github.com/gedoor/legado)，要登入的書源照 Legado 的方式登入。手邊的 TXT、EPUB 與漫畫（CBZ、ZIP、圖片資料夾）不用書源，在書架選「加入本地書籍」。
+夜讀不附書源，剛安裝時書架與搜尋都是空的。在 Android 上從書源網站點「一鍵導入」，或在「我的 → 書源管理」用網址、檔案、剪貼簿匯入；書源格式相容 [Legado](https://github.com/gedoor/legado)，要登入的書源照 Legado 的方式登入。手邊的 TXT、EPUB 與漫畫不用書源：TXT、EPUB 與單一個 CBZ、ZIP 在書架選「加入本地書籍」，漫畫資料夾（一話一個 CBZ、ZIP 或圖片資料夾）選「加入本地漫畫」。
 
 </details>
 

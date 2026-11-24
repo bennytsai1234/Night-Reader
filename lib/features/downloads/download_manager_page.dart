@@ -896,8 +896,8 @@ class _TaskControlButton extends StatelessWidget
           onTap: onPressed,
           // 命中區放大到 44（設計系統的圓形按鈕尺寸），圓鈕維持 34 置中；
           // 點偏一點不會打開整列的選單。
-          child: Opacity(
-            opacity: onPressed == null ? AppDisabled.opacity : 1,
+          child: DisabledDim(
+            disabled: onPressed == null,
             child: SizedBox.square(
               dimension: AppGlass.buttonSize,
               child: Center(

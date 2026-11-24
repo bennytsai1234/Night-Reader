@@ -239,7 +239,7 @@ class _ActionButton extends StatelessWidget {
       ),
     );
     if (onTap == null) {
-      button = Opacity(opacity: AppDisabled.opacity, child: button);
+      button = DisabledDim(child: button);
     }
     if (tooltip != null && tooltip != label) {
       button = Tooltip(message: context.ui(tooltip!), child: button);

@@ -61,8 +61,8 @@ class SourceCheckStatusBar extends StatelessWidget {
               Expanded(
                 child: InkWell(
                   onTap: onTap,
-                  child: Opacity(
-                    opacity: idle ? AppDisabled.opacity : 1,
+                  child: DisabledDim(
+                    disabled: idle,
                     child: Padding(
                       padding: const EdgeInsets.only(
                         left: AppSpacing.lg,

@@ -6,7 +6,7 @@
 
 使用者說「發測試版」才做。
 
-1. `git pull --ff-only`，看 `beta` 最後一次 CI：`gh run list --branch beta --workflow ci.yml -L 1`。還在跑就在同一輪裡前景等（`gh run watch <run> --exit-status`，逾時設 10 分鐘），不放背景，原因見全域指示「指令與測試」。
+1. `git pull --ff-only`，看 `beta` 最後一次 CI：`gh run list --branch beta --workflow ci.yml -L 1`。還在跑就在同一輪裡前景等（`gh run watch <run> --exit-status`，逾時設 10 分鐘），不放背景，原因見 `plan` 技能「收尾合併清單」第 6 條。
 2. 失敗就先修：開小分支修、開 PR、等 CI、照 `docs/agents/merge.md` 合併，再回到第 1 步；某個 PR 本身的邏輯一時修不好，就 `git revert` 它的合併提交推上 `beta`，告訴使用者它要回去重做。
 3. 通過就在模擬器上開一次要發的這版（`docs/agents/emulator.md`）：`channel=test` 建 `beta` 的 APK，蓋在最新已發布的測試版上開。壞了照第 2 步修好再回來。使用者說這次不用就跳過。
 4. `gh workflow run android-release.yml --ref beta -f channel=beta`（沒有 App 改動時照常結束、不發），確認開始建置就走，不等 APK。

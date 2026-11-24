@@ -12,6 +12,8 @@
 |---|---|---|
 | 介面 0 | `lib/shared/widgets/skeleton/` 11 個檔 | 0 |
 | 介面 1 | `lib/shared/widgets/` 其餘 35 個檔（`glass/`、`lists/`、`popups/`、`book/`、`text/` 與根目錄 4 個）、`lib/shared/navigation/` 10 個、`theme/` 9 個、`layout/` 2 個，共 56 個 | 1 |
+| 介面 2 | `lib/features/bookshelf/` 10 個、`book_detail/` 19 個、`home/` 2 個，共 31 個 | 2 |
+| 介面 3 | `lib/features/settings/` 14 個、`about/` 11 個、`association/` 6 個、`replace_rule/` 5 個，共 36 個 | 1 |
 
 ## 問題
 
@@ -21,7 +23,7 @@
 
 ### 介面 1：共用元件、換頁、主題、版面
 
-#### 1-1. 不能切的開關比其他灰掉的東西淡一倍多，幾乎看不見
+#### 1-1. 不能切的開關比其他灰掉的東西淡一倍多，幾乎看不見（已修，#530）
 
 **會發生什麼**：「關於夜讀」把「解鎖才能打開」設成會鎖之後，「離開時蓋住畫面」那一列灰掉；列的字是規定的灰（不透明度 0.4），列尾的開關卻只剩 0.16，比其他灰掉的開關淡得多，看起來像沒有開關。`DESIGN.md` 原則 5 與 `docs/design/components.md`「選單與提示」定的是灰掉全 App 只有一種樣子、開關「軌道留著顏色只降透明度」。
 
@@ -67,6 +69,78 @@
 
 **輕重**：畫面錯。
 
+### 介面 2：書架、書籍詳情、主頁
+
+#### 2-1. 自訂排序時拖一本書換位置，會蓋掉背景剛查到的新章節，偶爾還把拖好的書放回別的位置
+
+**會發生什麼**：開 App 後書架在背景檢查更新的那段時間裡（下拉檢查也一樣），在自訂排序下拖一本書放下，已經查完的書的新章節數、最新章節、檢查時間被寫回舊的值：檢查結束後角標寫「+N」，進度線與書籍詳情的「最新章節」卻還是舊的，下次檢查又報一次同樣的新章節。放下的那一刻若剛好有一次書架重讀（某本書下載完成、自動換源、同步套用了進度），存下的順序照重讀回來的混合順序算，拖的那本跳到別的位置。
+
+**為什麼**：
+
+1. 觸發點：`lib/features/bookshelf/bookshelf_page.dart:847-876`，放下時呼叫 `provider.reorderBooks(from, to)`。
+2. 排序把書架上每一本書照記憶體裡的樣子整筆寫回：`lib/features/bookshelf/provider/bookshelf_logic_mixin.dart:180-185`。
+
+   ```dart
+   final item = books.removeAt(oldIndex);
+   books.insert(newIndex, item);
+   for (var i = 0; i < books.length; i++) {
+     books[i].order = i;
+     await bookDao.upsert(books[i]);
+   }
+   ```
+
+   `upsert` 是整列覆蓋（`lib/core/database/dao/book_dao.dart:76-77`，`insertOnConflictUpdate`），不是只改順序。
+3. 背景檢查每查完一本就把新的章節數、最新章節與檢查時間寫進資料庫：`lib/core/download/book_update_service.dart:139-177`（寫回前讀資料庫最新的一筆、只換書源給的欄位，`await bookDao.upsert(info)`）。書架記憶體裡的書要等整批查完才重讀：`lib/features/bookshelf/provider/bookshelf_update_mixin.dart:110-130`（`await loadBooks()` 在最後）。這段期間記憶體裡是查之前的書，第 2 步整筆寫回就把查到的蓋掉。
+4. 第 2 步的迴圈每一圈都重讀 `books` 這個欄位；途中若有一次重讀做完，欄位換成資料庫照混合順序排出來的新清單（`lib/features/bookshelf/bookshelf_provider.dart:121`，`books = await bookDao.getInBookshelf(); _sortBooks();`），迴圈接著把 0、1、2… 寫進新清單的書，存下的就是那份混合的順序。重讀的來源有下載完成（`lib/core/download/download_executor.dart:542`）、自動換源、進度同步。
+
+**怎麼確認**：在 `test/features/bookshelf/` 加一個 provider 測試：書架兩本書 A、B，切到自訂排序；不經書架、直接用 `BookDao` 把 A 的章節數改大（模擬背景檢查寫回）；呼叫 `reorderBooks(1, 0)`，斷言資料庫裡 A 的章節數是改大的值、順序是 B、A。再一項：讓 `upsert` 第一次寫入時插一次 `loadBooks()`（假的 `BookDao`），斷言最後存下的順序仍是拖好的順序。
+
+**修法方向**：修在排序：只寫順序，不整筆寫回；用放下那一刻的清單算好每本的新順序，一次在同一個交易裡寫進去（`BookDao` 加一個只改 `order` 的方法），迴圈不再讀會被重讀換掉的欄位。同一個原因（拿記憶體裡的書整筆寫回）在書籍詳情也有：`lib/features/book_detail/book_detail_provider.dart:1155-1158` 存封面後 `await _bookDao.upsert(_book)`，要等封面下載完才寫，這段期間背景檢查寫進去的欄位同樣會被蓋掉；一起改成只寫封面的欄位。
+
+**輕重**：資料遺失或寫壞。
+
+#### 2-2. 書籍詳情的「換封面」面板打開時先出現置中轉圈，每張候選封面載入時也各轉一個圈（已修，#530）
+
+**會發生什麼**：打開「換封面」，面板滑上來時中間是一個轉圈，接著才換成封面格子；每張網路上找到的候選封面在圖到之前各自轉圈，圖到了一幀冒出來。規格是整區載入用骨架、不放置中轉圈（`DESIGN.md` 原則 4、`docs/design/components.md`「狀態視圖」），封面載入中鋪骨架的底色、圖片到了淡入（`docs/design/components.md`「封面」）。
+
+**為什麼**：
+
+1. 觸發點：書籍詳情「⋯」選單的「換封面」，`lib/features/book_detail/book_detail_page.dart:1171-1179` 打開面板。
+2. 面板一建立就開始讀資料庫裡存過的封面與繁簡字典，讀完才算準備好：`lib/features/book_detail/change_cover_provider.dart:98-112`。
+3. 還沒準備好時整個格子區是置中轉圈：`lib/features/book_detail/change_cover_sheet.dart:143-145`。
+
+   ```dart
+   if (!provider.isInitialized) {
+     return const Center(child: CircularProgressIndicator());
+   }
+   ```
+
+4. 每張候選封面用 `CachedNetworkImage`，佔位是轉圈、圖到了沒有淡入：`lib/features/book_detail/widgets/cover/cover_grid_item.dart:47-55`。
+
+**怎麼確認**：在 `test/features/book_detail/` 打開換封面面板（`ChangeCoverProvider` 換成讀資料庫要等一下的假資料），在 `init` 完成前 `pump` 一幀，斷言面板裡沒有 `CircularProgressIndicator`；放一張還沒載完的網路封面，斷言它的格子也沒有 `CircularProgressIndicator`。
+
+**修法方向**：準備好之前直接畫格子（第一格「恢復預設」一開始就有），或照格子的樣子畫骨架；候選封面改用 App 共用的封面元件（`BookCoverWidget`，載入中鋪骨架底色、到了淡入）。
+
+**輕重**：畫面錯。
+
+### 介面 3：設定、關於、檔案關聯、替換規則
+
+`replace_rule/` 沒有找到：試跑每次開新的 isolate、被下一次或關面板取代時結束舊的並傳回 null、逾時計時與接收埠在交出結果時一起收掉（`replace_rule_preview.dart`、`replace_rule_deadline.dart`）；編輯表單、開關與測試區三個元件只畫畫面，控制器由呼叫端的編輯面板建立與放掉。表單驗證的錯誤訊息沒照介面語言轉換已在 #527。
+
+#### 3-1. 「關於夜讀 → 權限」的權限狀態卡片，最後兩列沒有列首圖示（已修，#530）
+
+**會發生什麼**：權限狀態那張卡片上面每一列權限都有列首圖示，下面的「開啟系統設定」「重新整理」兩列沒有，字往左縮、和上面的列對不齊。規格是同一張卡片有一列帶列首圖示，其他列也帶（`docs/design/components.md`「分組清單」的「圖示跟著同一張卡片」，強調色的動作用強調色的同大小線條圖示）。#489 補這條規則時漏了這一頁。
+
+**為什麼**：`lib/features/about/privacy_pages.dart:192-196` 每一列權限給 `leading: SizedBox(width: AppGrouped.iconTile, child: Icon(...))`；同一張卡片的 `:177` 「開啟系統設定」與 `:183` 「重新整理」兩列沒有 `leading`。
+
+**怎麼確認**：在 `test/features/about/` 打開權限頁、等狀態查完，斷言「權限狀態」卡片裡每一列 `GroupedRow` 都有 `leading`。
+
+**修法方向**：兩列各給一個同大小的線條圖示（強調色），照權限列包在 `AppGrouped.iconTile` 寬的方塊裡。
+
+**輕重**：畫面錯。
+
 ## 拿不準
 
-（目前沒有）
+- **備份與同步：備份或還原進行中，清單下方是一個置中轉圈**（`lib/features/settings/backup_sync_page.dart:180`）。`DESIGN.md` 原則 4 說不放置中轉圈，但那條講的是載入；這是一件操作的進度，規格沒寫該用什麼，卡在「算不算違反規格」。
+- **外部匯入的提示框標題是「外部匯入」**（`lib/features/association/handlers/association_dialog_helper.dart:82`，「無法辨識」同理）。`docs/design/components.md`「提示框」要求標題直接問要做什麼（「匯入這個書源？」），說明只寫一句後果；這裡說明是三段。是規格不符還是用詞意見，沒有把握。
+- **打開「新增規則」「編輯規則」時，規則除錯的結果區先寫「(無結果)」才換成套用後的字**。編輯面板一開就試跑（`lib/features/reader/features/replace_rule/reader_replace_rule_editor_sheet.dart:106`），試跑在新開的 isolate 裡、結果一定晚於第一幀回來；在那之前結果是空字串（`:72`），測試區把「還沒跑出來」和「規則把字全刪光」都寫成「(無結果)」（`lib/features/replace_rule/widgets/replace_edit_test_panel.dart:53`）；面板沒有骨架進場，第一幀就看得到。替換規則面板不受影響（按「執行測試」才出現結果區，`docs/design/reader.md:47`）。至少一幀是確定的，但持續幾幀看開 isolate 多快，要在手機上看才知道看不看得出來，所以放這裡。

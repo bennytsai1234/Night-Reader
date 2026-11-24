@@ -86,6 +86,13 @@ void main() {
     expect(find.byType(SkeletonShapes), findsNothing);
     expect(find.text('已允許'), findsOneWidget);
     expect(find.text('開啟系統設定'), findsOneWidget);
+    // 同一張卡片有一列帶列首圖示，其他列也帶（docs/design/components.md
+    // 「分組清單」）。
+    for (final row in tester.widgetList<GroupedRow>(
+      find.descendant(of: list, matching: find.byType(GroupedRow)),
+    )) {
+      expect(row.leading, isNotNull, reason: '「${row.title}」少了列首圖示');
+    }
     expect(
       skeletonMismatches(
         ready,
