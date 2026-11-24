@@ -65,15 +65,30 @@ void main() {
     });
 
     test('規則 JS 包住的登入牆照樣算要登入', () {
+      // 字串規則的 JS 出錯時包成「解析字串失敗」，登入的訊息在包住的那一層。
       final wrapped = classify(
         ParsingException(
-          'Error: 正文${LoginCheckException.marker}後閱讀',
+          '解析字串失敗',
           rule: '@js:java.ajax(url)',
           url: 'https://example.com/c/1',
+          originalError: RuleJsException(
+            'Error: 正文${LoginCheckException.marker}後閱讀',
+          ),
         ),
         stage: 'content',
       );
       expect(wrapped.health, loginRequiredSourceHealth);
+
+      final wall = classify(
+        ParsingException(
+          '解析字串失敗',
+          originalError: LoginCheckException(
+            '正文${LoginCheckException.marker}後閱讀',
+          ),
+        ),
+        stage: 'content',
+      );
+      expect(wall.health, loginRequiredSourceHealth);
     });
 
     test('搜尋到的書打不開會隔離書源，發現到的只標發現失效', () {
