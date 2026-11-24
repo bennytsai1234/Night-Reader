@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
@@ -53,12 +52,8 @@ class NowPlayingArtwork {
   /// 網路封面和書架的封面（`CachedNetworkImageProvider`）用同一個磁碟快取：
   /// 看過的封面不再下載。有書源網址 [origin] 時照書源抓（[SourceCoverLoader]，
   /// 帶書源標頭、Cookie 與解密），抓好的在同一個快取裡。
-  static Future<File> _downloadToCoverCache(String url, String? origin) async {
-    if (origin != null && origin.isNotEmpty) {
-      await SourceCoverLoader.load(url, origin);
-    }
-    return CachedNetworkImageProvider.defaultCacheManager.getSingleFile(url);
-  }
+  static Future<File> _downloadToCoverCache(String url, String? origin) =>
+      SourceCoverLoader.file(url, origin);
 
   static Future<Directory> _defaultDirectory() async {
     final temp = await getTemporaryDirectory();

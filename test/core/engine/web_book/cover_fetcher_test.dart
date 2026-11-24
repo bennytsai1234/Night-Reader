@@ -133,4 +133,29 @@ void main() {
     );
     expect(CoverFetcher.needsScript(source(), '$baseUrl/{{1+1}}.png'), isTrue);
   });
+
+  test('標頭或網址選項解不成 JSON（會當成 JS 跑）時也交給書源 isolate', () {
+    expect(
+      CoverFetcher.needsScript(
+        source(header: '{"Referer": "x" + "y"}'),
+        '$baseUrl/c.png',
+      ),
+      isTrue,
+    );
+    expect(
+      CoverFetcher.needsScript(
+        source(),
+        '$baseUrl/c.png,{"headers": base + "/"}',
+      ),
+      isTrue,
+    );
+    expect(
+      CoverFetcher.needsScript(
+        source(header: "{Referer:'$baseUrl/'}"),
+        '$baseUrl/c.png',
+      ),
+      isFalse,
+      reason: '寬鬆 JSON 照樣解得開',
+    );
+  });
 }

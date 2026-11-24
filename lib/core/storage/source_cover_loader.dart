@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -25,30 +26,42 @@ abstract final class SourceCoverLoader {
     if (memo != null && now.difference(memo.$1) < _sourceMemo) return memo.$2;
     final lookup = getIt<BookSourceDao>().getByUrl(origin);
     _sources[origin] = (now, lookup);
+    // 讀不到時不記：下一張封面再讀一次。
+    lookup.catchError((Object _) {
+      _sources.remove(origin);
+      return null;
+    });
     return lookup;
   }
 
+  /// 照書源抓的封面在快取裡的鍵：和一般圖片（鍵就是網址）分開，這一版之前
+  /// 照一般圖片抓下、沒解密或沒帶標頭的那份不會被當成照書源抓的。
+  static String sourceKey(String url) => 'source\u0000$url';
+
   /// [url] 這張封面的位元組；[origin] 是書的書源網址，[book] 交給書源的解密
-  /// 程式（`coverDecodeJs` 的 `book`）。
+  /// 程式（`coverDecodeJs` 的 `book`；Legado 畫面上的封面不傳，存封面時才
+  /// 有）。
   static Future<Uint8List> load(
     String url,
     String? origin, {
     Book? book,
-  }) async {
+  }) async => (await file(url, origin, book: book)).readAsBytes();
+
+  /// 同 [load]，交回快取裡的檔案（系統播放資訊要檔案）。
+  static Future<File> file(String url, String? origin, {Book? book}) async {
     final cache = CachedNetworkImageProvider.defaultCacheManager;
-    final cached = await cache.getFileFromCache(url);
-    if (cached != null) return cached.file.readAsBytes();
     final source = origin == null || origin.isEmpty
         ? null
         : await _sourceOf(origin);
     if (source != null && CoverFetcher.needsSource(source, url)) {
+      final key = sourceKey(url);
+      final cached = await cache.getFileFromCache(key);
+      if (cached != null) return cached.file;
       final bytes = CoverFetcher.needsScript(source, url)
           ? await BookSourceService().fetchCover(source, url, book: book)
           : await CoverFetcher.fetch(source, book, url);
-      await cache.putFile(url, bytes);
-      return bytes;
+      return cache.putFile(key, bytes, key: key);
     }
-    final file = await cache.getSingleFile(url);
-    return file.readAsBytes();
+    return cache.getSingleFile(url);
   }
 }

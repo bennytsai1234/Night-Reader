@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/storage/resource_service.dart';
+import 'package:night_reader/core/storage/source_cover_loader.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 import 'package:night_reader/shared/widgets/book/source_cover_image.dart';
@@ -356,16 +357,23 @@ class _CoverImageState extends State<_CoverImage> {
   }
 
   /// 查一次這張網路封面是不是已經在手機裡（`CachedNetworkImageProvider`
-  /// 用的同一個磁碟快取）；查不到或出錯都算不在。
+  /// 用的同一個磁碟快取，照書源抓的在 [SourceCoverLoader.sourceKey]）；查不到
+  /// 或出錯都算不在。
   void _checkOnDevice(String source) {
     if (_checking || _onDevice != null) return;
     _checking = true;
-    CachedNetworkImageProvider.defaultCacheManager
-        .getFileFromCache(source)
-        .then(
-          (file) => _onDeviceChecked(file != null),
-          onError: (Object _) => _onDeviceChecked(false),
-        );
+    final cache = CachedNetworkImageProvider.defaultCacheManager;
+    final origin = widget.origin;
+    Future<bool> inCache() async =>
+        await cache.getFileFromCache(source) != null ||
+        (origin != null &&
+            origin.isNotEmpty &&
+            await cache.getFileFromCache(SourceCoverLoader.sourceKey(source)) !=
+                null);
+    inCache().then(
+      _onDeviceChecked,
+      onError: (Object _) => _onDeviceChecked(false),
+    );
   }
 
   void _onDeviceChecked(bool onDevice) {

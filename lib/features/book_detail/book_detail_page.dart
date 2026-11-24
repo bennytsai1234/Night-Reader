@@ -957,7 +957,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
                         ? File(url.replaceFirst('local://', ''))
                         : File(Uri.parse(url).toFilePath()),
                   )
-                : Image(image: SourceCoverImage(url, origin)),
+                : Image(
+                    image: SourceCoverImage(url, origin),
+                    errorBuilder: (context, error, stackTrace) =>
+                        const SizedBox.shrink(),
+                  ),
           ),
         ),
       ),
