@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -40,6 +41,56 @@ void main() {
     await tester.pump(const Duration(seconds: 61));
   });
 
+  testWidgets('the source script runs, and a partial match or a frame does '
+      'not end the wait', (tester) async {
+    Map<String, dynamic>? result;
+    unawaited(
+      BackstageWebView(
+        url: 'https://site.test/play',
+        overrideUrlRegex: r'https://cdn\.test/.*\.mp3',
+        javaScript: 'play()',
+      ).getStrResponse().then((value) => result = value),
+    );
+    await tester.pump();
+
+    webView.pageFinished('https://site.test/play');
+    await tester.pump(const Duration(milliseconds: 1100));
+    expect(webView.ran, ['play()']);
+
+    // 同 Legado 的 matches：整段網址都要符合。
+    webView.navigate('https://site.test/go?to=https://cdn.test/1.mp3');
+    // iframe 裡的跳轉不算。
+    webView.navigate('https://cdn.test/ad.mp3', mainFrame: false);
+    await tester.pump();
+    expect(result, isNull);
+
+    webView.navigate('https://cdn.test/1.mp3');
+    await tester.pump();
+    expect(result?['body'], 'https://cdn.test/1.mp3');
+
+    await tester.pump(const Duration(seconds: 61));
+  });
+
+  testWidgets('with a resource pattern too, an address in the page is taken '
+      'as before', (tester) async {
+    webView.page = '<audio src="https://cdn.test/2.m3u8"></audio>';
+    Map<String, dynamic>? result;
+    unawaited(
+      BackstageWebView(
+        url: 'https://site.test/play',
+        overrideUrlRegex: r'.*\.mp3',
+        sourceRegex: r'https://cdn\.test/[^"]+\.m3u8',
+      ).getStrResponse().then((value) => result = value),
+    );
+    await tester.pump();
+
+    webView.pageFinished('https://site.test/play');
+    await tester.pump(const Duration(milliseconds: 1100));
+    expect(result?['body'], 'https://cdn.test/2.m3u8');
+
+    await tester.pump(const Duration(seconds: 61));
+  });
+
   testWidgets('without a redirect pattern the page content is returned as '
       'before', (tester) async {
     Map<String, dynamic>? result;
@@ -65,14 +116,19 @@ class _RecordingWebView extends WebViewPlatform {
 
   void pageFinished(String url) => _onPageFinished?.call(url);
 
-  void navigate(String url) => _onNavigationRequest?.call(
-    NavigationRequest(url: url, isMainFrame: true),
-  );
+  /// 書源給的 JS（[BackstageWebView.javaScript]）跑過的。
+  final List<String> ran = [];
+
+  /// 網頁內容（`outerHTML`）。
+  String page = '<html>內容</html>';
+
+  void navigate(String url, {bool mainFrame = true}) => _onNavigationRequest
+      ?.call(NavigationRequest(url: url, isMainFrame: mainFrame));
 
   @override
   PlatformWebViewController createPlatformWebViewController(
     PlatformWebViewControllerCreationParams params,
-  ) => _Controller(params);
+  ) => _Controller(params, this);
 
   @override
   PlatformNavigationDelegate createPlatformNavigationDelegate(
@@ -93,7 +149,9 @@ class _Widget extends PlatformWebViewWidget {
 }
 
 class _Controller extends PlatformWebViewController {
-  _Controller(super.params) : super.implementation();
+  _Controller(super.params, this._web) : super.implementation();
+
+  final _RecordingWebView _web;
 
   @override
   Future<void> loadRequest(LoadRequestParams params) async {}
@@ -116,11 +174,13 @@ class _Controller extends PlatformWebViewController {
   ) async {}
 
   @override
-  Future<void> runJavaScript(String javaScript) async {}
+  Future<void> runJavaScript(String javaScript) async =>
+      _web.ran.add(javaScript);
 
   @override
   Future<Object> runJavaScriptReturningResult(String javaScript) async =>
-      '"<html>內容</html>"';
+      // 真的 WebView 把字串結果編成 JSON 字串交回。
+      jsonEncode(_web.page);
 }
 
 class _Delegate extends PlatformNavigationDelegate {

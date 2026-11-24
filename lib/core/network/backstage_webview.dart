@@ -61,6 +61,11 @@ class BackstageWebView {
     return _hiddenWebViewWidget!;
   }
 
+  /// 跳轉的網址 [url] 整段符合 [overrideUrlRegex]（同 Legado 的 `matches`）。
+  @visibleForTesting
+  static bool overrideUrlMatches(String url, String overrideUrlRegex) =>
+      RegExp('^(?:$overrideUrlRegex)\$').hasMatch(url);
+
   /// [sourceRegex] 在網頁內容裡找到的資源網址，有分組時取第一組；沒找到是
   /// null。Legado 等的是網頁真的載入的資源網址，這裡在內容裡找，網址寫在
   /// HTML 屬性裡，實體（`&amp;`）解開才是真的網址。
@@ -175,10 +180,27 @@ class BackstageWebView {
           // SnifferWebClient，網頁載完只跑書源給的 JS，不交回網頁內容，
           // 等到符合的跳轉（[onNavigationRequest]）或逾時才結束。跳轉常在
           // 網頁跑了一陣子之後才發生（例如播放頁幾秒後才導向音訊）。
+          // 同時有 [sourceRegex] 的，照舊在網頁內容裡找，先到的為準（Legado
+          // 兩條路都在 SnifferWebClient 裡、先到先得）。
           if (overrideUrlRegex?.isNotEmpty ?? false) {
             final js = javaScript;
             if (js != null && js.isNotEmpty) {
               unawaited(controller.runJavaScript(js).catchError((_) {}));
+            }
+            final regex = sourceRegex;
+            if (regex != null && regex.isNotEmpty) {
+              try {
+                final content = webViewJsResult(
+                  await controller.runJavaScriptReturningResult(
+                    'document.documentElement.outerHTML',
+                  ),
+                );
+                if (sourceIn(content, regex) case final source?) {
+                  finish({'body': source, 'url': currentUrl, 'code': 200});
+                }
+              } catch (_) {
+                // 網頁還在換頁、讀不到內容：照樣等跳轉。
+              }
             }
             return;
           }
@@ -225,8 +247,11 @@ class BackstageWebView {
           evaluateAndCheck();
         },
         onNavigationRequest: (NavigationRequest request) {
-          if (overrideUrlRegex != null && overrideUrlRegex!.isNotEmpty) {
-            if (RegExp(overrideUrlRegex!).hasMatch(request.url)) {
+          // 同 Legado `shouldOverrideUrlLoading` 的 `matches`：整段網址都要
+          // 符合；只看主畫面的跳轉（Android 的外掛本來就只回報主畫面）。
+          final pattern = overrideUrlRegex;
+          if (pattern != null && pattern.isNotEmpty && request.isMainFrame) {
+            if (overrideUrlMatches(request.url, pattern)) {
               finish({'body': request.url, 'url': request.url, 'code': 200});
               return NavigationDecision.prevent;
             }
