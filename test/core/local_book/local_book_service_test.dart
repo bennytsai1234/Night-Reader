@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -71,5 +72,19 @@ void main() {
     expect(p.basename(other), '書 (2).txt');
     expect(await File(other).readAsString(), '乙');
     expect(await store(other), other);
+  });
+
+  test('同名不同內容的第二本：書名作者照選的檔名拆，「 (2)」接在書名後面', () async {
+    Future<String> add(String content) async {
+      final book = await LocalBookService().addToShelf(
+        await pick('The Hobbit by Tolkien.txt', content),
+        bookDao: bookDao,
+        chapterDao: ChapterDao(db),
+      );
+      return '${book!.name}／${book.author}';
+    }
+
+    expect(await add('第一章 甲\n內容'), 'The Hobbit／Tolkien');
+    expect(await add('第一章 乙\n內容'), 'The Hobbit (2)／Tolkien');
   });
 }

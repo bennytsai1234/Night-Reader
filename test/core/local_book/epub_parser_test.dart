@@ -477,6 +477,35 @@ void main() {
     expect(texts[0].replaceAll(marker, '').length, 30000);
   });
 
+  test('超過五萬字、有分段的章照字數切，不找換行、不照 TXT 的新規則（textVersion 2 的切法）', () async {
+    // 轉好的文字檔不見時會重轉：切法一變，資料庫裡的章節與閱讀位置就對不上。
+    final paragraphs = [
+      for (var i = 0; i < 70; i += 1)
+        if (i == 20)
+          '<p>序章</p>'
+        else if (i == 40)
+          '<p>Chapter 1 Start</p>'
+        else
+          '<p>${'字' * 999}</p>',
+    ].join();
+    final path = await write(
+      'long-paragraphs.epub',
+      _simple(
+        {'Text/one.xhtml': _xhtml(paragraphs)},
+        [('第一章', 'Text/one.xhtml')],
+      ),
+    );
+    final (info, texts) = await convert(path);
+
+    expect(info.chapters.map((c) => c.title), [
+      '第一章 (1)',
+      '第一章 (2)',
+      '第一章 (3)',
+    ]);
+    expect(texts[0].length, 30000);
+    expect(texts[1].length, 30000);
+  });
+
   test('不是 EPUB 的檔案給使用者看得懂的錯誤', () async {
     final file = File(p.join(dir.path, 'broken.epub'));
     await file.writeAsString('not a zip');

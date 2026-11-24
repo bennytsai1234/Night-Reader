@@ -94,7 +94,10 @@ class LocalBookService {
     final existing = await bookDao.getByUrl('local://$storedPath');
     if (existing != null && existing.isInBookshelf) return existing;
     try {
-      final result = await importBook(storedPath);
+      final result = await importBook(
+        storedPath,
+        pickedName: p.basenameWithoutExtension(path),
+      );
       if (result == null) {
         await _discardUnusedCopy(storedPath, existing == null);
         return null;
@@ -472,8 +475,13 @@ class LocalBookService {
     List<({String title, int start, int end})> ranges,
   ) => _chapters(book, ranges);
 
-  /// 解析本地書籍並回傳 Book + chapters（不做持久化）
-  Future<LocalBookImportResult?> importBook(String path) async {
+  /// 解析本地書籍並回傳 Book + chapters（不做持久化）。書名與作者從
+  /// [pickedName]（使用者選的檔名，不含副檔名；沒給時用 [path] 的）拆，見
+  /// [_localBook]。
+  Future<LocalBookImportResult?> importBook(
+    String path, {
+    String? pickedName,
+  }) async {
     final file = File(path);
     if (!await file.exists()) return null;
 
@@ -481,15 +489,20 @@ class LocalBookService {
     if (!isSupportedLocalBookExtension(ext)) {
       throw UnsupportedError('不支援的本地格式: $ext');
     }
-    return ext == 'epub' ? _importEpub(path) : _importTxt(file);
+    return ext == 'epub'
+        ? _importEpub(path, pickedName)
+        : _importTxt(file, pickedName);
   }
 
-  Future<LocalBookImportResult> _importTxt(File file) async {
+  Future<LocalBookImportResult> _importTxt(
+    File file,
+    String? pickedName,
+  ) async {
     final result = await compute((File f) async {
       final parser = TxtParser(f);
       return await parser.splitChapters();
     }, file);
-    final book = _localBook(file.path)..charset = result.charset;
+    final book = _localBook(file.path, pickedName)..charset = result.charset;
     final chapters = _chapters(book, [
       for (final (i, chapter) in result.chapters.indexed)
         (
@@ -504,8 +517,11 @@ class LocalBookService {
     return LocalBookImportResult(book: book, chapters: chapters);
   }
 
-  Future<LocalBookImportResult> _importEpub(String path) async {
-    final book = _localBook(path)..charset = 'utf-8';
+  Future<LocalBookImportResult> _importEpub(
+    String path,
+    String? pickedName,
+  ) async {
+    final book = _localBook(path, pickedName)..charset = 'utf-8';
     final info = await EpubParser.convert(path, await epubTextPath(book));
     // 書名照 Legado：書裡沒寫時用檔名，不拆。
     book
@@ -519,13 +535,20 @@ class LocalBookService {
     );
   }
 
-  Book _localBook(String path) {
-    final (:name, :author) = nameAndAuthorFromFileName(
-      p.basenameWithoutExtension(path),
-    );
+  /// 書名與作者照 [nameAndAuthorFromFileName] 從使用者選的檔名
+  /// [pickedName] 拆。存進本地書資料夾時同名的檔另取了「名字 (2)」
+  /// （[storeInLibrary]）：拆的是原本的檔名，「 (2)」接在書名後面，同名的
+  /// 兩本書才分得開（書籤與標註照書名加作者認書）。
+  Book _localBook(String path, String? pickedName) {
+    final stored = p.basenameWithoutExtension(path);
+    final picked = pickedName ?? stored;
+    final copySuffix = stored != picked && stored.startsWith(picked)
+        ? stored.substring(picked.length)
+        : '';
+    final (:name, :author) = nameAndAuthorFromFileName(picked);
     return Book(
       bookUrl: 'local://$path',
-      name: name,
+      name: '$name$copySuffix',
       author: author.isEmpty ? '本地' : author,
       origin: BookType.localOrigin,
       originName: '本地',
