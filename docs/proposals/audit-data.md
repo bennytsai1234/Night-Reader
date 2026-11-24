@@ -13,6 +13,7 @@
 | 資料 1 下載與儲存 | `lib/core/download/` 的 `book_update_service`、`download_base`、`download_executor`、`download_failure`、`download_scheduler`、`download_service`（6 檔，`audio_chapter_download` 在閱讀器 4）、`lib/features/downloads/download_manager_page.dart`（1 檔）、`lib/core/utils/cache_manager.dart`、`lib/core/storage/` 的 `book_storage_service`、`book_chapter_files`、`reader_chapter_content_store`、`reader_chapter_content_storage`、`book_illustration_storage`、`book_cover_storage_service`、`bookshelf_state_tracker`、`books_in_use`（8 檔） | 2 |
 | 資料 2 備份還原、本地書與更新 | `lib/core/local_book/`（5 檔）、`lib/core/backup/` 的 `backup_service`、`restore_service`、`bookshelf_exchange_service`、`export_book_service`、`highlight_export`（5 檔，`login_data_backup` 在書源 4）、`lib/core/app_update/`（4 檔）、`lib/core/playback/tts_service.dart`（1 檔） | 2 |
 | 資料 3 啟動、背景工作與 Android | `lib/main.dart`、`lib/app_providers.dart`、`lib/core/` 的 `startup/`（1）、`di/`（1）、`config/`（1）、`constant/`（5）、`exception/`（2）、`fonts/`（2）、`base/`（1）、`background_work/`（4）、`diagnostics/`（4）、`platform/`（2）、`app_lock/`（1）；`android/app/src/main/` 的 Kotlin（7 檔）與 `AndroidManifest.xml`；`lib/core/utils/` 的 `encoder_utils`、`lru_map`；`lib/core/storage/resource_service.dart` | 0 |
+| 資料 4 同步 | 還沒讀：`lib/core/sync/`（21 檔，從頭讀起） | — |
 
 ## 問題
 
@@ -149,4 +150,4 @@
 
 ## 拿不準
 
-（還沒有）
+- **同步送來的書是不是也帶著別台的封面本機路徑**（和 2-1 同一個原因）：卡在還沒讀 `lib/core/sync/bookshelf_sync.dart`；只看到它在 `369` 行封面網址換了時清掉 `customCoverLocalPath`，新加入的書、`coverLocalPath` 怎麼處理還沒走。讀資料 4 時確認，是的話併進 2-1。
