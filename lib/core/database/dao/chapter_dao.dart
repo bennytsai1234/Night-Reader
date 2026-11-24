@@ -43,6 +43,24 @@ class ChapterDao extends DatabaseAccessor<AppDatabase> with _$ChapterDaoMixin {
         .watch();
   }
 
+  /// 這本書還沒有目錄時才存 [chapterList]，傳回有沒有存：已經有的（例如背景
+  /// 檢查更新剛換上的新目錄）不拿畫面手上那份舊的蓋回去。
+  Future<bool> insertChaptersIfNone(
+    String bookUrl,
+    List<BookChapter> chapterList,
+  ) => transaction(() async {
+    if (chapterList.isEmpty) return false;
+    final existing =
+        await (selectOnly(chapters)
+              ..addColumns([chapters.url])
+              ..where(chapters.bookUrl.equals(bookUrl))
+              ..limit(1))
+            .get();
+    if (existing.isNotEmpty) return false;
+    await insertChapters(chapterList);
+    return true;
+  });
+
   Future<void> insertChapters(List<BookChapter> chapterList) async {
     await batch(
       (b) => b.insertAllOnConflictUpdate(
