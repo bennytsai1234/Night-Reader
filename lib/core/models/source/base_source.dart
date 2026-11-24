@@ -74,14 +74,35 @@ abstract class BaseSource {
     null => key,
   };
 
-  /// 草稿 [draft] 從書源 [key] 現在的書源變數與規則變數開始。
-  static Future<void> startDraftVariables(String draft, String key) =>
-      _copyVariables(key, _draftIdentity(draft));
+  /// 草稿 [draft] 從書源 [key] 現在的書源變數與規則變數開始；傳回抄進草稿
+  /// 的每個鍵與值，套用時只寫回草稿改過的（[commitDraftVariables]）。
+  static Future<Map<String, String>> startDraftVariables(
+    String draft,
+    String key,
+  ) async {
+    final started = <String, String>{};
+    for (final (from, to) in await _variablePairs(key, _draftIdentity(draft))) {
+      final cache = CacheManager();
+      if (await cache.copy(from, to)) started[to] = (await cache.get(to))!;
+    }
+    return started;
+  }
 
-  /// 修好套用了：草稿 [draft] 的變數寫進書源 [key]（網址換了開頭時是新的
-  /// 網址），同名的換成草稿的，再丟掉草稿。
-  static Future<void> commitDraftVariables(String draft, String key) async {
-    await _copyVariables(_draftIdentity(draft), key);
+  /// 修好套用了：草稿 [draft] 改過的變數（和開始時抄進來的 [started] 不同、
+  /// 或新存的）寫進書源 [key]（網址換了開頭時是新的網址），再丟掉草稿。
+  /// 沒改過的不寫：修復這段時間書源自己存的（開場的校驗與試抓、閱讀）不被
+  /// 開始時的舊值蓋回去。
+  static Future<void> commitDraftVariables(
+    String draft,
+    String key, {
+    required Map<String, String> started,
+  }) async {
+    final cache = CacheManager();
+    for (final (from, to) in await _variablePairs(_draftIdentity(draft), key)) {
+      final value = await cache.get(from);
+      if (value == null || started[from] == value) continue;
+      await cache.copy(from, to);
+    }
     await discardDraftVariables(draft);
   }
 
@@ -97,16 +118,17 @@ abstract class BaseSource {
     }
   }
 
-  static Future<void> _copyVariables(String from, String to) async {
-    final cache = CacheManager();
-    await cache.copy(_variableKey(from), _variableKey(to));
+  /// 身分 [from] 的書源變數與每個規則變數，各配上身分 [to] 的同一個鍵。
+  static Future<List<(String, String)>> _variablePairs(
+    String from,
+    String to,
+  ) async {
     final fromPrefix = _ruleVariablePrefix(from);
-    for (final key in await cache.keysStartingWith(fromPrefix)) {
-      await cache.copy(
-        key,
-        '${_ruleVariablePrefix(to)}${key.substring(fromPrefix.length)}',
-      );
-    }
+    return [
+      (_variableKey(from), _variableKey(to)),
+      for (final key in await CacheManager().keysStartingWith(fromPrefix))
+        (key, '${_ruleVariablePrefix(to)}${key.substring(fromPrefix.length)}'),
+    ];
   }
 
   /// 書源換了身分（[getKey] 從 [from] 變成 [to]，例如書源改了網址）：以舊身分

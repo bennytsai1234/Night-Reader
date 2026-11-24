@@ -238,6 +238,10 @@ class AiRepairSession extends ChangeNotifier {
   /// 解析、跑程式與校驗時，規則存的變數寫在這一份，修好套用時才寫回書源。
   final String _draft = const Uuid().v4();
 
+  /// 草稿開始時從書源抄進來的變數（[BaseSource.startDraftVariables]）：套用
+  /// 時只寫回草稿改過的。
+  Map<String, String> _draftStart = const {};
+
   /// 在這次修復的草稿裡跑 [work]。
   Future<T> _inDraft<T>(Future<T> Function() work) =>
       BaseSource.inDraftVariables(_draft, work);
@@ -366,7 +370,9 @@ class AiRepairSession extends ChangeNotifier {
         // 正在暫停時按結束：結束蓋過暫停，照做著時按結束的走。
         _phase = WorkPhase.ending;
       case _:
+        // 等貼回書源時按結束（或關掉頁面）：不會再校驗貼回的，草稿丟掉。
         _phase = WorkPhase.finished;
+        unawaited(_discardDraft());
     }
     CrashTrail.action('按了結束：AI 修復 ${job.original.bookSourceName}');
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已結束');
@@ -469,7 +475,10 @@ class AiRepairSession extends ChangeNotifier {
 
   Future<void> _repair(AiRepairJob job) async {
     final original = job.original;
-    await BaseSource.startDraftVariables(_draft, original.getKey());
+    _draftStart = await BaseSource.startDraftVariables(
+      _draft,
+      original.getKey(),
+    );
     await _refreshSecrets(job);
     log
       ..redact = ((text) => _redact(job, text))
@@ -793,8 +802,17 @@ class AiRepairSession extends ChangeNotifier {
     } finally {
       job._committing = false;
     }
-    // 存好了：草稿試抓時規則存的變數換進書源（網址換了開頭的是新網址）。
-    await BaseSource.commitDraftVariables(_draft, saved.getKey());
+    // 存好了：草稿試抓時規則改過的變數換進書源（網址換了開頭的是新網址）。
+    // 寫不進去只記下來：書源已經存好了，結果照修好。
+    try {
+      await BaseSource.commitDraftVariables(
+        _draft,
+        saved.getKey(),
+        started: _draftStart,
+      );
+    } catch (error) {
+      AppLog.w('AI 修書源的草稿變數沒寫回書源: $error');
+    }
     _finish(step, checkText);
     // 交出的規則和原本一樣（2026-11-13 品书楼：AI 查過每一段都沒問題）：照樣
     // 存回去拿掉舊的標記，但不說修好了。
@@ -849,6 +867,8 @@ class AiRepairSession extends ChangeNotifier {
     job._secrets = {
       ...job._secrets,
       ...await _secretsOf(job.original),
+      // 草稿試抓時規則存的變數在草稿那一份（[BaseSource.inDraftVariables]）。
+      ...await _inDraft(() => _secretsOf(job.original)),
       if (service?.apiKey case final key? when key.length >= 6) key,
     };
   }
