@@ -14,7 +14,7 @@
 | 閱讀器 1：功能、書籤、朗讀 | `lib/features/reader/features/` 全部 35 個檔（`auto_page/`、`bookmark/`、`brightness/`、`highlight/`、`illustration/`、`menu/`、`replace_rule/`、`settings/`、`tts/`）、`lib/features/bookmarks/` 2 個檔、`lib/core/engine/reader/` 1 個檔、`lib/core/playback/` 4 個檔（`tts_service` 在資料 2，為了走完「拿不準」的朗讀那條讀了停止與念完的部分）、`lib/core/chinese/` 3 個檔 | 3 |
 | 閱讀器 2：畫面與視窗 | `lib/features/reader/screen/` 全部 16 個檔（含 `dependencies/`）、`lib/features/reader/viewport/` 2 個檔 | 2 |
 | 閱讀器 3：章節與排版 | `lib/features/reader/chapter/` 全部 7 個檔、`session/` 全部 12 個檔、`layout/` 全部 4 個檔、`use_cases/` 全部 3 個檔（含 `coordinators/`）；`lib/core/utils/` 的 `illustration_markers`、`html_formatter`、`string_utils`；`lib/core/source/chapter_content_kind.dart`；`lib/core/storage/` 的 `chapter_content_preparation_pipeline`、`book_toc_replacer`。共 32 個檔 | 1（另把 2-2 的同一個原因補完） |
-| 閱讀器 4：漫畫與有聲書 | 還沒讀 | — |
+| 閱讀器 4：漫畫與有聲書 | 全文讀過：`lib/features/comic_reader/` 的 `comic_reader_page`、`comic_strip_model`、`comic_strip_view`、`comic_page_images`、`comic_page_source`、`network_comic_page_source`、`comic_progress_sync`；`lib/features/audiobook/` 的 `audiobook_player`、`audio_engine`；`lib/core/comic/` 全部 6 個檔中的 `comic_chapter_download`、`comic_chapter_numbers`、`comic_folder_picker`、`local_comic_library`、`local_comic_service`；`lib/core/download/audio_chapter_download.dart`。只讀了狀態與非同步的部分（版面沒有逐行看）：`comic_chapter_files`（頁序與 ComicInfo）、`comic_page_view`、`comic_reader_menu`、`audiobook_page`（開頁、換源、失敗提示）、`audiobook_mini_button`。沒有讀：`comic_chapter_transition`、`comic_paper_tint_row`（換章分隔與紙色色票的版面）。共 22 個檔 | 2 |
 
 ## 閱讀器 0：正文層
 
@@ -193,9 +193,9 @@
       chapter.url = '${chapter.title}$i';
   ```
 
-  這和 Legado 一樣；但 Legado 抓正文時先擋下這種卷名，直接回空字串（`~/projects/legado/app/src/main/java/io/legado/app/model/webBook/WebBook.kt:310-313`：`if (bookChapter.isVolume && bookChapter.url.startsWith(bookChapter.title))`），卷名的正文是空的也不算錯（`BookContent.kt:149`：`if (!bookChapter.isVolume && contentStr.isBlank())`）。
+  這和 Legado 一樣；但 Legado 抓正文時先擋下這種卷名，直接回空字串（Legado 的 `app/src/main/java/io/legado/app/model/webBook/WebBook.kt:310-313`：`if (bookChapter.isVolume && bookChapter.url.startsWith(bookChapter.title))`），卷名的正文是空的也不算錯（`BookContent.kt:149`：`if (!bookChapter.isVolume && contentStr.isBlank())`）。
 - 夜讀的閱讀器取正文時不看是不是分卷：`ReaderChapterRepository._loadContentUncached` → `_loadViaContentPipeline` → `storage.read`（`lib/features/reader/chapter/reader_chapter_repository.dart:383-409`、`:550-561`），一路到 `ChapterContentPreparationPipeline._fetchOnce` 照章節網址向書源抓（`lib/core/storage/chapter_content_preparation_pipeline.dart:284-292`），`CompleteContentFetcher` 拿假網址建請求（`lib/core/engine/web_book/complete_content_fetcher.dart:156-157`），相對網址照書源網址補完；抓不到或正文是空的就成了失敗（`chapter_content_preparation_pipeline.dart:293-299`、`:313-318`），閱讀器丟 `ReaderContentUnavailableException`（`reader_chapter_repository.dart:557-561`）。
-- 書架自動下載知道分卷沒有正文、不抓它（`lib/core/storage/reader_chapter_content_store.dart:8-14` 的 `chapterHasContent`，`lib/core/download/download_executor.dart:66-69`），所以卷名這一章永遠沒有存好的正文，閱讀器每次都去抓。閱讀器算全書進度時也已經把分卷當成沒有正文（`reader_chapter_repository.dart:206-207`），取正文的路徑沒有。
+- 書架自動下載知道分卷沒有正文、不抓它（`lib/core/storage/reader_chapter_content_store.dart:8-14` 的 `chapterHasContent`，`lib/core/download/download_executor.dart:66-69`），所以卷名這一章永遠沒有存好的正文，閱讀器每次都去抓。閱讀器算全書進度時也已經把分卷當成沒有正文（`reader_chapter_repository.dart:206-207`），取正文的路徑沒有。漫畫閱讀器與有聲書播放器換話、換集時都跳過分卷（`lib/core/models/book/book_chapter.dart:55-57` 的 `isSkippedWhenReading`，`lib/features/comic_reader/comic_strip_model.dart:102-104`、`lib/features/audiobook/audiobook_player.dart:395-420`），只有文字閱讀器沒有。
 - 往下捲到這一章的邊緣時，正文層只替付費章節跳過，其他取不到的章節就提示並重試（`lib/features/reader/text_view/reader_text_view.dart:861-872`），排好的正文停在那一側不再接（`lib/features/reader/text_view/pipeline/layout_pipeline.dart:474-496`）。「下一章」也只跳過付費章節（`lib/features/reader/use_cases/reader_page_coordinator.dart:112-122`），落在卷名上。
 
 **怎麼確認**：在 `test/features/reader/` 加測試：目錄三章，中間一章 `isVolume: true`、網址是「卷名＋序號」，書源的正文規則照常；開在第一章，捲到章末往下，斷言第二章（卷名）排得出來、只有卷名、沒有提示失敗，也沒有向書源發出那個假網址的請求；從第一章按「下一章」同樣不出現失敗提示。
@@ -203,6 +203,64 @@
 **修法方向**：修在取正文的入口，照 Legado：分卷、網址是卷名開頭的那一章不向書源抓，正文當成空的（Legado 回 `bookChapter.tag`，沒有就是空字串），正文是空的也不算失敗。放在 `ChapterContentPreparationPipeline._fetchOnce` 或 `CompleteContentFetcher.fetch` 的開頭，閱讀器、換源、單章借源、書源除錯都走這裡；書源除錯拿卷名當第一章抓正文是同一個原因（`docs/proposals/audit-source-app.md` 第 2 項），可以一起收。
 
 **輕重**：功能沒反應或結果錯。
+
+## 閱讀器 4：漫畫與有聲書
+
+### 4-1. 漫畫自動捲動中按 Home 或關螢幕，回來時條漫一口氣往下跳好幾屏，進度跟著存到那裡
+
+**會發生什麼**：漫畫閱讀器開著自動捲動，讀者按 Home 鍵、關螢幕或切到別的 App，過一陣子回來，條漫不是停在離開時的那張，而是照離開的時間一次往下捲完：預設速度每秒 0.1 屏，離開一分鐘就跳 6 屏，離開十分鐘跳到已經放上的內容盡頭；跳到的位置隨即存成閱讀進度。文字閱讀器的自動翻頁不會這樣。
+
+**為什麼**：
+
+- 自動捲動是一個 `Ticker`，每一幀照「這一幀和上一幀差多久」往下捲：`lib/features/comic_reader/comic_strip_view.dart:726-743`
+
+  ```dart
+  final dt = (elapsed - _autoScrollLast).inMicroseconds / 1e6;
+  _autoScrollLast = elapsed;
+  ...
+  position.jumpTo(
+    math.min(
+      position.maxScrollExtent,
+      position.pixels + _autoScrollSpeed * _screen.height * dt / _scale,
+    ),
+  );
+  ```
+
+  `dt` 沒有上限。App 在背景時不畫幀，`Ticker` 的 `elapsed` 照時間往前走，回來的第一幀 `dt` 就是離開的整段時間。
+- 自動捲動只在手指按到條漫（`comic_strip_view.dart:542`）、捲到書尾（`:731-736`）或使用者按鈕時停（`lib/features/comic_reader/comic_reader_page.dart:400-414`）；退到背景沒有停，漫畫閱讀器聽 App 進出背景只為了同步進度（`lib/features/comic_reader/comic_progress_sync.dart:66`、`:139-141`）。
+- 跳到的位置照常回報（`comic_strip_view.dart:409-420` 的 `_onScroll` → `comic_reader_page.dart:301-312`），400 毫秒後寫進資料庫。
+- 文字閱讀器同一件事有上限：「單幀最多推進的時間。卡頓超過這麼久時不一口氣補上，免得正文跳一大段」（`lib/features/reader/features/auto_page/reader_auto_page_controller.dart:40-41`、`:161`，0.08 秒）。
+
+**怎麼確認**：在 `test/features/comic_reader/` 加元件測試：條漫放幾話、開自動捲動，推幾幀記下位置；接著讓下一幀的時間戳一次往後 60 秒（`tester.pump(const Duration(seconds: 60))` 只推一幀），斷言位置只多了一幀的量（不超過 0.08 秒份），不是 60 秒份。
+
+**修法方向**：`_onAutoScrollTick` 的 `dt` 照文字閱讀器夾在 0.08 秒內（兩邊共用同一個常數），回來時從原處接著捲。要不要在退到背景時乾脆停掉自動捲動另外看，修法先對齊文字閱讀器。
+
+**輕重**：進度跳錯。
+
+### 4-2. 開 App 後馬上開漫畫，書架檢查更新換了目錄時，存下的「第幾話」是舊目錄的，下次開在別話
+
+**會發生什麼**：開 App 時書架在背景檢查更新（「啟動時檢查書架更新」預設開），讀者在檢查跑完前就打開一本漫畫；書源這次在目前讀的那一話前面多了幾話（補了番外、重排）時，檢查更新照章節網址把資料庫的進度對到新的序號，但漫畫閱讀器接著存的進度又寫回舊目錄的序號。關掉再開，開在往前錯幾話的地方。有聲書播放器同一件事是 #528 第 21 項，這裡是漫畫閱讀器的同一個原因。
+
+**為什麼**：
+
+- 漫畫閱讀器開書時讀一次目錄，之後照它算序號：`lib/features/comic_reader/comic_reader_page.dart:171-176`、`:218-226`。只有從「書籍詳情」回來時重讀目錄（`:597-613`）。
+- 存進度直接寫畫面上那一話的序號：`comic_reader_page.dart:314-322`
+
+  ```dart
+  final movedAt = await getIt<BookDao>().updateProgress(
+    _book.bookUrl,
+    location.chapterIndex,
+  ```
+
+- 開 App 的書架檢查更新（`lib/features/bookshelf/provider/bookshelf_update_mixin.dart:47-51`）在交易裡換掉目錄、照網址把進度對到新目錄（`lib/core/download/book_update_service.dart:162-177`、`lib/core/storage/book_toc_replacer.dart:44`），不看這本書是不是正開著；漫畫閱讀器登記的「開著的書」只擋清理（`lib/core/storage/books_in_use.dart:5-9`）。
+- 之後每捲一張，閱讀器都用舊目錄的序號蓋回去；下次開書照資料庫的序號開（`comic_reader_page.dart:197-201`），在新目錄裡是別話。
+- 文字閱讀器存進度時已經照章節網址換成目前目錄的序號（`lib/features/reader/session/reader_progress_controller.dart:81-109`）。
+
+**怎麼確認**：在 `test/features/comic_reader/` 加測試：資料庫放目錄 `[A, B, C]`，開漫畫閱讀器在 B；用 `BookTocReplacer` 把目錄換成 `[X, A, B, C]`（資料庫的進度此時是 2），在閱讀器裡捲一張觸發存進度，斷言資料庫的 `chapterIndex` 仍是 2、`durChapterTitle` 是 B。
+
+**修法方向**：漫畫閱讀器存進度時照文字閱讀器：在同一個交易裡用這一話的網址查目前目錄的序號再寫（`ChapterDao.indexOfUrl`），查不到才用閱讀器的序號。和 #528 第 21 項（有聲書播放器）一起修，三處共用一個「照網址寫進度」的寫法。
+
+**輕重**：進度跳錯。
 
 ## 拿不準
 
