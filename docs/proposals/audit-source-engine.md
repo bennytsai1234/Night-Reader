@@ -3,7 +3,8 @@
 讀者在書源的規則、抓取與網路這一層會碰到的錯，一筆一筆從觸發點走到出錯的那一行。只列不修，修哪幾筆由使用者在第三階段挑。
 
 - 範圍：`docs/agents/auto-audit.md`「舊程式」表上的書源 0、書源 1、書源 2。
-- 讀的是 `origin/beta` 的 `fff55f9c`，下面的「檔案:行號」都是這個提交的。
+- 讀的是 `origin/beta` 的 `fff55f9c`，下面的「檔案:行號」都是這個提交的。書源 2 讀的時候 `beta` 已到 `de5f8e51`，`lib/`、`third_party/` 和 `fff55f9c` 一樣，行號照用。
+- Legado 原始碼是使用者的 fork 的 `2fe3ef8`，路徑從 `app/src/main/java/io/legado/app/` 算起。
 - 標準照 `docs/agents/auto-audit.md` 的「算問題的」「不報的」；行為對不對照 Legado 原始碼（使用者的 fork）。以前的巡檢 #397、#404、#405 報過、修過或定案不修的不再列。
 
 ## 進度
@@ -12,7 +13,7 @@
 |---|---|---|
 | 書源 0 | `lib/core/engine/js/` 全部 32 個檔（`extensions/` 13、`encode/` 6、`ttf/` 4、`jsoup/` 1、其餘 8）；`third_party/flutter_js/` 只讀 `PATCHES.md` 記的修補（`quickjs/quickjs_runtime2.dart`、`quickjs/ffi.dart` 的中斷、`javascriptcore/jscore_runtime.dart`、`extensions/fetch.dart`），上游原本的程式照「不報的」不看 | 4 |
 | 書源 1 | `lib/core/engine/parsers/` 12 個檔（含 `css/` 4）、`analyze_rule/` 6 個檔與 `analyze_rule.dart`、`rule_analyzer/` 4 個檔與 `rule_analyzer.dart`、`analyze_url.dart`、`explore_url_parser.dart`、`rule_data_fields.dart`；`css/analyze_by_css_support.dart` 的選擇器相容層（`:contains`、`:has` 這類的比對）只略讀，細讀 `ElementsSingle` 的索引 | 4 |
-| 書源 2 | 還沒讀 | |
+| 書源 2 | `lib/core/engine/web_book/` 9 個檔、`source_isolate/` 3 個檔；`lib/core/network/` 屬於書源 2 的 16 個檔（含 `interceptors/` 3），`request_log.dart` 只看結構（它記請求給除錯、校驗與 AI 修復看，不影響抓到的內容），`cloudflare.dart` 細讀判斷擋頁與通過檢查的部分；`lib/core/utils/` 的 `network_utils`、`idna`、`public_suffix`、`encoding_detect`（Big5 的解碼記在書源 1 第 8 筆，這裡不重算） | 4 |
 
 ## 問題
 
@@ -217,6 +218,96 @@
 
 **輕重**：功能沒反應或結果錯
 
+### 書源 2：抓取與網路
+
+#### 9. 正文要在網頁裡跑 JS 才抓得到的書源，夜讀沒跑書源寫的 `webJs`，正文是整頁網頁或抓不到
+
+**會發生什麼**：書源的章節網址開了 `webView`、正文規則另寫 `webJs`（網頁載入後跑的 JS，例如等正文渲染好、解密後交出正文）時，Legado 拿到的是這段 JS 的結果；夜讀沒跑它，拿到的是整頁 HTML，照正文規則解析出來是整頁網頁的字（選單、廣告一起）或是空的。正文規則另寫的 `sourceRegex`（等網頁載入某個資源，常見是正文或音訊 API 的網址）也一樣沒用上。漫畫抓一章的圖走同一條（`lib/core/comic/comic_chapter_download.dart:113`），一起受影響。
+
+**為什麼**：
+
+1. Legado 抓正文時把正文規則的 `webJs`、`sourceRegex` 交給請求（Legado `model/webBook/WebBook.kt:334-337`），開了 `webView` 的請求跑 `webJs ?: jsStr`（`model/analyzeRule/AnalyzeUrl.kt:427`、`437`）：網址選項的 `webJs` 優先，沒有時用正文規則的。
+2. 夜讀抓正文的每一頁只傳取消（`lib/core/engine/web_book/complete_content_fetcher.dart:156-157`）：
+   ```dart
+   final analyzeUrl = AnalyzeUrl(url, source: source, ruleData: book);
+   var response = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
+   ```
+3. `getStrResponse` 只看網址選項的 `webJs` 與呼叫端給的 `jsStr`（`lib/core/engine/analyze_url.dart:599-626`：`javaScript: webJs ?? jsStr`），兩個都沒有時瀏覽器跑預設的 `document.documentElement.outerHTML`（`lib/core/network/backstage_webview.dart:144-146`）。整個 `lib/` 沒有地方讀 `ruleContent.webJs`、`ruleContent.sourceRegex`，只存在書源上（`lib/core/models/source/book_source_rules.dart:230`）。
+
+**怎麼確認**：`test/core/engine/web_book/` 加一則：用 `BackstageWebView.delegate` 換上假的瀏覽器、記下收到的 `javaScript` 與 `sourceRegex`；章節網址帶 `,{"webView":true}`、正文規則 `webJs: "getText()"`、`sourceRegex: ".*\\.m3u8"`，跑 `CompleteContentFetcher.fetch`，斷言瀏覽器收到這兩個值；章節網址的選項也寫了 `webJs` 時，斷言收到的是網址的。
+
+**修法方向**：`CompleteContentFetcher._fetchPageContent` 照 Legado 把 `source.ruleContent?.webJs`、`sourceRegex` 交給 `getStrResponse` 的 `jsStr`、`sourceRegex`。`docs/proposals/legado-sources.md` 的 R7 以為正文的 `sourceRegex` 有送到瀏覽器、只是比對的做法不同，實際上沒送到。
+
+**輕重**：功能沒反應或結果錯
+
+#### 10. 書源沒寫目錄網址時，夜讀改抓詳情頁上寫著「目錄」的連結當目錄頁
+
+**會發生什麼**：很多網站的詳情頁本身就有整份目錄，書源的目錄網址規則就留空（Legado 這時用詳情頁當目錄頁）。夜讀另外在詳情頁上找文字是「目录」「目錄」或含「章节目录」「章節目錄」的連結，找到就改抓那一頁當目錄：那一頁的版面和書源的目錄規則對不上時，目錄是空的或只抓到幾章；對得上也多抓一次網頁。目錄網址規則明明算出詳情頁網址時，同樣被換掉。
+
+**為什麼**：
+
+1. Legado：目錄網址算出空的就用詳情頁網址，等於詳情頁網址時直接拿這一頁當目錄（Legado `model/webBook/BookInfo.kt:150-153`）：
+   ```kotlin
+   book.tocUrl = analyzeRule.getString(infoRule.tocUrl, isUrl = true)
+   if (book.tocUrl.isEmpty()) book.tocUrl = baseUrl
+   if (book.tocUrl == baseUrl) {
+       book.tocHtml = body
+   ```
+2. 夜讀的目錄網址規則空白時 `getString` 交出空字串（`lib/core/engine/analyze_rule/analyze_rule_string.dart:20-22`），結果交給 `_resolveFallbackTocUrl`（`lib/core/engine/web_book/book_info_parser.dart:111-116`）。
+3. `_resolveFallbackTocUrl` 在目錄網址是空的或等於書的網址時，掃整頁的連結，文字像目錄的就用它（`book_info_parser.dart:148-184`）：
+   ```dart
+   if (tocUrl.isNotEmpty && tocUrl != bookUrl) {
+     return tocUrl;
+   }
+   final document = html_parser.parse(body);
+   for (final anchor in document.querySelectorAll('a[href]')) {
+     final text = anchor.text.trim();
+     if (!_looksLikeTocLinkText(text)) {
+   ```
+   換成別的網址後，`getBookInfoAwait` 不再把詳情頁留給目錄用（`lib/core/engine/web_book/web_book_service.dart:123-125`），目錄改抓那個連結。這段從夜讀第一個提交就在，沒有測試，ADR 沒提到。
+
+**怎麼確認**：`test/core/engine/web_book/book_info_without_rule_test.dart` 加一則：書源有目錄規則、沒寫目錄網址，詳情頁 HTML 有 `<a href="/book/1/all.html">章节目录</a>`，斷言 `tocUrl` 是詳情頁網址；再一則目錄網址規則算出詳情頁網址，斷言一樣不換。
+
+**修法方向**：拿掉 `_resolveFallbackTocUrl` 找連結的那段，照 Legado：空的就用詳情頁網址。
+
+**輕重**：功能沒反應或結果錯
+
+#### 11. 目錄的 `formatJs` 用到 `index`、`gInt` 時整段失效，章名沒照書源重新編號
+
+**會發生什麼**：書源用目錄的 `formatJs` 替章名重新編號（例如 `'第'+index+'章 '+title`、`(++gInt)+'.'+title`）時，夜讀執行時沒有 `index`、`gInt`，規則出錯，整份目錄保留網站原本的章名。夜讀跑 `formatJs` 時目錄還是倒過來的順序，沒出錯的規則拿序號編也會編反。GPT 讀的 #529 第 28 筆報了同一件事。
+
+**為什麼**：
+
+1. Legado 先把目錄排成最後的順序、編好號，再逐章跑 `formatJs`，給 `index`（從 1 起）、`chapter`、`title`，`gInt` 是整份目錄共用、從 0 起的計數（Legado `model/webBook/BookChapterList.kt:119-152`）。
+2. 夜讀在照 `reverseToc` 的第二次反轉之前跑 `formatJs`（`lib/core/engine/web_book/web_book_service.dart:292-337`），序號只放進 `page`：
+   ```dart
+   fmtRule = AnalyzeRule(source: source, ruleData: book).setChapter(ch);
+   fmtRule.page = i + 1;
+   final newTitle = fmtRule.evalJS(formatJs, ch.title);
+   ```
+3. 規則 JS 拿得到的變數沒有 `index`、`gInt`（`lib/core/engine/js/js_engine.dart:243-260`），用到就丟出 ReferenceError；`catch` 記日誌、保留原章名（`web_book_service.dart:311-322`）。預設（書源沒寫 `-`、讀者沒反轉目錄）這時的順序是倒的，`i` 是 0 的是最後一章。
+
+**怎麼確認**：`test/core/engine/web_book/` 加 `toc_format_js_test.dart`：目錄三章、`formatJs` 寫 `'第'+index+'章'`，斷言三章依序是「第1章」「第2章」「第3章」；另一則 `(++gInt)+title`，斷言從 1 遞增；目錄規則開頭寫 `-`、讀者反轉目錄各一則，斷言編號照最後顯示的順序。
+
+**修法方向**：`formatJs` 移到兩次反轉與重新編號之後，照 Legado 給 `index`、`title`、`chapter` 與整份目錄共用的 `gInt`。
+
+**輕重**：畫面錯
+
+#### 12. 書源從正文頁取章名（正文規則的 `title`）時，夜讀不用，章名一直是目錄上的
+
+**會發生什麼**：網站目錄上的章名不完整（截成「第一章 天…」、只有「第1章」）時，書源照 Legado 在正文規則寫 `title`，從正文頁取完整的章名。Legado 抓完正文就換掉這一章的章名、存回目錄；夜讀不讀這條規則，頁首、目錄面板、下載與書籤看到的一直是目錄上不完整的章名。
+
+**為什麼**：
+
+1. Legado `model/webBook/BookContent.kt:66-78`：`title` 規則算出不是空的，就寫進這一章、`bookChapterDao.update`。
+2. 夜讀的正文規則存著 `title`（`lib/core/models/source/book_source_rules.dart:230-261`），抓正文的程式只讀 `content`、`nextContentUrl`、`replaceRegex`（`lib/core/engine/web_book/content_parser.dart:44-59`、`93`），整個 `lib/` 沒有地方讀 `ruleContent.title`。
+
+**怎麼確認**：`test/core/engine/web_book/complete_content_fetcher_test.dart` 加一則：章名「第1章」，正文頁 `<h1>第1章 開端</h1>`，正文規則 `title: "h1@text"`，抓完斷言這一章的章名是「第1章 開端」。
+
+**修法方向**：正文第一頁解析時照 Legado 跑 `title`、寫進章節。書源 isolate 會把規則改過的章節欄位抄回呼叫端（ADR 0028），抄回後要存進資料庫、目錄面板跟著換，這段要一起確認。
+
+**輕重**：畫面錯
+
 ## 拿不準
 
 - **`java.put` 存的值，下一章、同書源的別本書讀得到**（書源 0）：Legado 的 `java.put` 只存在章節、書或搜尋結果上，`java.get` 找不到時才看 `source.put` 存的（Legado `model/analyzeRule/AnalyzeRule.kt:740-768`）。夜讀的 `java.put` 另外存一份到書源的規則變數，和 `source.put` 同一個鍵，而且寫進資料庫（`lib/core/engine/js/js_extensions.dart:88-92`）；`java.get` 在章節、書都沒有時讀這一份（`js_extensions.dart:106-112`），`source.get` 也讀得到（`lib/core/models/source/base_source.dart:44-46` 的註解寫明兩者共用）。所以第二章 `java.get('k')` 拿到第一章存的值，Legado 是空的。卡在：註解看起來是刻意的，找不到哪個書源靠「讀不到」分支，說不出讀者實際會看到什麼。
@@ -228,3 +319,5 @@
 - **同一層有好幾種分隔（`&&`、`||`、`%%`）時，後面括號裡的同一個符號也被切開**（書源 1）：Legado 的 `splitRule` 在第一個分隔後面遇到括號時改走會跳過括號的那一段（Legado `RuleAnalyzer.kt` `splitRule` 的 `st > end` 分支）；夜讀把 `st > end` 和「後面沒有括號」併成同一條，直接照分隔符切到底（`lib/core/engine/rule_analyzer/rule_analyzer_split.dart:28-39`），`$.name||$.list[?(@.a||@.b)].x` 會切成三段。卡在：實際的書源少這樣寫。
 - **CSS 規則的 `@abs:href`**（書源 1）：Legado 交給 Jsoup 的 `attr("abs:href")`，夜讀當成名叫 `abs:href` 的屬性、拿不到（`lib/core/engine/parsers/css/analyze_by_css_helper.dart:81-87`），網址規則因此退回目前頁的網址。卡在：Legado 解析網頁時沒給頁面網址，`abs:` 只對本來就是完整網址的連結有效，差別只在這種情況。
 - **發現規則寫的 JSON 不是標準寫法時整個發現頁失敗**（書源 1）：Legado 用 Gson 讀（寬鬆，收單引號、不加引號的名稱），夜讀用 `jsonDecode`、只去掉多的逗號（`lib/core/engine/explore_url_parser.dart:154-166`、`222-224`），讀不了就顯示一筆「ERROR:」。夜讀已經有照 Gson 讀的 `decodeLenientJson`（網址選項、`@put` 在用）。卡在：沒找到實際這樣寫的書源。
+- **搜尋結果直接是詳情頁時，點進去重抓的可能是另一頁**（書源 2）：搜尋網址符合 `bookUrlPattern`、或書單是空的改照詳情頁解析時，Legado 把這一頁留給詳情頁用（`searchBook.infoHtml = body`，Legado `model/webBook/BookList.kt:76`、`106`，`SearchBook.toBook` 帶過去，`data/entities/SearchBook.kt:136`），沒轉址時書的網址還帶著網址選項（`BookList.kt:168`：`getAbsoluteURL(analyzeUrl.url, analyzeUrl.ruleUrl)`）。夜讀書的網址是回應的網址（`lib/core/engine/web_book/book_list_parser.dart:187`，來自 `web_book_service.dart:61`），`toSearchBook`、`toBook` 都不帶這一頁（`lib/core/models/book/book_extensions.dart:85-102`、`lib/core/models/search/search_book.dart:247-263`），點進詳情用 GET 重抓這個網址：POST 搜尋、沒轉址就回詳情頁的網站，抓到的是沒有搜尋字的另一頁。卡在：沒找到這樣的網站；GET 搜尋只是多抓一次。
+- **Cookie 的值有空白、中文、逗號或雙引號時被丟掉**（書源 2）：請求帶的 Cookie（書源標頭、登入、`cookie.setCookie` 存的）一段段用 Dart 的 `Cookie.fromSetCookieValue` 讀（`lib/core/network/interceptors/lenient_cookie_manager.dart:137-150`），讀不了的丟掉（`185-213` 的 `ignoreInvalidCookies`），送出的 Cookie 標頭整個換成讀得了的那些（`50`）；網站回的 Set-Cookie 讀不了的也不存（`152-168`）。實測 `a=x y`、`a=中文`、`a={"k":1}`、`a=b,c` 都丟出 FormatException，最後一段是空值的 `token=` 也讀不了。Legado 請求這一端照字串切開合併、不檢查字元，只略過空值（`help/http/CookieStore.kt:87-104`）；回應那一端用 OkHttp 的 `Cookie.parseAll`（`help/http/CookieManager.kt:43`），收不收這些字元這份原始碼查不到。卡在：沒找到 Cookie 值帶這些字元的網站。
