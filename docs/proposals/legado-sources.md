@@ -52,24 +52,24 @@
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| `{{key}}`、`{{page}}`，以及舊的 `searchKey`、`searchPage` | | |
-| 分頁清單（`<1,2,3>`） | | |
-| 網址是 JS（`@js:`、`<js>`） | | |
-| 網址選項 `method`、`body`（表單、JSON） | | |
-| 網址選項 `charset`（參數照網站編碼送） | | |
-| 網址選項 `headers` | | |
-| 網址選項 `retry` | | |
-| 網址選項 `type`（抓二進位） | | |
-| 網址選項 `webView`、`webJs`、`webViewDelayTime` | | |
-| 網址選項 `js`（送出前改網址） | | |
-| 網址選項 `origin` | | |
-| 網址選項 `serverID` 與代理（`proxy` 標頭） | | |
-| `data:` 網址 | | |
-| 回應的編碼（沒寫 `charset` 時照網頁宣告） | | |
-| Cookie（自動存、標頭裡的 Cookie 合併） | | |
-| 併發與限流 | | |
-| 重新導向與 `redirectUrl` | | |
-| HTTP 錯誤碼 | | |
+| `{{key}}`、`{{page}}`，以及舊的 `searchKey`、`searchPage` | 一樣 | `{{}}` 先代入再換頁碼；舊寫法兩邊的引擎都不認（Legado 只在匯入舊資料時轉）。 |
+| 分頁清單（`<1,2,3>`） | 一樣 | 頁數超過清單時用最後一個。 |
+| 網址是 JS（`@js:`、`<js>`） | 一樣 | JS 前後的文字與 `@result` 同 Legado。 |
+| 網址選項 `method`、`body`（表單、JSON） | 一樣 | 物件寫的內文轉成 JSON；有 Content-Type 照原文送；沒有時表單或 JSON 照內文判斷。 |
+| 網址選項 `charset`（參數照網站編碼送） | 一樣 | 只管送出的參數，含 `escape`；已編碼過的照用。 |
+| 網址選項 `headers` | 一樣 | 物件或 JSON 文字都收，蓋過書源標頭。 |
+| 網址選項 `retry` | 一樣 | 回應不成功時再送；夜讀另外對連線一下就斷的再試兩次。 |
+| 網址選項 `type`（抓二進位） | 一樣 | 內文是位元組的十六進位。 |
+| 網址選項 `webView`、`webJs`、`webViewDelayTime` | 結果不對 | 開瀏覽器、跑 JS、延遲一樣；搭配的 `sourceRegex`（等網頁載入某個資源）做法不同，見 R7。 |
+| 網址選項 `js`（送出前改網址） | 一樣 | |
+| 網址選項 `origin` | 一樣 | 這版 Legado 只存著、送請求時沒用，夜讀也不用。 |
+| 網址選項 `serverID` 與代理（`proxy` 標頭） | 結果不對（代理） | `serverID` Legado 只給 WebDAV 遠端書用，書源用不到；代理見 R2。 |
+| `data:` 網址 | 一樣 | |
+| 回應的編碼（沒寫 `charset` 時照網頁宣告） | 一樣 | 回應標頭 → 網頁 meta → 自動偵測；XML 沒宣告補上 `<?xml`。 |
+| Cookie（自動存、標頭裡的 Cookie 合併） | 結果不對 | 存著的 Cookie 照哪個網域拿不同：Legado 照書源網址，夜讀照這次請求的網址，見 R8；合併時規則給的優先一樣。 |
+| 併發與限流 | 一樣 | 見「併發率」；限流紀錄放主 isolate 是 ADR 0028。 |
+| 重新導向與 `redirectUrl` | 一樣 | 一跳一跳跟、Cookie 跟著走；相對網址照轉址後的網址補。 |
+| HTTP 錯誤碼 | 一樣 | 4xx、5xx 照樣交給規則；夜讀另外認出 Cloudflare 檢查（ADR 0033）與要登入（ADR 0038）。 |
 
 ### 規則 JS 能用的變數與函式
 
@@ -299,6 +299,20 @@
 - 讀者會碰到：`a@href`、`img@src`、`span@title` 這類取屬性的規則碰到好幾個元素有同一個值時，Legado 只留一個，夜讀全部留著：分類變成「玄幻,玄幻」，正文的插圖重複出現。網址清單（下一頁）另外會去重，不受影響。
 - Legado：`L:model/analyzeRule/AnalyzeByJSoup.kt:270-276`，`if (url.isBlank() || textS.contains(url)) continue`。
 - 夜讀：`N:lib/core/engine/parsers/css/analyze_by_css_helper.dart:81-87`，只略過空的。
+
+### R7 網頁載入時等某個資源（`sourceRegex`）：夜讀在網頁內容裡找，不是等網頁真的去抓的網址（少數寫法才碰到）
+
+- 讀者會碰到：書源開了 `webView`，再寫 `sourceRegex` 等網頁用程式去抓某個資源（常見的是正文或音訊的 API 網址、`.m3u8`），這個網址沒有寫在 HTML 裡、是網頁跑起來才組出來的時候，Legado 拿得到，夜讀找不到，拿到的是整頁 HTML，正文是一頁網頁原始碼或抓不到。
+- Legado：`L:help/http/BackstageWebView.kt:282-293`，`onLoadResource` 每載入一個資源就比對 `resUrl.matches(sourceRegex)`（整個網址要符合），符合時回那個網址；正文的 `sourceRegex` 從 `L:model/webBook/WebBook.kt:334-337` 傳進去。
+- 夜讀：`N:lib/core/network/backstage_webview.dart:56-66, 155-161`，把網頁內容（`outerHTML` 或 `webJs` 的結果）拿來找，有分組時取第一組；找不到就回整頁內容。註解寫明是因為用的 WebView 套件拿不到資源載入的事件。
+- 補的方向：不換套件也可以在網頁裡讀 `performance.getEntriesByType('resource')` 的網址清單，照 Legado 整個網址比對；拿不準可不可行，列在檔尾。
+
+### R8 存著的 Cookie 照請求的網址拿，書源呼叫別的網域時登入的 Cookie 沒送出去（抓不到）
+
+- 讀者會碰到：書源網址是 `https://www.甲.com`，搜尋、正文卻打 `https://api.乙.com` 這類別的網域。讀者登入過（登入程式把 Cookie 存在書源網址底下），Legado 每個請求都帶著書源網域的 Cookie，網站認得是登入的；夜讀照請求的網域找 Cookie，找不到，搜尋或正文回「需要登入」或抓不到。
+- Legado：`L:model/analyzeRule/AnalyzeUrl.kt:134` 決定 `domain = NetworkUtils.getSubDomain(source?.getKey() ?: url)`，`setCookie()` 用它找存著的 Cookie（同檔 607-623），自動存的 Cookie 罐也照它存（同檔 635-644）。登入標頭裡的 Cookie 存在書源網址底下（`L:data/entities/BaseSource.kt:150-156`）。
+- 夜讀：`N:lib/core/engine/analyze_url.dart:731-741`，`CookieStore().getCookie(url)` 照這次請求的網址；登入標頭的 Cookie 存在書源網址底下（`N:lib/core/models/source/base_source.dart:158-160`），兩邊對不上。
+- 附帶：登入標頭的 Cookie Legado 是併進舊的（`replaceCookie`），夜讀是整個蓋掉（`setCookie`），同一個網站先前存的其他 Cookie 會不見。
 
 ## 少一個選項
 
