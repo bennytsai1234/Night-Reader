@@ -65,6 +65,13 @@ abstract class XPathNode<T> {
   /// Is element or node
   bool get isElement;
 
+  /// Night Reader patch: reads the text nodes of a DOM node, for models whose
+  /// [children] are elements only (`xpath_selector_html_parser`): its own text
+  /// nodes, or with `deep` every text node inside it in document order. The
+  /// app sets it for its DOM; when it is not set or gives null, the
+  /// non-element [children] are used.
+  static List<String>? Function(Object? node, bool deep)? textNodesOf;
+
   @override
   bool operator ==(Object other);
 

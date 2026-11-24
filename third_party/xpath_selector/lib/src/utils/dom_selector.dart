@@ -94,3 +94,33 @@ List<XPathNode<T>> precedingSibling<T>(XPathNode<T>? e) {
   }
   return result;
 }
+
+/// Night Reader patch: JsoupXpath `preceding`, the preceding siblings of the
+/// node and of each of its ancestors, nearest first.
+List<XPathNode<T>> preceding<T>(XPathNode<T>? e) {
+  final result = <XPathNode<T>>[];
+  if (e == null) return result;
+  for (final parent in ancestor(e)) {
+    result.addAll(precedingSibling(parent).where((n) => n.isElement));
+  }
+  result.addAll(precedingSibling(e).where((n) => n.isElement));
+  return result;
+}
+
+/// Night Reader patch: the next element sibling of the node (JsoupXpath
+/// `following-sibling-one`).
+List<XPathNode<T>> followingSiblingOne<T>(XPathNode<T>? e) {
+  for (final sibling in followingSibling(e)) {
+    if (sibling.isElement) return [sibling];
+  }
+  return [];
+}
+
+/// Night Reader patch: the previous element sibling of the node (JsoupXpath
+/// `preceding-sibling-one`).
+List<XPathNode<T>> precedingSiblingOne<T>(XPathNode<T>? e) {
+  for (final sibling in precedingSibling(e)) {
+    if (sibling.isElement) return [sibling];
+  }
+  return [];
+}

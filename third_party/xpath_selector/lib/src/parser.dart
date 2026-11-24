@@ -1,4 +1,4 @@
-import 'package:xpath_selector/src/reg.dart';
+import 'package:xpath_selector/src/expression.dart';
 import 'package:xpath_selector/src/selector.dart';
 
 import 'model/base.dart';
@@ -10,8 +10,7 @@ List<List<Selector>> parseSelectGroup(String xpath) {
 
   for (final _path in combine) {
     final path = _path.trim();
-    final xpathItem =
-        xpathGroup.allMatches(path).map((e) => e.group(0)!.trim()).toList();
+    final xpathItem = splitXPathSteps(path);
     selectorList.add([
       for (var i = 0; i < xpathItem.length; i++)
         _parseSelector(xpathItem[i], first: i == 0),
@@ -48,6 +47,69 @@ List<String> splitXPathUnion(String xpath) {
   return parts;
 }
 
+/// Night Reader patch: split a location path into its steps, each with its
+/// leading `/` or `//`, on the slashes outside quotes, `[...]` and `(...)`.
+/// Upstream matched steps with a regular expression that dropped `..` and
+/// `.`, and cut predicates holding `]` or a function with arguments.
+List<String> splitXPathSteps(String path) {
+  final steps = <String>[];
+  var depth = 0;
+  String? quote;
+  var start = 0;
+  for (var i = 0; i < path.length; i++) {
+    final char = path[i];
+    if (quote != null) {
+      if (char == quote) quote = null;
+    } else if (char == '"' || char == "'") {
+      quote = char;
+    } else if (char == '[' || char == '(') {
+      depth++;
+    } else if (char == ']' || char == ')') {
+      if (depth > 0) depth--;
+    } else if (char == '/' && depth == 0 && i > start) {
+      // A `//` starts at its first slash.
+      if (i > 0 && path[i - 1] == '/') continue;
+      final step = path.substring(start, i).trim();
+      if (step.isNotEmpty && step != '/' && step != '//') steps.add(step);
+      start = i;
+    }
+  }
+  final last = path.substring(start).trim();
+  if (last.isNotEmpty && last != '/' && last != '//') steps.add(last);
+  return steps;
+}
+
+/// Night Reader patch: the predicates of a step (`li[@class='a'][2]`),
+/// matching brackets outside quotes so a predicate may hold `]` or a nested
+/// predicate. Returns the node test without them and the predicates.
+(String, List<String>) _splitPredicates(String step) {
+  final predicates = <String>[];
+  final nodeTest = StringBuffer();
+  var depth = 0;
+  String? quote;
+  var start = -1;
+  for (var i = 0; i < step.length; i++) {
+    final char = step[i];
+    if (quote != null) {
+      if (char == quote) quote = null;
+      continue;
+    }
+    if (depth > 0 && (char == '"' || char == "'")) {
+      quote = char;
+    } else if (char == '[') {
+      if (depth == 0) start = i + 1;
+      depth++;
+      continue;
+    } else if (char == ']') {
+      depth--;
+      if (depth == 0) predicates.add(step.substring(start, i).trim());
+      continue;
+    }
+    if (depth == 0) nodeTest.write(char);
+  }
+  return (nodeTest.toString().trim(), predicates);
+}
+
 Selector _parseSelector(String input, {required bool first}) {
   late String source;
   late SelectorType selectorType;
@@ -74,27 +136,24 @@ Selector _parseSelector(String input, {required bool first}) {
   final simpleSelector = _parseSimpleSelector(selectorType, source);
   if (simpleSelector != null) return simpleSelector;
 
-  // Axis
+  // Axis. Night Reader patch: the predicates are split off first, so a
+  // predicate may hold an axis (`li[following-sibling::li]`).
+  var (stepTest, predicateList) = _splitPredicates(source);
   AxesAxis? axis;
-  late String withoutAxis;
-  if (source.contains('::')) {
-    final pattern = source.split('::');
-    if (pattern.length > 2) throw UnsupportedError('Not support multiple axis');
-    axis = SelectorAxes.createAxis(pattern.first.trim());
-    withoutAxis = pattern.last.trim();
-  } else {
-    withoutAxis = source;
+  var nodeTest = stepTest;
+  final axisAt = stepTest.indexOf('::');
+  if (axisAt >= 0) {
+    axis = SelectorAxes.createAxis(stepTest.substring(0, axisAt).trim());
+    nodeTest = stepTest.substring(axisAt + 2).trim();
   }
-
-  var nodeTest = withoutAxis;
-  final predicates = predicateReg.allMatches(withoutAxis);
-  for (final predicate in predicates) {
-    nodeTest = nodeTest.replaceAll(predicate.group(0) ?? '', '');
+  // Night Reader patch: a node test is a name (any letters, CJK too), `*`,
+  // `.`, `..` or `node()`; anything else (`div[2] div`, a missing `/`) is not
+  // a valid path.
+  if (!RegExp(
+    r'^(?:[A-Za-z_*\u0080-\uFFFF][\w.:*\u0080-\uFFFF-]*|\.\.?|node\(\))$',
+  ).hasMatch(nodeTest)) {
+    throw FormatException("'$input' is not a valid xpath query string");
   }
-  final predicateList = predicates
-      .map((e) => e.namedGroup('predicate'))
-      .whereType<String>()
-      .toList();
 
   if (nodeTest == '.') {
     axis = AxesAxis.self;
@@ -157,8 +216,10 @@ Selector? _parseSimpleSelector(SelectorType selectorType, String source) {
     );
   }
 
-  // text() string() .. xxx()
-  final function = RegExp(r'^\w*\(\s*\)$').firstMatch(source);
+  // text() string() .. xxx(), and (Night Reader patch) JsoupXpath's
+  // functions with arguments as the last step:
+  // `substring-after(text(),'：')`, `num()`.
+  final function = RegExp(r'^[\w-]+\(.*\)$').firstMatch(source);
   if (function != null) {
     return Selector(
       selectorType: selectorType,
@@ -190,6 +251,18 @@ List<String?> parseAttr({
         } else {
           result.add(element.attributes[lastSelector.attr]);
         }
+      } else if (lastSelector.function == 'text()') {
+        // Night Reader patch: JsoupXpath `text()`, one string for each of
+        // the element's own text nodes; `//text()` every text node inside,
+        // in document order.
+        if (lastSelector.selectorType == SelectorType.descendant) {
+          if (elements.any((e) => e != element && _isAncestor(e, element))) {
+            continue;
+          }
+          result.addAll(_descendantTextNodes(element));
+        } else {
+          result.addAll(ownTextNodes(element));
+        }
       } else if (lastSelector.function != null) {
         // function
         result.add(
@@ -207,15 +280,46 @@ List<String?> parseAttr({
   return result;
 }
 
+bool _isAncestor(XPathNode ancestor, XPathNode node) {
+  for (var p = node.parent; p != null; p = p.parent) {
+    if (p == ancestor) return true;
+  }
+  return false;
+}
+
+List<String> _descendantTextNodes(XPathNode node) {
+  final deep = XPathNode.textNodesOf?.call(node.node, true);
+  if (deep != null) {
+    return [
+      for (final text in deep) text.replaceAll(RegExp(r'\s+'), ' ').trim(),
+    ];
+  }
+  return [
+    for (final child in node.children)
+      if (child.isElement)
+        ..._descendantTextNodes(child)
+      else
+        ...ownTextNodes(child),
+  ];
+}
+
 /// if node-test is text() or other functions
 String? elementFunction({required XPathNode node, required String function}) {
   if (function.startsWith('@')) {
     return node.attributes[function.substring(1)];
   } else {
     switch (function) {
+      // Night Reader patch: JsoupXpath `text()` is the element's own text,
+      // `allText()` all the text inside.
       case 'text()':
+        return ownText(node);
       case 'string()':
+      case 'allText()':
         return node.text ?? '';
+      // Night Reader patch: JsoupXpath `num()`, the first number in the
+      // text.
+      case 'num()':
+        return numberIn(node.text ?? '');
       case 'name()':
       case 'qualified()':
         return node.name?.qualified;
@@ -225,6 +329,11 @@ String? elementFunction({required XPathNode node, required String function}) {
       case 'prefix()':
         return node.name?.namespace;
       default:
+        // Night Reader patch: a JsoupXpath function call
+        // (`substring-after(text(),'：')`) with this node as the context.
+        if (isExpressionFunction(function)) {
+          return evaluateExpression(function, XContext(node)).asString;
+        }
         throw UnsupportedError('Unsupported function: $function');
     }
   }
