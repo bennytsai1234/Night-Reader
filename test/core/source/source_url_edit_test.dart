@@ -264,7 +264,11 @@ void main() {
       await getIt<BookSourceDao>().deleteByUrl(oldUrl);
 
       await expectLater(
-        BookSourceService().saveEditedSource(edited, previousUrl: oldUrl),
+        BookSourceService().saveEditedSource(
+          edited,
+          previousUrl: oldUrl,
+          editedFrom: oldUrl,
+        ),
         throwsA(isA<SourceGoneException>()),
       );
       expect(await getIt<BookSourceDao>().getByUrl(oldUrl), isNull);
@@ -279,10 +283,37 @@ void main() {
       await getIt<BookSourceDao>().deleteByUrl(oldUrl);
 
       await expectLater(
-        BookSourceService().saveEditedSource(edited, previousUrl: oldUrl),
+        BookSourceService().saveEditedSource(
+          edited,
+          previousUrl: oldUrl,
+          editedFrom: oldUrl,
+        ),
         throwsA(isA<SourceGoneException>()),
       );
       expect(await getIt<BookSourceDao>().getByUrl(newUrl), isNull);
+    });
+
+    // 同步照另一台搬書源：這台的舊網址書源可能已經刪了、只剩書記著它。
+    test('but a move from sync still saves', () async {
+      await getIt<BookDao>().upsert(
+        Book(
+          bookUrl: '$oldUrl/book/1',
+          name: '甲書',
+          origin: oldUrl,
+          originName: '舊名',
+          isInBookshelf: true,
+        ),
+      );
+
+      await BookSourceService().saveEditedSource(
+        BookSource(bookSourceUrl: newUrl, bookSourceName: '新名'),
+        previousUrl: oldUrl,
+      );
+      expect(await getIt<BookSourceDao>().getByUrl(newUrl), isNotNull);
+      expect(
+        (await getIt<BookDao>().getByUrl('$oldUrl/book/1'))?.origin,
+        newUrl,
+      );
     });
   });
 

@@ -247,13 +247,18 @@ class BookSourceService {
   /// 的書、搜尋結果、已下載的正文見 [BookSourceDao.saveEdited]，登入資訊與
   /// 變數見 [BaseSource.moveCachedIdentity]）；搬的時候這些書的下載先停住，
   /// 搬完照原本的狀態接著下載，不會有一輪用舊網址寫正文。
+  ///
+  /// [editedFrom] 是編輯頁打開的那一筆：它這時已經不在了（編輯時被刪掉或
+  /// 併掉）就不存（[BookSourceDao.saveEdited]）。同步搬書源不給：舊網址的
+  /// 書源可能已經刪了、只剩書記著它，照樣要搬。
   Future<void> saveEditedSource(
     BookSource source, {
     String? previousUrl,
+    String? editedFrom,
   }) async {
     final sourceDao = getIt<BookSourceDao>();
     if (previousUrl == null || previousUrl == source.bookSourceUrl) {
-      return sourceDao.saveEdited(source, editedFrom: previousUrl);
+      return sourceDao.saveEdited(source, editedFrom: editedFrom);
     }
     final books = await getIt<BookDao>().bookUrlsFromOrigin(previousUrl);
     final otherSources = [
@@ -272,7 +277,7 @@ class BookSourceService {
         commit: () => sourceDao.saveEdited(
           source,
           previousUrl: previousUrl,
-          editedFrom: previousUrl,
+          editedFrom: editedFrom,
         ),
       );
       await _moveBookFiles(moving, source.bookSourceUrl);

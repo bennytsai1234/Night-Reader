@@ -317,6 +317,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
       await _bookSourceService.saveEditedSource(
         _editingSource,
         previousUrl: previousUrl,
+        editedFrom: previousUrl,
       );
       if (mounted) Navigator.pop(context, true);
     } on SourceGoneException catch (error) {
