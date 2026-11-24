@@ -104,16 +104,17 @@
 | 功能 | 結論 | 一句話 |
 |---|---|---|
 | 沒有搜尋網址的書源不搜 | 一樣 | |
-| 多個書源同時搜（同時幾個） | | |
-| 搜尋範圍：分組、單一書源 | | |
+| 多個書源同時搜（同時幾個） | 少一個選項 | 都是同時 16 個；Legado 在「其他設定」可以改（同一個數字也管檢查新章節、目錄與正文分頁、換源、校驗），夜讀固定（`N:lib/features/search/search_model.dart:192`）。夜讀另外先送上次回得快的書源。 |
+| 搜尋範圍：分組、單一書源 | 結果不對（單一書源） | 分組一樣（沒有書源的分組清掉、都沒有時搜全部）；單一書源停用或被校驗擋下時搜不到，已列在 `docs/proposals/audit-source-app.md` 第 5 筆，這裡不重列。 |
+| 搜尋結果捲到底，接著搜下一頁 | 結果不對 | Legado 每個書源接著搜第 2、3 頁，夜讀只搜第 1 頁，見 R17。 |
 | 精準搜尋 | 結果不對 | Legado 留書名或作者「含」關鍵字的，夜讀只留「等於」的，見 R16。 |
-| 同一本書合併成一筆 | | |
-| 結果排序 | | |
+| 同一本書合併成一筆 | 一樣 | 書名加作者一樣就併；夜讀另外不分繁簡與空白、沒寫作者的併進唯一的那個作者、類別不同的分開（ADR 0053）。 |
+| 結果排序 | 一樣 | 書名或作者「等於」關鍵字的在前、「含」的其次、其他最後，同一級照來源數；「其他」那一級 Legado 照到達順序，夜讀也照來源數（`N:lib/features/search/search_model.dart:573-575`）。 |
 | 搜尋直接跳到詳情頁（`bookUrlPattern`、清單抓不到時當詳情頁） | 結果不對（少數） | 判斷一樣；書的網址取法不同，用 POST 搜尋的會丟掉選項，見 R15。 |
-| 書名、作者清理 | | |
-| 結果的分類、字數、最新章節、簡介整理 | | |
+| 書名、作者清理 | 一樣 | 同一組正則拿掉「作者：」「某某 著」（`N:lib/core/constant/app_pattern.dart:25-26`、`L:constant/AppPattern.kt:17-18`）。 |
+| 結果的分類、字數、最新章節、簡介整理 | 一樣 | 分類用逗號接、字數同一套格式、簡介照 `HtmlFormatter`、封面補成完整網址；作者規則出錯時 Legado 整個書源失敗，夜讀留空。 |
 | 搜尋結果的變數帶到詳情 | 結果不對 | 搜尋網址裡存的變數 Legado 帶給每本書，夜讀沒帶，見 R14。 |
-| 停止搜尋、逾時 | | |
+| 停止搜尋、逾時 | 拿不準 | 停止一樣（已收到的照常列出）；每個書源等多久不同：Legado 30 秒（`L:model/webBook/SearchModel.kt:91`），夜讀 20 秒（`N:lib/core/constant/source_wait.dart:3`，使用者 2026-11-13 定，沒有 ADR），見檔尾。 |
 
 ### 詳情
 
@@ -364,6 +365,12 @@
 - 夜讀：`N:lib/features/search/search_model.dart:36-41`（正規化後 `==`）。
 - 備註：夜讀比對前先正規化（繁簡、空白），這點比 Legado 寬；只有「含」與「等於」的差別。
 
+### R17 搜尋只搜第 1 頁，捲到底不會接著搜下一頁（抓錯或抓不全）
+
+- 讀者會碰到：搜一個常見的詞，網站一頁只給 10 或 20 本，要的那本在第 2 頁。Legado 捲到結果底部時，每個書源接著搜下一頁（`{{page}}` 加一），一直到沒有新結果；夜讀只有第 1 頁，那本書搜不到。
+- Legado：`L:model/webBook/SearchModel.kt:53-75`（同一次搜尋再呼叫時 `searchPage++`，有結果的書源記 `hasMore`），`L:ui/book/search/SearchActivity.kt:345-355`（捲到底、沒在搜、還有下一頁時再搜）。
+- 夜讀：`N:lib/features/search/search_model.dart:476` 送出時不帶頁碼，用 `N:lib/core/source/book_source_service.dart:183` 的預設 `page = 1`；搜尋頁沒有載入更多。發現頁有（`N:lib/features/explore/explore_show_provider.dart:156-159`）。
+
 ## 少一個選項
 
 （使用者勾了才做。）
@@ -382,5 +389,6 @@
 - **R7 的補法**：在網頁裡讀 `performance.getEntriesByType('resource')` 能不能拿到所有資源網址（含 iframe、XHR 之後才發的），沒有試。
 - **規則 JS 的 `java.put` 寫進書源層的快取**（`N:lib/core/engine/js/extensions/js_extensions.dart:73-112`）：讀甲書時存的值，讀乙書時 `java.get` 會拿到，Legado 拿到空的；沒找到會因此出錯的書源。
 - **`@put` 的值是空的時**：Legado 照樣存空字串，夜讀不存、留著舊值（`N:lib/core/engine/analyze_rule/analyze_rule_string.dart:38-45`）；影響多大沒查。
-- **搜尋一類沒對完**：多個書源同時搜、範圍、合併、排序、書名作者清理、逾時讀到一半（`N:lib/features/search/search_model.dart`），結論留空。
+- **刻意不同，但只寫在程式註解或畫面規格、沒有 ADR**：照規則要有 ADR 才算「刻意不同」，這幾處先放這裡，要不要補 ADR 由使用者定。
+  - 每個書源等多久：搜尋、換源每次搜尋與校驗每一段都等 20 秒（`N:lib/core/constant/source_wait.dart:1-3`，使用者 2026-11-13）；Legado 搜尋 30 秒、校驗整個書源 180 秒。
 
