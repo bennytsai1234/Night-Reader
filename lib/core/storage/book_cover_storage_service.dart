@@ -20,24 +20,14 @@ class BookCoverStorageService {
   final Dio _dio = Dio()..httpClientAdapter = sourceHttpClientAdapter();
 
   /// 從別處收進來的書（還原備份、匯入書架檔）：封面的本機檔是存的那台
-  /// 手機的，這台沒有時拿掉，顯示改回封面網址；從相簿選的自訂封面連網址都
-  /// 是那台的檔（`file://`），一起拿掉。同一台手機還原時檔案還在，照留。
+  /// 手機的，這台沒有時拿掉，顯示改回封面網址。同一台手機還原時檔案還在，
+  /// 照留。從相簿選的自訂封面（`file://`）網址照留，顯示時只用存好的那份
+  /// （`Book.getDisplayCover`）。
   static Future<void> dropMissingCoverFiles(Book book) async {
     if (await _missing(book.coverLocalPath)) book.coverLocalPath = null;
     if (await _missing(book.customCoverLocalPath)) {
       book.customCoverLocalPath = null;
     }
-    if (book.customCoverLocalPath == null &&
-        await isMissingLocalCover(book.customCoverUrl)) {
-      book.customCoverUrl = null;
-    }
-  }
-
-  /// [url] 是這台手機上不存在的檔（`file://`，從另一台相簿選的封面）。
-  static Future<bool> isMissingLocalCover(String? url) async {
-    if (url == null || !url.startsWith('file://')) return false;
-    final path = Uri.tryParse(url)?.toFilePath();
-    return path == null || !await File(path).exists();
   }
 
   static Future<bool> _missing(String? path) async =>

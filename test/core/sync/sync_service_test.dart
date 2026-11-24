@@ -1351,7 +1351,8 @@ void main() {
     });
 
     test('a cover picked from the gallery on one phone (a file only there) '
-        'leaves the other phone\'s cover as it was', () async {
+        'shows the source cover on the other, and comes back to the first '
+        'phone untouched after edits there', () async {
       // A 從相簿選的封面是 A 的 App 暫存資料夾裡的檔，B 上沒有。
       const gallery = 'file:///data/user/0/a-only/cache/picked.jpg';
       await a.addBook('a-src', toc: toc, time: 200);
@@ -1360,21 +1361,27 @@ void main() {
       await a.books.upsert((await a.book('a-only'))..customCoverUrl = gallery);
       await a.sync.syncAll();
       await b.sync.syncAll();
-      await b.books.upsert(
-        (await b.book('b-src'))..customCoverUrl = 'https://img/b.jpg',
+      await a.books.upsert(
+        (await a.book('a-src'))
+          ..customCoverUrl = gallery
+          ..customCoverLocalPath = '/data/a/cover.jpg',
       );
-      await b.sync.syncAll();
-      await a.sync.syncAll();
-
-      await a.books.upsert((await a.book('a-src'))..customCoverUrl = gallery);
-      await a.sync.syncAll();
-      await b.sync.syncAll();
       await a.sync.syncAll();
       await b.sync.syncAll();
 
-      expect((await b.book('b-src')).customCoverUrl, 'https://img/b.jpg');
-      expect((await b.book('a-only')).customCoverUrl, isNull);
-      expect((await a.book('a-src')).customCoverUrl, gallery);
+      for (final url in ['b-src', 'a-only']) {
+        final book = await b.book(url);
+        expect(book.getDisplayCover(), book.coverUrl, reason: url);
+      }
+
+      // B 之後改了這本書別的東西：送回去的封面網址還是 A 選的那張。
+      await b.books.upsert((await b.book('b-src'))..customTag = '想看');
+      await b.sync.syncAll();
+      await a.sync.syncAll();
+      final mine = await a.book('a-src');
+      expect(mine.customTag, '想看');
+      expect(mine.customCoverUrl, gallery);
+      expect(mine.customCoverLocalPath, '/data/a/cover.jpg');
     });
 
     group('renamed on one phone', () {
