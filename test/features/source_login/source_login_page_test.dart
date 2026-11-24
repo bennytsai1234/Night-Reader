@@ -1,9 +1,11 @@
+import 'dart:io' as io;
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/network/network_service.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -140,6 +142,31 @@ void main() {
     expect(await close(tester, closed), isFalse);
     final stored = await tester.runAsync(() => dao.getByUrl(url));
     expect(stored!.groupTags, contains(loginRequiredSourceGroupTag));
+  });
+
+  // 登入程式靠 HTTP 回應拿到新的工作階段 Cookie（存在 Cookie 檔，不在
+  // 表單、登入標頭與夜讀自己存的 Cookie 裡）：照樣算登入資料變了，讓呼叫端
+  // 重抓。
+  testWidgets('a new cookie in the cookie jar counts as changed', (
+    tester,
+  ) async {
+    setupTestDI();
+    await tester.runAsync(() async {
+      await NetworkService().init(ephemeral: true);
+      await dao.upsert(source);
+    });
+
+    final closed = await openLogin(tester);
+    await tester.runAsync(
+      () => NetworkService().cookieJar.saveFromResponse(Uri.parse(url), [
+        io.Cookie('sid', 'fresh-session'),
+      ]),
+    );
+
+    expect(await close(tester, closed), isTrue);
+    await tester.runAsync(
+      () => NetworkService().cookieJar.delete(Uri.parse(url), true),
+    );
   });
 
   group('tells the caller it logged in', () {

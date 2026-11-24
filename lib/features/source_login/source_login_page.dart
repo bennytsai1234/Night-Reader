@@ -151,17 +151,43 @@ bool _looksLikeScript(String loginUrl) =>
     loginUrl.contains('function ') ||
     loginUrl.contains('\n');
 
-typedef _LoginSnapshot = ({String info, String header, String cookie});
+/// 書源的登入資料：表單內容、登入標頭、夜讀自己存的 Cookie，與 HTTP 回應
+/// 存在 Cookie 檔裡的這個網站的 Cookie（登入程式常只靠回應拿到工作階段）。
+typedef _LoginSnapshot = ({
+  String info,
+  String header,
+  String cookie,
+  String jar,
+});
 
 extension on _LoginSnapshot {
-  bool get hasData => info.isNotEmpty || header.isNotEmpty || cookie.isNotEmpty;
+  bool get hasData =>
+      info.isNotEmpty ||
+      header.isNotEmpty ||
+      cookie.isNotEmpty ||
+      jar.isNotEmpty;
 }
 
 Future<_LoginSnapshot> _loginSnapshot(BookSource source) async => (
   info: await source.getLoginInfo() ?? '',
   header: await source.getLoginHeader() ?? '',
   cookie: await CookieStore().getCookie(source.bookSourceUrl),
+  jar: await _jarCookies(source.bookSourceUrl),
 );
+
+/// Cookie 檔裡 [url] 這個網站的 Cookie（名稱＝值，照名稱排）；讀不到是空的。
+Future<String> _jarCookies(String url) async {
+  final uri = Uri.tryParse(url);
+  if (uri == null || !uri.hasScheme || uri.host.isEmpty) return '';
+  try {
+    final cookies = await NetworkService().cookieJar.loadForRequest(uri);
+    return ([
+      for (final c in cookies) '${c.name}=${c.value}',
+    ]..sort()).join('; ');
+  } catch (_) {
+    return '';
+  }
+}
 
 Future<void> _clearLoginRequiredTag(BookSource source) async {
   try {
