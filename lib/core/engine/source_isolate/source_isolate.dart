@@ -13,6 +13,7 @@ import 'package:native_synchronization/mailbox.dart';
 import 'package:native_synchronization/sendable.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
@@ -499,10 +500,14 @@ final class SourceWorker {
     void Function(Object entry)? onProgress,
   }) async {
     final id = _nextTaskId++;
+    // 在草稿裡送出的工作，到了 worker 也在同一份草稿裡跑（AI 修書源的試抓、
+    // 解析、校驗，[BaseSource.inDraftVariables]）。
+    final draft = BaseSource.draftVariables;
+    final run = draft == null ? task : _inDraft(draft, task);
     final Future<Object?> result;
     try {
       result = _channel.request(
-        _RunTask(id, task, progress: onProgress != null),
+        _RunTask(id, run, progress: onProgress != null),
       );
     } on ArgumentError catch (e) {
       throw _TaskNotSendable(e);
@@ -774,6 +779,14 @@ final class SourceWorker {
     }
   }
 }
+
+/// [task] 在草稿 [draft] 裡跑（[BaseSource.inDraftVariables]）。寫成頂層函式：
+/// 包裝只捕捉 [draft] 與 [task]，送得進 worker。
+Future<R> Function(CancelToken) _inDraft<R>(
+  String draft,
+  Future<R> Function(CancelToken cancelToken) task,
+) =>
+    (token) => BaseSource.inDraftVariables(draft, () => task(token));
 
 /// [SourceWorker.run] 的工作連同捕捉的變數送不進 worker。
 final class _TaskNotSendable implements Exception {

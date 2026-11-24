@@ -144,9 +144,17 @@ class CacheManager {
     return true;
   }
 
-  /// 資料庫裡以 [prefix] 開頭的鍵。
-  Future<List<String>> keysStartingWith(String prefix) async =>
-      await _cacheDao?.keysStartingWith(prefix) ?? const <String>[];
+  /// 以 [prefix] 開頭的鍵：資料庫的，加上只在記憶體裡的文字（沒有資料庫
+  /// 的測試、還沒讀進記憶體以外的）。
+  Future<List<String>> keysStartingWith(String prefix) async => {
+    ...?await _cacheDao?.keysStartingWith(prefix),
+    // 先抄出鍵再讀值：讀值會把那一筆排到最後，不能邊走邊讀。
+    for (final key in [
+      for (final key in _memoryCache.keys)
+        if (key.startsWith(prefix)) key,
+    ])
+      if (_memoryCache[key] is String) key,
+  }.toList();
 
   /// 刪除快取 (記憶體 + 資料庫)
   Future<void> delete(String key) async {
