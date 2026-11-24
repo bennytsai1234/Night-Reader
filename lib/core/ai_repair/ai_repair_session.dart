@@ -115,6 +115,7 @@ typedef AiRepairPageParser = Future<String> Function(
   String stage,
   RepairPage page,
   CancelToken cancelToken,
+  Set<String> secrets,
 );
 
 /// 在書源規則 JS 的環境跑一段程式（[runRepairJs]）；[pages] 是程式用到的
@@ -124,6 +125,7 @@ typedef AiRepairJsRunner = Future<String> Function(
   String code,
   Map<int, String> pages,
   CancelToken cancelToken,
+  Set<String> secrets,
 );
 
 /// AI 要看的一頁（[fetchPageForAi]）。
@@ -858,10 +860,15 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 送給 AI、寫進紀錄的文字都經過這裡：開始時讀到的秘密、修復途中重讀
   /// 的（[_refreshSecrets]），加上記憶體裡現在的 Cookie 值。
-  String _redact(AiRepairJob job, String text) => redactAiRepairSecrets(text, {
+  String _redact(AiRepairJob job, String text) =>
+      redactAiRepairSecrets(text, _secretSet(job));
+
+  /// 現在要遮的秘密（[_redact]）：截短前先遮的地方（讀頁、找字、試解析、
+  /// 跑程式）拿這一份。
+  Set<String> _secretSet(AiRepairJob job) => {
     ...job._secrets,
     ...aiRepairLiveCookieSecrets({job.original.getKey(), ?job.repairedUrl}),
-  });
+  };
 
   /// 重讀這個書源的秘密，併進已知的：修復途中規則可能寫了新的 Cookie、登入
   /// 標頭或書源變數，舊的也照樣遮（ADR 0054）。AI 服務的金鑰也算。
@@ -939,12 +946,23 @@ class AiRepairSession extends ChangeNotifier {
   }
 
   /// 停下時正在等的那件事以取消結束，當成 null。
+  ///
+  /// 做完（含出錯）先重讀秘密再交回：跑書源的程式（校驗、試抓、看網頁、
+  /// 試解析、跑程式）可能寫了新的 Cookie、登入標頭或變數，交回的結果接著就
+  /// 寫進紀錄、送給 AI。寫入在背景 isolate 做，轉送回這裡的那份比結果先到。
   Future<T?> _guard<T>(Future<T> Function() work) async {
     try {
       return await work();
     } on DioException catch (error) {
       if (CancelToken.isCancel(error) || _halting) return null;
       rethrow;
+    } finally {
+      // 重讀不成不蓋掉這件事本身的結果或錯誤：舊的秘密照樣遮。
+      try {
+        await _refreshSecrets(job);
+      } catch (error) {
+        AppLog.w('AI 修書源重讀秘密失敗: ${error.runtimeType}');
+      }
     }
   }
 
@@ -1024,7 +1042,7 @@ final class _AgentHost implements RepairAgentHost {
   String redact(String text) => s._redact(job, text);
 
   @override
-  Future<void> refreshSecrets() => s._refreshSecrets(job);
+  Set<String> get secrets => s._secretSet(job);
 
   @override
   Future<String?> validate(

@@ -889,15 +889,26 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     }
     if (chapter.number == chapter.total) found.lastTried = true;
     if (chapter.total == 1) found.readTried = true;
+    // 給 AI 的那一段遮掉秘密，切點落在一段秘密中間時往外延到整段：分段切在
+    // 秘密中間，兩半各自認不出來。位置照原文算。
     final text = chapter.text;
-    final from = command.from.clamp(0, text.length);
-    final to = (from + aiFindReadLength).clamp(0, text.length);
+    final slice = aiRepairSlice(
+      text,
+      command.from.clamp(0, text.length),
+      (command.from.clamp(0, text.length) + aiFindReadLength).clamp(
+        0,
+        text.length,
+      ),
+      _library.secrets,
+    );
+    final from = slice.start;
+    final to = slice.end;
     final next = to < text.length ? '，下一段從 $to 讀' : '，這章讀完了';
     final reply =
         '# ${found.id}《${found.book.name}》第 ${chapter.number}／'
         '${chapter.total} 章${last ? '（最後一章）' : ''} ${chapter.title}'
         '（這章共 ${text.length} 字，'
-        '這是 $from 到 $to$next）\n${text.substring(from, to)}';
+        '這是 $from 到 $to$next）\n${slice.text}';
     s.log.note(_head(reply));
     return AgentToolResult(reply);
   }

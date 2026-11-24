@@ -107,4 +107,78 @@ void main() {
     expect(raw, contains('<script>var x = 1;</script>'));
     expect(raw, contains('共 ${_toc.length} 字'));
   });
+
+  // 秘密剛好跨過讀頁或截字的邊界：先遮整段再截，兩半都不留（#529 第 47 條）。
+  group('a secret across a cut is hidden before cutting', () {
+    const left = 'LEFTq7Wk';
+    const right = 'RIGHTz3Pm';
+    const secrets = {'$left$right'};
+
+    test('when reading a page in two parts', () async {
+      final body = '${'x' * 7990}$left$right尾';
+      final page = RepairPage(1, 'https://site.example/', body);
+
+      // 切在原本秘密的中間（第 7994 字）。
+      final first = await readRepairPage(
+        page,
+        raw: true,
+        length: 7994,
+        secrets: secrets,
+      );
+      final from = int.parse(
+        RegExp(r'"from":(\d+)').firstMatch(first)!.group(1)!,
+      );
+      final second = await readRepairPage(
+        page,
+        raw: true,
+        from: from,
+        secrets: secrets,
+      );
+
+      for (final part in [first, second]) {
+        expect(part, isNot(contains(left)));
+        expect(part, isNot(contains(right)));
+      }
+      String text(String reply) => reply.substring(reply.indexOf('\n') + 1);
+      expect(
+        text(first) + text(second),
+        '${'x' * 7990}«已遮蔽»尾',
+        reason: '接著讀的字連得上，不缺不重',
+      );
+    });
+
+    // 兩次讀之間修復途中多讀到一個秘密：位置照原文算，接著讀不缺字。
+    test('the next part starts in the same place when the secrets change '
+        'between reads', () async {
+      final body = '前$left$right${'x' * 100}後';
+      final page = RepairPage(1, 'https://site.example/', body);
+
+      final first = await readRepairPage(page, raw: true, length: 50);
+      expect(first, contains('"from":50'));
+      final second = await readRepairPage(
+        page,
+        raw: true,
+        from: 50,
+        secrets: secrets,
+      );
+
+      expect(second.substring(second.indexOf('\n') + 1), '${'x' * 68}後');
+    });
+
+    test('when finding in a page', () async {
+      final body =
+          '<div class="row"><span>${'字' * 270}$left$right${'字' * 60}</span>'
+          '<a>要找的</a></div>';
+
+      final found = findInPage(body, '要找的', secrets: secrets);
+      expect(found, isNot(contains(left)));
+      expect(found, isNot(contains(right)));
+      final aroundText = findInPage(
+        '{"a":"${'x' * 140}$left$right"}',
+        'x{3}',
+        secrets: secrets,
+      );
+      expect(aroundText, isNot(contains(left)));
+    });
+  });
 }

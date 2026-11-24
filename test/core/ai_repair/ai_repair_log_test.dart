@@ -93,6 +93,21 @@ void main() {
     expect(full, contains('cookie=«已遮蔽»'));
   });
 
+  // 摘要裡的回應、工具參數與 AI 的話截短前先遮：秘密跨過截字的地方時，
+  // 截下的半段認不出來（#529 第 47 條）。
+  test('the summary hides a secret before cutting it short', () async {
+    const left = 'LEFTq7Wk';
+    const right = 'RIGHTz3Pm';
+    final record = log()
+      ..redact = ((text) => text.replaceAll('$left$right', '«已遮蔽»'))
+      ..requests(['  ← https://site.example/ 200，3 KB：${'x' * 195}$left$right'])
+      ..toolCall('read', '${'a' * 795}$left$right')
+      ..reply('${'b' * 795}$left$right');
+
+    expect(record.summary, isNot(contains(left.substring(0, 4))));
+    expect(record.summary, isNot(contains(right)));
+  });
+
   test('only the newest logs are kept', () async {
     for (var i = 0; i < 105; i++) {
       final n = i.toString().padLeft(3, '0');

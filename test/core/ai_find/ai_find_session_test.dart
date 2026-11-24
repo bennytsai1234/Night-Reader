@@ -40,6 +40,7 @@ class _Library implements AiFindLibrary {
   final Set<String> secrets = {};
   Completer<void>? searchGate;
   String? detailIntro;
+  String? chapterText;
   int pending = 0;
 
   /// 指定某本在搜尋頁的哪一段。
@@ -95,7 +96,12 @@ class _Library implements AiFindLibrary {
     calls.add('chapter ${book.name} $number');
     final index = number == aiFindLastChapter ? 2 : number;
     if (index > 2) throw const AiFindUnreadable('沒有這一章，共 2 章');
-    return (title: '第$index章', text: '字' * 4500, number: index, total: 2);
+    return (
+      title: '第$index章',
+      text: chapterText ?? '字' * 4500,
+      number: index,
+      total: 2,
+    );
   }
 
   @override
@@ -966,6 +972,31 @@ void main() {
     expect(result, contains(aiRepairRedacted));
     final log = await (await find.log.file())!.readAsString();
     expect(log, isNot(contains(secret)));
+  });
+
+  // 章節先遮秘密再分段：秘密剛好跨過分段處時，兩半都不留（#529 第 47 條）。
+  test('a secret across where a chapter is cut is masked whole', () async {
+    const left = 'LEFTq7Wk';
+    const right = 'RIGHTz3Pm';
+    final library =
+        _Library({
+            '穿越': [_book('獵魔人')],
+          })
+          ..secrets.add('$left$right')
+          ..chapterText = '${'字' * 2996}$left$right${'尾' * 1000}';
+    final ai = _Ai([
+      _calls([
+        ('search', {'keyword': '穿越'}),
+      ]),
+      _calls([
+        ('read', {'book': 'b1', 'chapter': 1}),
+      ]),
+    ]);
+    await session(library, ai).start();
+
+    final read = ai.toolResults(3).single;
+    expect(read, isNot(contains(left.substring(0, 4))));
+    expect(read, isNot(contains(right)));
   });
 
   test('arguments that are not JSON are dropped and the same conversation '

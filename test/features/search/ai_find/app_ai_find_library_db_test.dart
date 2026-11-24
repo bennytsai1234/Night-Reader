@@ -156,6 +156,32 @@ void main() {
     expect(secretsWhenSecondDone, {'token-abc-123456'});
   });
 
+  // 書源的規則看詳情時才寫進新的登入資料或 Cookie：工具的結果交回之前，
+  // 讀過的書源的秘密要重讀（#529 第 52 條，AI 找書這邊）。
+  test('a secret a rule writes while a tool runs is collected before the '
+      'result goes back', () async {
+    await addSource('https://a.test');
+    var reads = 0;
+    final library = AppAiFindLibrary(
+      scope: SearchScope(),
+      service: _Sites({
+        'https://a.test': Book(
+          bookUrl: 'https://a.test/x',
+          name: '獵魔人',
+          origin: 'https://a.test',
+          kind: '玄幻',
+          intro: '簡介',
+          wordCount: '10萬字',
+        ),
+      }),
+      secretsOf: (_) async => reads++ == 0 ? const {} : {'fresh-secret-123'},
+    );
+
+    await library.detail(found('https://a.test', '獵魔人'), CancelToken());
+
+    expect(library.secrets, contains('fresh-secret-123'));
+  });
+
   test('a detail without a word count or intro fills them from the other '
       'sources of the same book, keeping the main one', () async {
     for (final url in ['https://a.test', 'https://b.test', 'https://c.test']) {

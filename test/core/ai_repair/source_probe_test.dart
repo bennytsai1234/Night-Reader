@@ -376,6 +376,25 @@ void main() {
     expect(await parse(source(), 'nope', toc), startsWith('不認得的段'));
   });
 
+  // 解析結果截字前先遮秘密（#529 第 47 條）。
+  test('parse hides a secret before cutting the content it shows', () async {
+    const left = 'LEFTq7Wk';
+    const right = 'RIGHTz3Pm';
+    final result = await parseRepairPage(
+      source(),
+      stage: 'content',
+      body: '<div id="content">${'字' * 296}$left$right${'字' * 100}</div>',
+      url: '$site/1.html',
+      timeout: const Duration(seconds: 30),
+      database: Future.value(databaseIsolate),
+      secrets: const {'$left$right'},
+    );
+
+    expect(result, startsWith('解析成正文頁'));
+    expect(result, isNot(contains(left.substring(0, 4))));
+    expect(result, isNot(contains(right)));
+  });
+
   test('js runs in the rule JS world and can read fetched pages', () async {
     final result = await runRepairJs(
       source(),

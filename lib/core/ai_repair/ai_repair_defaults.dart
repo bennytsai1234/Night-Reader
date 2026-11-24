@@ -97,6 +97,7 @@ abstract final class AiRepairDefaults {
     String stage,
     RepairPage page,
     CancelToken cancelToken,
+    Set<String> secrets,
   ) async => parseRepairPage(
     source,
     stage: stage,
@@ -104,6 +105,7 @@ abstract final class AiRepairDefaults {
     url: page.url,
     timeout: (await _config()).sourceTimeoutDuration,
     cancelToken: cancelToken,
+    secrets: secrets,
   );
 
   static Future<String> runJs(
@@ -111,12 +113,14 @@ abstract final class AiRepairDefaults {
     String code,
     Map<int, String> pages,
     CancelToken cancelToken,
+    Set<String> secrets,
   ) async => runRepairJs(
     source,
     code: code,
     pages: pages,
     timeout: (await _config()).sourceTimeoutDuration,
     cancelToken: cancelToken,
+    secrets: secrets,
   );
 
   static AgentAsk ask(AiService service) {
