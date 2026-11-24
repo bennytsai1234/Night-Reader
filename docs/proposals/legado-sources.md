@@ -183,7 +183,7 @@
 | 網頁登入 | 一樣 | 打開登入網址、帶書源標頭，每載完一頁把 Cookie 存給書源（`L:ui/login/WebViewLoginFragment.kt`、`N:lib/features/source_login/source_browser_page.dart:141-165`）；跳到別的網站（統一登入）時夜讀把那個網站的 Cookie 併進書源的。 |
 | 表單登入（文字、密碼、按鈕） | 一樣 | 文字、密碼、按鈕三種；按鈕是網址就開瀏覽器、是程式就和書源的登入程式一起跑，`result` 是表單內容；打勾存表單再跑 `login`（`L:ui/login/SourceLoginDialog.kt:131-190`、`N:lib/core/source/source_login_session.dart:86-114`）。存表單時夜讀併進舊的（按鈕存的欄位留著），全部空白時 Legado 清掉已存的、夜讀不動。 |
 | 登入檢查（`loginCheckJs`） | 一樣 | 搜尋、發現、詳情、目錄、正文每次回來都先跑（`N:lib/core/engine/web_book/` 七處 `runLoginCheckJs`）。 |
-| 看與刪登入標頭 | 一樣 | 看、複製、刪；夜讀另有「登出」連表單與 Cookie 一起清。 |
+| 看與刪登入標頭 | 少一個選項 | 看、複製一樣；只刪登入標頭夜讀沒有，「清除登入資料」連表單與 Cookie 一起清（`N:lib/features/source_login/source_login_page.dart:379-420`），見 O10。 |
 | 登入資訊加密存放 | 刻意不同 | Legado 用手機編號當鑰匙加密（`L:data/entities/BaseSource.kt:186-196`），夜讀不加密（ADR 0038，備份與同步也帶著，ADR 0039）。 |
 
 ### 書源校驗
@@ -220,7 +220,7 @@
 | 功能 | 結論 | 一句話 |
 |---|---|---|
 | 編輯頁：儲存、除錯、登入、搜尋 | 少一個選項 | 只有儲存與除錯（`docs/design/screens.md` 第 58 行）；登入、搜尋要回書源管理長按。 |
-| 清除 Cookie | 少一個選項 | 只有登入頁的「登出」連登入資料一起清，沒有登入網址的書源清不了它存的 Cookie。 |
+| 清除 Cookie | 少一個選項 | 只有登入頁的「清除登入資料」連表單與登入標頭一起清，沒有登入網址的書源清不了它存的 Cookie。 |
 | 自動補全 | 少一個選項 | |
 | 複製、貼上書源 | 少一個選項 | 編輯頁沒有；書源管理的「分享選中」「剪貼簿匯入」做得到同樣的事。 |
 | 設定書源變數 | 少一個選項 | 夜讀沒有地方看或改書源變數，`variableComment` 也沒有地方顯示。 |
@@ -423,6 +423,7 @@
 - [ ] **O7 書源編輯頁的欄位**：夜讀沒列、改不到的有詳情頁網址規則（`bookUrlPattern`）、校驗關鍵字、併發率、自動存 Cookie、程式庫、變數說明、封面解密；搜尋與發現的簡介；詳情的 `canReName`、`downloadUrls`；目錄的卷名、付費、更新時間、`formatJs`、`preUpdateJs`；正文的章名、`webJs`、`sourceRegex`、`imageStyle`、`imageDecode`、`payAction`（`N:lib/features/source_manager/source_editor_page.dart` 的 `_controllers`）。匯入的值照存，只是不能在 App 裡改。
 - [ ] **O8 除錯**：從書源編輯進除錯時改關鍵字（Legado 有輸入框，「我的」「系統」、書源的校驗關鍵字與第一個發現分類可以點，`L:ui/book/source/debug/BookSourceDebugActivity.kt:94-107`；夜讀固定搜「我的世界」）；看搜尋、詳情、目錄、正文四步的原始網頁；重新整理發現分類。
 - [ ] **O9 換源**：搜到一半停止；結果長按選單（置頂、置底、編輯、停用、刪除書源），置頂置底會記住、下次照它排；載入字數（抓每個書源讀到的那一章，列出字數並照它排）。
+- [ ] **O10 登入頁只刪登入標頭**：Legado 登入選單有「刪除登入標頭」，表單內容與 Cookie 留著；夜讀只有全部一起清的「清除登入資料」。
 
 ## 有更好的做法
 
@@ -449,10 +450,11 @@
 - **刻意不同，但只寫在程式註解或畫面規格、沒有 ADR**：照規則要有 ADR 才算「刻意不同」，這幾處先放這裡，要不要補 ADR 由使用者定。
   - 每個書源等多久：搜尋、換源每次搜尋與校驗每一段都等 20 秒（`N:lib/core/constant/source_wait.dart:1-3`，使用者 2026-11-13）；Legado 搜尋 30 秒、校驗整個書源 180 秒。
   - 插圖挑哪個網址：夜讀先取懶載入屬性（`data-original`、`data-src`、`data-lazy-src`），再取 `src`（`N:lib/core/utils/html_formatter.dart:25-35`）；Legado 是同一個標籤裡寫在後面的那個（`L:utils/HtmlFormatter.kt:16-19`）。網頁把佔位圖放在 `src` 時夜讀抓得到真的圖。
-  - 換源面板：一律抓到目錄才列、照回應時間排、每次打開都全部重搜、「校驗作者」預設開（`docs/design/screens.md`「換源面板」，使用者 2026-11-16 選了目錄那一項）；Legado 載入目錄、詳情、字數是三個預設關的開關，照讀者的置頂置底與書源順序排，有存著的結果就不重搜。
+  - 換源面板：一律抓到目錄才列、回得快的在前（`docs/design/screens.md`「換源面板」，使用者 2026-11-16 在候選圖上選）；Legado 載入目錄、詳情、字數是三個預設關的開關，照讀者的置頂置底與書源順序排。
 - **目錄一次給好幾頁時**：夜讀同時抓 4 頁（`N:lib/core/engine/web_book/web_book_service.dart:31`），其中一頁抓不到就略過、先給抓到的部分，檢查新章節時才整份失敗（同檔 202）；Legado 同時抓的頁數照「線程數」設定（預設 16，`L:model/webBook/BookChapterList.kt:99`），一頁抓不到整份失敗。閱讀時的目錄可能少幾章，讀者看不出來。
 - **校驗不寫回應時間**：Legado 校驗完寫（`L:service/CheckSourceService.kt:151`），夜讀只有搜尋時寫（`N:lib/features/search/search_model.dart` 的 `_smoothedRespondTime`）；書源管理沒有「回應時間」排序，只影響搜尋時先送哪個。
 - **書源管理的小差異**：「按名稱」夜讀照字碼排、Legado 照拼音（`cnCompare`，`L:ui/book/source/manage/BookSourceActivity.kt:343`）；「按更新時間」夜讀舊的在前、Legado 新的在前（同檔 348）；搜尋框 Legado 也比分組名稱。都不是書源抓不抓得到，也不是少一個開關，不知道算哪一類。
+- **換源面板每次重搜、校驗作者預設開**：只在程式裡（`N:lib/features/book_detail/source/book_detail_change_source_provider.dart:63, 141-240`），沒有註解說是刻意的。Legado 有存著的結果就不重搜、按「重新整理」才搜（`L:ui/book/changesource/ChangeBookSourceViewModel.kt:127`），校驗作者預設關。
 - **不在書架上的書閱讀時預先抓幾章**：書架上的書照 ADR 0008 整本下載；從搜尋直接打開、沒加書架的書，閱讀器往後預先抓幾章沒追到（`N:lib/features/reader/chapter/reader_chapter_repository.dart` 的 `preloadContent` 沒有人呼叫）。Legado 照「預下載章節數」抓後面 10 章。
 - **閱讀時走到卷名那一列**：Legado 不抓網頁，正文是那一列的更新時間欄（`L:model/webBook/WebBook.kt:310-313`）；夜讀下載與校驗會跳過卷名（`N:lib/core/storage/reader_chapter_content_store.dart:9-10`），閱讀器翻到那一列時怎麼處理沒追到。
 
