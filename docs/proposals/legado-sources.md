@@ -166,25 +166,25 @@
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| 發現網址的文字寫法（`名稱::網址`，`&&` 與換行分隔） | | |
-| 發現網址的 JSON 寫法與樣式（`style`） | | |
-| 發現網址是 JS | | |
-| 發現分類的快取與重新整理 | | |
-| 發現頁往下載入下一頁 | | |
-| 沒寫發現規則時用搜尋規則 | | |
-| 發現篩選（`exploreScreen`） | | |
-| 發現的書源分組與啟用發現 | | |
-| 發現書源的選單（編輯、置頂、登入、搜尋、重新整理、刪除） | | |
+| 發現網址的文字寫法（`名稱::網址`，`&&` 與換行分隔） | 一樣 | 同一個分隔法（`L:help/source/BookSourceExtensions.kt:76-79`、`N:lib/core/engine/explore_url_parser.dart:180-197`）；只有名稱的是標題列；空的項目夜讀略過。 |
+| 發現網址的 JSON 寫法與樣式（`style`） | 一樣 | 陣列照 `title`、`url`、`style` 的 flex 欄位排；夜讀另外容許結尾多一個逗號（`N:lib/core/engine/explore_url_parser.dart:222`）與單一物件。 |
+| 發現網址是 JS | 一樣 | `<js>`、`@js:` 跑完的結果再照文字或 JSON 解析；出錯時列一個「ERROR:」分類，點了看原因。 |
+| 發現分類的快取與重新整理 | 一樣 | JS 算出的分類存著，鍵是書源網址加發現網址，改了發現網址自動重算（`L:help/source/BookSourceExtensions.kt:29-31, 68`、`N:lib/core/engine/explore_url_parser.dart:265`）；「重新整理分類」清掉重算。 |
+| 發現頁往下載入下一頁 | 一樣 | 捲到底頁碼加一，同網址去重，沒有新書就停（`N:lib/features/explore/explore_show_provider.dart:131`）。 |
+| 沒寫發現規則時用搜尋規則 | 一樣 | 發現的書單規則空著時整套用搜尋規則（`N:lib/core/engine/web_book/book_list_parser.dart:245-252`）。 |
+| 發現篩選（`exploreScreen`） | 一樣 | 兩邊都只存著，見「書源的欄位」。 |
+| 發現的書源分組與啟用發現 | 結果不對 | 分組與名稱篩選一樣；停用的書源開著「啟用發現」時 Legado 照列，夜讀不列，見 R20。夜讀另外照類型分開（ADR 0051）。 |
+| 發現書源的選單（編輯、置頂、登入、搜尋、重新整理、刪除） | 少一個選項 | 編輯、置頂、搜尋、重新整理、刪除都有；有登入網址的書源 Legado 多一項「登入」（`L:ui/main/explore/ExploreAdapter.kt:159-165`），夜讀沒有（`N:lib/features/explore/explore_page.dart:467-494`）。 |
 
 ### 登入
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| 網頁登入 | | |
-| 表單登入（文字、密碼、按鈕） | | |
-| 登入檢查（`loginCheckJs`） | | |
-| 看與刪登入標頭 | | |
-| 登入資訊加密存放 | | |
+| 網頁登入 | 一樣 | 打開登入網址、帶書源標頭，每載完一頁把 Cookie 存給書源（`L:ui/login/WebViewLoginFragment.kt`、`N:lib/features/source_login/source_browser_page.dart:141-165`）；跳到別的網站（統一登入）時夜讀把那個網站的 Cookie 併進書源的。 |
+| 表單登入（文字、密碼、按鈕） | 一樣 | 文字、密碼、按鈕三種；按鈕是網址就開瀏覽器、是程式就和書源的登入程式一起跑，`result` 是表單內容；打勾存表單再跑 `login`（`L:ui/login/SourceLoginDialog.kt:131-190`、`N:lib/core/source/source_login_session.dart:86-114`）。存表單時夜讀併進舊的（按鈕存的欄位留著），全部空白時 Legado 清掉已存的、夜讀不動。 |
+| 登入檢查（`loginCheckJs`） | 一樣 | 搜尋、發現、詳情、目錄、正文每次回來都先跑（`N:lib/core/engine/web_book/` 七處 `runLoginCheckJs`）。 |
+| 看與刪登入標頭 | 一樣 | 看、複製、刪；夜讀另有「登出」連表單與 Cookie 一起清。 |
+| 登入資訊加密存放 | 刻意不同 | Legado 用手機編號當鑰匙加密（`L:data/entities/BaseSource.kt:186-196`），夜讀不加密（ADR 0038，備份與同步也帶著，ADR 0039）。 |
 
 ### 書源校驗
 
@@ -384,6 +384,12 @@
 - 讀者會碰到：目錄頁只給「第 12 章」或沒有章名、正文頁才有完整章名的網站，書源在正文規則寫了 `title`。Legado 抓正文時把章名換成正文頁上的、存回目錄；夜讀目錄與正文上方一直是目錄頁的那個。
 - Legado：`L:model/webBook/BookContent.kt:66-77`，`title` 規則有結果就寫進章節並 `bookChapterDao.update`。
 - 夜讀：`N:lib/core/engine/web_book/content_parser.dart:44-77` 只讀 `content` 與 `nextContentUrl`；`ContentRule.title` 照收（`N:lib/core/models/source/book_source_rules.dart:249`），整個 `lib/` 沒有地方讀它。
+
+### R20 停用的書源開著「啟用發現」，發現頁不列（少數寫法才碰到）
+
+- 讀者會碰到：讀者把某個書源停用（不想讓它出現在搜尋），但留著「啟用發現」看它的排行與分類。Legado 的「啟用」與「啟用發現」各管各的，發現頁照列；夜讀停用就整個從發現頁消失，「啟用發現」開著也沒用。
+- Legado：`L:data/dao/BookSourceDao.kt:84-88`，發現頁只看 `enabledExplore = 1 and hasExploreUrl = 1`，不看 `enabled`。
+- 夜讀：`N:lib/core/models/source/book_source_logic.dart:551-556`，`canParticipateInDiscovery` 要 `enabled && enabledExplore && hasExploreUrl`，另外要校驗沒擋下；沒有 ADR 記這個決定。
 
 ## 少一個選項
 
