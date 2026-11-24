@@ -39,6 +39,19 @@ void main() {
         "<SCRIPT>function go(){} // 舊的\nlocation.href='/new/';</SCRIPT>",
         '/new/',
       ),
+      // 正規表示式裡的引號、斜線不是字串與註解。
+      (
+        "<script>var a = s.replace(/'/g, '').replace(/\"/g, '');"
+            "location.href='/new/';</script>",
+        '/new/',
+      ),
+      (
+        "<script>if (/^https?:\\/\\//.test(u)) {} location.href='/new/';"
+            '</script>',
+        '/new/',
+      ),
+      // 舊式的 `<!--` 只遮掉那一行。
+      ("<script><!--\nlocation.href='/new/';\n//--></script>", '/new/'),
       (
         '<html><head><meta http-equiv="refresh" '
             'content="0; url=https://new.example/home"></head></html>',

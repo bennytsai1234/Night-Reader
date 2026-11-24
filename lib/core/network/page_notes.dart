@@ -67,13 +67,17 @@ final RegExp _inlineScript = RegExp(
 );
 
 /// [code] 每個位置是不是最外層的程式：不在 `{}` 裡（函式、區塊），也不在
-/// 字串與註解裡。
+/// 字串、正規表示式與註解（含舊式的 `<!--` 那一行）裡。
 List<bool> _topLevelCode(String code) {
   final top = List<bool>.filled(code.length, false);
   var depth = 0;
   String? quote;
   var lineComment = false;
   var blockComment = false;
+  var regex = false;
+  var regexClass = false;
+  // 上一個有意義的字元：斜線前面是運算子、括號或開頭時是正規表示式。
+  String? prev;
   for (var i = 0; i < code.length; i++) {
     final c = code[i];
     final next = i + 1 < code.length ? code[i + 1] : '';
@@ -93,6 +97,20 @@ List<bool> _topLevelCode(String code) {
         i++;
       } else if (c == quote) {
         quote = null;
+        prev = c;
+      }
+      continue;
+    }
+    if (regex) {
+      if (c == '\\') {
+        i++;
+      } else if (regexClass) {
+        if (c == ']') regexClass = false;
+      } else if (c == '[') {
+        regexClass = true;
+      } else if (c == '/') {
+        regex = false;
+        prev = c;
       }
       continue;
     }
@@ -100,18 +118,28 @@ List<bool> _topLevelCode(String code) {
       lineComment = true;
     } else if (c == '/' && next == '*') {
       blockComment = true;
+    } else if (c == '<' && code.startsWith('<!--', i)) {
+      lineComment = true;
+    } else if (c == '/' && (prev == null || _beforeRegex.contains(prev))) {
+      regex = true;
     } else if (c == '"' || c == "'" || c == '`') {
       quote = c;
     } else if (c == '{') {
       depth++;
+      prev = c;
     } else if (c == '}') {
       if (depth > 0) depth--;
+      prev = c;
     } else {
       top[i] = depth == 0;
+      if (c.trim().isNotEmpty) prev = c;
     }
   }
   return top;
 }
+
+/// 斜線前面是這些字元時是正規表示式，不是除號。
+const String _beforeRegex = '(,=:[!&|?{};+-*%<>~^';
 
 /// `location.href = "…"`、`window.location = '…'`、`location.replace("…")`
 /// 這類。

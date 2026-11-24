@@ -225,9 +225,14 @@ Future<Map<String, Object?>> Function(CancelToken) _siteTask(
   String origin,
 ) => (_) async {
   final source = BookSource.fromJson(sourceJson);
-  Future<SitePage> fetch(String url) async {
+
+  /// [asSource] 是用書源的標頭與 Cookie 抓。
+  Future<SitePage> fetch(String url, {bool asSource = true}) async {
     try {
-      final response = await AnalyzeUrl(url, source: source).getStrResponse();
+      final response = await AnalyzeUrl(
+        url,
+        source: asSource ? source : null,
+      ).getStrResponse();
       return SitePage(
         status: response.raw.statusCode,
         finalUrl: response.url,
@@ -250,8 +255,12 @@ Future<Map<String, Object?>> Function(CancelToken) _siteTask(
     final base = Uri.tryParse(home.finalUrl ?? '$origin/');
     final next = target == null ? null : base?.resolve(target).toString();
     if (next != null && next.startsWith('http')) {
-      // 轉去的網址抓不到時照首頁判斷：網站本身是在的。
-      final followed = await fetch(next);
+      // 轉到別的網站（例如停放後轉到出售頁）時不帶書源的標頭與 Cookie：
+      // 那是別人的網站。轉去的網址抓不到時照首頁判斷：網站本身是在的。
+      final sameSite =
+          _site(Uri.tryParse(next)?.host ?? '') ==
+          _site(Uri.tryParse(origin)?.host ?? '');
+      final followed = await fetch(next, asSource: sameSite);
       if (followed.error == null) home = followed;
     }
   }
