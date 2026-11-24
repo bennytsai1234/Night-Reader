@@ -73,12 +73,14 @@ jobs:
           fi
           stable_tag="v${app_version}"
 
-          # 上一個發布（正式版或測試版的 tag）之後，有沒有改到會進 APK 的檔案；哪些算、標了
+          # 上一個發出去的版本（正式版或測試版，見 find_published_tag）之後，有沒有改到會進 APK 的檔案；哪些算、標了
           # Release-Notes: none 的提交不算，都由 tool/changelog.sh 判斷，和更新說明的檢查同一套。
           # 看的是整段而不只是這次推送，所以發版失敗、之後只推了測試修正時也會補發。
           has_unreleased_app_changes() {
             local last_tag files
-            last_tag="$(git describe --tags --abbrev=0 --first-parent --match 'v[0-9]*' "$GITHUB_SHA" 2>/dev/null)" || return 0
+            find_published_tag "$GITHUB_SHA"
+            last_tag="$published_tag"
+            [[ -n "$last_tag" ]] || return 0
             # 在 if 條件裡呼叫時 set -e 不生效，失敗要自己結束，免得被當成沒有改動而略過發版。
             if ! files="$(sh tool/changelog.sh app-files "$last_tag" "$GITHUB_SHA")"; then
               echo "::error::無法判斷 $last_tag 之後有沒有 App 改動。"
@@ -99,6 +101,21 @@ jobs:
             fi
             echo "::error::查詢 Release $1 失敗：$err"
             exit 1
+          }
+
+          # 上一個真的發出去的版本：沿第一父提交往回找 v* tag，跳過推了 tag、Release 卻沒建成
+          # 的（發布到一半失敗留下的）。找到的放進 published_tag，找不到是空字串。不在子殼裡
+          # 跑：release_exists 查詢失敗時的 exit 要結束整個步驟。
+          find_published_tag() {
+            local ref=$1 tag
+            published_tag=""
+            while tag="$(git describe --tags --abbrev=0 --first-parent --match 'v[0-9]*' "$ref" 2>/dev/null)"; do
+              if release_exists "$tag"; then
+                published_tag="$tag"
+                return 0
+              fi
+              ref="${tag}^"
+            done
           }
 
           # 正式版 tag 只有 vX.Y.Z；測試版 vX.Y.Z-beta.N 不參與正式版的版號檢查。
@@ -221,7 +238,12 @@ jobs:
           notes_base=""
           if [[ "$publish" == "true" ]]; then
             if [[ "$prerelease" == "true" ]]; then
-              notes_base="$(git describe --tags --abbrev=0 --first-parent --match 'v[0-9]*' "${target_sha}^")"
+              find_published_tag "${target_sha}^"
+              notes_base="$published_tag"
+              if [[ -z "$notes_base" ]]; then
+                echo "::error::找不到 $target_sha 之前發出去的版本，無法產生測試版說明。"
+                exit 1
+              fi
               notes="$(sh tool/changelog.sh titles "$notes_base" "$target_sha")"
               notes_mode=beta
             else
@@ -241,13 +263,14 @@ jobs:
           # Android versionCode 取發版那個提交的提交數：beta 與 main 都禁止強制推送、歷史不改寫，main 又只
           # 快轉到 beta 上的提交，兩邊是同一條歷史，提交數只增不減（ADR 0049）。正式版與測試版共用
           # 同一條序列，裝了測試版也能直接更新到之後的正式版。
-          # 只建測試 APK 時改取 beta 上最近一個發布（tag）的提交數：功能分支的提交合併時會 squash 成一個，
+          # 只建測試 APK 時改取 beta 上最近一個發出去的版本（有 Release 的 tag）的提交數：功能分支的提交合併時會 squash 成一個，
           # 分支自己的提交數常比之後的測試版還大，裝了測試 APK 就裝不回測試版；beta 最新提交也常比最近的
           # 發布多幾個只改文件、還沒發的提交。取最近發布的數字，測試 APK 和目前的測試版一樣大（Android
           # 允許同版本號覆蓋安裝），裝完測試 APK 還裝得回目前的測試版，之後的測試版、正式版都比它大。
           if [[ "$mode" == manual-test ]]; then
-            if last_release="$(git describe --tags --abbrev=0 --match 'v[0-9]*' origin/beta 2>/dev/null)"; then
-              build_number="$(git rev-list --count "$last_release")"
+            find_published_tag origin/beta
+            if [[ -n "$published_tag" ]]; then
+              build_number="$(git rev-list --count "$published_tag")"
             else
               build_number="$(git rev-list --count origin/beta)"
             fi
