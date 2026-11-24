@@ -80,9 +80,12 @@ class BackstageWebView {
 
   /// 網頁載入過的資源網址（瀏覽器的 Resource Timing：圖、程式、XHR、
   /// fetch）。WebView 套件收不到 Legado 用的 `onLoadResource`，改讀這份。
+  /// 順便把紀錄的上限加大（瀏覽器預設 250 筆，滿了之後新的資源不再記）。
   static const _loadedResourcesJs =
+      '(performance.setResourceTimingBufferSize && '
+      'performance.setResourceTimingBufferSize(5000), '
       'JSON.stringify(performance.getEntriesByType("resource")'
-      '.map(function (e) { return e.name; }))';
+      '.map(function (e) { return e.name; })))';
 
   /// [controller] 的網頁載入過、整段符合 [sourceRegex] 的資源網址；還沒有或
   /// 讀不到（網頁還在換頁）是 null。
@@ -218,9 +221,9 @@ class BackstageWebView {
           // SnifferWebClient，網頁載完只跑書源給的 JS，不交回網頁內容，
           // 等到符合的跳轉（[onNavigationRequest]）或逾時才結束。跳轉常在
           // 網頁跑了一陣子之後才發生（例如播放頁幾秒後才導向音訊）。
-          // 同時有 [sourceRegex] 的，也等網頁載入符合的資源、在網頁內容裡
-          // 找，先到的為準（Legado 兩條路都在 SnifferWebClient 裡、先到
-          // 先得）。
+          // 同時有 [sourceRegex] 的，也等網頁載入符合的資源（Legado 兩條路
+          // 都在 SnifferWebClient 裡、先到先得），並在網頁內容裡找（夜讀
+          // 另外的一條路），先到的為準。
           final regex = sourceRegex;
           final waitsForResource = regex != null && regex.isNotEmpty;
           if (overrideUrlRegex?.isNotEmpty ?? false) {
@@ -261,8 +264,9 @@ class BackstageWebView {
               ? javaScript!
               : 'document.documentElement.outerHTML';
 
-          // 等資源時書源的 JS 只跑一次（它可能點按鈕、捲頁），之後只讀資源
-          // 清單；這是跑出來的網頁內容，等到最後都沒等到資源時用。
+          // 等資源時書源的 JS 只跑一次（它可能點按鈕、捲頁），之後每一輪讀
+          // 資源清單與網頁內容；這是書源 JS 跑出來的內容，等到最後都沒等到
+          // 時交回。
           String? pageContent;
 
           void evaluateAndCheck() async {
@@ -277,27 +281,26 @@ class BackstageWebView {
                   return;
                 }
               }
-              if (!waitsForResource || pageContent == null) {
-                final result = await controller.runJavaScriptReturningResult(
-                  jsToRun,
-                );
-                if (result.toString().isNotEmpty &&
-                    result.toString() != 'null') {
-                  final content = webViewJsResult(result);
-                  if (!waitsForResource) {
-                    finish({'body': content, 'url': currentUrl, 'code': 200});
-                    return;
-                  }
-                  pageContent = content;
+              final firstRun = !waitsForResource || pageContent == null;
+              final result = await controller.runJavaScriptReturningResult(
+                firstRun ? jsToRun : 'document.documentElement.outerHTML',
+              );
+              if (result.toString().isNotEmpty && result.toString() != 'null') {
+                final content = webViewJsResult(result);
+                if (!waitsForResource) {
+                  finish({'body': content, 'url': currentUrl, 'code': 200});
+                  return;
+                }
+                if (firstRun) pageContent = content;
+                // 網址寫在網頁內容裡的（夜讀另外的一條路），找到就交回。
+                if (sourceIn(content, regex) case final source?) {
+                  finish({'body': source, 'url': currentUrl, 'code': 200});
+                  return;
                 }
               }
-              // 等到最後還沒載入符合的資源：在內容裡找，再沒有就交回內容。
+              // 等到最後都沒有：交回書源 JS 跑出來的內容。
               if (waitsForResource && pageContent != null && retryCount > 30) {
-                finish({
-                  'body': sourceIn(pageContent!, regex) ?? pageContent,
-                  'url': currentUrl,
-                  'code': 200,
-                });
+                finish({'body': pageContent, 'url': currentUrl, 'code': 200});
                 return;
               }
             } catch (e) {

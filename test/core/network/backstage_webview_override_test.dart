@@ -160,8 +160,9 @@ void main() {
     await tester.pump(const Duration(seconds: 61));
   });
 
-  testWidgets('when the resource never loads, an address in the page is '
-      'taken at the end', (tester) async {
+  testWidgets('an address written in the page is taken at once, as before', (
+    tester,
+  ) async {
     webView.page = '<video src="https://cdn.test/v.m3u8"></video>';
     Map<String, dynamic>? result;
     unawaited(
@@ -173,11 +174,30 @@ void main() {
     await tester.pump();
 
     webView.pageFinished('https://site.test/watch');
+    await tester.pump(const Duration(milliseconds: 1100));
+    expect(result?['body'], 'https://cdn.test/v.m3u8');
+
+    await tester.pump(const Duration(seconds: 61));
+  });
+
+  testWidgets('when nothing matches, the page is returned at the end', (
+    tester,
+  ) async {
+    Map<String, dynamic>? result;
+    unawaited(
+      BackstageWebView(
+        url: 'https://site.test/watch',
+        sourceRegex: r'.*\.m3u8',
+      ).getStrResponse().then((value) => result = value),
+    );
+    await tester.pump();
+
+    webView.pageFinished('https://site.test/watch');
     await tester.pump(const Duration(seconds: 10));
     expect(result, isNull, reason: '等的途中不交回');
 
     await tester.pump(const Duration(seconds: 25));
-    expect(result?['body'], 'https://cdn.test/v.m3u8');
+    expect(result?['body'], '<html>內容</html>');
 
     await tester.pump(const Duration(seconds: 61));
   });
