@@ -33,11 +33,13 @@ String searchResultIdentity(SearchBook book) =>
 String _nameKeyOf(SearchBook book) =>
     '${book.bookKind.keyPrefix}${normalizeSearchText(book.name)}';
 
+/// 精準搜尋留哪些書：書名或作者含關鍵字（同 Legado `SearchModel`），比之前
+/// 先拿掉繁簡與空白的差別。
 bool matchesPrecisionSearch(SearchBook book, String key) {
   final keyword = normalizeSearchText(key);
   if (keyword.isEmpty) return false;
-  return normalizeSearchText(book.name) == keyword ||
-      normalizeSearchText(book.author) == keyword;
+  return normalizeSearchText(book.name).contains(keyword) ||
+      normalizeSearchText(book.author).contains(keyword);
 }
 
 int searchRelevanceRank(SearchBook book, String key) {

@@ -184,7 +184,8 @@ void main() {
           name: 'a@text',
           bookUrl: 'a@href@put:{bid:i@text}',
         ),
-        ruleBookInfo: BookInfoRule(name: '@get:{bid}'),
+        // 寫了 canReName，詳情頁讀到的變數才會換上書名（同 Legado）。
+        ruleBookInfo: BookInfoRule(name: '@get:{bid}', canReName: '1'),
       ),
     );
 

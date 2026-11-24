@@ -53,11 +53,11 @@ class BookInfoParser {
         }
       }
 
-      // 書架上的書名與作者以使用者看到（可能改過）的為準，除非書源規則
-      // 宣告 canReName（同 legado）；搜尋結果進詳情時仍以詳情頁為準。
+      // 已經有書名、作者時不拿詳情頁的蓋掉，書源寫了 canReName 才換（同
+      // Legado BookInfo）：搜尋結果的書名常比詳情頁的乾淨（詳情頁多了
+      // 「《》最新章節」），書名加作者也是書架、同步與換源認書的身分。
       final keepNames =
-          book.isInBookshelf &&
-          (infoRule.canReName == null || infoRule.canReName!.trim().isEmpty);
+          infoRule.canReName == null || infoRule.canReName!.trim().isEmpty;
       String pick(String parsed, String current) =>
           parsed.isEmpty || (keepNames && current.isNotEmpty)
           ? current

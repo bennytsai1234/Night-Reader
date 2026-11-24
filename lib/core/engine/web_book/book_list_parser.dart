@@ -15,6 +15,8 @@ class BookListParser {
     required String body,
     required String baseUrl,
     required bool isSearch,
+    String? variable,
+    String? requestUrl,
     bool Function(String name, String author)? filter,
     bool Function(int size)? shouldBreak,
   }) => _parse(
@@ -22,6 +24,8 @@ class BookListParser {
     body: body,
     baseUrl: baseUrl,
     isSearch: isSearch,
+    variable: variable,
+    requestUrl: requestUrl ?? baseUrl,
     filter: filter,
     shouldBreak: shouldBreak,
   );
@@ -31,6 +35,8 @@ class BookListParser {
     required String body,
     required String baseUrl,
     required bool isSearch,
+    required String? variable,
+    required String requestUrl,
     bool Function(String name, String author)? filter,
     bool Function(int size)? shouldBreak,
   }) async {
@@ -43,6 +49,8 @@ class BookListParser {
         source: source,
         body: body,
         baseUrl: baseUrl,
+        bookUrl: requestUrl,
+        variable: variable,
         filter: filter,
       );
       return [?searchBook];
@@ -78,6 +86,8 @@ class BookListParser {
           source: source,
           body: body,
           baseUrl: baseUrl,
+          bookUrl: requestUrl,
+          variable: variable,
           filter: filter,
         );
         return [?searchBook];
@@ -104,6 +114,7 @@ class BookListParser {
           originName: source.bookSourceName,
           originOrder: source.customOrder,
           type: source.bookSourceType,
+          variable: variable,
         );
 
         final itemRule = AnalyzeRule(
@@ -176,15 +187,19 @@ class BookListParser {
   }
 
   /// 照詳情頁解析這一頁；書名作者不符 [filter]（精準搜尋、換源）或沒有書名
-  /// 時是 null（Legado `getInfoItem`）。
+  /// 時是 null（Legado `getInfoItem`）。[bookUrl] 是這本書的網址（見
+  /// `WebBook._requestUrl`），[baseUrl] 是回應的網址、補相對網址用。
   static Future<SearchBook?> _getInfoItem({
     required BookSource source,
     required String body,
     required String baseUrl,
+    required String bookUrl,
+    required String? variable,
     required bool Function(String name, String author)? filter,
   }) async {
     var book = Book(
-      bookUrl: baseUrl,
+      bookUrl: bookUrl,
+      variable: variable,
       origin: source.bookSourceUrl,
       originName: source.bookSourceName,
       originOrder: source.customOrder,
