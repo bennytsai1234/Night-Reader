@@ -455,6 +455,7 @@ class BookDetailProvider extends ChangeNotifier {
       final coverLocalPath = _book.coverLocalPath;
       final customCoverUrl = _book.customCoverUrl;
       final customCoverLocalPath = _book.customCoverLocalPath;
+      final before = _book.copyWith();
       final updatedBook = await _service.getBookInfo(_currentSource!, _book);
       updatedBook.isInBookshelf = wasInBookshelf;
       updatedBook.coverLocalPath = coverLocalPath;
@@ -462,14 +463,16 @@ class BookDetailProvider extends ChangeNotifier {
       updatedBook.customCoverLocalPath = customCoverLocalPath;
       _book = updatedBook;
       if (_fetchIssue == _FetchIssue.staleInfo) _fetchIssue = _FetchIssue.none;
-      await _bookDao.saveFetchedInfo(_book);
+      await _bookDao.saveFetchedInfo(_book, before: before);
     } catch (e) {
       AppLog.e('加載書籍詳情失敗: $e', error: e);
       if (_fetchIssue == _FetchIssue.none) _fetchIssue = _FetchIssue.staleInfo;
+      // 抓不到詳情：只補上目錄網址的預設值（詳情頁就是目錄頁），其他照舊。
+      final before = _book.copyWith();
       if (_book.tocUrl.isEmpty) {
         _book.tocUrl = _book.bookUrl;
       }
-      await _bookDao.saveFetchedInfo(_book);
+      await _bookDao.saveFetchedInfo(_book, before: before);
     }
   }
 

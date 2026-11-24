@@ -277,6 +277,7 @@ void main() {
     final meanwhile = (await db.bookDao.getByUrl(_bookUrl))!
       ..totalChapterNum = 12
       ..lastCheckCount = 2
+      ..latestChapterTitle = '第十二章'
       ..chapterIndex = 5
       ..durChapterTitle = '第6章';
     await db.bookDao.upsert(meanwhile);
@@ -287,6 +288,8 @@ void main() {
     expect(stored.intro, '詳情頁的簡介');
     expect(stored.totalChapterNum, 12);
     expect(stored.lastCheckCount, 2);
+    // 詳情頁沒給最新章節：留著檢查更新剛寫的。
+    expect(stored.latestChapterTitle, '第十二章');
     expect(stored.chapterIndex, 5);
     expect(stored.durChapterTitle, '第6章');
   });

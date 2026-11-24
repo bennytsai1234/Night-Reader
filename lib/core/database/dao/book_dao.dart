@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import '../../models/book/book.dart';
@@ -80,6 +82,8 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
   /// 打開畫面時讀的，之後背景檢查更新、同步、書籍詳情寫進去的不被它蓋掉。
   /// 資料庫還沒有這本書（剛從搜尋打開、還沒存過）時整筆新增 [book]。
   Future<void> writeFields(Book book, BooksCompanion fields) {
+    // 一欄都不用寫時只確定這本書在資料庫裡（空的更新 drift 不收）。
+    if (fields.toColumns(false).isEmpty) return insertIfMissing(book);
     return transaction(() async {
       final updated = await (update(
         books,
@@ -92,26 +96,38 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
   Future<void> insertIfMissing(Book book) =>
       into(books).insert(_row(book), mode: InsertMode.insertOrIgnore);
 
-  /// 書籍詳情向書源重抓的資訊（[info]：手上的書填上詳情頁的欄位）寫回，只寫
-  /// 詳情頁給得出的那幾欄（書名作者照書源規則與 `canReName`、分類、字數、
-  /// 最新章節、簡介、封面、目錄網址，與規則寫的變數、閱讀設定）：抓詳情要
-  /// 幾秒，這段期間背景檢查更新寫的章數、同步套用的進度不被手上的舊資料蓋
-  /// 掉。資料庫還沒有這本書時整筆新增。
-  Future<void> saveFetchedInfo(Book info) => writeFields(
-    info,
-    BooksCompanion(
-      name: Value(info.name),
-      author: Value(info.author),
-      kind: Value(info.kind),
-      wordCount: Value(info.wordCount),
-      latestChapterTitle: Value(info.latestChapterTitle),
-      intro: Value(info.intro),
-      coverUrl: Value(info.coverUrl),
-      tocUrl: Value(info.tocUrl),
-      variable: Value(info.variable),
-      readConfig: Value(info.readConfig),
-    ),
-  );
+  /// 書籍詳情向書源重抓的資訊（[info]：抓之前的 [before] 填上詳情頁的欄位）
+  /// 寫回，只寫這次真的改了的那幾欄（書名作者照書源規則與 `canReName`、分類、
+  /// 字數、最新章節、簡介、封面、目錄網址，與規則寫的變數、閱讀設定）：抓
+  /// 詳情要幾秒，這段期間背景檢查更新寫的章數與最新章節、同步套用的進度、
+  /// 讀者在編輯資訊改的書名，不被抓之前那份的舊值蓋掉。資料庫還沒有這本書
+  /// 時整筆新增。
+  Future<void> saveFetchedInfo(Book info, {required Book before}) {
+    Value<T> changed<T>(T now, T was) =>
+        now == was ? const Value.absent() : Value(now);
+    String? configOf(Book book) =>
+        book.readConfig == null ? null : jsonEncode(book.readConfig!.toJson());
+    return writeFields(
+      info,
+      BooksCompanion(
+        name: changed(info.name, before.name),
+        author: changed(info.author, before.author),
+        kind: changed(info.kind, before.kind),
+        wordCount: changed(info.wordCount, before.wordCount),
+        latestChapterTitle: changed(
+          info.latestChapterTitle,
+          before.latestChapterTitle,
+        ),
+        intro: changed(info.intro, before.intro),
+        coverUrl: changed(info.coverUrl, before.coverUrl),
+        tocUrl: changed(info.tocUrl, before.tocUrl),
+        variable: changed(info.variable, before.variable),
+        readConfig: configOf(info) == configOf(before)
+            ? const Value.absent()
+            : Value(info.readConfig),
+      ),
+    );
+  }
 
   /// 存這本書自己的閱讀設定（替換規則、重新分段這類開關）。
   Future<void> saveReadConfig(Book book) =>
