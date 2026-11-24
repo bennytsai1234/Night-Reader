@@ -156,7 +156,7 @@
 | K10 | 自動備份（每天一次） | 少一個選項 | Legado 每天第一次開 App 或離開閱讀器時自動備份到資料夾與 WebDAV；夜讀只有手動，同步不留過去的版本 |
 | K11 | 匯出書架、從檔案或網址匯入書架 | 結果不對 | Legado 匯出的書架夜讀匯不進來，夜讀匯出的 Legado 也匯不進去 |
 | K12 | 匯出書（TXT、EPUB；套不套替換規則、含不含章名、章節範圍） | 結果不對 | Legado 匯出預設套替換規則，夜讀匯出原文；EPUB、章節範圍、不含章名、編碼夜讀都沒有 |
-| K13 | 夜讀匯出的替換規則給 Legado 讀 | 結果不對 | 夜讀備份裡的書架與替換規則把開關寫成 1／0，Legado 還原時這兩份整份讀不進去 |
+| K13 | 夜讀匯出的替換規則給 Legado 讀 | 結果不對 | 夜讀備份的開關寫成 1／0：Legado 還原時書架與替換規則整份讀不進去，書源只剩名稱與網址、規則全空，還蓋掉 Legado 裡同網址的書源 |
 | K14 | `legado://` 匯入連結（替換規則、加入書架） | 結果不對 | `legado://import/addToBookshelf` 在 Legado 是一本書的網址，夜讀當成書架檔下載，加不進書架 |
 
 ## 結果不對
@@ -287,18 +287,18 @@
 - 夜讀：匯出存著的原文，只拿掉插圖標記（`lib/core/backup/export_book_service.dart:42-111`）。
 - 修的時候注意：Legado 的「套替換規則」是匯出時可以關的選項，選項本身列在「少一個選項」。
 
-#### K13　夜讀的備份在 Legado 還原不了書架與替換規則（功能結果錯）
+#### K13　夜讀的備份在 Legado 還原，書源變成空殼、書架與替換規則進不去（資料少了或錯了）
 
-- 讀者會看到：從夜讀換回 Legado，或兩邊一起用，在 Legado 選夜讀的備份檔還原：書源進得去，書架與替換規則跳出「讀取文件出錯」，一條都沒進去。
-- Legado：備份裡每一份 JSON 整份用 Gson 讀，任何一欄型別不對整份放棄（`legado:help/storage/Restore.kt:295-312`）；Gson 沒有另外註冊布林值的讀法（`legado:utils/GsonExtensions.kt:29-39`），`1`、`0` 讀成布林值會失敗。Legado 不看 manifest，夜讀備份的檔名它都認得。
-- 夜讀：替換規則的開關寫成 `1`／`0`（`lib/core/models/replace_rule.dart:160-164`），書的 `canUpdate`、`isInBookshelf` 也是，`readConfig` 寫成一段字串而不是物件（`lib/core/models/book/book_serialization.dart:61-69`）。書籤欄位名和 Legado 不同（夜讀寫 `chapterTitle`、`charOffset`、`excerpt`，Legado 讀 `chapterName`、`chapterPos`、`bookText`），進得去但章內位置是開頭、原文是空的。
+- 讀者會看到：從夜讀換回 Legado，或兩邊一起用，在 Legado 選夜讀的備份檔還原：書架與替換規則跳出「讀取文件出錯」，一條都沒進去；書源進得去，但每個只有名稱、網址、分組，搜尋、目錄、正文的規則全是空的，Legado 裡原本就有的同一個網址的書源被它蓋掉，原本能用的也壞了。
+- Legado：備份裡每一份 JSON 整份用 Gson 讀，任何一欄型別不對整份放棄（`legado:help/storage/Restore.kt:295-312`）；Gson 沒有另外註冊布林值的讀法（`legado:utils/GsonExtensions.kt:29-39`），`1`、`0` 讀成布林值會失敗。Legado 不看 manifest，夜讀備份的檔名它都認得。書源那份讀失敗時改用 Legado 2.0 舊格式的讀法（`legado:help/storage/Restore.kt:134-142`、`legado:help/storage/ImportOldData.kt:163-240`），只對得上名稱、網址、分組、登入這些同名欄位，規則找的是舊欄位名（`ruleSearchList`、`ruleBookContent`…），寫進資料庫時同網址的直接取代（`legado:data/dao/BookSourceDao.kt:258-259`）。
+- 夜讀：書源的 `enabled`、`enabledExplore`、`enabledCookieJar` 寫成 `1`／`0`（`lib/core/models/source/book_source_serialization.dart:47-49`），替換規則的開關也是（`lib/core/models/replace_rule.dart:160-164`），書的 `canUpdate`、`isInBookshelf` 也是，`readConfig` 寫成一段字串而不是物件（`lib/core/models/book/book_serialization.dart:61-69`）。書籤欄位名和 Legado 不同（夜讀寫 `chapterTitle`、`charOffset`、`excerpt`，Legado 讀 `chapterName`、`chapterPos`、`bookText`），進得去但章內位置是開頭、原文是空的。
 - 修的時候注意：改成 `true`／`false` 時，夜讀自己讀舊備份與同步資料要兩種都認（`readJsonBool` 已經兩種都認）。
 
 #### K14　`legado://import/addToBookshelf` 連結加不進書架（功能結果錯）
 
-- 讀者會看到：網頁或書源給的「加入閱讀書架」連結，在夜讀打開後提示「辨識為書架資料」，按下匯入回「未找到可匯入的書架資料」。
+- 讀者會看到：網頁或書源給的「加入閱讀書架」連結，在夜讀打開後提示「辨識為書架資料」，按「匯入書架」回「匯入書架失敗：資料格式不對」。
 - Legado：`src` 是一本書的詳情頁網址；照網址的網站找啟用的書源（或書源的 `bookUrlPattern`），抓詳情後問要不要加入書架（`legado:ui/association/OnLineImportActivity.kt:84-86`、`legado:ui/association/AddToBookshelfDialog.kt:103-140`）。
-- 夜讀：這個路徑當成書架檔，下載 `src` 後照夜讀的書架格式解析（`lib/features/association/handlers/uri_association_handler.dart:31`、`lib/features/association/handlers/association_dialog_helper.dart:106-115`），拿到的是網頁，解析不出書。
+- 夜讀：這個路徑當成書架檔，下載 `src` 後照夜讀的書架格式解析（`lib/features/association/handlers/uri_association_handler.dart:31`、`lib/features/association/handlers/association_dialog_helper.dart:106-115`），拿到的是網頁，當 JSON 解失敗（`lib/core/backup/bookshelf_exchange_service.dart:112-113`）。
 
 ## 少一個選項
 
