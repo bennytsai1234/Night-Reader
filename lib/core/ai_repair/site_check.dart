@@ -132,7 +132,7 @@ SiteCheck judgeSite({
       missing.error == null &&
       (missing.status ?? 0) < 400 &&
       shell.length < _shellLength &&
-      !body.contains('<script') &&
+      !_scriptTag.hasMatch(body) &&
       digestPage(missing.body) == shell) {
     return SiteCheck(
       SiteVerdict.gone,
@@ -162,6 +162,9 @@ const int _parkedLength = 4000;
 /// 精簡後短於這個字數的頁面才算空殼：每個網址都回同一份大網頁的，可能是
 /// 單頁式網站，交給 AI 判斷。
 const int _shellLength = 1000;
+
+/// 頁面裡有 `<script>`（HTML 的標籤不分大小寫）。
+final RegExp _scriptTag = RegExp(r'<script\b', caseSensitive: false);
 
 String _site(String host) => registrableDomain(host) ?? host;
 
