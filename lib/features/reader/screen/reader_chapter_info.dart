@@ -103,7 +103,8 @@ final class ReaderChapterInfo {
     return _lastInfoTarget = ReaderInfoTarget(
       chapterIndex: chapterIndex,
       chapterCount: loaded > 0 ? loaded : _book.totalChapterNum,
-      title: chapterTitleAt(chapterIndex),
+      // 骨架照換上來的那個章名量（已載好的章是套過標題規則的）。
+      title: displayTitleAt(chapterIndex),
       shares: runtime?.chapterShares.value,
     );
   }
