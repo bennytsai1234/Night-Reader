@@ -35,7 +35,7 @@
 |---|---|---|
 | 預設的 JSoup 寫法（`class.`、`id.`、`tag.`、`text.`、`children`、索引 `.0`、`!0`、`[0:3]`、`[-1]`） | 一樣 | 關鍵字與索引寫法都照 Legado 移植（`N:lib/core/engine/parsers/css/analyze_by_css_support.dart:1124-1380`）。 |
 | `@css:` | 一樣 | |
-| XPath（`@XPath:`、`/` 開頭） | 拿不準 | 判斷模式與 `&&`、`\|\|`、`%%` 一樣；XPath 本身用的套件不同，支援哪些函式沒有逐一對，見檔尾。 |
+| XPath（`@XPath:`、`/` 開頭） | 結果不對 | 判斷模式與 `&&`、`\|\|`、`%%` 一樣；逐一對過 JsoupXpath 2.5.3（Legado 用的），條件的函式與運算子、帶參數的函式、`..`、三個軸、`text()` 只取自己的字都不同，已修（#571）。 |
 | JSONPath（`@json:`、`$.`、`$[`） | 結果不對 | 路徑取到一整個陣列時，Legado 每一項一行，夜讀變成 `[甲, 乙]` 一段字，見 R4。其他（`{$.…}` 內嵌、沒有前綴時照內容判斷）一樣。 |
 | 正則（`:` 開頭的整段比對、`##正則##替換`、`##…###` 只換第一個） | 結果不對 | `###` 兩邊回的東西不同，見 R3；`:` 開頭整段比對與 `##` 取代一樣。 |
 | 規則 JS（`@js:`、`<js></js>`，接在規則後面處理結果） | 一樣 | 切段方式相同；`@js:` 之後整段都是 JS。 |
@@ -262,7 +262,7 @@
 
 輕重分三級：**抓不到**（讀者拿不到東西）、**抓錯或抓不全**、**少數寫法才碰到**。
 
-### R1 書源的封面載不出來：沒帶書源的標頭、沒跑封面解密（抓錯或抓不全）
+### R1 書源的封面載不出來：沒帶書源的標頭、沒跑封面解密（抓錯或抓不全）（已修，#578）
 
 - 讀者會碰到：網站擋盜連（要帶 `Referer` 或書源標頭裡的 Cookie、瀏覽器標識）、或封面網址後面接了網址選項（`https://…/a.jpg,{"headers":{"Referer":"…"}}`）的書源，搜尋結果、書籍詳情與書架上的封面一律是載不出來的預設封面；書源寫了封面解密（`coverDecodeJs`）的，抓到的是加密過的位元組，一樣載不出來。
 - Legado：封面照書源組一個請求（`L:help/glide/OkHttpStreamFetcher.kt:67-77`：照 `sourceOrigin` 找回書源，`AnalyzeUrl(url, source)` 帶上書源標頭、網址選項的標頭與 Cookie），抓到後交給 `coverDecodeJs`（`L:utils/ImageUtils.kt:40-55, 61-71`，`result` 是抓到的資料、`book`、`src` 都綁好）。畫面傳書源進去的地方：`L:ui/widget/image/CoverImageView.kt:196-213`。
@@ -302,7 +302,7 @@
 - Legado：`L:model/analyzeRule/AnalyzeByJSoup.kt:270-276`，`if (url.isBlank() || textS.contains(url)) continue`。
 - 夜讀：`N:lib/core/engine/parsers/css/analyze_by_css_helper.dart:81-87`，只略過空的。
 
-### R7 網頁載入時等某個資源（`sourceRegex`）：夜讀在網頁內容裡找，不是等網頁真的去抓的網址（少數寫法才碰到）
+### R7 網頁載入時等某個資源（`sourceRegex`）：夜讀在網頁內容裡找，不是等網頁真的去抓的網址（少數寫法才碰到）（已修，#578）
 
 - 讀者會碰到：書源開了 `webView`，再寫 `sourceRegex` 等網頁用程式去抓某個資源（常見的是正文或音訊的 API 網址、`.m3u8`），這個網址沒有寫在 HTML 裡、是網頁跑起來才組出來的時候，Legado 拿得到，夜讀找不到，拿到的是整頁 HTML，正文是一頁網頁原始碼或抓不到。
 - Legado：`L:help/http/BackstageWebView.kt:282-293`，`onLoadResource` 每載入一個資源就比對 `resUrl.matches(sourceRegex)`（整個網址要符合），符合時回那個網址；正文的 `sourceRegex` 從 `L:model/webBook/WebBook.kt:334-337` 傳進去。
@@ -443,8 +443,6 @@
 
 ## 拿不準
 
-- **XPath**：判斷模式與組合一樣，但 Legado 用 JXDocument、夜讀用 `xpath_selector`，支援的函式（`text()`、`contains()`、位置、軸）沒有逐一對（`N:lib/core/engine/parsers/analyze_by_xpath.dart`、`L:model/analyzeRule/AnalyzeByXPath.kt`）。
-- **R7 的補法**：在網頁裡讀 `performance.getEntriesByType('resource')` 能不能拿到所有資源網址（含 iframe、XHR 之後才發的），沒有試。
 - **規則 JS 的 `java.put` 寫進書源層的快取**（`N:lib/core/engine/js/extensions/js_extensions.dart:73-112`）：讀甲書時存的值，讀乙書時 `java.get` 會拿到，Legado 拿到空的；沒找到會因此出錯的書源。
 - **`@put` 的值是空的時**：Legado 照樣存空字串，夜讀不存、留著舊值（`N:lib/core/engine/analyze_rule/analyze_rule_string.dart:38-45`）；影響多大沒查。
 - **刻意不同，但只寫在程式註解或畫面規格、沒有 ADR**：照規則要有 ADR 才算「刻意不同」，這幾處先放這裡，要不要補 ADR 由使用者定。
