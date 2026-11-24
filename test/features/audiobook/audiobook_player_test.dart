@@ -115,6 +115,20 @@ void main() {
     expect(sync.opened, [book.bookUrl]);
   });
 
+  test('編輯書源改了網址回來，播放器手上的書換成新網址，已下載的集數照新的書本資料夾找', () async {
+    await player.open(book);
+    await bookDao.moveOrigin(
+      book.origin,
+      'https://audio-new.test',
+      toName: '新書源',
+    );
+
+    await player.reloadBookOrigin();
+
+    expect(player.book!.origin, 'https://audio-new.test');
+    expect(player.book!.originName, '新書源');
+  });
+
   test('開書還沒讀到目錄時，畫面問有沒有上一集、下一集不會出錯', () async {
     // 開書先通知畫面「載入中」，這時目錄還是空的、集數已經是上次聽的那集；
     // 資料庫在另一個 isolate，回覆前畫面會照這個狀態畫一幀播放鈕。

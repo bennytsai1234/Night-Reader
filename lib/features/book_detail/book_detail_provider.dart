@@ -432,9 +432,12 @@ class BookDetailProvider extends ChangeNotifier {
     final stored = await _bookDao.getByUrl(_book.bookUrl);
     if (_disposed) return;
     if (stored != null) {
+      // 書本資料夾跟著搬了，存好的封面路徑一起換。
       _book
         ..origin = stored.origin
-        ..originName = stored.originName;
+        ..originName = stored.originName
+        ..coverLocalPath = stored.coverLocalPath
+        ..customCoverLocalPath = stored.customCoverLocalPath;
     }
     // 只重讀書源，書籍資訊與目錄沒有重抓：抓書源的結果照舊。
     await _loadSource();

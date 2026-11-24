@@ -289,6 +289,22 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 這本書在播或暫停中。
   bool isCurrent(Book other) => _book?.bookUrl == other.bookUrl;
 
+  /// 播放頁進去編輯書源回來：書源可能改了網址，資料庫裡這本書已經改記新
+  /// 網址、書本資料夾也搬了。照資料庫換上，換集時才找得到已下載的集數。
+  Future<void> reloadBookOrigin() async {
+    final book = _book;
+    if (book == null) return;
+    final stored = await _books.getByUrl(book.bookUrl);
+    if (stored == null || !identical(book, _book)) return;
+    if (stored.origin == book.origin) return;
+    book
+      ..origin = stored.origin
+      ..originName = stored.originName
+      ..coverLocalPath = stored.coverLocalPath
+      ..customCoverLocalPath = stored.customCoverLocalPath;
+    notifyListeners();
+  }
+
   // --- 開書與選集 ---
 
   /// 開 [book] 來聽。同一本已經開著時不打斷，給了 [chapterIndex] 才換到那一集；
