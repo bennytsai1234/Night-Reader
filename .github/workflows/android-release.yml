@@ -419,13 +419,13 @@ jobs:
   # 匯入一本 TXT、開書、進「閱讀偏好」（integration_test/ios_smoke_test.dart）。沒過就不建、
   # 不附 IPA，Android 版照常發。模擬器只跑得了開發版，只有正式版才出的錯抓不到。
   # 和 Android 的驗證、建 APK 同時跑。發版排隊不取消，模擬器卡住會擋住之後每一次發版，
-  # 所以設上限。
+  # 所以設上限；平常 9 分鐘，GitHub 的 macOS 機器忙時建置慢一倍、要 20 分鐘。
   ios-smoke:
     name: iOS simulator smoke test
     needs: plan-release
     if: needs.plan-release.outputs.should_build == 'true'
     runs-on: macos-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
 
     steps:
       - name: Checkout release source

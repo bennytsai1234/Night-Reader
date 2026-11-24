@@ -4,10 +4,6 @@
 
 到下一個正式版為止只收穩、不開新功能線，照下面的階段走；每一項定了什麼在 `docs/proposals/roadmap.md`。
 
-## 第二階段：修已知的
-
-- **iPhone 版加一個最小的自動檢查**：iPhone 版的下載次數約是 Android 版的一半，卻從沒打開驗過；發版的自動流程在 iPhone 模擬器上打開夜讀，走一遍進書架、匯入一本 TXT、開書、進設定，打不開或閃退就擋下。（分支 ci/ios-smoke-test）
-
 ## 第三階段：清單回來
 
 - **合併兩邊的全面檢查**：使用者另外讓 GPT 照五份清單各讀一遍、開成標 `auto-audit` 的 issue；等兩邊都讀完，照 `docs/agents/audit-triage.md` 逐筆核對、和 Claude 讀的合成一份。在這之前「處理巡檢」不動這些 issue。
