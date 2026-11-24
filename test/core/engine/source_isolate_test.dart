@@ -784,6 +784,33 @@ void main() {
       expect(await _evaluateJs('java.ajaxAll([]).length'), '0');
     });
 
+    // Legado 的 java.connect(url, header) 收的是 JSON 文字（Gson 寬鬆讀），
+    // 書源寫 `JSON.stringify({...})` 或直接一段 JSON；物件照樣收。
+    test('java.connect sends headers given as JSON text like Legado', () async {
+      expect(
+        await _evaluateJs(
+          'java.connect("$baseUrl/echo", \'{"X-Token":"text"}\').body()',
+        ),
+        'echo:text|',
+      );
+      expect(
+        await _evaluateJs(
+          'java.connect("$baseUrl/echo", JSON.stringify({"X-Token": "s"})).body()',
+        ),
+        'echo:s|',
+      );
+      expect(
+        await _evaluateJs(
+          'java.connect("$baseUrl/echo", {"X-Token": "map"}).body()',
+        ),
+        'echo:map|',
+      );
+      expect(
+        await _evaluateJs('java.connect("$baseUrl/echo", "not json").body()'),
+        'echo:null|',
+      );
+    });
+
     // Legado 的 java.importScript 原樣交出腳本，由書源自己 eval；腳本裡的函式
     // 與變數之後的規則叫得到。
     test(

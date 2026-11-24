@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:archive/archive.dart';
 import 'package:intl/intl.dart';
 
 import '../js_extensions.dart';
@@ -7,6 +6,7 @@ import 'js_blocking_tasks.dart';
 import 'js_jsoup_http.dart';
 
 import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/source/lenient_json.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
@@ -200,21 +200,6 @@ extension JsNetworkExtensions on JsExtensions {
       return code;
     });
 
-    // ─── java.getZipByteArrayContent(url, innerPath) ─────────────
-    onBlocking('getZipByteArrayContent', (payload) {
-      if (payload is! List || payload.length < 2) return null;
-      final url = payload[0].toString();
-      if (!url.startsWith('http')) return null;
-      try {
-        final bytes =
-            BlockingCall.run(responseBytes(_analyzeUrl(url))) as Uint8List;
-        final file = ZipDecoder().decodeBytes(bytes).findFile('${payload[1]}');
-        return file?.content as List<int>?;
-      } catch (_) {
-        return null;
-      }
-    });
-
     // ─── java.getWebViewUA — 手機內建瀏覽器的標識，還沒讀到時用預設 ──
     runtime.onMessage(
       'getWebViewUA',
@@ -308,6 +293,15 @@ extension JsNetworkExtensions on JsExtensions {
     final rawHeaders = payload[1];
     if (rawHeaders is Map) {
       return Map<String, dynamic>.from(rawHeaders);
+    }
+    // Legado 收 JSON 文字，用 Gson 寬鬆讀；讀不成物件時當成沒有標頭。
+    if (rawHeaders is String) {
+      try {
+        final decoded = decodeLenientJson(rawHeaders, numbersAsText: true);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } on FormatException {
+        // 不是 JSON。
+      }
     }
     return <String, dynamic>{};
   }
