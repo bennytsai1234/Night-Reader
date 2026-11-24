@@ -21,7 +21,7 @@
 | `docs/design/screens.md` | 全文；書架、關於夜讀、背景工作逐條對；其他段只比對畫面字 | 3 |
 | `docs/design/website.md` | 全文；功能數 | 0 |
 | ADR 索引 | `docs/adr/README.md` 與 `docs/adr/` 每個檔逐一比對；所有文件、程式、腳本裡寫到的 ADR 號碼都對過有這一份；被取代的幾份開頭有沒有標 | 1 |
-| 給 agent 看的文件 | `AGENTS.md`、`DESIGN.md`、`CODING_STANDARDS.md`、`docs/agents/` 十七份全文，寫到的路徑、指令、函式與設定逐一對程式；ADR 本文、`GLOSSARY.md`、`docs/state-machines.md` 只機械比對（寫到的路徑與類別、函式名稱在不在程式裡），沒逐條對行為；`DESIGN.md` 的原則只抽查「我的」九個入口；`docs/design/` 的日期與經過照 `DESIGN.md` 自己的規則評 | 6 |
+| 給 agent 看的文件 | `AGENTS.md`、`DESIGN.md`、`CODING_STANDARDS.md`、`docs/agents/` 十七份全文，寫到的路徑、檔案、指令、函式與類別逐一對過還在，數值與行為只抽查（候選圖的預設風格與玻璃、崩潰日誌最多 50 份、「我的」九個入口、推送前檢查、PR 標題長度）；ADR 本文、`GLOSSARY.md`、`docs/state-machines.md` 只機械比對（寫到的路徑與類別、函式名稱在不在程式裡），沒逐條對行為；`docs/design/` 的日期與經過照 `DESIGN.md` 自己的規則評 | 6 |
 | CI 與腳本 | 全文：`.github/workflows/` 四份、`.githooks/` 三支、`tool/changelog.sh`、`flutter_test.sh`、`skill_refs.sh`；`frame_budget_compare.sh` 只讀檔頭與參數；`tool/` 其餘只對過每一支都有文件或程式指到、文件寫的用法與參數；四份 workflow 的 Flutter 版本一致（3.47.2）；跑過 `changelog_test.sh`、`frame_budget_compare_test.sh`、`skill_refs.sh`，都通過 | 0（兩處檢查的缺口併在第 8、13 筆） |
 | 沒排進分段的程式 | `lib/features/` 17 個、`lib/core/` 31 個資料夾，`lib/core/source/` 9、`storage/` 15、`utils/` 12 個檔，逐一對 `docs/agents/auto-audit.md` 的分段表；表上寫的檔名反過來也都對過還在 | 交辦範圍內 0；範圍外 3 處 |
 
@@ -141,7 +141,7 @@
 #### 11. ADR 0001 與索引說自行維護「三個 fork」，`third_party/` 其實有四個
 
 - **文件寫的**：「自行維護 flutter_tts、flutter_js、file_picker 三個 fork」（`docs/adr/0001-maintain-third-party-plugin-forks.md:1`、`docs/adr/README.md:105`），本文的理由是上游用了 AGP 9 拿掉的 Kotlin 設定（`0001…md:3`）。
-- **程式做的**：`xpath_selector` 也放在 `third_party/`、自己維護（`pubspec.yaml:53-56`：「自行維護（源自 3.0.2），見 third_party/xpath_selector/PATCHES.md」，`:131-133` 連 `xpath_selector_html_parser` 也換成這一份），#214、#217 為了 XPath 照 Legado 改的，理由和 ADR 0001 的不同；`docs/` 裡沒有任何一份寫到它。
+- **程式做的**：`xpath_selector` 也放在 `third_party/`、自己維護（`pubspec.yaml:53-56`：「自行維護（源自 3.0.2），見 third_party/xpath_selector/PATCHES.md」，`:131-133` 連 `xpath_selector_html_parser` 也換成這一份），#214、#217 為了 XPath 照 Legado 改的，理由和 ADR 0001 的不同；`docs/` 裡沒有任何一份寫到它。`a21f85a4`（「third_party 的 fork 是四個，不是三個」）只把 `AGENTS.md` 那句改成「各 fork」，ADR 與索引沒跟著改。
 - **同一個原因**：巡檢的分段表只排了 `third_party/flutter_js/`（`docs/agents/auto-audit.md:25`），另外三個的修補沒有段會看，見「沒排進分段的程式」。
 - **該改哪一邊**：改文件，ADR 0001 與索引補上 `xpath_selector` 與它的理由；要併進 0001 還是另寫一份由使用者定。
 
@@ -158,15 +158,15 @@
 - **同一個原因**：推送前的 `tool/skill_refs.sh` 只認「`` `名稱` 技能 ``」這種寫法（`tool/skill_refs.sh:13`），`/名稱` 的寫法查不到，所以沒擋下來。
 - **該改哪一邊**：改文件，拿掉指向沒裝的技能的句子與「Wayfinding 操作」一段；`triage-labels.md` 與 `AGENTS.md`「Agent skills」要留多少由使用者定。
 
-#### 14. `DESIGN.md` 與 `docs/design/` 寫了選定的日期與來回的經過，違反 `DESIGN.md` 自己「規格裡不寫經過」
+#### 14. `docs/design/` 寫了選定的日期與來回的經過，違反 `DESIGN.md` 自己「規格裡不寫經過」
 
 - **文件寫的規則**：「理由寫在 ADR，規格裡不寫經過。」（`DESIGN.md:5`）
-- **實際寫的**：只算日期就有 `docs/design/screens.md` 26 處、`components.md` 13、`appearance.md` 4、`website.md` 3、`reader.md` 2、`audiobook.md` 2，`DESIGN.md` 本身 5 處；多半跟著「使用者在候選圖上選了甲，否決了……」的經過。例：
+- **實際寫的**：只算日期就有 `docs/design/screens.md` 26 處、`components.md` 13、`appearance.md` 4、`website.md` 3、`reader.md` 2、`audiobook.md` 2；多半跟著「使用者在候選圖上選了甲，否決了……」的經過。例：
   - `docs/design/components.md:22`「2026-11-13 使用者在候選圖上選了「前幾行照常、最後一行可拖」，沒選「整段排成一行拖」……」
   - `docs/design/components.md:28`「使用者 2026-11-10 在動畫儀表板上選；否決過：選中換實心、一律實心。」
   - `DESIGN.md:42`「改分組卡片的圓角與進度線」一條裡「2026-11-19 使用者重開書架……書卡的圓角試過 0、4、26……分頁列置中 2026-11-20 改成外觀設定的一種」。
-- **同一類**：`docs/agents/` 有 20 處日期（`phone.md` 5、`environment.md` 4、`ai-repair-runs.md` 3 等），多是「某天踩過」的理由，`auto-audit.md` 的「文件」那一項也算沉積。`AGENTS.md` 要把使用者選的「寫進 `docs/design/`」，寫的是選了什麼，不衝突。
-- **該改哪一邊**：改文件，`docs/design/` 與 `DESIGN.md` 只留選了什麼；否決過的寫進 `DESIGN.md`「否決過的方向」或 ADR，不帶日期。這筆量大，要不要現在整理由使用者定。
+- **同一類**：`DESIGN.md` 本身 5 處（上面 `:42` 那條，與 `:16`、`:58`、`:59`）、`docs/agents/` 18 處（`phone.md` 5、`environment.md` 4、`ai-repair-runs.md` 3 等）、`CODING_STANDARDS.md` 2 處，多是「某天踩過」的理由；這幾份不在 `DESIGN.md:5` 管的範圍，照 `auto-audit.md` 的「文件」那一項算沉積。`AGENTS.md` 要把使用者選的「寫進 `docs/design/`」，寫的是選了什麼，不衝突。
+- **該改哪一邊**：改文件，`docs/design/` 只留選了什麼；否決過的寫進 `DESIGN.md`「否決過的方向」或 ADR，不帶日期。這筆量大，要不要現在整理由使用者定。
 
 ## 沒排進分段的程式
 
@@ -184,4 +184,5 @@
 - **隱私說明**只核對了同步、備份、送給 AI 的長度上限與遮掉的資料、日誌遮罩；「AI 改書源之前的那一份不進備份、不同步」（`ai_repair_backups.dart` 存在哪）、WebDAV 帳密存在哪、AI 找書只送作品名稱到維基百科、讀章節的正文不存不算閱讀時間，都還沒對程式。
 - **ADR 本文與 `docs/state-machines.md` 的日期與經過**：76 份 ADR 共 342 處日期、`state-machines.md` 18 處，照 `auto-audit.md` 也算沉積；但 ADR 照它的索引就是記「考慮過什麼、否決了什麼」（`docs/adr/README.md:3`），`state-machines.md` 是每做完一個狀態機加一節的紀錄（`docs/state-machines.md:3`），沒算進第 14 筆。類別名稱也沒算：`docs/design/` 寫了不少（例如 `components.md:22` 的 `DragOverflowText`），是不是沉積和日期一樣由使用者定。
 - **只改 `.gitignore` 這類檔也會發測試版**：`tool/changelog.sh` 的 `is_app_path` 把文件、網站、測試、hook、工具與三份 workflow 以外的路徑都算 App 內容（`tool/changelog.sh:32-40`），`.gitignore`、`.gitattributes`、`LICENSE`、`.metadata` 也算；上一個發布之後只改了這些時，`android-release.yml` 仍會發一版（`.github/workflows/android-release.yml:79-88`、`:202`）。實際有沒有碰過、要不要排除沒查。
+- **第 13 筆**：`a21f85a4` 整理「指向不存在的技能」時改了 `git-flow`、`codex-review` 這幾個，留著 `/triage`、`/wayfinder`、`/grill-with-docs`；這三份是 mattpocock 技能的設定範本產生的，可能是刻意留著等之後裝，若是就不算問題。
 - **這台 Linux 電腦**：`docs/agents/environment.md`、`emulator.md`、`phone.md` 只寫了家裡與公司兩台 Windows（Legado 在 `C:\…`、模擬器在 `C:/Android/Sdk`、Git Bash、「家裡這台沒有 `jq`」）；這台有 `jq`、沒有模擬器、Legado 在 `~/.cache/audit-legado/legado`。是不是會長期用的電腦不知道，沒列成問題。`issue-tracker.md:8` 要用 `jq` 過濾留言，和 `environment.md:24`「家裡這台沒有 `jq`」也對不上。
