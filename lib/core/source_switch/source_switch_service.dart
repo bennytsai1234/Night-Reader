@@ -450,11 +450,16 @@ class SourceSwitchService {
   /// obsolete source-owned content is retired and the book's bookmarks and
   /// highlights are realigned to the new chapter list in the same
   /// transaction; any failure rolls the whole handoff back to the old world.
-  Future<void> commitSwitch(
+  ///
+  /// [abandonIf] 在等完舊書源的工作收尾（下載，可能等很久）、動手改書與刪
+  /// 舊資料之前問一次：成立就放回原狀、不換，傳回 false（自動換源在等的
+  /// 這段時間讀者打開了這本書）。換成了傳回 true。
+  Future<bool> commitSwitch(
     Book oldBook,
     PreparedSourceSwitch prepared, {
     BookDao? bookDao,
     ChapterDao? chapterDao,
+    bool Function()? abandonIf,
   }) async {
     final books = bookDao ?? getIt<BookDao>();
     final db = books.appDatabase;
@@ -467,6 +472,10 @@ class SourceSwitchService {
     final operationLease = sourceIdentityChanged
         ? await _operationQuiescer?.call(oldBook)
         : null;
+    if (abandonIf?.call() ?? false) {
+      operationLease?.rolledBack();
+      return false;
+    }
 
     try {
       await db.transaction(() async {
@@ -551,6 +560,7 @@ class SourceSwitchService {
         toBookUrl: migratedBook.bookUrl,
       ),
     );
+    return true;
   }
 
   String? _nextReadableChapterUrl(
