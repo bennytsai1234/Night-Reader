@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
@@ -12,6 +14,9 @@ import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/storage/book_chapter_files.dart';
+import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:night_reader/core/utils/cache_manager.dart';
 import 'package:night_reader/core/sync/source_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -101,6 +106,80 @@ void main() {
     // 同步時別台照這份紀錄搬。
     expect(SourceMoves(await SharedPreferences.getInstance()).read(), {
       newUrl: [oldUrl],
+    });
+  });
+
+  group('the book folder (downloaded comic chapters, audio, illustrations, '
+      'stored cover) moves with the source', () {
+    late Directory root;
+
+    setUp(() async {
+      root = await Directory.systemTemp.createTemp('source_move_files');
+      AppStoragePaths.useRoots((
+        documents: root.path,
+        support: root.path,
+        temporary: root.path,
+      ));
+    });
+
+    tearDown(() => root.delete(recursive: true));
+
+    /// 書源 [origin] 上的一本書，書本資料夾裡有一話下載好的 CBZ 與存好的封面。
+    Future<(Book, Directory)> comicWithFiles(String origin) async {
+      final book = Book(
+        bookUrl: 'https://comic.example/book/1',
+        name: '丙漫畫',
+        origin: origin,
+        type: 2,
+        isInBookshelf: true,
+      );
+      final dir = await AppStoragePaths.bookAssetDir(
+        BookCoverStorageService.bookStorageKey(book),
+        ensureExists: true,
+      );
+      final chapters = Directory('${dir.path}/${BookChapterFiles.folderName}')
+        ..createSync(recursive: true);
+      File('${chapters.path}/c1.cbz').writeAsBytesSync([1, 2, 3]);
+      final cover = File('${dir.path}/cover-x.jpg')..writeAsBytesSync([4]);
+      book.coverLocalPath = cover.path;
+      await getIt<BookDao>().upsert(book);
+      return (book, dir);
+    }
+
+    Future<void> expectMoved(Directory oldDir) async {
+      final book = (await getIt<BookDao>().getByUrl(
+        'https://comic.example/book/1',
+      ))!;
+      expect((await BookChapterFiles.downloaded(book)).keys, ['c1']);
+      expect(File(book.coverLocalPath!).existsSync(), isTrue);
+      expect(oldDir.existsSync(), isFalse, reason: '舊的資料夾不留在手機裡');
+    }
+
+    test('when its URL is edited', () async {
+      await getIt<BookSourceDao>().upsert(
+        BookSource(bookSourceUrl: oldUrl, bookSourceName: '舊名'),
+      );
+      final (_, oldDir) = await comicWithFiles(oldUrl);
+
+      await BookSourceService().saveEditedSource(
+        BookSource(bookSourceUrl: newUrl, bookSourceName: '新名'),
+        previousUrl: oldUrl,
+      );
+
+      await expectMoved(oldDir);
+    });
+
+    test('when a duplicate source is merged into another', () async {
+      for (final url in [oldUrl, newUrl]) {
+        await getIt<BookSourceDao>().upsert(
+          BookSource(bookSourceUrl: url, bookSourceName: url),
+        );
+      }
+      final (_, oldDir) = await comicWithFiles(oldUrl);
+
+      await BookSourceService().mergeSources([oldUrl], newUrl);
+
+      await expectMoved(oldDir);
     });
   });
 

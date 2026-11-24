@@ -6,6 +6,7 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/source/source_progress.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
@@ -23,6 +24,8 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/download/download_service.dart';
@@ -260,12 +263,15 @@ class BookSourceService {
         ? null
         : await DownloadService().holdBooks(books);
     try {
+      // 下載停下之後才讀：等下載停下的期間封面可能剛存好。
+      final moving = await _booksAt(books);
       await BaseSource.moveCachedIdentity(
         previousUrl,
         source.getKey(),
         otherKeys: otherSources,
         commit: () => sourceDao.saveEdited(source, previousUrl: previousUrl),
       );
+      await _moveBookFiles(moving, source.bookSourceUrl);
     } finally {
       release?.call();
     }
@@ -287,7 +293,12 @@ class BookSourceService {
         : await DownloadService().holdBooks(books);
     final List<String> merged;
     try {
+      final moving = await _booksAt(books);
       merged = await getIt<BookSourceDao>().mergeInto(from, into);
+      await _moveBookFiles([
+        for (final book in moving)
+          if (merged.contains(book.origin)) book,
+      ], into);
     } finally {
       release?.call();
     }
@@ -297,6 +308,30 @@ class BookSourceService {
       await moves.record(from: url, to: into);
     }
     return merged;
+  }
+
+  static Future<List<Book>> _booksAt(List<String> bookUrls) async => [
+    for (final url in bookUrls) ?await getIt<BookDao>().getByUrl(url),
+  ];
+
+  /// 資料庫裡這些書已經改記 [toOrigin]：書本資料夾的名字也照書源網址算，
+  /// 一起搬過去，不然已下載的漫畫、有聲書、插圖與封面都對不到。
+  /// 搬不動或寫不回的只記下錯誤，不擋書源存檔與搬家紀錄。
+  static Future<void> _moveBookFiles(List<Book> books, String toOrigin) async {
+    if (books.isEmpty) return;
+    final dao = getIt<BookDao>();
+    try {
+      for (final book in await BookCoverStorageService().moveBookAssets(
+        books,
+        toOrigin,
+      )) {
+        await dao.saveStoredCover(book);
+      }
+    } catch (error, stack) {
+      AppLog.e('書源換網址時改書的封面路徑失敗: $error', error: error, stackTrace: stack);
+    }
+    // 書架手上的書還記著舊的封面路徑。
+    AppEventBus().fire(AppEventBus.upBookshelf);
   }
 
   /// 依 URL 取得書源

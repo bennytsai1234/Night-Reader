@@ -174,7 +174,8 @@ class _AudiobookPageState extends State<AudiobookPage> {
 
   Future<void> _loadDownloaded() async {
     try {
-      final files = await BookChapterFiles.downloaded(widget.book);
+      final book = _player.isCurrent(widget.book) ? _player.book! : widget.book;
+      final files = await BookChapterFiles.downloaded(book);
       if (mounted) setState(() => _downloaded = files.keys.toSet());
     } catch (_) {
       // 讀不到資料夾就當作都沒下載；播放時照樣從網路抓。
@@ -304,6 +305,9 @@ class _AudiobookPageState extends State<AudiobookPage> {
         await Navigator.of(context).push<bool>(
           MaterialPageRoute(builder: (_) => SourceEditorPage(source: source)),
         );
+        // 改了書源網址的話，書本資料夾跟著搬了：照新網址重讀已下載的集數。
+        await _player.reloadBookOrigin();
+        if (mounted) unawaited(_loadDownloaded());
       case _MoreAction.log:
         await Navigator.of(context)
             .push<void>(MaterialPageRoute(builder: (_) => const AppLogPage()));
