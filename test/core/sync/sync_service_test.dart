@@ -1349,6 +1349,34 @@ void main() {
       expect(book.customCoverUrl, 'https://img/cover.jpg');
       expect(await b.books.getByUrl('a-src'), isNull, reason: 'B 照舊用自己的書源');
     });
+
+    test('a cover picked from the gallery on one phone (a file only there) '
+        'leaves the other phone\'s cover as it was', () async {
+      // A 從相簿選的封面是 A 的 App 暫存資料夾裡的檔，B 上沒有。
+      const gallery = 'file:///data/user/0/a-only/cache/picked.jpg';
+      await a.addBook('a-src', toc: toc, time: 200);
+      await b.addBook('b-src', toc: toc, time: 100);
+      await a.addBook('a-only', toc: toc, time: 300, name: '另一本');
+      await a.books.upsert((await a.book('a-only'))..customCoverUrl = gallery);
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+      await b.books.upsert(
+        (await b.book('b-src'))..customCoverUrl = 'https://img/b.jpg',
+      );
+      await b.sync.syncAll();
+      await a.sync.syncAll();
+
+      await a.books.upsert((await a.book('a-src'))..customCoverUrl = gallery);
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+
+      expect((await b.book('b-src')).customCoverUrl, 'https://img/b.jpg');
+      expect((await b.book('a-only')).customCoverUrl, isNull);
+      expect((await a.book('a-src')).customCoverUrl, gallery);
+    });
+
     group('renamed on one phone', () {
       Future<void> syncBoth() async {
         await a.sync.syncAll();

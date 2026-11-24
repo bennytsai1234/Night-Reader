@@ -6,6 +6,7 @@ import 'package:archive/archive.dart';
 import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
+import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:night_reader/core/storage/book_storage_service.dart';
 import 'package:night_reader/core/backup/backup_service.dart';
 import 'package:night_reader/core/backup/login_data_backup.dart';
@@ -295,7 +296,12 @@ class RestoreService {
             // 舊備份也帶著書架以外的書（打開詳情或閱讀器時的暫存）：不還原，
             // 也不拿它把這台書架上的同一本蓋成不在書架上。
             final book = Book.fromJson(item);
-            if (book.isInBookshelf) await _bookDao.upsert(book);
+            if (book.isInBookshelf) {
+              // 書本資料夾不在備份裡（`BookChapterFiles`）：新手機上沒有
+              // 存好的封面檔，改用網址。
+              await BookCoverStorageService.dropMissingCoverFiles(book);
+              await _bookDao.upsert(book);
+            }
             break;
           case 'bookSources.json':
           case 'bookSource.json':

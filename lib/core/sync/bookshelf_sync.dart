@@ -9,6 +9,7 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/book_storage_service.dart';
+import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -298,6 +299,7 @@ class BookshelfSync extends SyncKind {
           incoming.syncTime = DateTime.now().millisecondsSinceEpoch;
         }
         incoming.isInBookshelf = true;
+        await BookCoverStorageService.dropMissingCoverFiles(incoming);
         await _bookDao.upsert(incoming);
         _reportIfHeld(applied, key, incoming);
       }
@@ -402,12 +404,17 @@ class BookshelfSync extends SyncKind {
 
   /// 只寫使用者改的欄位，[to] 也跟著改成寫進去的樣子。
   Future<void> _writeUserFields({required Book from, required Book to}) async {
+    // 另一台從相簿選的封面是那台的檔，這台讀不到：留著這台自己的封面。
+    final customCoverUrl =
+        await BookCoverStorageService.isMissingLocalCover(from.customCoverUrl)
+        ? to.customCoverUrl
+        : from.customCoverUrl;
     // 換了封面網址，存在這台的封面檔就不是它了（同書籍詳情換封面）。
-    final coverChanged = to.customCoverUrl != from.customCoverUrl;
+    final coverChanged = to.customCoverUrl != customCoverUrl;
     await _bookDao.updateUserFields(
       to.bookUrl,
       customTag: from.customTag,
-      customCoverUrl: from.customCoverUrl,
+      customCoverUrl: customCoverUrl,
       customIntro: from.customIntro,
       canUpdate: from.canUpdate,
       readConfig: from.readConfig,
@@ -416,7 +423,7 @@ class BookshelfSync extends SyncKind {
     if (coverChanged) to.customCoverLocalPath = null;
     to
       ..customTag = from.customTag
-      ..customCoverUrl = from.customCoverUrl
+      ..customCoverUrl = customCoverUrl
       ..customIntro = from.customIntro
       ..canUpdate = from.canUpdate
       ..readConfig = from.readConfig;
