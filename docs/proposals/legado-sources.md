@@ -310,7 +310,7 @@
 - 補的方向：不換套件也可以在網頁裡讀 `performance.getEntriesByType('resource')` 的網址清單，照 Legado 整個網址比對；拿不準可不可行，列在檔尾。
 - 正文規則自己的 `sourceRegex` 走不到這裡：夜讀抓正文時根本沒把它傳進請求，見 R18。
 
-### R8 存著的 Cookie 照請求的網址拿，書源呼叫別的網域時登入的 Cookie 沒送出去（抓不到）
+### R8 存著的 Cookie 照請求的網址拿，書源呼叫別的網域時登入的 Cookie 沒送出去（抓不到）（已修，#560）
 
 - 讀者會碰到：書源網址是 `https://www.甲.com`，搜尋、正文卻打 `https://api.乙.com` 這類別的網域。讀者登入過（登入程式把 Cookie 存在書源網址底下），Legado 每個請求都帶著書源網域的 Cookie，網站認得是登入的；夜讀照請求的網域找 Cookie，找不到，搜尋或正文回「需要登入」或抓不到。
 - Legado：`L:model/analyzeRule/AnalyzeUrl.kt:134` 決定 `domain = NetworkUtils.getSubDomain(source?.getKey() ?: url)`，`setCookie()` 用它找存著的 Cookie（同檔 607-623），自動存的 Cookie 罐也照它存（同檔 635-644）。登入標頭裡的 Cookie 存在書源網址底下（`L:data/entities/BaseSource.kt:150-156`）。
@@ -342,25 +342,25 @@
 - Legado：`L:utils/StringExtensions.kt:74-79`（`isTrue`），目錄用在 `L:model/webBook/BookChapterList.kt:209-237`。
 - 夜讀：`N:lib/core/engine/web_book/chapter_list_parser.dart:217-222`（`_isTrue`），用在同檔 105、115-116、196-197 行。
 
-### R13 沒寫 `canReName` 時，詳情頁的書名、作者蓋掉搜尋結果的（少數寫法才碰到）
+### R13 沒寫 `canReName` 時，詳情頁的書名、作者蓋掉搜尋結果的（少數寫法才碰到）（已修，#548）
 
 - 讀者會碰到：搜尋結果的書名是乾淨的，詳情頁的書名規則抓到的多了字（「《書名》最新章節」）或略有不同。Legado 已經有書名就不換（書源寫了 `canReName` 才換）；夜讀不在書架上的書一律換成詳情頁的，書名與書架、同步、換源用的身分（書名加作者）跟著變。
 - Legado：`L:model/webBook/BookInfo.kt:65-79`：`mCanReName = canReName && !infoRule.canReName.isNullOrBlank()`，書名作者只在 `mCanReName` 或原本是空的時候寫入。
 - 夜讀：`N:lib/core/engine/web_book/book_info_parser.dart:57-77`：只有書在書架上、又沒寫 `canReName` 時才保留原名，其他時候用詳情頁的。
 
-### R14 搜尋網址裡存的變數沒帶到搜尋結果（少數寫法才碰到）
+### R14 搜尋網址裡存的變數沒帶到搜尋結果（少數寫法才碰到）（已修，#548）
 
 - 讀者會碰到：書源在搜尋網址的 JS 裡 `java.put` 一個值（常見是 token、加密用的鑰匙），之後詳情、目錄、正文再 `java.get` 它。Legado 每本搜尋結果都帶著這些變數；夜讀的搜尋結果是空白的，只靠書源層的記憶體快取補（只在同一個書源 isolate 裡讀得到），`@put` 存的完全沒有，後面的請求組錯、抓不到。
 - Legado：`L:model/webBook/WebBook.kt:35-44`（搜尋網址用一個 `RuleData` 收變數），`L:model/webBook/BookList.kt:56, 80, 94, 211`（`SearchBook(variable = variable)`，每本書帶著）。
 - 夜讀：`N:lib/core/engine/web_book/web_book_service.dart:47-52`（搜尋網址沒有 `ruleData`），`N:lib/core/engine/web_book/book_list_parser.dart:110-120`（每本書新建、沒有變數）；發現網址同樣（`web_book_service.dart:76`）。
 
-### R15 搜尋直接跳詳情頁時，書的網址取法不同（少數寫法才碰到）
+### R15 搜尋直接跳詳情頁時，書的網址取法不同（少數寫法才碰到）（已修，#548）
 
 - 讀者會碰到：用 POST 搜尋（網址後面接 `,{"method":"POST",…}`）、搜到唯一一本時網站直接給詳情頁的書源。Legado 沒轉址時把書的網址記成搜尋網址（含 POST 選項），也把這一頁存起來直接用；夜讀記成回應的網址、不存這一頁，打開書時用 GET 重抓，抓到的不是詳情頁。
 - Legado：`L:model/webBook/BookList.kt:166-169`（`isRedirect` 才用 `baseUrl`，否則 `getAbsoluteURL(analyzeUrl.url, analyzeUrl.ruleUrl)`），`66-68`（`searchBook.infoHtml = body`）。
 - 夜讀：`N:lib/core/engine/web_book/book_list_parser.dart:185-212`（`Book(bookUrl: baseUrl)`，`baseUrl` 是回應的網址；沒存 `infoHtml`）。
 
-### R16 精準搜尋只留書名或作者「完全等於」關鍵字的（抓錯或抓不全）
+### R16 精準搜尋只留書名或作者「完全等於」關鍵字的（抓錯或抓不全）（已修，#548）
 
 - 讀者會碰到：開精準搜尋搜「斗羅大陸」，Legado 留下書名或作者「含」這幾個字的（含續作、外傳），夜讀只留完全一樣的。
 - Legado：`L:model/webBook/SearchModel.kt:95-96`（`!precision || name.contains(searchKey) || author.contains(searchKey)`）。
@@ -398,13 +398,13 @@
 - Legado：`L:ui/association/ImportBookSourceViewModel.kt:135-150`（物件先讀 `$.sourceUrls`，讀到就逐一 `importSourceUrl`），`191-195`（`#requestWithoutUA`）。
 - 夜讀：`N:lib/features/source_manager/source_manager_provider.dart:35-66`，物件包成一個元素的清單，沒有書源網址或名稱的跳過。
 
-### R22 換源的「校驗作者」只留作者完全相同的（少數寫法才碰到）
+### R22 換源的「校驗作者」只留作者完全相同的（少數寫法才碰到）（已修，#555）
 
 - 讀者會碰到：這本書的作者是「張三」，另一個書源寫成「張三（著）」「張三／李四」這類多了字的。Legado 開著校驗作者時留作者「含」張三的，夜讀只留正規化後完全一樣的，那個書源換不過去。夜讀的校驗作者預設開著，碰到的機會比 Legado 多。
 - Legado：`L:ui/book/changesource/ChangeBookSourceViewModel.kt:268`（`fName == name && (!checkAuthor || fAuthor.contains(author))`）。
 - 夜讀：`N:lib/core/source_switch/same_book.dart:34-46`（`normalizeSearchText(author) == normalizeSearchText(bookAuthor)`）；自動換源（ADR 0069）與單章借源用同一個判斷。
 
-### R23 換源後對回讀到的那一章：章號是中文數字或章名前綴不同時對不到（抓錯或抓不全）
+### R23 換源後對回讀到的那一章：章號是中文數字或章名前綴不同時對不到（抓錯或抓不全）（已修，#555）
 
 - 讀者會碰到：舊書源的章名是「第100章 風起」，新書源寫「第一百章 風起」或「100、風起」。Legado 去掉章號比對章名本身（相似度），對不到再比章號（認中文數字與「100、」這種寫法），跳到同一章；夜讀只認一模一樣的章名與阿拉伯數字的「第 N 章」，都對不上就照章數比例估一個位置，可能差好幾章。
 - Legado：`L:help/book/BookHelp.kt:499-546`（`getDurChapter`：估計位置前後 10 章內比 `getPureChapterName` 的相似度，不到 0.96 再比 `getChapterNum`），`557-583`（章號認中文數字、「100、」）。
