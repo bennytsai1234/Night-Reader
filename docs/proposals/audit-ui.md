@@ -13,6 +13,7 @@
 | 介面 0 | `lib/shared/widgets/skeleton/` 11 個檔 | 0 |
 | 介面 1 | `lib/shared/widgets/` 其餘 35 個檔（`glass/`、`lists/`、`popups/`、`book/`、`text/` 與根目錄 4 個）、`lib/shared/navigation/` 10 個、`theme/` 9 個、`layout/` 2 個，共 56 個 | 1 |
 | 介面 2 | `lib/features/bookshelf/` 10 個、`book_detail/` 19 個、`home/` 2 個，共 31 個 | 2 |
+| 介面 3（未完） | 讀完 `lib/features/settings/` 14 個、`about/` 11 個、`association/` 6 個；**`replace_rule/` 5 個還沒讀** | 1 |
 
 ## 問題
 
@@ -122,6 +123,22 @@
 
 **輕重**：畫面錯。
 
+### 介面 3：設定、關於、檔案關聯（替換規則還沒讀）
+
+#### 3-1. 「關於夜讀 → 權限」的權限狀態卡片，最後兩列沒有列首圖示
+
+**會發生什麼**：權限狀態那張卡片上面每一列權限都有列首圖示，下面的「開啟系統設定」「重新整理」兩列沒有，字往左縮、和上面的列對不齊。規格是同一張卡片有一列帶列首圖示，其他列也帶（`docs/design/components.md`「分組清單」的「圖示跟著同一張卡片」，強調色的動作用強調色的同大小線條圖示）。#489 補這條規則時漏了這一頁。
+
+**為什麼**：`lib/features/about/privacy_pages.dart:192-196` 每一列權限給 `leading: SizedBox(width: AppGrouped.iconTile, child: Icon(...))`；同一張卡片的 `:177` 「開啟系統設定」與 `:183` 「重新整理」兩列沒有 `leading`。
+
+**怎麼確認**：在 `test/features/about/` 打開權限頁、等狀態查完，斷言「權限狀態」卡片裡每一列 `GroupedRow` 都有 `leading`。
+
+**修法方向**：兩列各給一個同大小的線條圖示（強調色），照權限列包在 `AppGrouped.iconTile` 寬的方塊裡。
+
+**輕重**：畫面錯。
+
 ## 拿不準
 
-（目前沒有）
+- **備份與同步：備份或還原進行中，清單下方是一個置中轉圈**（`lib/features/settings/backup_sync_page.dart:180`）。`DESIGN.md` 原則 4 說不放置中轉圈，但那條講的是載入；這是一件操作的進度，規格沒寫該用什麼，卡在「算不算違反規格」。
+- **外部匯入的提示框標題是「外部匯入」**（`lib/features/association/handlers/association_dialog_helper.dart:82`，「無法辨識」同理）。`docs/design/components.md`「提示框」要求標題直接問要做什麼（「匯入這個書源？」），說明只寫一句後果；這裡說明是三段。是規格不符還是用詞意見，沒有把握。
+- **介面 3 的 `lib/features/replace_rule/` 5 個檔還沒讀**（`replace_rule_deadline.dart`、`replace_rule_preview.dart`、`widgets/` 3 個）。
