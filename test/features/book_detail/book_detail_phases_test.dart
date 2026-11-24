@@ -123,11 +123,12 @@ class _Switch implements SourceSwitchService {
   }
 
   @override
-  Future<void> commitSwitch(
+  Future<bool> commitSwitch(
     Book oldBook,
     PreparedSourceSwitch prepared, {
     dynamic bookDao,
     dynamic chapterDao,
+    dynamic refresh,
   }) async {
     await db.bookDao.deleteByUrl(oldBook.bookUrl);
     await db.bookDao.upsert(prepared.migratedBook);
@@ -139,6 +140,7 @@ class _Switch implements SourceSwitchService {
         toBookUrl: prepared.migratedBook.bookUrl,
       ),
     );
+    return true;
   }
 
   @override

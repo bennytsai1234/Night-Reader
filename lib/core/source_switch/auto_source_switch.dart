@@ -235,7 +235,36 @@ class AutoSourceSwitch implements BackgroundJob {
           ((await _books.getByUrl(target))?.isInBookshelf ?? false)) {
         return;
       }
-      await _switch.commitSwitch(latest, rebased, bookDao: _books);
+      // 換之前要等舊書源的下載收尾，可能等很久：等完照書現在的樣子再對一次
+      // （讀者可能打開過、讀了幾頁）；現在開著就不換，等書關掉再來。
+      final switched = await _switch.commitSwitch(
+        latest,
+        rebased,
+        bookDao: _books,
+        refresh: () async {
+          if (_booksInUse().contains(bookUrl)) return null;
+          final current = await _stillOrphaned(bookUrl);
+          if (current == null || current.origin != latest.origin) return null;
+          final again = _switch.rebase(
+            prepared,
+            current,
+            targetChapterTitle: await _readingTitle(current),
+          );
+          if (again == null || _booksInUse().contains(bookUrl)) return null;
+          return (book: current, prepared: again);
+        },
+      );
+      if (!switched) {
+        if (_booksInUse().contains(bookUrl)) {
+          _heldBack.add(bookUrl);
+          return;
+        }
+        // 讀到的那一章在新書源對不上了：照現在的進度再找一次。
+        final current = await _stillOrphaned(bookUrl);
+        if (current == null) return;
+        book = current;
+        continue;
+      }
       AppEventBus().fire(AppEventBus.upBookshelf);
       // 書架上的書照新書源整本重抓（ADR 0008）。
       unawaited(_keepDownloaded(target));

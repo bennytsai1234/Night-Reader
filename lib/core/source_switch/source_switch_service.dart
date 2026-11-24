@@ -450,23 +450,50 @@ class SourceSwitchService {
   /// obsolete source-owned content is retired and the book's bookmarks and
   /// highlights are realigned to the new chapter list in the same
   /// transaction; any failure rolls the whole handoff back to the old world.
-  Future<void> commitSwitch(
+  ///
+  /// [refresh] 在等完舊書源的工作收尾（下載，可能等很久）、動手改書與刪
+  /// 舊資料之前呼叫，傳回要換的那本現在的樣子與照它重新對好的結果，換源
+  /// 照這一份寫；傳回 null 就放回原狀、不換，傳回 false。自動換源用：等的
+  /// 這段時間讀者可能打開過這本、讀了幾頁，或現在還開著。換成了傳回 true。
+  Future<bool> commitSwitch(
     Book oldBook,
     PreparedSourceSwitch prepared, {
     BookDao? bookDao,
     ChapterDao? chapterDao,
+    Future<({Book book, PreparedSourceSwitch prepared})?> Function()? refresh,
   }) async {
     final books = bookDao ?? getIt<BookDao>();
     final db = books.appDatabase;
     final chaptersDao = chapterDao ?? ChapterDao(db);
     final contentDao = ReaderChapterContentDao(db);
-    final migratedBook = prepared.migratedBook;
     final sourceIdentityChanged =
-        oldBook.origin != migratedBook.origin ||
-        oldBook.bookUrl != migratedBook.bookUrl;
+        oldBook.origin != prepared.migratedBook.origin ||
+        oldBook.bookUrl != prepared.migratedBook.bookUrl;
     final operationLease = sourceIdentityChanged
         ? await _operationQuiescer?.call(oldBook)
         : null;
+    if (refresh != null) {
+      final ({Book book, PreparedSourceSwitch prepared})? current;
+      try {
+        current = await refresh();
+      } catch (_) {
+        operationLease?.rolledBack();
+        rethrow;
+      }
+      // 等的是這本書、這個新書源的工作，換了別本就不算數。
+      if (current == null ||
+          current.book.bookUrl != oldBook.bookUrl ||
+          current.book.origin != oldBook.origin ||
+          current.prepared.migratedBook.bookUrl !=
+              prepared.migratedBook.bookUrl ||
+          current.prepared.migratedBook.origin !=
+              prepared.migratedBook.origin) {
+        operationLease?.rolledBack();
+        return false;
+      }
+      (oldBook, prepared) = (current.book, current.prepared);
+    }
+    final migratedBook = prepared.migratedBook;
 
     try {
       await db.transaction(() async {
@@ -551,6 +578,7 @@ class SourceSwitchService {
         toBookUrl: migratedBook.bookUrl,
       ),
     );
+    return true;
   }
 
   String? _nextReadableChapterUrl(

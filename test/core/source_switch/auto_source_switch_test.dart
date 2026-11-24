@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/source_switch/source_switch_operation_lease.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
@@ -81,6 +82,21 @@ List<BookChapter> _toc(String bookUrl) => [
       index: i,
     ),
 ];
+
+/// 等下載收尾拿到的租約：記下最後是換成了還是放回原狀。
+class _Lease implements SourceSwitchOperationLease {
+  bool didCommit = false;
+  bool didRollBack = false;
+
+  @override
+  Future<void> retireInTransaction(AppDatabase db) async {}
+
+  @override
+  void committed() => didCommit = true;
+
+  @override
+  void rolledBack() => didRollBack = true;
+}
 
 class _OtherJob implements BackgroundJob {
   @override
@@ -243,6 +259,79 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 20));
     await settled();
     expect((await shelf()).single.origin, 'new');
+  });
+
+  /// 換源收尾要先等舊的下載收尾（可能等很久）：[duringWait] 是這段時間
+  /// 發生的事，只在第一次等的時候發生。
+  _Lease waitWith(Future<void> Function(Book oldBook) duringWait) {
+    final lease = _Lease();
+    var waited = false;
+    unawaited(auto.dispose());
+    auto = AutoSourceSwitch(
+      work: work,
+      bookDao: db.bookDao,
+      sourceDao: db.bookSourceDao,
+      chapterDao: db.chapterDao,
+      switcher: SourceSwitchService(
+        service: sites,
+        sourceDao: db.bookSourceDao,
+        operationQuiescer: (oldBook) async {
+          if (!waited) {
+            waited = true;
+            await duringWait(oldBook);
+            return lease;
+          }
+          return _Lease();
+        },
+      ),
+      booksInUse: () => inUse,
+      releasedBooks: released.stream,
+      keepDownloaded: (bookUrl) async => downloads.add(bookUrl),
+    )..listen();
+    return lease;
+  }
+
+  // 等的這段時間讀者打開了這本書：不換、不刪舊資料，放回原狀，等書關掉
+  // 再換。
+  test('a book opened while the switch waits for its downloads is left '
+      'alone until it is closed', () async {
+    final lease = waitWith((oldBook) async => inUse = {oldBook.bookUrl});
+    await launched();
+    await shelve(_book('old'));
+
+    await db.bookSourceDao.deleteByUrl('old');
+    await settled();
+    expect((await shelf()).single.origin, 'old');
+    expect(await db.chapterDao.getByBook('old/夜雨'), hasLength(10));
+    expect(lease.didRollBack, isTrue);
+    expect(lease.didCommit, isFalse);
+
+    inUse = {};
+    released.add('old/夜雨');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await settled();
+    expect((await shelf()).single.origin, 'new');
+  });
+
+  // 等的這段時間讀者打開這本、讀到別章又關掉：換源照讀到的地方換，不寫回
+  // 等之前的進度。
+  test('a book read while the switch waits keeps the place it was read '
+      'to', () async {
+    waitWith((oldBook) async {
+      final read = (await db.bookDao.getByUrl(oldBook.bookUrl))!
+        ..chapterIndex = 7
+        ..durChapterTitle = '第8章';
+      await db.bookDao.upsert(read);
+    });
+    await launched();
+    await shelve(_book('old'));
+
+    await db.bookSourceDao.deleteByUrl('old');
+    await settled();
+    final books = await shelf();
+    expect(books.map((b) => (b.origin, b.chapterIndex, b.durChapterTitle)), [
+      ('new', 7, '第8章'),
+    ]);
   });
 
   test(
