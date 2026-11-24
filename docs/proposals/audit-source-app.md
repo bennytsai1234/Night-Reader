@@ -18,6 +18,13 @@
 | 書源 3 | `lib/features/source_manager/`（不含 `ai_repair/`） | 22／22 | 0（第 4 筆的入口在發現頁、書籍詳情） |
 | 書源 3 | `lib/features/search/`（含 `ai_find/` 畫面） | 15／15 | 1 |
 | 書源 3 | `lib/features/explore/` | 8／8 | 0 |
+| 書源 4 | `lib/features/source_login/` | 0／4 | 還沒讀 |
+| 書源 4 | `lib/core/ai_repair/` | 0／23 | 還沒讀 |
+| 書源 4 | `lib/core/ai_find/` | 0／4 | 還沒讀 |
+| 書源 4 | `lib/features/source_manager/ai_repair/` | 0／5 | 還沒讀 |
+| 書源 4 | `lib/core/source/` 的 `source_login_session`、`source_interaction` | 0／2 | 還沒讀 |
+| 書源 4 | `lib/core/network/` 的 `cookie_store`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service` | 0／4 | 還沒讀 |
+| 書源 4 | `lib/core/backup/login_data_backup.dart` | 0／1 | 還沒讀 |
 
 ## 問題
 
@@ -152,4 +159,5 @@
 
 ## 拿不準
 
-（還沒有）
+- **AI 修復的試抓逾時後，上一次沒跑完的書源除錯可能把正文寫進下一次的結果**：書源除錯是每個 isolate 一份的單例，記「這一輪抓到的正文」的那一行不看這一輪的代號（`lib/core/source/source_debug_service.dart:261-267`，寫紀錄的 `log` 有看，`52-53`）；試抓逾時只是不再等（`lib/core/ai_repair/source_probe.dart:282-292` 的 `.timeout`），舊的那輪還在跑。卡在：還沒讀書源 worker 會不會在逾時後被重用來跑下一次試抓（書源 4 的 `source_probe.dart`）；不重用就不會發生。
+- **書源校驗的整體時限可能把慢但能用的書源判成逾時**：一個書源整個校驗最多 120 秒（`lib/core/source_check/check_source_service.dart:303-313`），開了正文抽查時要搜兩次、讀完整目錄、抓最多八、九章正文（每章可能分頁、失敗再重試一次），每段又各自有時限。卡在：沒有實際的書源量過一次要多久，說不出多慢的網站會超過；逾時的書源會被隔離、建議移除（ADR 0081）。
