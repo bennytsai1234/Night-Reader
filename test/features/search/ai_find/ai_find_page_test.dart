@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
 import 'package:night_reader/core/ai_find/ai_find_avoid.dart';
@@ -525,6 +526,30 @@ void main() {
     expect(sentCount, 5);
     expect(settings.getInt(aiFindCountKey), 5, reason: '下次停在 5 本');
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  // 從這一頁進 AI 服務設定改了服務，返回時「送到」就是新的（頁面一關上
+  // 就讀，設定頁要等返回動畫播完才拆掉）。
+  testWidgets('changing the service in the settings shows the new one on '
+      'coming back', (tester) async {
+    await show(tester, AiFindPage(prefs: await prefs()));
+    expect(find.widgetWithText(GroupedRow, 'ai.example · m'), findsOneWidget);
+
+    await tester.tap(find.byType(GlassMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AI 服務設定'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'https://ai.example/v1'),
+      'https://other.example/v1',
+    );
+    await tester.state<NavigatorState>(find.byType(Navigator)).maybePop();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.widgetWithText(GroupedRow, 'other.example · m'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('starting without an AI service asks to set one up', (

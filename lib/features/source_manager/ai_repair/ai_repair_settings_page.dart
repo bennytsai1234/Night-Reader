@@ -55,7 +55,7 @@ const String _sameAsRepair = '\u0000same';
 
 /// AI 服務設定（docs/design/screens.md「AI 服務」）：常用服務、服務網址、
 /// 金鑰、模型（從服務列出的清單選）、找書的模型、思考程度、同時修幾個網站，
-/// 離開頁面就存。
+/// 一改就存。
 class AiRepairSettingsPage extends StatefulWidget {
   const AiRepairSettingsPage({super.key, this.settings, this.listModels});
 
@@ -120,11 +120,14 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
     }
   }
 
+  /// 一改就存：打開這一頁的地方在頁面一關上（返回動畫還沒播完）就讀服務、
+  /// 更新「送到」，等到頁面拆掉才存會讀到改前的。
+  void _save() {
+    if (_loaded) unawaited(_settings.save(_service, findModel: _findModel));
+  }
+
   @override
   void dispose() {
-    if (_loaded) {
-      unawaited(_settings.save(_service, findModel: _findModel));
-    }
     _url.dispose();
     _key.dispose();
     super.dispose();
@@ -147,7 +150,9 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
           GlassMenuItem(value: value, label: label, checked: value == _effort),
       ],
     );
-    if (picked != null && mounted) setState(() => _effort = picked);
+    if (picked == null || !mounted) return;
+    setState(() => _effort = picked);
+    _save();
   }
 
   Future<void> _pickPreset(BuildContext rowContext) async {
@@ -174,6 +179,7 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
         _serviceVersion++;
         _url.clear();
       });
+      _save();
       return;
     }
     final preset = aiServicePresets.firstWhere((p) => p.name == picked);
@@ -186,13 +192,18 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
       _model = preset.model ?? '';
       _findModel = '';
     });
+    _save();
   }
 
   /// 模型從服務列出的清單選；列不出來（網址錯、服務不給清單）或清單裡沒有
   /// 時，自己輸入。[find] 是選找書的模型：多一項「同修書源」。
   Future<void> _pickModel(BuildContext rowContext, {bool find = false}) async {
     final current = find ? _findModel : _model;
-    void choose(String model) => find ? _findModel = model : _model = model;
+    void choose(String model) {
+      find ? _findModel = model : _model = model;
+      _save();
+    }
+
     FocusScope.of(context).unfocus();
     final service = _service;
     if (service.baseUrl.isEmpty) {
@@ -306,7 +317,6 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
     FocusScope.of(context).unfocus();
     setState(() => _testing = true);
     try {
-      await _settings.save(service, findModel: _findModel);
       for (final model in models) {
         await verifyAiToolConnection(
           AiChatClient((
@@ -347,7 +357,10 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
               ),
               GroupedTextFieldRow(
                 label: '服務網址',
-                onChanged: (_) => setState(() => _serviceVersion++),
+                onChanged: (_) {
+                  setState(() => _serviceVersion++);
+                  _save();
+                },
                 controller: _url,
                 hintText: 'https://api.openai.com/v1',
                 keyboardType: TextInputType.url,
@@ -356,7 +369,10 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
               GroupedTextFieldRow(
                 label: '金鑰',
                 controller: _key,
-                onChanged: (_) => _serviceVersion++,
+                onChanged: (_) {
+                  _serviceVersion++;
+                  _save();
+                },
                 obscureText: !_revealed,
                 keyboardType: TextInputType.visiblePassword,
                 textInputAction: TextInputAction.done,
