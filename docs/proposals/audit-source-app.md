@@ -185,7 +185,9 @@
 
 **怎麼確認**：`test/core/network/backstage_webview_test.dart` 換掉 `WebViewNative` 的平台頻道，讓 `getCookies` 回 `jsl=abc`；用假的 WebView 平台讓一次 `webView` 請求載完。斷言之後 `CookieStore().getCookie(書源網址)` 含 `jsl=abc`；現在是空字串。
 
-**修法方向**：照 Legado，背景網頁帶上書源的 key，每次載完把那一頁的 Cookie 併進書源的 `CookieStore`（用 `replaceCookie`，不蓋掉登入存的）；網址選項與三個 `java.webView*` 入口一起改。
+**修法方向**：照 Legado，背景網頁帶上書源的 key，每次載完把那一頁的 Cookie 存進書源的 `CookieStore`（Legado 是 `CookieStore.setCookie`，整個換成網頁那一份）；網址選項與三個 `java.webView*` 入口一起改。主 isolate 替書源 isolate 開網頁的那一段（`lib/core/engine/source_isolate/source_isolate.dart:668-669`）只交回內容，也沒有另外存。
+
+**相關**：`docs/proposals/legado-sources.md` 第 63 列把 `webView` 記成「開瀏覽器、跑 JS、延遲一樣」，沒對到存 Cookie 這一段；同一份的 R8（存著的 Cookie 照請求的網址拿）修好之前，存在書源名下的 Cookie 也只有書源網址那個網域的請求帶得到。
 
 **輕重**：功能沒反應或結果錯。
 
