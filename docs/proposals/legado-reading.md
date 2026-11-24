@@ -4,12 +4,10 @@
 
 - 範圍：替換規則、文字閱讀器的目錄、閱讀進度、書籤、朗讀、選字、正文整理、閱讀器選單與設定裡會影響讀到什麼的選項、本地 TXT 與 EPUB、備份與還原和 Legado 互通。
 - 不對照：正文排版、翻頁方式、介面長相與動畫、漫畫、有聲書、同步、三個 AI 功能；書源的抓取、登入、換源、下載在另一份（書源那一半）。
-- 讀的版本：夜讀 `fff55f9c`（`beta`），Legado `2fe3ef80`（使用者的 fork，2026-08-24）。
+- 讀的版本：夜讀 `fff55f9c`（`beta`；本地書與備份讀的是 `5fcc7506`），Legado `2fe3ef80`（使用者的 fork，2026-08-24）。
 - 下面的出處，夜讀寫 `lib/...`，Legado 寫 `legado:` 加 `app/src/main/java/io/legado/app/` 底下的路徑。
 
 ## 功能表
-
-結論欄空著的是還沒對完的列。
 
 ### 替換規則
 
@@ -149,17 +147,17 @@
 | K1 | 還原 Legado 的備份 ZIP | 結果不對 | 夜讀說「這不是可用的夜讀備份檔」，什麼都不還原 |
 | K2 | Legado 備份裡的書架（進度、分組、每本書的設定） | 結果不對 | 就算放行，書全被當成不在書架上略過，進度欄位名也對不上 |
 | K3 | Legado 備份裡的書籤 | 結果不對 | 附註欄位丟掉（其餘欄位讀得懂） |
-| K4 | Legado 備份裡的替換規則 |  | |
-| K5 | Legado 備份裡的閱讀紀錄 |  | |
-| K6 | Legado 備份裡的分組 |  | |
-| K7 | Legado 備份裡的 TXT 目錄規則、線上朗讀引擎、字典規則 |  | |
-| K8 | Legado 備份裡的設定（`config.xml`）與排版 |  | |
-| K9 | 還原時略過某幾項 |  | |
-| K10 | 自動備份（每天一次） |  | |
+| K4 | Legado 備份裡的替換規則 | 一樣 | 欄位名稱與預設值相同，夜讀讀得懂（規則本身的寫法差異見 R2、R3） |
+| K5 | Legado 備份裡的閱讀紀錄 | 結果不對 | Legado 的閱讀時長以毫秒記、夜讀以秒記，還原後每本書的時長變成 1000 倍；同一本書好幾台的紀錄只留一筆 |
+| K6 | Legado 備份裡的分組 | 少一個選項 | 分組讀得進來（分組封面的欄位名不同會丟），但夜讀的書架沒有分組，讀進來看不到 |
+| K7 | Legado 備份裡的 TXT 目錄規則、線上朗讀引擎、字典規則 | 少一個選項 | 夜讀三樣都不讀：TXT 目錄規則要先有 L8；線上朗讀引擎、字典規則夜讀沒有 |
+| K8 | Legado 備份裡的設定（`config.xml`）與排版 | 少一個選項 | 夜讀不讀 `config.xml`；同名的設定有一百多個，但數值的意思不一定一樣；排版不在這一份的範圍 |
+| K9 | 還原時略過某幾項 | 少一個選項 | Legado 還原前可以勾略過閱讀界面、主題、封面、書架樣式、本地書等；夜讀全部還原 |
+| K10 | 自動備份（每天一次） | 少一個選項 | Legado 每天第一次開 App 或離開閱讀器時自動備份到資料夾與 WebDAV；夜讀只有手動，同步不留過去的版本 |
 | K11 | 匯出書架、從檔案或網址匯入書架 | 結果不對 | Legado 匯出的書架夜讀匯不進來，夜讀匯出的 Legado 也匯不進去 |
-| K12 | 匯出書（TXT、EPUB；套不套替換規則、含不含章名、章節範圍） |  | |
-| K13 | 夜讀匯出的替換規則給 Legado 讀 |  | |
-| K14 | `legado://` 匯入連結（替換規則、加入書架） |  | |
+| K12 | 匯出書（TXT、EPUB；套不套替換規則、含不含章名、章節範圍） | 結果不對 | Legado 匯出預設套替換規則，夜讀匯出原文；EPUB、章節範圍、不含章名、編碼夜讀都沒有 |
+| K13 | 夜讀匯出的替換規則給 Legado 讀 | 結果不對 | 夜讀備份裡的書架與替換規則把開關寫成 1／0，Legado 還原時這兩份整份讀不進去 |
+| K14 | `legado://` 匯入連結（替換規則、加入書架） | 結果不對 | `legado://import/addToBookshelf` 在 Legado 是一本書的網址，夜讀當成書架檔下載，加不進書架 |
 
 ## 結果不對
 
@@ -265,7 +263,7 @@
 - 讀者會看到：從 Legado 換到夜讀，在「備份與同步」選 Legado 的備份檔，提示「還原失敗，這不是可用的夜讀備份檔」，書架、書源、替換規則、書籤一樣都沒進來。
 - Legado：備份 ZIP 裡是 `bookshelf.json`、`bookmark.json`、`bookGroup.json`、`bookSource.json`、`replaceRule.json`、`readRecord.json` 等檔與 `config.xml`，沒有 manifest（`legado:help/storage/Backup.kt:62-84`、`131-160`）。
 - 夜讀：還原一定要有 `manifest.json` 且帶 `schemaVersion`，沒有就整份拒絕（`lib/core/backup/restore_service.dart:98-101`、`387-392`；2026-10-10 `47536584` 起）。但還原程式其實照 Legado 的檔名在讀（同檔 `253-271`），ADR 0053 也寫了「從 Legado 備份還原的書」，看得出原本要支援。
-- 放行之後還有：Legado 的書沒有 `isInBookshelf` 欄位，夜讀只還原 `isInBookshelf` 為真的書（同檔 `297-298`、`lib/core/models/book/book.dart:136-137`），書架會整個是空的；Legado 的閱讀進度叫 `durChapterIndex`、`durChapterPos`，夜讀只讀 `chapterIndex`、`charOffset`（`lib/core/models/book/book.dart:107-110`），進度歸零。`config.xml`（Legado 的設定）夜讀不讀，只讀自己的 `config.json`（`restore_service.dart:123-129`）。替換規則、書籤、閱讀紀錄、分組還沒逐欄對（K4–K8）。
+- 放行之後還有：Legado 的書沒有 `isInBookshelf` 欄位，夜讀只還原 `isInBookshelf` 為真的書（同檔 `297-298`、`lib/core/models/book/book.dart:136-137`），書架會整個是空的；Legado 的閱讀進度叫 `durChapterIndex`、`durChapterPos`，夜讀只讀 `chapterIndex`、`charOffset`（`lib/core/models/book/book.dart:107-110`），進度歸零。`config.xml`（Legado 的設定）夜讀不讀，只讀自己的 `config.json`（`restore_service.dart:123-129`）。替換規則讀得懂（K4），閱讀紀錄與書籤另有問題（K5、K3）。
 
 #### K3　Legado 書籤的附註丟掉（資料少了或錯了）
 
@@ -275,6 +273,32 @@
 
 - Legado 匯出書架是 `[{name, author, intro}]`，匯入時每本照書名、作者在啟用的書源裡精準搜尋、加第一個搜到的（`legado:ui/main/bookshelf/BookshelfViewModel.kt:102-123`、`156-186`）。
 - 夜讀匯入書架要每筆有 `bookUrl`（`lib/core/backup/bookshelf_exchange_service.dart:247-248`），Legado 匯出的檔回「未找到可匯入的書架資料」；夜讀匯出的是一個物件 `{kind, books, chapters, …}`（同檔 `64-75`），Legado 只收陣列，回「格式不对」。
+
+#### K5　Legado 的閱讀時長還原後變成 1000 倍（資料少了或錯了）
+
+- 讀者會看到：K1 放行後，「閱讀紀錄」裡從 Legado 帶來的書，一本讀了 3 小時的顯示成 3000 小時；在 Legado 用兩台手機讀過的同一本書，只剩其中一台的時間。
+- Legado：閱讀時長以毫秒累加（`legado:model/ReadBook.kt:290`），一台一筆（`deviceId` 加書名，`legado:data/entities/ReadRecord.kt:7-14`）；還原時別台的紀錄照收，本機的取較長的（`legado:help/storage/Restore.kt:170-182`）。
+- 夜讀：閱讀時長以秒記（`lib/core/database/dao/read_record_dao.dart:195-213`），還原時照書名一本一筆、後讀到的蓋掉前面的（同檔 `223-245`），欄位名一樣、單位不換。
+
+#### K12　匯出的 TXT 沒有套替換規則（功能結果錯）
+
+- 讀者會看到：網路書用替換規則刪掉的廣告、亂碼行，在閱讀器裡看不到，匯出的 TXT 裡又出現。
+- Legado：匯出預設套這本書的替換規則（「替換淨化」開著時），不做繁簡轉換（`legado:service/ExportBookService.kt:276-321`，`legado:help/config/AppConfig.kt:321-325` 預設開）。
+- 夜讀：匯出存著的原文，只拿掉插圖標記（`lib/core/backup/export_book_service.dart:42-111`）。
+- 修的時候注意：Legado 的「套替換規則」是匯出時可以關的選項，選項本身列在「少一個選項」。
+
+#### K13　夜讀的備份在 Legado 還原不了書架與替換規則（功能結果錯）
+
+- 讀者會看到：從夜讀換回 Legado，或兩邊一起用，在 Legado 選夜讀的備份檔還原：書源進得去，書架與替換規則跳出「讀取文件出錯」，一條都沒進去。
+- Legado：備份裡每一份 JSON 整份用 Gson 讀，任何一欄型別不對整份放棄（`legado:help/storage/Restore.kt:295-312`）；Gson 沒有另外註冊布林值的讀法（`legado:utils/GsonExtensions.kt:29-39`），`1`、`0` 讀成布林值會失敗。Legado 不看 manifest，夜讀備份的檔名它都認得。
+- 夜讀：替換規則的開關寫成 `1`／`0`（`lib/core/models/replace_rule.dart:160-164`），書的 `canUpdate`、`isInBookshelf` 也是，`readConfig` 寫成一段字串而不是物件（`lib/core/models/book/book_serialization.dart:61-69`）。書籤欄位名和 Legado 不同（夜讀寫 `chapterTitle`、`charOffset`、`excerpt`，Legado 讀 `chapterName`、`chapterPos`、`bookText`），進得去但章內位置是開頭、原文是空的。
+- 修的時候注意：改成 `true`／`false` 時，夜讀自己讀舊備份與同步資料要兩種都認（`readJsonBool` 已經兩種都認）。
+
+#### K14　`legado://import/addToBookshelf` 連結加不進書架（功能結果錯）
+
+- 讀者會看到：網頁或書源給的「加入閱讀書架」連結，在夜讀打開後提示「辨識為書架資料」，按下匯入回「未找到可匯入的書架資料」。
+- Legado：`src` 是一本書的詳情頁網址；照網址的網站找啟用的書源（或書源的 `bookUrlPattern`），抓詳情後問要不要加入書架（`legado:ui/association/OnLineImportActivity.kt:84-86`、`legado:ui/association/AddToBookshelfDialog.kt:103-140`）。
+- 夜讀：這個路徑當成書架檔，下載 `src` 後照夜讀的書架格式解析（`lib/features/association/handlers/uri_association_handler.dart:31`、`lib/features/association/handlers/association_dialog_helper.dart:106-115`），拿到的是網頁，解析不出書。
 
 ## 少一個選項
 
@@ -330,6 +354,14 @@
 - [ ] **L11　每本書關掉超長章節拆分**：Legado 目錄選單與書籍詳情的「分割長章節」（`legado:ui/book/toc/TocActivity.kt:133-138`，預設開）。夜讀一律拆。要補的話預設開，和現在一樣。
 - [ ] **L3　自訂從檔名拆書名與作者的方式**：Legado 匯入頁「導入文件名」寫一段 JS（`legado:model/localBook/LocalBook.kt:341-359`）。四種常見寫法修進 L3 之後用處很小，建議不做。
 
+### 備份與 Legado 互通
+
+- [ ] **K10　自動備份**：Legado 每天第一次開 App、離開閱讀器時，當天還沒備份過就自動備份到設定的資料夾與 WebDAV（`legado:help/storage/Backup.kt:99-118`，`legado:ui/main/MainActivity.kt:321`）。夜讀只有手動建立備份；同步只留最新的狀態、刪除也跟著同步（ADR 0039），誤刪書源或書架後兩台都沒了，沒有前幾天的版本可以拿回來。要補的話：放「備份與同步」，備份到同步空間、留最近幾份，預設關。
+- [ ] **K9　還原時略過某幾項**：Legado 還原前可以勾選略過閱讀界面設定、主題模式、主題、封面設定、書架樣式、本地書等（`legado:help/storage/BackupConfig.kt:22-44`、`legado:ui/config/BackupConfigFragment.kt:235`、`251`）。夜讀還原一律全部併進來，拿別台的備份還原時這台的外觀與閱讀設定都被換掉。要補的話：還原確認框加「設定也還原」一個勾，預設勾。
+- [ ] **K12　匯出書的選項**：Legado 匯出時可以選 TXT 或 EPUB、套不套替換規則、要不要章名、只匯出某幾章、TXT 的編碼（`legado:help/config/AppConfig.kt:309-335`、`legado:service/ExportBookService.kt`）。夜讀只匯出整本 TXT、一律含章名、UTF-8（`lib/core/backup/export_book_service.dart`）。要補的話：先修 K12 的替換規則，選項只加「套用替換規則」（預設開），EPUB 與章節範圍不做。
+- [ ] **K8　還原 Legado 的設定**：Legado 的設定在 `config.xml`（Android 的偏好設定檔），夜讀不讀。兩邊同名的設定一百多個（夜讀的設定名稱多半照搬 Legado），但數值的意思不一定一樣（例如語速、繁簡轉換的編號），整份照收會把夜讀的設定改壞。要補的話只收逐一對過的幾個（繁簡轉換、替換規則預設、換源校驗作者這類），其他不收。
+- [ ] **K6、K7　Legado 的分組、TXT 目錄規則**：分組要等夜讀的書架有分組才用得到（列在「完全沒有的功能」）；TXT 目錄規則要等 L8。線上朗讀引擎、字典規則夜讀沒有這兩個功能。建議跟著各自的功能做，這一波不做。
+
 ## 有更好的做法
 
 - [ ] **L7　TXT 章名認得繁體字與全形數字**：Legado 的 TXT 目錄規則只有簡體字，數字只認半形（`app/src/main/assets/defaultData/txtTocRule.json`），繁體的「第一節」「第兩百章」「第一萬章」「第貳章」與「第１章」都分不出；夜讀現在的規則也一樣。夜讀的介面是繁體，讀者手上的 TXT 很多是繁體：照 Legado 補規則時，數字與章、節、卷、集、部、篇、回都同時收繁簡（節、兩、萬、貳、參、陸、億、迴），數字收全形。好處是繁體 TXT 分得出章，壞處是規則比 Legado 長、和 Legado 匯出的規則不完全一樣。
@@ -344,6 +376,7 @@
 - 反轉內容：把這一章的字整個倒過來（對付把正文倒著放的網站）。
 - 模擬追讀：照設定的起始日與每天章數，假裝這本書每天只更新幾章。
 - 段評：顯示書源給的段落評論。
+- 書架分組：自己建分組、把書分進去，書架照分組切換（夜讀的書架只能照小說、漫畫、有聲書篩選）。
 
 ## 拿不準
 
