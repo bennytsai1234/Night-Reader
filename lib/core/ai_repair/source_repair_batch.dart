@@ -458,7 +458,9 @@ class SourceRepairBatch extends ChangeNotifier {
         // 校驗把結果寫回書源（標記，照正文改的類型，ADR 0051）：之後交給
         // AI 與存檔前的比對都照寫回去的那一份，不然自己改的類型會被當成
         // 修的期間別處改過，修好的規則存不進去。
-        final checked = BookSource.fromJson(result.updatedSourceJson);
+        // 校驗時間不在書源 JSON 裡，寫回時記成現在（同校驗寫進資料庫）。
+        final checked = BookSource.fromJson(result.updatedSourceJson)
+          ..lastCheckTime = _now().millisecondsSinceEpoch;
         item.source = CheckSourceService.withCheckMarks(
           BookSource.fromJson(item.source.toJson()),
           checked,
