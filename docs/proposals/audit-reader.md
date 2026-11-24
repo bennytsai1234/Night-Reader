@@ -11,6 +11,7 @@
 |---|---|---|
 | 閱讀器 0：正文層 | `lib/features/reader/text_view/` 全部 41 個檔（`anchor/`、`core/`、`geometry/`、`illustration/`、`layout/`、`measure/`、`overlay/`、`paragraph/`、`pipeline/`、`progress/`、`pump/`、`text/`、`view/` 與 `reader_text_view.dart`） | 1 |
 | 閱讀器 1：功能、書籤、朗讀 | `lib/features/reader/features/` 全部 35 個檔（`auto_page/`、`bookmark/`、`brightness/`、`highlight/`、`illustration/`、`menu/`、`replace_rule/`、`settings/`、`tts/`）、`lib/features/bookmarks/` 2 個檔、`lib/core/engine/reader/` 1 個檔、`lib/core/playback/` 4 個檔（`tts_service` 在資料 2）、`lib/core/chinese/` 3 個檔 | 2 |
+| 閱讀器 2：畫面與視窗 | `lib/features/reader/screen/` 全部 16 個檔（含 `dependencies/`）、`lib/features/reader/viewport/` 2 個檔 | 2 |
 
 ## 閱讀器 0：正文層
 
@@ -88,6 +89,59 @@
 **修法方向**：推入時照其他設定頁走骨架（`GroupedListView` 的推入骨架）；改動後的重讀只換清單內容，不回到載入中。同步後的重讀（`_rulesSynced`，`:57-73`）已經是安靜地換，改動後的重讀照它做。
 
 **輕重**：畫面錯。
+
+## 閱讀器 2：畫面與視窗
+
+### 2-1. 四秒內連刪兩個書籤（或連加兩個、連刪兩個標註），按「復原」救回的是第一個，不是剛刪的那個
+
+**會發生什麼**：在目錄面板的書籤分頁往左滑刪掉一個書籤，提示「已刪除書籤　復原」還在畫面上時又刪一個，第二次不會出新的提示；這時按「復原」，回來的是第一個書籤，剛刪的第二個救不回來。連續加兩個書籤（「已加入書籤」的復原會刪掉第一個）、連續加或刪兩個標註都一樣。
+
+**為什麼**：
+
+- 閱讀器的提示同樣的字還在畫面上就不再顯示：`lib/features/reader/screen/reader_page.dart:709-718`
+
+  ```dart
+  void _showNotice(String message, {ReaderNoticeAction? action, ...}) {
+    ...
+    if (_visibleNoticeMessage == message) return;
+  ```
+
+  提示 4 秒才收（`:712`、`:730-731`），收掉前 `_visibleNoticeMessage` 一直是那段字（`:734-739`）。
+- 帶「復原」的提示字樣固定、只有按鈕的動作綁著那一筆：刪書籤 `reader_page.dart:692-701`（`'已刪除書籤'`，復原 `bookmarks.restore(bookmark)`）；加書籤 `lib/features/reader/use_cases/reader_page_coordinator.dart:434-441`（`'已加入書籤'`）；加標註 `:486-493`（`'已標註'`）；刪標註 `:500-509`（`'已刪除標註'`）。這幾處都經 `ReaderPageCoordinator` 的 `_showNotice`，就是上面那一個（`reader_page.dart:195`）。
+- 第二次呼叫在 `:717` 就回去了，畫面上留著第一次的提示與它的「復原」。
+
+**怎麼確認**：在 `test/features/reader/` 加元件測試：開閱讀器、有兩個書籤，目錄面板的書籤分頁滑刪第一個、接著滑刪第二個，按提示上的「復原」，斷言資料庫裡回來的是第二個（或兩個都回來）。
+
+**修法方向**：帶動作的提示不跳過：同樣的字也換上新的一則（動作換成這次的），或把「已刪除書籤」這類提示的去重只用在沒有動作的提示上。去重原本是為了擋同一個錯誤一直重複跳出，帶「復原」的提示每一則都綁著不同的資料。
+
+**輕重**：資料遺失或寫壞。
+
+### 2-2. 閱讀中從「書籍詳情」檢查過更新，回來切換「重新分段」或「本書套用替換規則」，剛抓到的新章節資訊被蓋回舊的
+
+**會發生什麼**：在閱讀器的「更多 → 書籍詳情」按檢查更新，抓到幾章新章節；回到閱讀器後在「更多」切換「重新分段」，或在替換規則面板切換「本書套用替換規則」「本書重新分段」，這本書的最新章名、章數、上次檢查的結果被寫回開書時的舊值；下次檢查更新又把同一批章節當成新章節，書架上再掛一次「+N」。書架在背景檢查更新、剛好在閱讀時寫完，也是同一個情形。
+
+**為什麼**：
+
+- 兩個開關都把閱讀器手上那一份書整筆寫回資料庫：`lib/features/reader/screen/reader_menu_pages.dart:234-241`
+
+  ```dart
+  final book = _host.book;
+  final config = book.readConfig ??= ReadConfig();
+  ...
+  await _host.dependencies.bookDao.upsert(book);
+  ```
+
+  替換規則面板 `lib/features/reader/features/replace_rule/reader_replace_rule_sheet.dart:148-160`（`widget.book` 就是 `_host.book`，`lib/features/reader/use_cases/reader_page_coordinator.dart:245-248`）；兩處失敗時的還原（`reader_menu_pages.dart:244-246`、`reader_replace_rule_sheet.dart:164-166`）也一樣。
+- `upsert` 是整列覆寫：`lib/core/database/dao/book_dao.dart:76-77`（`insertOnConflictUpdate`）。
+- 閱讀器手上的書是開書時的那一份，之後只有閱讀進度那幾欄跟著改（`lib/features/reader/session/reader_progress_controller.dart:86-90`）。書籍詳情的檢查更新寫的是資料庫裡那一列：`lib/features/book_detail/book_detail_provider.dart:1010` 呼叫 `BookUpdateService.check`，在 `lib/core/download/book_update_service.dart:170-177` 寫入新的 `totalChapterNum`、`latestChapterTitle`、`lastCheckTime`、`lastCheckCount`；閱讀器那一份沒有跟著換。
+- 下次檢查以資料庫裡的 `totalChapterNum` 算新章節數（`book_update_service.dart:166-169`），被蓋回舊值後同一批章又算一次。
+- 同一個資料表裡別處已經改成只寫要改的欄：閱讀進度用 `updateProgress`，同步來的使用者欄位用 `updateUserFields`（`book_dao.dart:140`、`:201-224`，註解寫「其他欄位不跟著被舊資料覆寫」）。
+
+**怎麼確認**：在 `test/features/reader/` 加測試：資料庫放一本書（`totalChapterNum` 10），用同一份 `Book` 物件建閱讀器；另外在資料庫把這本書的 `totalChapterNum` 改成 12、`latestChapterTitle` 改成新章名（模擬詳情的檢查更新）；呼叫「重新分段」的切換，斷言資料庫裡仍是 12 與新章名、`readConfig.reSegment` 已改。
+
+**修法方向**：這兩個開關只寫 `readConfig`：在 `BookDao` 加一個只更新 `readConfig` 的方法（或用現有的 `updateUserFields` 那一類），閱讀器的兩處開關與還原都改用它。閱讀器裡其他整筆寫回書的地方（`lib/features/reader/session/reader_session_facade.dart:46` 加入書架）在閱讀器 3 一起看。
+
+**輕重**：資料遺失或寫壞。
 
 ## 拿不準
 
