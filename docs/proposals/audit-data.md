@@ -10,12 +10,77 @@
 | 段 | 讀了哪些檔 | 找到 |
 |---|---|---|
 | 資料 0 資料庫與模型 | `lib/core/database/`（19 檔，不含 `*.g.dart`；另把 `app_tables.dart` 和初版 `5a4c55ee` 逐欄比過，後加的欄位都有升級步驟）、`lib/core/models/`（34 檔）、`lib/core/storage/` 的 `app_cache`、`app_storage_paths`、`reader_layout_cache`、`storage_metrics`（4 檔） | 0 |
+| 資料 1 下載與儲存 | `lib/core/download/` 的 `book_update_service`、`download_base`、`download_executor`、`download_failure`、`download_scheduler`、`download_service`（6 檔，`audio_chapter_download` 在閱讀器 4）、`lib/features/downloads/download_manager_page.dart`（1 檔）、`lib/core/utils/cache_manager.dart`、`lib/core/storage/` 的 `book_storage_service`、`book_chapter_files`、`reader_chapter_content_store`、`reader_chapter_content_storage`、`book_illustration_storage`、`book_cover_storage_service`、`bookshelf_state_tracker`、`books_in_use`（8 檔） | 2 |
 
 ## 問題
 
 ### 資料 0 資料庫與模型
 
 沒有找到。
+
+### 資料 1 下載與儲存
+
+#### 1-1. 書源改了網址、或重複書源被合併之後，那些書已下載的漫畫與有聲書全變成「沒下載」，插圖也不見；舊檔案留在手機裡再也不會被刪
+
+**會發生什麼**：讀者在書源編輯頁改了網址，或匯入書源、打開書源管理時夜讀自動合併了重複書源（ADR 0062），用那個書源的漫畫整本重新下載一遍、有聲書已下載的集數要重新手動下載、網路書正文裡的插圖重新抓；原本那份檔案留在舊的資料夾，移出書架、清除下載都刪不到，一直佔空間。另一台照同步的書源搬家紀錄跟著搬時也一樣。
+
+**為什麼**：
+1. 一本書的封面、插圖、漫畫的 CBZ 與有聲書的音訊都放在同一個書本資料夾，資料夾名稱由「書源網址＋書的網址」算出來：`lib/core/storage/book_cover_storage_service.dart:143-146`
+   ```dart
+   static String bookStorageKey(Book book) {
+     final material = '${book.origin}\n${book.bookUrl}';
+     return sha1.convert(utf8.encode(material)).toString();
+   }
+   ```
+   章節檔照它找資料夾（`lib/core/storage/book_chapter_files.dart:32-37`），插圖也是（`lib/core/storage/book_illustration_storage.dart:60-65`）。
+2. 改書源網址：`BookSourceService.saveEditedSource`（`lib/core/source/book_source_service.dart:247-275`）→ `BookSourceDao.saveEdited`（`lib/core/database/dao/book_source_dao.dart:103-120`）只改資料庫：書的書源網址（`BookDao.moveOrigin`，`lib/core/database/dao/book_dao.dart:70-74`）、搜尋結果、已存正文的鍵（`ReaderChapterContentDao.moveOrigin` 有重算鍵）。書本資料夾沒有搬。
+3. 合併重複書源：`mergeDuplicateSources`（`lib/core/source/source_dedupe.dart:61-93`，書源管理 `lib/features/source_manager/source_manager_provider.dart:190`、`401` 讀清單時呼叫）→ `BookSourceService.mergeSources`（`book_source_service.dart:280-300`）→ `BookSourceDao.mergeInto`（`book_source_dao.dart:127-162`），同樣只搬資料庫。另一台同步時走 `SourceSync._saveEdited`（`lib/core/sync/source_sync.dart:41-42`）與同一個 `mergeSources`。
+4. 書的書源網址換了，`bookStorageKey` 就指到一個新的空資料夾：
+   - 漫畫：書架自動下載比對已下載的話（`lib/core/download/download_service.dart:85-93` → `downloadedComicChapterUrls`，`lib/core/download/download_executor.dart:379-392`）一話都對不到，整本排進下載；漫畫閱讀器也讀不到已下載的 CBZ。
+   - 有聲書：`BookChapterFiles.downloaded` 讀新資料夾，已下載的集數都不見（`book_chapter_files.dart:50-61`）。
+   - 插圖：`BookIllustrationStorage.dirFor` 指到新資料夾，已存正文裡的圖都找不到檔。
+5. 舊資料夾從此沒人管：移出書架時 `_discardFiles` → `deleteBookAssets` 只刪新鍵的資料夾（`lib/core/storage/book_storage_service.dart:100-104`、`book_cover_storage_service.dart:134-141`）。
+
+對照：本地書換檔名時有把整個書本資料夾複製過去、改指新路徑（`lib/core/local_book/local_book_service.dart:190-200`）；換源有 `handoffSourceSwitchAssets`（`book_cover_storage_service.dart:76-132`）。書源改網址與合併兩條路沒有。
+
+**怎麼確認**：`test/core/database/` 或 `test/core/source/` 加一項：建一本漫畫書（書源 A），用 `BookChapterFiles.save` 存一話 CBZ；呼叫 `BookSourceService.mergeSources([A], B)`（或 `saveEditedSource` 改網址），重讀這本書，斷言 `BookChapterFiles.downloaded(book)` 仍有那一話、舊的 `bookAssetDir(bookStorageKey(舊書))` 不在了。
+
+**修法方向**：修在書源網址換掉的地方：`BookSourceDao.moveOrigin` 這一層（`saveEdited` 與 `mergeInto` 共用）搬資料庫時，同時把每本書的書本資料夾從舊鍵搬到新鍵，並把 `coverLocalPath`、`customCoverLocalPath` 改指新路徑（同本地書的 `_repointAssets`）；新鍵已有資料夾時（合併時兩個書源有同一本書）以留下的為準、舊的刪掉。同一個原因：所有「書的 `origin` 被改掉」的地方都要一起搬，含同步套用書源搬家。
+
+**輕重**：資料遺失或寫壞
+
+#### 1-2. 在下載佇列刪掉一個剛開始、還在抓目錄的任務，重開 App 後它以「已暫停」又出現
+
+**會發生什麼**：還沒有目錄的書（例如還原備份後）排進下載時，開跑先向書源抓目錄；讀者這時在「背景下載佇列」把它滑掉刪除，畫面上不見了，但下次開 App 這個任務以「已暫停」回到佇列。書架自動下載不會動被暫停的任務（`decideShelfDownload`），要讀者再刪一次。
+
+**為什麼**：
+1. 刪除只從記憶體與資料庫拿掉，不讓進行中的那一輪停下：`lib/core/download/download_service.dart:304-311`
+   ```dart
+   void removeTask(String bookUrl) {
+     for (final task in tasks.where((t) => t.bookUrl == bookUrl)) {
+       task.status = DownloadTask.statusPaused;
+     }
+     tasks.removeWhere((t) => t.bookUrl == bookUrl);
+     downloadDao.deleteByUrl(bookUrl);
+   ```
+   沒有像 `retireBook`（同檔 `375-390`）那樣標退役、取消這一輪。
+2. 那一輪還在 `planDownloadInSourceIsolate`（`lib/core/download/download_executor.dart:418-421`）裡抓目錄；回來後章數和排進來時不同（排進來時沒有目錄，總數是 0），整筆寫回資料庫：`download_executor.dart:428-431`
+   ```dart
+   if (plan.total != task.totalCount) {
+     task.totalCount = plan.total;
+     await downloadDao.upsert(task);
+   }
+   ```
+   `upsert` 是 `insertOnConflictUpdate`（`lib/core/database/dao/download_dao.dart:36-37`），被刪掉的那一列又插回去，狀態是第 1 步設的「已暫停」。
+3. 下一次開 App，`_loadTasks` 讀回資料庫所有任務（`download_service.dart:180-196`），它就回到佇列。
+
+排隊期間目錄變長（書架檢查更新抓到新章節）也會讓第 2 步的條件成立，只是空檔較短。
+
+**怎麼確認**：`test/core/download/` 加一項：準備一本沒有目錄的書與一個抓目錄會等一個 `Completer` 的假書源，`queueShelfDownload` 後等任務進入下載中，呼叫 `removeTask`，再讓目錄回來；等任務收尾後斷言 `DownloadDao.getAll()` 是空的。
+
+**修法方向**：修在第 2 步：只改總數的地方用只更新那一欄的寫法（`DownloadDao.updateProgress` 加 `totalCount`，條件更新、列不在就不寫），不用整筆 `upsert`。另外 `removeTask` 改走退役（標退役、取消這一輪），已送出的章節也不再寫進度。
+
+**輕重**：功能沒反應或結果錯
 
 ## 拿不準
 
