@@ -187,5 +187,8 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
     }
     await bookDao.updateOrders([for (final book in ordered) book.bookUrl]);
     notifyListeners();
+    // 放下之前已經開始的書架重讀會帶回舊的順序、換掉畫面上的清單：寫好之後
+    // 再讀一次，畫面照存下的順序。
+    await loadBooks();
   }
 }

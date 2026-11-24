@@ -139,8 +139,14 @@ void main() {
         ..latestChapterTitle = '第十二章';
       await bookDao.upsert(checked);
 
+      // 放下的那一刻剛好有一次書架重讀在跑（例如某本書下載完成）。
+      final reloading = provider.loadBooks();
       await provider.reorderBooks(1, 0);
+      await reloading;
 
+      expect([
+        for (final book in provider.books) book.bookUrl,
+      ], before.reversed.toList());
       final first = (await bookDao.getByUrl(before.first))!;
       final second = (await bookDao.getByUrl(before.last))!;
       expect(first.totalChapterNum, 12);

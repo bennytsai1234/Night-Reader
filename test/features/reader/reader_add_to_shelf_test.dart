@@ -6,6 +6,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/features/reader/chapter/reader_content.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/session/reader_open_target.dart';
@@ -122,5 +123,41 @@ void main() {
     expect(saved.durChapterTitle, '第一章');
     expect(saved.name, '新書名');
     expect(saved.customCoverUrl, 'https://s.example/cover.jpg');
+  });
+
+  test('adding to the shelf keeps the table of contents an update check '
+      'just stored and follows the chapter there', () async {
+    final book = unshelvedBook();
+    BookChapter chapter(String id, int index) => BookChapter(
+      url: 'https://s.example/c/$id',
+      title: id,
+      bookUrl: book.bookUrl,
+      index: index,
+    );
+    // 閱讀器開書時的目錄是 A、B、C；閱讀中檢查更新存了 X、A、B、C。
+    final opened = [chapter('A', 0), chapter('B', 1), chapter('C', 2)];
+    await bookDao.upsert(book.copyWith());
+    await chapterDao.insertChapters([
+      chapter('X', 0),
+      chapter('A', 1),
+      chapter('B', 2),
+      chapter('C', 3),
+    ]);
+
+    await const ReaderSessionFacade().addCurrentBookToBookshelf(
+      book: book,
+      chapters: opened,
+      location: const ReaderLocation(chapterIndex: 1, charOffset: 30),
+      chapterTitle: 'B',
+      bookDao: bookDao,
+      chapterDao: chapterDao,
+    );
+
+    final stored = await chapterDao.getByBook(book.bookUrl);
+    expect([for (final c in stored) c.title], ['X', 'A', 'B', 'C']);
+    final saved = (await bookDao.getByUrl(book.bookUrl))!;
+    expect(saved.chapterIndex, 2);
+    expect(saved.durChapterTitle, 'B');
+    expect(ReaderOpenTarget.resume(saved).location.chapterIndex, 2);
   });
 }
