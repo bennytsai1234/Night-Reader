@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/ai_find/ai_find_library.dart';
 import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
@@ -33,6 +34,7 @@ class AppAiFindLibrary implements AiFindLibrary {
     this._searchLoader,
     this.searchLimit = aiFindSearchLimit,
     Dio? wikipedia,
+    @visibleForTesting this._secretsOf = aiRepairSecretsOf,
   }) : _service = service ?? BookSourceService(),
        _wikipedia = wikipedia ?? NetworkService().appDio;
 
@@ -47,7 +49,9 @@ class AppAiFindLibrary implements AiFindLibrary {
   final BookSourceService _service;
   final SearchBookLoader? _searchLoader;
 
-  final Map<String, BookSource?> _sources = {};
+  /// 讀過的書源：連它的秘密一起讀好才算（[_source]）。
+  final Map<String, Future<BookSource?>> _sources = {};
+  final Future<Set<String>> Function(BookSource source) _secretsOf;
 
   @override
   final Set<String> secrets = {};
@@ -561,12 +565,22 @@ class AppAiFindLibrary implements AiFindLibrary {
     ];
   }
 
+  /// 書源 [url]，連它的秘密都讀好才交出：同一輪幾個工具一起跑時，後到的
+  /// 也等秘密讀好，結果才不會在秘密還沒收進來前就接進對話。
   Future<BookSource> _source(String url) async {
-    if (!_sources.containsKey(url)) {
-      final loaded = _sources[url] = await getIt<BookSourceDao>().getByUrl(url);
-      if (loaded != null) secrets.addAll(await aiRepairSecretsOf(loaded));
+    final pending = _sources[url] ??= () async {
+      final loaded = await getIt<BookSourceDao>().getByUrl(url);
+      if (loaded != null) secrets.addAll(await _secretsOf(loaded));
+      return loaded;
+    }();
+    final BookSource? source;
+    try {
+      source = await pending;
+    } catch (_) {
+      // 讀不到的不記著：下一次重讀。
+      if (identical(_sources[url], pending)) _sources.remove(url)?.ignore();
+      rethrow;
     }
-    final source = _sources[url];
     if (source == null) throw const AiFindUnreadable('書源已經不在了');
     return source;
   }

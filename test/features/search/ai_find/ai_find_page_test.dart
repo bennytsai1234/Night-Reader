@@ -22,6 +22,7 @@ import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/core/background_work/paused_work_file.dart';
 import 'package:night_reader/features/search/ai_find/ai_find_page.dart';
 import 'package:night_reader/features/search/ai_find/ai_find_run.dart';
+import 'package:night_reader/features/search/models/search_scope.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -192,6 +193,56 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  // ADR 0060：AI 找書照搜尋頁的範圍。從「在此書源中搜尋」進來時範圍只有
+  // 那一個書源（不存進設定），不能改用存著的範圍。
+  testWidgets('starting from a page that searches one source uses that '
+      'source, not the saved scope', (tester) async {
+    final settings = await prefs();
+    await settings.setString('search_scope', '乙::https://b.example');
+    String? started;
+    await show(
+      tester,
+      AiFindPage(
+        prefs: settings,
+        scope: SearchScope('甲::https://a.example'),
+        startRun:
+            ({
+              required description,
+              required depth,
+              required count,
+              required avoid,
+              required service,
+              required scope,
+            }) {
+              started = scope.toString();
+              final session = AiFindSession(
+                description: description,
+                depth: depth,
+                library: _Library(),
+                ask: (_, _) async =>
+                    _call('submit', {'books': <Object>[], 'summary': '沒有'}),
+                log: AiRepairLog.find(
+                  description: description,
+                  directory: () async => logs,
+                ),
+              );
+              return AiFindRun(
+                session,
+                save: (_) async {},
+                progress: _MemoryFile(),
+                work: BackgroundWork(platform: _Platform()),
+              );
+            },
+      ),
+    );
+    await tester.enterText(find.byType(TextField), '穿越');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('開始找書'));
+    await tester.pumpAndSettle();
+
+    expect(started, '甲::https://a.example');
+  });
 
   testWidgets('typing a wish and starting runs the find with the chosen '
       'depth, then shows the picks, the explanation and a saved report', (

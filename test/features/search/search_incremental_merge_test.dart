@@ -53,6 +53,33 @@ void main() {
       containsAll(['甲', '乙', null]),
     );
   });
+
+  // 同一個書源回的兩本書：網址只差路徑的大小寫（/book/A、/book/a）是兩本
+  // 不同的書，不當成重複；網址完全相同的才是同一本回了兩次。
+  test('two books whose addresses differ only in case are both kept', () {
+    SearchBook at(String path, String name, String author) => SearchBook(
+      bookUrl: 'https://Site.example$path',
+      name: name,
+      author: author,
+      origin: 'a',
+      originName: 'a',
+    );
+    final model = SearchModel(callback: const _SilentCallback());
+    model.mergeForTest(
+      [
+        at('/book/A', '作品甲', '甲'),
+        at('/book/a', '作品乙', '乙'),
+        at('/book/a', '作品乙', '乙'),
+      ],
+      '作品',
+      false,
+    );
+
+    expect(model.searchBooksForTest.map((card) => card.name).toList()..sort(), [
+      '作品乙',
+      '作品甲',
+    ]);
+  });
 }
 
 class _SilentCallback implements SearchModelCallback {

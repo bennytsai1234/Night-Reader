@@ -48,14 +48,18 @@ const String aiFindDepthKey = 'ai_find.depth';
 const String aiFindCountKey = 'ai_find.count';
 
 /// 搜尋頁的 ✦：有一次找書在跑、暫停中，或做完還沒看過結果時推回那一頁；
-/// 不然推開始前的頁面（docs/design/screens.md「AI 找書」）。
-Future<void> openAiFind(BuildContext context) async {
+/// 不然推開始前的頁面（docs/design/screens.md「AI 找書」）。[scope] 是搜尋頁
+/// 現在的範圍（ADR 0060：照搜尋頁的範圍膠囊）：從「在此書源中搜尋」進來的
+/// 只有那一個書源，不存進設定。
+Future<void> openAiFind(BuildContext context, {SearchScope? scope}) async {
   final navigator = Navigator.of(context);
   if (aiFindRuns.current case final AiFindRun current when !current.isDone) {
     await navigator.push(current.pageRoute());
     return;
   }
-  await navigator.push(MaterialPageRoute<void>(builder: (_) => AiFindPage()));
+  await navigator.push(
+    MaterialPageRoute<void>(builder: (_) => AiFindPage(scope: scope)),
+  );
 }
 
 /// 開始前那一列「不想看的」右邊的字：只寫幾項，沒有寫「沒有」。
@@ -79,6 +83,7 @@ class AiFindPage extends StatefulWidget {
     AiRepairSettings? settings,
     SharedPreferences? prefs,
     this.startRun,
+    this.scope,
     this.bookPage = _bookDetail,
   }) : settings = settings ?? AiRepairSettings(prefs),
        _prefs = prefs;
@@ -92,6 +97,9 @@ class AiFindPage extends StatefulWidget {
 
   /// 在跑或跑完的那一次；開始前是 null。
   final AiFindRun? run;
+
+  /// 搜尋頁現在的範圍（[openAiFind]）；沒給時照存著的設定。
+  final SearchScope? scope;
 
   /// 過去的一次找書。
   final AiFindRecord? record;
@@ -228,7 +236,7 @@ class _AiFindPageState extends State<AiFindPage> {
       final prefs = await _prefs();
       await prefs.setString(aiFindDepthKey, _depth.name);
       await prefs.setInt(aiFindCountKey, _count);
-      final scope = SearchScope.fromPrefs(prefs);
+      final scope = widget.scope ?? SearchScope.fromPrefs(prefs);
       final description = _description.text.trim();
       final run = (widget.startRun ?? _defaultRun)(
         description: description,
