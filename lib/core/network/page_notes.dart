@@ -33,18 +33,113 @@ const int _shortPageLength = 1000;
 
 /// 頁面用程式或 `<meta refresh>` 轉去的網址（照頁面上寫的，可能是相對路徑）；
 /// 頁面有內容（精簡後 [_shortPageLength] 字以上）或沒有轉址時是 null。
+///
+/// 程式只認一定會自動跑的：`<script>` 最外層的那一行。寫在函式、區塊、
+/// 按鈕的 `onclick`、註解與字串裡的不算——網站檢查會照轉去的網址抓（帶
+/// 書源的 Cookie），跟到登出按鈕的網址會把讀者登出。
 String? scriptRedirectOf(String body) {
   if (!body.trimLeft().startsWith('<')) return null;
-  final assign = _locationAssign.firstMatch(body);
-  final found = assign != null
-      ? assign.group(1) ?? assign.group(2)
-      : _metaRefresh.firstMatch(body)?.group(1);
+  final found =
+      _topLevelRedirect(body) ?? _metaRefresh.firstMatch(body)?.group(1);
   if (found == null) return null;
   final target = found.trim();
   if (target.isEmpty || target.startsWith('#')) return null;
   if (digestPage(body).length >= _shortPageLength) return null;
   return target;
 }
+
+/// 頁面裡 `<script>` 最外層的 [_locationAssign] 轉去的網址。
+String? _topLevelRedirect(String body) {
+  for (final script in _inlineScript.allMatches(body)) {
+    final code = script.group(1)!;
+    final top = _topLevelCode(code);
+    for (final assign in _locationAssign.allMatches(code)) {
+      if (top[assign.start]) return assign.group(1) ?? assign.group(2);
+    }
+  }
+  return null;
+}
+
+/// `<script>` 裡的程式（HTML 標籤不分大小寫）。
+final RegExp _inlineScript = RegExp(
+  r'<script\b[^>]*>([\s\S]*?)</script\s*>',
+  caseSensitive: false,
+);
+
+/// [code] 每個位置是不是最外層的程式：不在 `{}` 裡（函式、區塊），也不在
+/// 字串、正規表示式與註解（含舊式的 `<!--` 那一行）裡。
+List<bool> _topLevelCode(String code) {
+  final top = List<bool>.filled(code.length, false);
+  var depth = 0;
+  String? quote;
+  var lineComment = false;
+  var blockComment = false;
+  var regex = false;
+  var regexClass = false;
+  // 上一個有意義的字元：斜線前面是運算子、括號或開頭時是正規表示式。
+  String? prev;
+  for (var i = 0; i < code.length; i++) {
+    final c = code[i];
+    final next = i + 1 < code.length ? code[i + 1] : '';
+    if (lineComment) {
+      if (c == '\n') lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (c == '*' && next == '/') {
+        blockComment = false;
+        i++;
+      }
+      continue;
+    }
+    if (quote != null) {
+      if (c == '\\') {
+        i++;
+      } else if (c == quote) {
+        quote = null;
+        prev = c;
+      }
+      continue;
+    }
+    if (regex) {
+      if (c == '\\') {
+        i++;
+      } else if (regexClass) {
+        if (c == ']') regexClass = false;
+      } else if (c == '[') {
+        regexClass = true;
+      } else if (c == '/') {
+        regex = false;
+        prev = c;
+      }
+      continue;
+    }
+    if (c == '/' && next == '/') {
+      lineComment = true;
+    } else if (c == '/' && next == '*') {
+      blockComment = true;
+    } else if (c == '<' && code.startsWith('<!--', i)) {
+      lineComment = true;
+    } else if (c == '/' && (prev == null || _beforeRegex.contains(prev))) {
+      regex = true;
+    } else if (c == '"' || c == "'" || c == '`') {
+      quote = c;
+    } else if (c == '{') {
+      depth++;
+      prev = c;
+    } else if (c == '}') {
+      if (depth > 0) depth--;
+      prev = c;
+    } else {
+      top[i] = depth == 0;
+      if (c.trim().isNotEmpty) prev = c;
+    }
+  }
+  return top;
+}
+
+/// 斜線前面是這些字元時是正規表示式，不是除號。
+const String _beforeRegex = '(,=:[!&|?{};+-*%<>~^';
 
 /// `location.href = "…"`、`window.location = '…'`、`location.replace("…")`
 /// 這類。

@@ -111,6 +111,17 @@ void main() {
         '<html><body><div id="app"></div>'
         '<script src="/main.js"></script></body></html>';
     expect(_judge(_page(app), missing: _page(app)).verdict, SiteVerdict.alive);
+    // HTML 的標籤不分大小寫。
+    for (final tag in ['SCRIPT', 'ScRiPt']) {
+      final upper =
+          '<html><body><div id="app"></div>'
+          '<$tag src="/main.js"></$tag></body></html>';
+      expect(
+        _judge(_page(upper), missing: _page(upper)).verdict,
+        SiteVerdict.alive,
+        reason: tag,
+      );
+    }
   });
 
   test('a large page served for every address may be a single-page app, so '
