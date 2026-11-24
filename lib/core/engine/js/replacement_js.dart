@@ -14,4 +14,11 @@ String runReplacementJs(String code, String matched) {
   return '$value';
 }
 
+/// 收掉這個 isolate 的引擎（QuickJS 的記憶體在 isolate 結束時不會自己還）。
+/// 只跑一次就結束的 isolate（選字建規則、規則試跑）在結束前呼叫。
+void disposeReplacementJs() {
+  _engine?.dispose();
+  _engine = null;
+}
+
 JsEngine? _engine;

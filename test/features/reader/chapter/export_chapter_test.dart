@@ -58,4 +58,27 @@ void main() {
     );
     expect(exported.text, '　　正文广告内容');
   });
+
+  test('跑太久的規則告訴呼叫端，這一章照其他規則處理完', () async {
+    final timedOut = <String>[];
+    final exported = await ReaderContentTransformer.exportChapter(
+      book: book,
+      chapter: chapter,
+      rawContent: '　　正文广告\n${'a' * 30}!',
+      enabledRules: [
+        ReplaceRule(
+          id: 3,
+          name: '回溯',
+          pattern: r'(?m)^(a+)+$',
+          replacement: 'x',
+          timeoutMillisecond: 200,
+        ),
+        ReplaceRule(id: 4, name: '廣告', pattern: '广告', isRegex: false),
+      ],
+      onRuleTimedOut: (rule) => timedOut.add(rule.name),
+    );
+    expect(timedOut, ['回溯']);
+    expect(exported.text, contains('正文'));
+    expect(exported.text, isNot(contains('广告')));
+  });
 }

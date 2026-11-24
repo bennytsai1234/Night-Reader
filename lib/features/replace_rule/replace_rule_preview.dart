@@ -142,5 +142,6 @@ void _previewMain((SendPort, List<ReplaceRule>, String) args) {
     reply.send(('rule', i));
     text = rules[i].apply(text, runJs: runReplacementJs);
   }
+  disposeReplacementJs();
   reply.send(('done', text));
 }

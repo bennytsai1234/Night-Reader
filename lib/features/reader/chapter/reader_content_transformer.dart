@@ -746,11 +746,14 @@ class ReaderContentTransformer {
   /// 匯出書用的一章：照 Legado（`ExportBookService.getExportData`）套這本書
   /// 的替換規則與標題規則、拿掉正文開頭重複的章名，不做繁簡轉換、不重新
   /// 分段，插圖不放（ADR 0050）。[text] 是每段前面空兩格、一段一行。
+  /// 有規則跑超過它的逾時就略過它、照其他規則處理完，並呼叫
+  /// [onRuleTimedOut]（同閱讀器）。
   static Future<({String title, String text})> exportChapter({
     required Book book,
     required BookChapter chapter,
     required String rawContent,
     required List<ReplaceRule> enabledRules,
+    void Function(ReplaceRule rule)? onRuleTimedOut,
   }) async {
     final result = await ReaderContentTransformWorker.instance.process({
       'chapterIndex': chapter.index,
@@ -762,7 +765,7 @@ class ReaderContentTransformer {
       'useReplaceRules': book.getUseReplaceRule(),
       'reSegmentEnabled': false,
       'chineseConvertType': 0,
-    });
+    }, onRuleTimedOut: onRuleTimedOut);
     final document = result['document']! as ReaderContent;
     return (
       title: document.title,
@@ -825,7 +828,13 @@ class ReaderContentTransformer {
       'useReplaceRules': book.getUseReplaceRule(),
       'reSegmentEnabled': book.getReSegment(),
     };
-    return Isolate.run(() => _ruleStageParagraphsInBackground(args));
+    return Isolate.run(() {
+      try {
+        return _ruleStageParagraphsInBackground(args);
+      } finally {
+        disposeReplacementJs();
+      }
+    });
   }
 
   static RuleStageText _ruleStageParagraphsInBackground(
