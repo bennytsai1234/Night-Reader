@@ -415,12 +415,83 @@ jobs:
           path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           retention-days: 7
 
+  # iPhone 版的最小自動檢查（ADR 0003）：在 iPhone 模擬器上打開夜讀，走一遍進書架、
+  # 匯入一本 TXT、開書、進「閱讀偏好」（integration_test/ios_smoke_test.dart）。沒過就不建、
+  # 不附 IPA，Android 版照常發。模擬器只跑得了開發版，只有正式版才出的錯抓不到。
+  # 和 Android 的驗證、建 APK 同時跑。發版排隊不取消，模擬器卡住會擋住之後每一次發版，
+  # 所以設上限。
+  ios-smoke:
+    name: iOS simulator smoke test
+    needs: plan-release
+    if: needs.plan-release.outputs.should_build == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan-release.outputs.target_sha }}
+          persist-credentials: false
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.2"
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Boot iPhone simulator
+        id: simulator
+        # 機型與 iOS 版本隨 GitHub 的映像檔更新，從現有的 iPhone 裡挑最新的一台，不寫死。
+        run: |
+          set -euo pipefail
+          udid="$(xcrun simctl list devices available --json |
+            jq -r '[.devices | to_entries[] | select(.key | test("iOS")) | .value[]
+                    | select(.name | startswith("iPhone"))] | last | .udid // empty')"
+          if [[ -z "$udid" ]]; then
+            echo "::error::這台機器上找不到 iPhone 模擬器。"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          xcrun simctl list devices available | grep "$udid"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Open the app and walk through it
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: >-
+          flutter test integration_test/ios_smoke_test.dart
+          --no-pub
+          --reporter expanded
+          -d "$UDID"
+
+      - name: Screenshot the simulator
+        if: failure() && steps.simulator.outputs.udid != ''
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/ios-smoke.png"
+
+      - name: Upload the screenshot
+        if: failure() && steps.simulator.outputs.udid != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-smoke-screenshot
+          path: ${{ runner.temp }}/ios-smoke.png
+          if-no-files-found: ignore
+          retention-days: 7
+
   # 未簽章的 iOS IPA（ADR 0003）：沒有 Apple 開發者帳號，使用者自行用 AltStore／Sideloadly
   # 簽章安裝。排在 APK 之後：發布時 Release 由 APK 那步建立，這裡只補上 IPA；iOS 建置失敗
-  # 不影響已發出的 Android 版。
+  # 或上面的模擬器檢查沒過，都不影響已發出的 Android 版，那一版只是沒有 IPA。
   build-ios-ipa:
     name: Build unsigned iOS IPA
-    needs: [plan-release, build-release-apk]
+    needs: [plan-release, build-release-apk, ios-smoke]
     if: needs.plan-release.outputs.should_build == 'true'
     runs-on: macos-latest
 
