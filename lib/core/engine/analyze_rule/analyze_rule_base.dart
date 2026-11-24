@@ -5,7 +5,11 @@ import '../parsers/analyze_by_json_path.dart';
 import '../parsers/analyze_by_xpath.dart';
 import '../analyze_url.dart';
 import '../js/js_engine.dart';
+import '../js/js_extensions.dart';
 
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
+import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/models/source/rule_data_interface.dart';
 import 'package:night_reader/core/source/rule_big_data_service.dart';
 import 'package:night_reader/core/utils/lru_map.dart';
@@ -76,59 +80,48 @@ abstract class AnalyzeRuleBase {
       }
     }
 
+    // 同 Legado：章節、書，都沒有時存進書源（`source.put`，和規則 JS 的
+    // `source.put` 同一份），之後別的規則讀得到。
     if (chapter != null && chapter is RuleDataInterface) {
       (chapter as RuleDataInterface).putVariable(key, value);
     } else if (ruleData != null) {
       ruleData!.putVariable(key, value);
-    } else if (source != null && source is RuleDataInterface) {
-      (source as RuleDataInterface).putVariable(key, value);
+    } else if (source case final BaseSource source) {
+      JsExtensions.putSourceRuleVariable(source, key, value);
     } else {
       transientVariables[key] = value;
     }
   }
 
+  /// 同 Legado `AnalyzeRule.get`：`bookName` 是書名、`title` 是章名，其他
+  /// 依序找章節、書、書源（空的也算沒有，往下一層找：正文的規則讀得到詳情頁
+  /// 用 @put 存在書上的變數）。
   String get(String key) {
     switch (key) {
-      case 'key':
-        return this.key ?? '';
-      case 'page':
-        return page.toString();
-      case 'baseUrl':
-        return baseUrl ?? '';
-      case 'redirectUrl':
-        return redirectUrl ?? '';
-      case 'nextChapterUrl':
-        return nextChapterUrl ?? '';
-      case 'title':
-        final chapterTitle = chapter?.title?.toString();
-        if (chapterTitle != null && chapterTitle.isNotEmpty) {
-          return chapterTitle;
+      case 'bookName':
+        switch (ruleData) {
+          case final Book book:
+            return book.name;
+          case final SearchBook book:
+            return book.name;
         }
-        break;
+      case 'title':
+        if (chapter != null) return chapter.title?.toString() ?? '';
     }
 
     String? val;
-
-    // 同 Legado：章節、書、書源一層層找，空的也算沒有，往下一層找（正文的
-    // 規則讀得到詳情頁用 @put 存在書上的變數）。
     if (chapter != null && chapter is RuleDataInterface) {
       val = (chapter as RuleDataInterface).getVariable(key);
     }
     if (val == null || val.isEmpty) val = ruleData?.getVariable(key);
     if (val == null || val.isEmpty) {
-      if (source != null && source is RuleDataInterface) {
-        val = (source as RuleDataInterface).getVariable(key);
+      if (source case final BaseSource source) {
+        val = JsExtensions.sourceRuleVariable(source, key);
       }
     }
     if (val == null || val.isEmpty) {
       val = transientVariables[key];
     }
-
-    // 如果內存中沒有且可能在大數據中，嘗試讀取
-    if (val == null || val.isEmpty) {
-      // 異步讀取可能需要重構 get 為 Future，這裡先做同步檢查的框架
-    }
-
     return val ?? '';
   }
 

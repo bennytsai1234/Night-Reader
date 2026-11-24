@@ -212,13 +212,19 @@ class ChapterListParser {
     return null;
   }
 
-  /// 解析布林字串 (對標 Android String.isTrue)
-  /// 認可: true / yes / 1 / 是
+  /// 規則的結果算不算「是」（同 Legado `String.isTrue`）：空白與 `null` 不算，
+  /// 其他只要不是 false、no、not、0（不分大小寫）就算，所以規則回元素的文字
+  /// 或屬性（鎖頭圖片的網址、「VIP」字樣、卷名的 class）也算。
   static bool _isTrue(String s) {
-    if (s.isEmpty) return false;
-    final lower = s.trim().toLowerCase();
-    return lower == 'true' || lower == 'yes' || lower == '1' || lower == '是';
+    final trimmed = s.trim();
+    if (trimmed.isEmpty || s == 'null') return false;
+    return !_falseWords.hasMatch(trimmed);
   }
+
+  static final RegExp _falseWords = RegExp(
+    r'^(false|no|not|0)$',
+    caseSensitive: false,
+  );
 
   static String _readString(
     AnalyzeRule rule,
