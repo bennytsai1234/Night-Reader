@@ -148,19 +148,19 @@
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| 正文規則 | | |
-| 從正文抓章名（`title`） | | |
-| 正文下一頁（`nextContentUrl`，一頁接一頁與一次給多頁） | | |
-| `webJs`（用網頁抓正文時跑的 JS） | | |
-| `sourceRegex`（等網頁載入某個資源） | | |
-| 書源自帶的正文替換（`replaceRegex`） | | |
-| 插圖的樣子（`imageStyle`） | | |
-| 插圖解密（`imageDecode`） | | |
-| 購買（`payAction`） | | |
-| 正文空白時 | | |
-| 正文開頭重複的章名 | | |
-| 正文 HTML 整理（段落、插圖） | | |
-| 下一章網址（`nextChapterUrl`） | | |
+| 正文規則 | 一樣 | 先清標籤、保留插圖，再解 HTML 實體（`L:model/webBook/BookContent.kt:180`、`N:lib/core/engine/web_book/content_parser.dart:50`）；沒寫正文規則時 Legado 把章節網址當正文（`L:model/webBook/WebBook.kt:307`），夜讀是空的，文字書源用不到。 |
+| 從正文抓章名（`title`） | 結果不對 | 夜讀不讀這條規則，見 R19。 |
+| 正文下一頁（`nextContentUrl`，一頁接一頁與一次給多頁） | 一樣 | 停在下一頁出現過或就是下一章；夜讀多留 1000 頁上限（ADR 0072）；一次給多頁時夜讀同時抓 4 頁、Legado 照「線程數」（`N:lib/core/engine/web_book/complete_content_fetcher.dart:28-29`、`L:model/webBook/BookContent.kt:118`），一頁抓不到兩邊都整章失敗。 |
+| `webJs`（用網頁抓正文時跑的 JS） | 結果不對 | 夜讀沒傳進正文的請求，見 R18。 |
+| `sourceRegex`（等網頁載入某個資源） | 結果不對 | 同 R18；`java.webViewGetSource` 那條路見 R7。 |
+| 書源自帶的正文替換（`replaceRegex`） | 一樣 | 拆行去頭尾空白、跑規則、每段補縮排（`L:model/webBook/BookContent.kt:139`、`N:lib/core/engine/web_book/content_parser.dart:84-123`）；規則出錯時 Legado 整章失敗，夜讀留沒替換的正文。 |
+| 插圖的樣子（`imageStyle`） | 刻意不同 | 四種樣式不做，插圖一律獨立一塊（ADR 0050）。 |
+| 插圖解密（`imageDecode`） | 一樣 | 抓到插圖的位元組先交給它（`N:lib/core/engine/web_book/illustration_fetcher.dart:111-119`）；封面沒跑，見 R1。 |
+| 購買（`payAction`） | 刻意不同 | 照收、不執行，沒有「購買」（ADR 0057）。 |
+| 正文空白時 | 一樣 | 當失敗（`L:model/webBook/BookContent.kt:150`、「章節內容為空」）；夜讀另外認出登入牆（ADR 0038）。 |
+| 正文開頭重複的章名 | 見另一份 | 閱讀時的正文整理，在 `docs/proposals/legado-reading.md` C3。 |
+| 正文 HTML 整理（段落、插圖） | 拿不準 | 段落、空白與實體一樣；插圖網址夜讀先取懶載入屬性（`data-original`、`data-src`），Legado 取標籤裡寫在後面的那個，刻意不同但沒有 ADR，見檔尾。 |
+| 下一章網址（`nextChapterUrl`） | 一樣 | 傳給正文規則、也當分頁的停點；沒給時查存著的目錄的下一章，沒有就第一章（`L:model/webBook/BookContent.kt:51`）。 |
 
 ### 發現
 
@@ -307,6 +307,7 @@
 - Legado：`L:help/http/BackstageWebView.kt:282-293`，`onLoadResource` 每載入一個資源就比對 `resUrl.matches(sourceRegex)`（整個網址要符合），符合時回那個網址；正文的 `sourceRegex` 從 `L:model/webBook/WebBook.kt:334-337` 傳進去。
 - 夜讀：`N:lib/core/network/backstage_webview.dart:56-66, 155-161`，把網頁內容（`outerHTML` 或 `webJs` 的結果）拿來找，有分組時取第一組；找不到就回整頁內容。註解寫明是因為用的 WebView 套件拿不到資源載入的事件。
 - 補的方向：不換套件也可以在網頁裡讀 `performance.getEntriesByType('resource')` 的網址清單，照 Legado 整個網址比對；拿不準可不可行，列在檔尾。
+- 正文規則自己的 `sourceRegex` 走不到這裡：夜讀抓正文時根本沒把它傳進請求，見 R18。
 
 ### R8 存著的 Cookie 照請求的網址拿，書源呼叫別的網域時登入的 Cookie 沒送出去（抓不到）
 
@@ -371,6 +372,19 @@
 - Legado：`L:model/webBook/SearchModel.kt:53-75`（同一次搜尋再呼叫時 `searchPage++`，有結果的書源記 `hasMore`），`L:ui/book/search/SearchActivity.kt:345-355`（捲到底、沒在搜、還有下一頁時再搜）。
 - 夜讀：`N:lib/features/search/search_model.dart:476` 送出時不帶頁碼，用 `N:lib/core/source/book_source_service.dart:183` 的預設 `page = 1`；搜尋頁沒有載入更多。發現頁有（`N:lib/features/explore/explore_show_provider.dart:156-159`）。
 
+### R18 正文規則的 `webJs`、`sourceRegex` 沒傳進抓正文的請求（抓錯或抓不全）
+
+- 讀者會碰到：章節網址開了 `webView`、正文規則寫了 `webJs`（等網頁跑完後取出正文或解密）或 `sourceRegex`（等網頁去抓正文的 API）的書源。Legado 用網頁抓這一頁時跑那段 JS、或等那個資源；夜讀只用網址選項裡的 `webJs`，正文規則的兩條都沒用，拿到的是網頁原本的 HTML，正文是亂的、空的或只有載入中的字。
+- Legado：`L:model/webBook/WebBook.kt:334-337`，`getStrResponseAwait(jsStr = 正文規則.webJs, sourceRegex = 正文規則.sourceRegex)`；網址選項的 `webJs` 優先（`L:model/analyzeRule/AnalyzeUrl.kt:427, 437`）。
+- 夜讀：`N:lib/core/engine/web_book/complete_content_fetcher.dart:156-157`，`AnalyzeUrl(...).getStrResponse(cancelToken:)` 沒給 `jsStr`、`sourceRegex`；`getStrResponse` 本身收這兩個參數（`N:lib/core/engine/analyze_url.dart:599-626`）。整個 `lib/` 沒有地方讀正文規則的這兩個欄位。
+- 附帶（少數寫法）：Legado 抓正文的請求帶著這一章（`L:model/webBook/WebBook.kt:331`），章節網址裡的 `java.get("title")` 拿到章名、`java.put` 存進這一章（`L:model/analyzeRule/AnalyzeUrl.kt:373-394`）；夜讀的 `AnalyzeUrl` 沒有章節（`N:lib/core/engine/analyze_url.dart:86-95`），拿到空的、存進書。
+
+### R19 正文頁的章名規則（`title`）沒有用（少數寫法才碰到）
+
+- 讀者會碰到：目錄頁只給「第 12 章」或沒有章名、正文頁才有完整章名的網站，書源在正文規則寫了 `title`。Legado 抓正文時把章名換成正文頁上的、存回目錄；夜讀目錄與正文上方一直是目錄頁的那個。
+- Legado：`L:model/webBook/BookContent.kt:66-77`，`title` 規則有結果就寫進章節並 `bookChapterDao.update`。
+- 夜讀：`N:lib/core/engine/web_book/content_parser.dart:44-77` 只讀 `content` 與 `nextContentUrl`；`ContentRule.title` 照收（`N:lib/core/models/source/book_source_rules.dart:249`），整個 `lib/` 沒有地方讀它。
+
 ## 少一個選項
 
 （使用者勾了才做。）
@@ -392,4 +406,5 @@
 - **刻意不同，但只寫在程式註解或畫面規格、沒有 ADR**：照規則要有 ADR 才算「刻意不同」，這幾處先放這裡，要不要補 ADR 由使用者定。
   - 每個書源等多久：搜尋、換源每次搜尋與校驗每一段都等 20 秒（`N:lib/core/constant/source_wait.dart:1-3`，使用者 2026-11-13）；Legado 搜尋 30 秒、校驗整個書源 180 秒。
   - 目錄一次給好幾頁時：夜讀同時抓 4 頁（`N:lib/core/engine/web_book/web_book_service.dart:31`），其中一頁抓不到就略過、先給抓到的部分，檢查新章節時才整份失敗（同檔 202）；Legado 同時抓的頁數照「線程數」設定（預設 16，`L:model/webBook/BookChapterList.kt:99`），一頁抓不到整份失敗。閱讀時的目錄可能少幾章，讀者看不出來。
+  - 插圖挑哪個網址：夜讀先取懶載入屬性（`data-original`、`data-src`、`data-lazy-src`），再取 `src`（`N:lib/core/utils/html_formatter.dart:25-35`）；Legado 是同一個標籤裡寫在後面的那個（`L:utils/HtmlFormatter.kt:16-19`）。網頁把佔位圖放在 `src` 時夜讀抓得到真的圖。
 
