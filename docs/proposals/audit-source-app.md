@@ -15,6 +15,7 @@
 | 書源 3 | `lib/core/source/`（不含登入、網頁驗證、`chapter_content_kind`） | 6／6 | 2 |
 | 書源 3 | `lib/core/source_check/` | 6／6 | 2 |
 | 書源 3 | `lib/core/source_switch/` | 5／5 | 0 |
+| 書源 3 | `lib/features/source_manager/`（不含 `ai_repair/`） | 22／22 | 0（第 4 筆的入口在發現頁、書籍詳情） |
 
 ## 問題
 
