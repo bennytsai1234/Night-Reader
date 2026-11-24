@@ -85,6 +85,10 @@ void main() {
     for (final json in decoded.cast<Map<String, dynamic>>())
       if ((json['bookSourceType'] as int? ?? 0) == 0 &&
           (only == null || (json['bookSourceName'] as String).contains(only)) &&
+          (env['NR_NOTOC'] == null ||
+              (((json['ruleBookInfo'] as Map?)?['tocUrl'] as String?) ?? '')
+                  .trim()
+                  .isEmpty) &&
           (env['NR_ALL'] != null ||
               ((json['ruleToc'] is Map) &&
                   ((json['ruleToc']['nextTocUrl'] as String?) ?? '')
@@ -124,8 +128,31 @@ void main() {
                     .timeout(const Duration(seconds: 180)))
                 .where((c) => !c.isVolume)
                 .toList();
+        if (env['NR_NOTOC'] != null) {
+          if (book.tocUrl == book.bookUrl) {
+            debugPrint('[DEBUG-toc50] $i $name | 同 | ${chapters.length}');
+            return;
+          }
+          final reset = book.copyWith()..tocUrl = book.bookUrl;
+          var legado = -1;
+          var err = '';
+          try {
+            legado =
+                (await service
+                        .getChapterList(source, reset)
+                        .timeout(const Duration(seconds: 180)))
+                    .where((c) => !c.isVolume)
+                    .length;
+          } catch (e) {
+            err = e.toString().split('\n').first;
+          }
+          debugPrint(
+            '[DEBUG-toc50] $i $name | 異 | 夜讀 ${chapters.length} | Legado $legado $err | ${book.name} | book:${book.bookUrl} | toc:${book.tocUrl}',
+          );
+          return;
+        }
         debugPrint(
-          '[DEBUG-toc50] $i $name | ${book.name} | ${chapters.length} 章 | 最新:${book.latestChapterTitle} | 末:${chapters.isEmpty ? '' : chapters.last.title} | toc:${book.tocUrl}',
+          '[DEBUG-toc50] $i $name | ${book.name} | ${chapters.length} 章 | 最新:${book.latestChapterTitle} | 末:${chapters.isEmpty ? '' : chapters.last.title} | book:${book.bookUrl} | toc:${book.tocUrl} | first:${chapters.isEmpty ? "" : chapters.first.title} | urls:${chapters.take(3).map((c) => c.url).join(" ")}',
         );
         return;
       } catch (e) {

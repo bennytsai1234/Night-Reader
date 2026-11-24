@@ -37,6 +37,41 @@ void main() {
     expect(book.tocUrl, _bookUrl);
   });
 
+  // 读趣小说這類書源：詳情頁列了前 100 章與「章节目录」連結，書源的目錄規則
+  // 從詳情頁讀起、照它的「查看更多章节」接後面的分頁。目錄要從詳情頁開始，不照
+  // 連結的字自己換到目錄頁，否則書源的下一頁規則對不上，只剩第一頁。
+  group('a toc link on the book page', () {
+    const page =
+        '<html><body><h1>書</h1>'
+        '<a href="/b/ml1.html">章节目录</a>'
+        '<ul class="chapter-list"><li><a href="/b/1.html">第1章</a></li></ul>'
+        '<a class="btn-mulu" href="/b/ml1.html">查看更多章节...</a>'
+        '</body></html>';
+    const bookUrl = 'http://site.test/b/';
+
+    Future<Book> parse(Map<String, dynamic> infoRule) => BookInfoParser.parse(
+      source: BookSource.fromJson({
+        'bookSourceName': '读趣',
+        'bookSourceUrl': 'http://site.test',
+        'ruleBookInfo': infoRule,
+      }),
+      book: Book(bookUrl: bookUrl, origin: 'http://site.test', name: '書'),
+      body: page,
+      baseUrl: bookUrl,
+    );
+
+    test('is not followed when the source has no toc rule', () async {
+      expect((await parse({'name': 'h1@text'})).tocUrl, bookUrl);
+    });
+
+    test('is not followed when the toc rule gives the book page', () async {
+      expect(
+        (await parse({'name': 'h1@text', 'tocUrl': '@js:baseUrl'})).tocUrl,
+        bookUrl,
+      );
+    });
+  });
+
   // 2026-11-12 AI 修涨姿势：原本的書源有一份每項都是 null 的詳情規則，AI
   // 一改書源就被當成空欄位拿掉，之後每次試抓都停在「目錄：」空白，AI 為此
   // 繞了 21 輪。沒改任何規則的書源要跟原本走同一條路。
