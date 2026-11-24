@@ -59,6 +59,7 @@ abstract final class AiRepairDefaults {
       source,
       config.forIsolate,
       config.sourceTimeoutDuration,
+      secrets: currentAiRepairSecrets,
     );
     unawaited(cancelToken.whenCancel.then((_) => handle.abort()));
     return handle.result;

@@ -101,7 +101,8 @@ final class RequestLog {
   /// 網路 isolate 的這份紀錄要把整頁帶回停住的 worker（[settingsFor]）。
   final bool _returnsPages;
 
-  /// 回應開頭與送出的內容截短前先遮掉的值（[hideSecrets]）：AI 修書源拿這份
+  /// 回應開頭截短前先遮掉的值（[hideSecrets]；送出的內容截在欄位之間，不切
+  /// 在值的中間）：AI 修書源拿這份
   /// 紀錄給 AI 看，截在一段秘密中間時，留下的半段後面認不出來。整頁原文
   /// （[pages]）不遮，規則解析要用。跟著 [settingsFor] 帶到網路 isolate，
   /// 只用在這份紀錄。

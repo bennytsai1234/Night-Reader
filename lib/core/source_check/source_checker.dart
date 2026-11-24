@@ -43,10 +43,15 @@ class SourceChecker {
   /// 校驗送出的請求與網站的回應，依序（`recordRequestUrls`）。也記送出的
   /// 標頭：AI 修書源照方法、網址、內容與標頭認同一個請求，開場校驗和試抓
   /// 才對得上（換了 User-Agent 就通的不算時好時壞）。
-  final RequestLog _requests = RequestLog(
+  late final RequestLog _requests = RequestLog(
     responsePreview: RequestLog.diagnosisPreview,
     sentHeaders: true,
+    secrets: _secrets,
   );
+
+  /// 回應開頭截短前先遮掉的值：AI 修書源的開場校驗把診斷送給 AI
+  /// （[RequestLog.secrets]）。一般的校驗是空的。
+  final Set<String> _secrets;
 
   /// 網域查不到時查過網路本身通不通：true 是手機斷網了，null 是還沒查過。
   bool? _networkDown;
@@ -66,6 +71,7 @@ class SourceChecker {
     required this._config,
     BookSourceService? service,
     Future<bool> Function()? networkCheck,
+    this._secrets = const {},
   }) : _service = service ?? BookSourceService(),
        _networkCheck = networkCheck ?? networkReachable;
 

@@ -523,8 +523,21 @@ class JsExtensions extends JsExtensionsBase {
   /// 之後就結束它的 isolate）用 [settleWrites]。
   static final Set<Future<void>> pendingWrites = {};
 
+  /// 這次書源工作的規則 JS 觸發、還沒寫完的寫入（[taskWrites] 的範圍裡），
+  /// 書源 worker 交回這件工作前只等這幾筆（[settleTaskWrites]），不等同一個
+  /// isolate 上別的工作的。
+  static final Object _taskWritesZoneKey = Object();
+
+  /// 在 [body] 裡觸發的寫入記進 [writes]。
+  static Future<T> taskWrites<T>(
+    Set<Future<void>> writes,
+    Future<T> Function() body,
+  ) => runZoned(body, zoneValues: {_taskWritesZoneKey: writes});
+
   static void _track(Future<void> write) {
     pendingWrites.add(write);
+    final task = Zone.current[_taskWritesZoneKey] as Set<Future<void>>?;
+    task?.add(write);
     write
         .catchError(
           (Object error, StackTrace stackTrace) => AppLog.e(
@@ -533,7 +546,19 @@ class JsExtensions extends JsExtensionsBase {
             stackTrace: stackTrace,
           ),
         )
-        .whenComplete(() => pendingWrites.remove(write));
+        .whenComplete(() {
+          pendingWrites.remove(write);
+          task?.remove(write);
+        });
+  }
+
+  /// 等 [writes]（[taskWrites] 記下的）都寫完（失敗的已經記在日誌）。
+  static Future<void> settleTaskWrites(Set<Future<void>> writes) async {
+    while (writes.isNotEmpty) {
+      await Future.wait(
+        writes.toList().map((write) => write.catchError((_) {})),
+      );
+    }
   }
 
   /// 等目前觸發的寫入都寫完（失敗的已經記在日誌）。
