@@ -48,8 +48,12 @@ extension BookExtensions on BookBase {
     if (customCoverLocalPath != null && customCoverLocalPath!.isNotEmpty) {
       return 'local://$customCoverLocalPath';
     }
-    if (customCoverUrl != null && customCoverUrl!.isNotEmpty) {
-      return customCoverUrl;
+    // 從相簿選的封面網址是選的那台手機的檔（`file://`）：只用上面存好的
+    // 那份。同步、還原到另一台時那台讀不到，改用書源的封面；網址照留，
+    // 同步時原樣送回，不蓋掉選的那台。
+    if (customCoverUrl case final url?
+        when url.isNotEmpty && !url.startsWith('file://')) {
+      return url;
     }
     if (coverLocalPath != null && coverLocalPath!.isNotEmpty) {
       return 'local://$coverLocalPath';

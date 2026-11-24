@@ -16,6 +16,7 @@ import 'package:night_reader/core/models/book/reader_chapter_content.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/network/network_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:share_plus/share_plus.dart';
 
 class BookshelfImportResult {
@@ -188,6 +189,8 @@ class BookshelfExchangeService {
             for (final chapter in chapters)
               if (chapter.bookUrl == book.bookUrl) chapter,
           ]);
+      // 書架檔多半是別台匯出的：那台存好的封面檔這台沒有，改用網址。
+      await BookCoverStorageService.dropMissingCoverFiles(normalized);
       await _bookDao.upsert(normalized);
     }
     // 書源在書之後存：存書源時書跟著它的類型（ADR 0053），書已經在才跟得到。
