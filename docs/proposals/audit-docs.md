@@ -9,8 +9,17 @@
 
 | 類 | 讀了哪些 | 找到幾筆 |
 |---|---|---|
-| README 與網站 | `README.md`、`website/index.html` | 1 |
+| README 與網站 | `README.md`、`website/index.html` | 2 |
 | 隱私說明 | `PRIVACY.md`、`lib/features/about/privacy_pages.dart`（App 的「隱私說明」與「權限」） | 2 |
+| `docs/design/appearance.md` | 全文 | 0 |
+| `docs/design/audiobook.md` | 全文 | 0 |
+| `docs/design/comics.md` | 全文 | 0 |
+| `docs/design/components.md` | 全文 | 0 |
+| `docs/design/loading.md` | 全文 | 0 |
+| `docs/design/motion.md` | 全文 | 0 |
+| `docs/design/reader.md` | 全文 | 0 |
+| `docs/design/screens.md` | 全文 | 2 |
+| `docs/design/website.md` | 全文 | 0 |
 
 ## 問題
 
@@ -34,9 +43,15 @@
   分享進來的檔案由 `lib/features/association/handlers/file_association_handler.dart:18-47` 處理，只有分享這條路。
 - **該改哪一邊**：改文件，拿掉「與用檔案開書」，或寫成 Android 也只能分享進 App。
 
+#### 2. README 說漫畫的圖片資料夾在「加入本地書籍」匯入，其實要用「加入本地漫畫」
+
+- **文件寫的**：「手邊的 TXT、EPUB 與漫畫（CBZ、ZIP、圖片資料夾）不用書源，在書架選「加入本地書籍」。」（`README.md:39`）
+- **程式做的**：書架「加入」選單有兩項，「加入本地書籍」選單一個檔，只收 TXT、EPUB、CBZ、ZIP（`lib/core/platform/app_file_selection_service.dart:22-24`：`allowedExtensions: ['txt', 'epub', 'cbz', 'zip']`）；圖片資料夾、一個作品好幾話的資料夾要按「加入本地漫畫」選資料夾（`lib/features/bookshelf/bookshelf_page.dart:417-424` 兩個選單項；`:1220-1222`「加入本地漫畫（ADR 0052）：選一個作品資料夾」）。照 README 去「加入本地書籍」找不到選資料夾的地方。
+- **該改哪一邊**：改文件，寫成「TXT、EPUB 與單一個 CBZ 在「加入本地書籍」，漫畫資料夾在「加入本地漫畫」」。
+
 ### 隱私說明
 
-#### 2. 隱私說明的「同步」列了會同步哪些資料，漏了 AI 找書「不想看的」清單與書架、搜尋的設定
+#### 3. 隱私說明的「同步」列了會同步哪些資料，漏了 AI 找書「不想看的」清單與書架、搜尋的設定
 
 - **文件寫的**：「書架上的書（…）、閱讀進度、書籤（…）、標註（…）、書源、替換規則、閱讀與外觀設定、閱讀統計、書源的登入資料、過去的找書，以及 AI 服務設定（…）會存到你自己的同步空間」（`PRIVACY.md:43`；App 內同一段在 `lib/features/about/privacy_pages.dart:53`）。這一段是逐項列，讀者會以為沒列的不會離開手機。
 - **程式做的**：同步的設定還有 AI 找書每次都送給 AI 的「不想看的」清單，與書架、搜尋的設定（含搜尋屏蔽的字）。`lib/core/sync/settings_sync.dart:39-48`、`:97-100`：
@@ -54,8 +69,33 @@
 
 - **該改哪一邊**：改文件，兩處（`PRIVACY.md` 與 App 的「隱私說明」）一起補上「AI 找書不想看的清單、書架與搜尋設定」。
 
-#### 3. App 的「權限」說哪些工作會用通知，漏了 AI 建立書源與自動換源
+#### 4. App 的「權限」說哪些工作會用通知，漏了 AI 建立書源與自動換源
 
 - **文件寫的**：「朗讀的播放控制，與修書源、校驗書源、AI 找書、放到背景的搜尋的進度會使用通知權限；…在 Android 上，它們跑的時候會開前景服務」（`lib/features/about/privacy_pages.dart:130`）。
 - **程式做的**：AI 建立書源與自動換源也是背景工作，跑的時候一樣在通知欄顯示進度、開前景服務。AI 建立書源按下「開始建立」就建一件背景工作（`lib/features/source_manager/ai_repair/ai_create_source_page.dart:162-163`：`final run = SingleRepairRun(session); if (!_runs.adopt(run)) …`，`SingleRepairRun` 是 `RepairRun`，`RepairRun implements BackgroundJob`，`lib/features/source_manager/ai_repair/repair_runs.dart:103`）；自動換源是 `class AutoSourceSwitch implements BackgroundJob`，「跑的時候佔背景工作的位置、只有『結束』」（`lib/core/source_switch/auto_source_switch.dart:24-28`）。
 - **該改哪一邊**：改文件，補上 AI 建立書源與自動換源。
+
+### `docs/design/`
+
+#### 5. 規格與用語表寫「關於夜讀 → 系統工具」，畫面上沒有「系統工具」這幾個字
+
+- **文件寫的**：「開 App 時照同樣方式檢查一次（「關於夜讀 → 系統工具 → 啟動時檢查書架更新」可關）」（`docs/design/screens.md:10`）；`GLOSSARY.md:24`「更新紀錄」也寫「「關於夜讀 → 系統工具」裡列出各版更新說明的頁面」。寫成路徑，讀的人會去找一個叫「系統工具」的分段。
+- **程式做的**：「關於夜讀」的幾組卡片都沒有段落標題（`lib/features/about/about_page.dart:304`、`:333` 的 `GroupedSection(children: [...])` 都沒給 `header`），照 ADR 0076 卡片外不放小字，只有隱私說明、權限這種說明文件有段落標題（`docs/design/components.md:67`）。「系統工具」只是 `screens.md:143` 描述分組時用的名字。
+- **該改哪一邊**：改文件，`screens.md:10` 與 `GLOSSARY.md:24` 改成「關於夜讀」裡的「啟動時檢查書架更新」「更新紀錄」，不寫成有「系統工具」這一層。
+
+#### 6. 畫面規格的「背景工作」只列四種，漏了 AI 建立書源與自動換源
+
+- **文件寫的**：「修書源（單一、一批）、從書源管理按的校驗（…）、AI 找書與按了「放到背景」的搜尋（ADR 0070）離開頁面、離開夜讀、關螢幕都照跑。」（`docs/design/screens.md:129`）；「一次一件」列哪些入口會灰掉（`:131`）、「通知」逐一寫每一種的標題與內文（`:133-137`），最後「右邊兩顆「暫停」「結束」」（`:138`）。
+- **程式做的**：
+  - AI 建立書源也是背景工作，通知標題是「AI 建立書源 · 名稱」：`lib/features/source_manager/ai_repair/repair_runs.dart:663-669`
+
+    ```dart
+    title:
+        '${creating ? 'AI 建立書源' : 'AI 修復'} · '
+        '${_session.job.original.bookSourceName}',
+    text: _session.job.steps.lastOrNull?.line ?? '準備中…',
+    pausable: true,
+    ```
+
+  - 自動換源也是背景工作，通知標題「自動換源」、內文「正在替《書名》找書源」、有進度條、只有「結束」沒有「暫停」：`lib/core/source_switch/auto_source_switch.dart:24-28`（「跑的時候佔背景工作的位置、只有『結束』」）、`:48`（`static const String title = '自動換源';`）、`:264-268`（`BackgroundWorkStatus(title: title, text: … '正在替《${book.name}》找書源', progress: …)`，沒給 `pausable`，預設 `false`，`lib/core/background_work/background_work.dart:27`）。
+- **該改哪一邊**：改文件，`screens.md`「背景工作」補上這兩種：一次一件的入口、通知的標題與內文，以及自動換源只有「結束」。AI 建立書源一節（`:90`）已寫了灰掉的規則，這裡只差總表。
