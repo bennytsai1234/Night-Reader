@@ -90,7 +90,8 @@ class BackstageWebView {
       if (cookie == null || cookie.isEmpty) return;
       await CookieStore().setCookie(tag, cookie);
     } catch (error) {
-      AppLog.w('存背景網頁的 Cookie 失敗: $error');
+      // 只記錯誤的種類：資料庫的錯誤訊息會帶出寫入的 Cookie 值。
+      AppLog.w('存背景網頁的 Cookie 失敗: ${error.runtimeType}');
     }
   }
 
