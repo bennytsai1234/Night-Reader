@@ -820,9 +820,14 @@ class SourceManagerProvider with ChangeNotifier {
       if (_disposed) return null;
     }
     _editingUrls.add(url);
-    final full = await _dao.getByUrl(url);
-    if (full == null) _editingUrls.remove(url);
-    return full;
+    try {
+      final full = await _dao.getByUrl(url);
+      if (full == null) _editingUrls.remove(url);
+      return full;
+    } catch (_) {
+      _editingUrls.remove(url);
+      rethrow;
+    }
   }
 
   /// [url] 的編輯頁關掉了：存過（[changed]）或開著的期間有重複書源沒併，

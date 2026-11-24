@@ -253,7 +253,7 @@ class BookSourceService {
   }) async {
     final sourceDao = getIt<BookSourceDao>();
     if (previousUrl == null || previousUrl == source.bookSourceUrl) {
-      return sourceDao.saveEdited(source);
+      return sourceDao.saveEdited(source, editedFrom: previousUrl);
     }
     final books = await getIt<BookDao>().bookUrlsFromOrigin(previousUrl);
     final otherSources = [
@@ -269,7 +269,11 @@ class BookSourceService {
         previousUrl,
         source.getKey(),
         otherKeys: otherSources,
-        commit: () => sourceDao.saveEdited(source, previousUrl: previousUrl),
+        commit: () => sourceDao.saveEdited(
+          source,
+          previousUrl: previousUrl,
+          editedFrom: previousUrl,
+        ),
       );
       await _moveBookFiles(moving, source.bookSourceUrl);
     } finally {

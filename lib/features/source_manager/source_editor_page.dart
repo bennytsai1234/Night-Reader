@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
@@ -318,6 +319,11 @@ class _SourceEditorPageState extends State<SourceEditorPage>
         previousUrl: previousUrl,
       );
       if (mounted) Navigator.pop(context, true);
+    } on SourceGoneException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: UiText(error.message)));
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context)

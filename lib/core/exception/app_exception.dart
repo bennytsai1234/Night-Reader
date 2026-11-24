@@ -9,6 +9,12 @@ abstract class AppException implements Exception {
   String toString() => message;
 }
 
+/// 編輯的書源在編輯頁開著時被刪掉，或併進同網站的另一個書源（ADR 0062）：
+/// 存檔不把它寫回來。
+class SourceGoneException extends AppException {
+  SourceGoneException() : super('這個書源已經被刪掉，或併進同網站的另一個書源，沒有存');
+}
+
 /// ConcurrentException - 併發限制例外 (對標 ConcurrentException.kt)
 class ConcurrentException extends AppException {
   final int waitTime;
