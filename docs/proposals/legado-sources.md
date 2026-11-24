@@ -33,20 +33,20 @@
 
 | 功能 | 結論 | 一句話 |
 |---|---|---|
-| 預設的 JSoup 寫法（`class.`、`id.`、`tag.`、`text.`、`children`、索引 `.0`、`!0`、`[0:3]`、`[-1]`） | | |
-| `@css:` | | |
-| XPath（`@XPath:`、`/` 開頭） | | |
-| JSONPath（`@json:`、`$.`、`$[`） | | |
-| 正則（`:` 開頭的整段比對、`##正則##替換`、`##…###` 只換第一個） | | |
-| 規則 JS（`@js:`、`<js></js>`，接在規則後面處理結果） | | |
-| 內嵌（`{{…}}` 裡放 JS 或規則） | | |
-| 組合（`&&`、`\|\|`、`%%`） | | |
-| 存取變數（`@put:{…}`、`@get:{…}`） | | |
-| 取值結尾（`@text`、`@textNodes`、`@ownText`、`@html`、`@all`、屬性） | | |
-| 清單倒序（`-` 開頭）與 `+` 開頭 | | |
-| 正則替換的 `$1` 分組 | | |
-| 網址欄位轉成完整網址 | | |
-| HTML 實體還原 | | |
+| 預設的 JSoup 寫法（`class.`、`id.`、`tag.`、`text.`、`children`、索引 `.0`、`!0`、`[0:3]`、`[-1]`） | 一樣 | 關鍵字與索引寫法都照 Legado 移植（`N:lib/core/engine/parsers/css/analyze_by_css_support.dart:1124-1380`）。 |
+| `@css:` | 一樣 | |
+| XPath（`@XPath:`、`/` 開頭） | 拿不準 | 判斷模式與 `&&`、`\|\|`、`%%` 一樣；XPath 本身用的套件不同，支援哪些函式沒有逐一對，見檔尾。 |
+| JSONPath（`@json:`、`$.`、`$[`） | 結果不對 | 路徑取到一整個陣列時，Legado 每一項一行，夜讀變成 `[甲, 乙]` 一段字，見 R4。其他（`{$.…}` 內嵌、沒有前綴時照內容判斷）一樣。 |
+| 正則（`:` 開頭的整段比對、`##正則##替換`、`##…###` 只換第一個） | 結果不對 | `###` 兩邊回的東西不同，見 R3；`:` 開頭整段比對與 `##` 取代一樣。 |
+| 規則 JS（`@js:`、`<js></js>`，接在規則後面處理結果） | 一樣 | 切段方式相同；`@js:` 之後整段都是 JS。 |
+| 內嵌（`{{…}}` 裡放 JS 或規則） | 一樣 | `@`、`$.`、`$[`、`//` 開頭當規則，其他當 JS；整數不帶小數點；`##` 等組好字才切（2026-11-15 修過）。 |
+| 組合（`&&`、`\|\|`、`%%`） | 一樣 | JSoup、XPath、JSONPath 三種都照 Legado 的平衡切法。 |
+| 存取變數（`@put:{…}`、`@get:{…}`） | 結果不對 | `@get:{bookName}` 拿不到書名、沒有書的時候存不進書源，見 R5；`@put` 的寬鬆 JSON 一樣。 |
+| 取值結尾（`@text`、`@textNodes`、`@ownText`、`@html`、`@all`、屬性） | 結果不對 | 取屬性時 Legado 去掉重複的值，夜讀留著，見 R6；其他一樣。 |
+| 清單倒序（`-` 開頭）與 `+` 開頭 | 一樣 | 書單與目錄都照做。 |
+| 正則替換的 `$1` 分組 | 一樣 | `##` 之前的 `$1` 取上一步的分組、之後的是取代式（2026-11 修過）。 |
+| 網址欄位轉成完整網址 | 一樣 | 網址選項 `,{…}` 留在後面；`javascript:` 開頭的丟掉。 |
+| HTML 實體還原 | 一樣 | 有 `&` 才還原。 |
 
 ### 網址與請求
 
@@ -270,9 +270,35 @@
 ### R2 書源標頭裡的代理（`proxy`）被拿掉（少數寫法才碰到）
 
 - 讀者會碰到：書源在標頭寫了 `"proxy":"socks5://…"` 或 `"http://…"`，網站只讓經過代理的連線進來時，Legado 走代理抓得到，夜讀直接連、抓不到。
-- Legado：`L:model/analyzeRule/AnalyzeUrl.kt:120-127` 把標頭的 `proxy` 拿出來，`getClient()` 用 `getProxyClient(proxy)`（`L:model/analyzeRule/AnalyzeUrl.kt:524-526`）。
+- Legado：`L:model/analyzeRule/AnalyzeUrl.kt:120-127` 把標頭的 `proxy` 拿出來，`getClient()` 用 `getProxyClient(proxy)`（`L:model/analyzeRule/AnalyzeUrl.kt:516-517`）。
 - 夜讀：`N:lib/core/engine/analyze_url.dart:193-207` 註解寫「夜讀不走代理」，拿掉不用；沒有 ADR 記這個決定。
 - 備註：多數寫代理的書源是作者自己的環境（例如 `127.0.0.1`），換一台手機本來就連不上；要補的話照 Legado 只在書源寫了時才走。
+
+### R3 規則結尾 `##正則##取代###`（只取第一個）回整段文字，不是只回比對到的那段（抓錯或抓不全）
+
+- 讀者會碰到：書源用 `###` 從一段字裡「挑出」某一塊，例如作者欄 `.info@text##作者：(\S+)##$1###`、更新時間 `##\d{4}-\d{2}-\d{2}##$0###`。Legado 只留比對到、換過的那一段；夜讀把整段字留著、只換掉第一處，書籍詳情的作者、分類、最新章節、字數就多了前後的字（「類別：玄幻 張三」）。比對不到時 Legado 是空的、夜讀是原文，該空著的欄位出現一整段網頁文字。
+- Legado：`L:model/analyzeRule/AnalyzeRule.kt:441-452`：`matcher.find()` 找到就回 `matcher.group(0)!!.replaceFirst(regex, replacement)`（只有比對到的那段），找不到回 `""`；正則寫錯時回取代式本身。另外不加 `###` 的正則寫錯時照字面取代（`result.replace(replaceRegex, replacement)`，同一段 455-459）。
+- 夜讀：`N:lib/core/engine/analyze_rule/analyze_rule_regex_helper.dart:93-112`：規則本身不是空的時回 `result.replaceFirstMapped(...)`（整段字），找不到回原文；正則寫錯一律不取代（同檔 140-151）。測試把這個行為寫死了：`N:test/core/engine/template_replace_rule_test.dart:41` 期待 `{{'甲乙乙'}}##乙##丁###` 是「甲丁乙」，Legado 是「丁」。
+- 補充（少數寫法）：取代式最後一個字是 `#` 時（`##a##b#`），夜讀當成「只換第一個」並把 `#` 拿掉，Legado 照字面當取代式的一部分（`N:lib/core/engine/analyze_rule/analyze_rule_support.dart:52-63`）。
+
+### R4 JSONPath 取到一整個陣列時變成 `[甲, 乙]`（少數寫法才碰到）
+
+- 讀者會碰到：JSON 網站的正文或簡介是一個字串陣列（`{"content":["第一段","第二段"]}`），書源寫 `$.content`。Legado 一段一行；夜讀的正文是一行「[第一段, 第二段]」，帶著中括號與逗號。分類這類用清單讀的欄位不受影響。
+- Legado：`L:model/analyzeRule/AnalyzeByJSonPath.kt:44-49`，`ctx.read` 拿到清單就 `joinToString("\n")`。
+- 夜讀：`N:lib/core/engine/parsers/analyze_by_json_path.dart:66-77`，只有一個結果時直接 `values[0].toString()`，那個結果是清單時就是 Dart 清單的寫法。
+
+### R5 `@get:{bookName}` 拿不到書名；沒有書的時候 `@put` 存不進書源（少數寫法才碰到）
+
+- 讀者會碰到：書源用 `@get:{bookName}`（或規則 JS 的 `java.get("bookName")`）組網址或比對書名時，Legado 拿到這本書的書名，夜讀拿到空的，網址組錯、抓不到。另外在沒有書的地方（例如登入檢查、發現分類的網址）用 `@put` 存的值，Legado 存進書源、之後的規則讀得到，夜讀只留在這一次解析裡。
+- Legado：`L:model/analyzeRule/AnalyzeRule.kt:740-769`，`get` 先看 `bookName`（書名）與 `title`（章名），`put`／`get` 依序找章節、書、`ruleData`、最後是書源（`source.put`，存進快取）；網址裡的 `java.get` 也認 `bookName`（`L:model/analyzeRule/AnalyzeUrl.kt:380-394`）。
+- 夜讀：`N:lib/core/engine/analyze_rule/analyze_rule_base.dart:89-131`，認 `key`、`page`、`baseUrl`、`redirectUrl`、`nextChapterUrl`、`title`，沒有 `bookName`；`put` 沒有章節與書時落到只活在這一次的 `transientVariables`（同檔 80-87）。規則 JS 的 `java.put` 另外寫進書源的快取（`N:lib/core/engine/js/extensions/js_extensions.dart:73-92`），`@put` 沒有。
+- 另一個方向的差別：夜讀先攔下 `key`、`page`、`baseUrl` 這幾個名字，書源自己 `@put:{page:…}` 再 `@get:{page}` 時拿到的是頁碼、不是存的值；Legado 不攔。
+
+### R6 取屬性時重複的值沒有去掉（少數寫法才碰到）
+
+- 讀者會碰到：`a@href`、`img@src`、`span@title` 這類取屬性的規則碰到好幾個元素有同一個值時，Legado 只留一個，夜讀全部留著：分類變成「玄幻,玄幻」，正文的插圖重複出現。網址清單（下一頁）另外會去重，不受影響。
+- Legado：`L:model/analyzeRule/AnalyzeByJSoup.kt:270-276`，`if (url.isBlank() || textS.contains(url)) continue`。
+- 夜讀：`N:lib/core/engine/parsers/css/analyze_by_css_helper.dart:81-87`，只略過空的。
 
 ## 少一個選項
 
