@@ -1240,15 +1240,16 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   /// 開始新的一次校驗：先佔住背景工作的位置，佔不到（按下去之後別件剛好
-  /// 開始）就不做，暫停中的那次照舊；佔到了才存設定、結束暫停中的那次（做完的
-  /// 那些不再接著校驗）。
-  Future<void> _checkAnew(List<String> urls, SourceCheckConfig? config) async {
+  /// 開始）就不做，暫停中的那次與勾選照舊；佔到了才存設定、結束暫停中的那次
+  /// （做完的那些不再接著校驗）。傳回校驗有沒有跑。
+  Future<bool> _checkAnew(List<String> urls, SourceCheckConfig? config) async {
     final job = SourceCheckJob.of(checkService, SourceCheckPlan(urls));
-    if (!job.reserve()) return;
+    if (!job.reserve()) return false;
     try {
       if (config != null) await checkService.updateConfig(config);
       await pausedCheck.end();
       await job.run();
+      return true;
     } finally {
       job.release();
     }
@@ -1257,10 +1258,11 @@ class SourceManagerProvider with ChangeNotifier {
   Future<void> checkSelectedSources({SourceCheckConfig? config}) async {
     final selectedUrls = Set<String>.from(_selectedUrls);
     if (selectedUrls.isEmpty || !_beginBatchOperation()) return;
+    var checked = false;
     try {
-      await _checkAnew(selectedUrls.toList(growable: false), config);
+      checked = await _checkAnew(selectedUrls.toList(growable: false), config);
     } finally {
-      _selectedUrls.removeAll(selectedUrls);
+      if (checked) _selectedUrls.removeAll(selectedUrls);
       _endBatchOperation();
     }
   }
@@ -1374,10 +1376,11 @@ class SourceManagerProvider with ChangeNotifier {
     final urls = _sources.map((s) => s.bookSourceUrl).toList();
     if (urls.isEmpty || !_beginBatchOperation()) return;
     final selectedAtStart = Set<String>.from(_selectedUrls);
+    var checked = false;
     try {
-      await _checkAnew(urls, config);
+      checked = await _checkAnew(urls, config);
     } finally {
-      _selectedUrls.removeAll(selectedAtStart);
+      if (checked) _selectedUrls.removeAll(selectedAtStart);
       _endBatchOperation();
     }
   }

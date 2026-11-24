@@ -29,9 +29,7 @@ Future<void> openAiCreateSource(
   final navigator = Navigator.of(context);
   if (repairs.current case final SingleRepairRun current
       when current.creating && !current.isDone) {
-    await navigator.push(
-      MaterialPageRoute<void>(builder: (_) => current.page()),
-    );
+    await navigator.push(current.pageRoute());
     return;
   }
   if (!canAiCreateSource()) return;
@@ -166,11 +164,7 @@ class _AiCreateSourcePageState extends State<AiCreateSourcePage> {
           ..dispose();
         return;
       }
-      unawaited(
-        Navigator.of(
-          context,
-        ).pushReplacement(MaterialPageRoute<void>(builder: (_) => run.page())),
-      );
+      unawaited(Navigator.of(context).pushReplacement(run.pageRoute()));
     } finally {
       if (mounted) setState(() => _starting = false);
     }

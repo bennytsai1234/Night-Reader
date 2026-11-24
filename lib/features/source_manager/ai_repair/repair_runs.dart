@@ -234,6 +234,24 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
   /// 這一件的頁面。
   Widget page();
 
+  /// 推這一件的頁面都用這個路由：推入動畫播完前（連第一幀都還沒畫、頁面還沒
+  /// 建立）就返回的，返回動畫播完後在背景開始。頁面建立過的由 [detach] 接手。
+  Route<void> pageRoute() {
+    final route = MaterialPageRoute<void>(builder: (_) => page());
+    unawaited(route.completed.then((_) => _startIfLeft()));
+    return route;
+  }
+
+  /// 佔著位置、沒有頁面開著卻還沒開始：使用者按了開始，照樣在背景跑（同開始後
+  /// 返回）。
+  void _startIfLeft() {
+    if (_pages == 0 &&
+        _stage == _RunStage.notStarted &&
+        identical(_work.current, this)) {
+      start();
+    }
+  }
+
   /// 做完之後在結果頁刪了、併了幾次書源：書源管理看到它變了就重讀清單。
   int get sourceEdits => 0;
 
@@ -349,12 +367,10 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
     _pages--;
     if (_pages > 0) return;
     _topRoute = null;
-    // 推入動畫播完前就返回：使用者按了開始，照樣在背景跑（同開始後返回）。
-    // 頁面還在拆，拆完再開始；開始前又打開了頁面的，由那一頁開始。
-    if (_stage == _RunStage.notStarted && identical(_work.current, this)) {
-      scheduleMicrotask(() {
-        if (_pages == 0 && identical(_work.current, this)) start();
-      });
+    // 推入動畫播完前就返回：頁面還在拆，拆完再開始；開始前又打開了頁面的，由
+    // 那一頁開始。
+    if (_stage == _RunStage.notStarted) {
+      scheduleMicrotask(_startIfLeft);
       return;
     }
     // 頁面還在拆：等它的監聽都拿掉，再讓書源管理收掉這一件。
@@ -373,7 +389,7 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
     if (navigator == null) return;
     final top = _topRoute;
     if (top != null && top.isCurrent) return;
-    unawaited(navigator.push(MaterialPageRoute<void>(builder: (_) => page())));
+    unawaited(navigator.push(pageRoute()));
   }
 }
 

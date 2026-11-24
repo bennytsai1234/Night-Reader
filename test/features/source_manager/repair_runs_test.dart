@@ -1098,6 +1098,33 @@ void main() {
       expect(work.isBusy, isFalse);
     });
 
+    testWidgets('going back before the page was even built still starts the '
+        'repair, once the page has slid out', (tester) async {
+      final gate = Completer<void>();
+      final batch = _batch(gate: gate);
+      final run = runOf(batch);
+      runs.adopt(run);
+      final navigator = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigator,
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: const SizedBox(),
+        ),
+      );
+      unawaited(navigator.currentState!.push(run.pageRoute()));
+      navigator.currentState!.pop();
+      await _settle(tester);
+      expect(find.byType(SourceRepairPage), findsNothing);
+      expect(batch.isRunning, isTrue, reason: '按了開始，返回照樣在背景跑');
+      expect(work.current, same(run));
+
+      gate.complete();
+      await tester.runAsync(() => batch.completion);
+      await tester.pump();
+      expect(work.isBusy, isFalse);
+    });
+
     testWidgets('going back before the page finished sliding in still starts '
         'the repair, once the page is gone', (tester) async {
       final gate = Completer<void>();
@@ -1112,11 +1139,7 @@ void main() {
           home: const SizedBox(),
         ),
       );
-      unawaited(
-        navigator.currentState!.push(
-          MaterialPageRoute<void>(builder: (_) => SourceRepairPage(run: run)),
-        ),
-      );
+      unawaited(navigator.currentState!.push(run.pageRoute()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
       expect(batch.isRunning, isFalse, reason: '推入動畫還沒播完');

@@ -340,9 +340,12 @@ void main() {
     );
     addTearDown(() => BackgroundWork.instance.end(other));
 
+    provider.toggleSelect(url);
     await provider.checkAllSources();
+    await provider.checkSelectedSources();
 
     expect(SourceCheckJob.current, isNull, reason: '沒開始');
+    expect(provider.selectedUrls, {url}, reason: '沒校驗，勾選留著');
     expect(paused.isPaused, isTrue, reason: '新的沒開始，暫停的那次不結束');
     expect(pausedFile.closed, isFalse);
     expect(BackgroundWork.instance.current, same(other));
