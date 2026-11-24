@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:night_reader/core/app_lock/app_lock.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 enum AppPermissionStatusTone { ok, attention, blocked, neutral }
@@ -127,8 +128,13 @@ class AppPermissionService {
     return _requestIfNeeded(AppPermissionTarget.photos);
   }
 
-  Future<bool> openSystemSettings() {
-    return _gateway.openSystemSettings();
+  /// 系統設定是夜讀自己打開的，回來不算離開（ADR 0083）；Android 的
+  /// permission_handler 不經過夜讀的視窗打開，這裡自己記。
+  Future<bool> openSystemSettings() async {
+    await AppLock.instance.markOwnExcursion();
+    final opened = await _gateway.openSystemSettings();
+    if (!opened) await AppLock.instance.clearOwnExcursion();
+    return opened;
   }
 
   Future<AppPermissionItem> _notificationItem() async {

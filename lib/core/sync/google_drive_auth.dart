@@ -55,6 +55,9 @@ class GoogleSignInDriveAuth implements GoogleDriveAuth {
       return account.email;
     } on GoogleSignInException catch (error) {
       throw SyncStoreException(_message('Google 登入失敗', error));
+    } finally {
+      // 已經登入過時不會跳出畫面：記號不留給下一次真的離開。
+      await AppLock.instance.clearOwnExcursion();
     }
   }
 

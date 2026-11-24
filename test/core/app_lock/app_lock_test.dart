@@ -8,7 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakePlatform implements AppLockPlatform {
   bool deviceSupported = true;
+  Object? supportedError;
   String? reason = 'away';
+  Completer<String?>? slowReason;
   final List<AppLockAuthResult> results = [];
   int prompts = 0;
   Completer<AppLockAuthResult>? pending;
@@ -16,7 +18,10 @@ class _FakePlatform implements AppLockPlatform {
   bool? locked;
 
   @override
-  Future<bool> supported() async => deviceSupported;
+  Future<bool> supported() async {
+    if (supportedError case final error?) throw error;
+    return deviceSupported;
+  }
 
   @override
   Future<AppLockAuthResult> authenticate() {
@@ -26,10 +31,14 @@ class _FakePlatform implements AppLockPlatform {
   }
 
   @override
-  Future<String?> leaveReason() async => reason;
+  Future<String?> leaveReason() async =>
+      slowReason == null ? reason : slowReason!.future;
 
   @override
   Future<void> markOwnExcursion() async {}
+
+  @override
+  Future<void> clearOwnExcursion() async {}
 
   @override
   Future<void> configure({required bool cover, required bool locked}) async {
@@ -279,5 +288,83 @@ void main() {
     platform.results.add(AppLockAuthResult.passed);
     await lock.unlock();
     expect(await lock.didPopRoute(), isFalse);
+  });
+
+  testWidgets('coming straight back before the reason arrives still locks', (
+    tester,
+  ) async {
+    platform.results.addAll([
+      AppLockAuthResult.passed,
+      AppLockAuthResult.passed,
+    ]);
+    await start(tester, mode: AppLockMode.onLeave);
+    platform.slowReason = Completer<String?>();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    expect(phase(), AppLockPhase.away, reason: 'covered at once');
+    await comeBack(tester, Duration.zero);
+    expect(phase(), AppLockPhase.away, reason: 'stays covered while waiting');
+    platform.slowReason!.complete('away');
+    await tester.pump();
+    expect(platform.prompts, 2);
+    expect(phase(), AppLockPhase.open);
+  });
+
+  testWidgets('a screen 夜讀 opened is uncovered while still outside', (
+    tester,
+  ) async {
+    platform.results.add(AppLockAuthResult.passed);
+    await start(tester, mode: AppLockMode.onLeave);
+    platform.reason = 'own';
+    await leave(tester);
+    expect(phase(), AppLockPhase.open, reason: 'no lock screen flashes back');
+  });
+
+  testWidgets('a failed capability check keeps the lock', (tester) async {
+    platform.supportedError = Exception('channel');
+    await start(tester, mode: AppLockMode.onLeave);
+    await tester.pump();
+    expect(lock.lockState.value.covering, isTrue);
+    expect(lock.supported, isTrue);
+  });
+
+  testWidgets('adding a screen lock in settings enables the row on return', (
+    tester,
+  ) async {
+    platform.deviceSupported = false;
+    await start(tester);
+    await tester.pump();
+    expect(lock.supported, isFalse);
+    platform
+      ..deviceSupported = true
+      ..reason = 'own';
+    await leave(tester);
+    await comeBack(tester, const Duration(seconds: 30));
+    expect(lock.supported, isTrue);
+  });
+
+  testWidgets('a prompt the system closed without leaving waits for the '
+      'button', (tester) async {
+    platform.results.addAll([
+      AppLockAuthResult.interrupted,
+      AppLockAuthResult.interrupted,
+    ]);
+    await start(tester, mode: AppLockMode.onLeave);
+    await tester.pump();
+    expect(platform.prompts, 1);
+    expect(lock.lockState.value.promptFailed, isTrue);
+  });
+
+  testWidgets('focus coming back uses up a mark 夜讀 left', (tester) async {
+    platform
+      ..reason = null
+      ..results.add(AppLockAuthResult.passed);
+    await start(tester, mode: AppLockMode.onLeave);
+    await lock.markOwnExcursion();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await leave(tester);
+    expect(phase(), AppLockPhase.away);
   });
 }

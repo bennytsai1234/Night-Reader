@@ -52,7 +52,7 @@
 | `GLOSSARY.md` | 做：加「解鎖才能打開」 |
 | `docs/design/` | 做：`screens.md` 的「我的與設定頁」與鎖的畫面 |
 | iPhone | 做：模糊由系統畫、Face ID；只有 CI 建置過，沒有實機跑過 |
-| 自動巡檢 | 新檔案在 `lib/core/app_lock/`，照所在資料夾的分段 |
+| 自動巡檢 | 做：`lib/core/app_lock/` 排進「資料 3」，和開 App 與平台程式一起看 |
 | 小說、漫畫、有聲、本地書 | 都一樣：整個 App 一起蓋、一起鎖 |
 
 ## 後果

@@ -47,6 +47,11 @@ object AppPrivacyWindow {
                     markOwnExcursion()
                     result.success(null)
                 }
+                // 說要打開的畫面沒打開：記號不留給下一次真的離開。
+                "clearOwnExcursion" -> {
+                    ownExcursionAt = 0L
+                    result.success(null)
+                }
                 "leaveReason" -> result.success(leaveReason)
                 // 多工畫面的縮圖由系統不拍，沒有要拿掉的模糊。
                 "uncover" -> result.success(null)

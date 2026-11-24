@@ -25,6 +25,7 @@ Future<bool> launchExternalUrlWithFeedback(
   } catch (error, stackTrace) {
     AppLog.e('開啟外部連結失敗: $url', error: error, stackTrace: stackTrace);
   }
+  if (launcher == null) await AppLock.instance.clearOwnExcursion();
 
   if (!context.mounted) return false;
   final messenger = ScaffoldMessenger.of(context);

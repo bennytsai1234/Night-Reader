@@ -205,6 +205,8 @@ private final class AppPrivacyCover {
     switch LAError.Code(rawValue: error?.code ?? 0) {
     case .some(.biometryNotAvailable): return "denied"
     case .some(.biometryNotEnrolled): return "notEnrolled"
+    // 失敗太多次被系統暫時鎖住：不是使用者不允許，不帶去系統設定。
+    case .some(.biometryLockout): return "available"
     default: return "denied"
     }
   }

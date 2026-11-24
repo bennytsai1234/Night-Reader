@@ -550,6 +550,7 @@ class _MainPageState extends State<MainPage>
   @override
   bool handleStartBackGesture(PredictiveBackEvent backEvent) {
     if (backEvent.isButtonEvent ||
+        AppLock.instance.lockState.value.covering ||
         _currentIndex == 0 ||
         _tabBarHidden.value ||
         _outgoing != null ||

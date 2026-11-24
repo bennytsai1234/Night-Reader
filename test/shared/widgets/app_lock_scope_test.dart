@@ -28,6 +28,9 @@ class _FakePlatform implements AppLockPlatform {
   Future<void> markOwnExcursion() async {}
 
   @override
+  Future<void> clearOwnExcursion() async {}
+
+  @override
   Future<void> configure({required bool cover, required bool locked}) async {}
 
   @override
