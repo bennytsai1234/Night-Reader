@@ -50,4 +50,30 @@ void main() {
     expect(await titles(source(), 0), hasLength(8));
     expect(await titles(source(vipRule: false), 10), hasLength(8));
   });
+
+  test('後面的卷名旁寫著 VIP 不算付費章節', () async {
+    final s = BookSource.fromJson({
+      'bookSourceName': '付費',
+      'bookSourceUrl': 'https://novels.test',
+      'ruleToc': {
+        'chapterList': 'tag.li',
+        'chapterName': 'tag.a@text||tag.span@text',
+        'chapterUrl': 'tag.a@href',
+        'isVolume': 'class.volume@text',
+        'isVip': 'class.vip@text',
+      },
+    });
+    final body =
+        '<ul>${[for (var i = 1; i <= 8; i++) '<li><a href="/c/$i.html">第$i章</a></li>'].join()}'
+        '<li><span>第二卷</span><i class="volume">卷</i><b class="vip">VIP</b></li>'
+        '<li><a href="/c/9.html">第9章</a></li></ul>';
+    final result = await ChapterListParser.parse(
+      source: s,
+      book: Book(bookUrl: 'https://novels.test/b/1', origin: s.bookSourceUrl),
+      body: body,
+      baseUrl: 'https://novels.test/b/1',
+      maxChapters: 8,
+    );
+    expect(result.chapters.where((c) => c.isLocked), isEmpty);
+  });
 }

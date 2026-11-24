@@ -12,6 +12,7 @@ import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/models/source/rule_data_interface.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 
@@ -31,6 +32,7 @@ import 'extensions/js_url_extensions.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/network/cookie_store.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
+import 'package:night_reader/core/utils/cache_manager.dart';
 import 'package:night_reader/core/utils/html_formatter.dart';
 
 export 'js_extensions_base.dart';
@@ -489,6 +491,27 @@ class JsExtensions extends JsExtensionsBase {
   String? cached(String key) =>
       cacheManager.getMemoryText(key) ??
       BlockingCall.run(cacheRead(key)) as String?;
+
+  /// 規則（`@put`）存進書源的變數 [key]，和規則 JS 的 `source.put` 同一份
+  /// （Legado `BaseSource.put`）。記憶體馬上有，資料庫的寫入照 [pendingWrites]。
+  static void putSourceRuleVariable(
+    BaseSource source,
+    String key,
+    String value,
+  ) => _track(CacheManager().put(source.ruleVariableCacheKey(key), value));
+
+  /// 規則（`@get`）讀書源的變數 [key]（Legado `BaseSource.get`）：先看記憶體，
+  /// 在書源 isolate 裡再讀資料庫；都沒有時是空的。
+  static String sourceRuleVariable(BaseSource source, String key) {
+    final cacheKey = source.ruleVariableCacheKey(key);
+    final inMemory = CacheManager().getMemoryText(cacheKey);
+    if (inMemory != null) return inMemory;
+    try {
+      return BlockingCall.run(cacheRead(cacheKey)) as String? ?? '';
+    } on BlockingCallUnavailable {
+      return '';
+    }
+  }
 
   /// [url] 的站點 Cookie，和 [cached] 一樣先看記憶體。
   /// 規則寫的與網站寫的 Cookie 合起來（[cookieRead]）：Cookie 罐在主 isolate，
