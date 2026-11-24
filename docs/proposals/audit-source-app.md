@@ -18,7 +18,7 @@
 | 書源 3 | `lib/features/source_manager/`（不含 `ai_repair/`） | 22／22 | 0（第 4 筆的入口在發現頁、書籍詳情） |
 | 書源 3 | `lib/features/search/`（含 `ai_find/` 畫面） | 15／15 | 1 |
 | 書源 3 | `lib/features/explore/` | 8／8 | 0 |
-| 書源 4 | `lib/features/source_login/` | 0／4 | 還沒讀 |
+| 書源 4 | `lib/features/source_login/` | 4／4 | 0（另 1 筆在 #529） |
 | 書源 4 | `lib/core/ai_repair/` | 0／23 | 還沒讀 |
 | 書源 4 | `lib/core/ai_find/` | 0／4 | 還沒讀 |
 | 書源 4 | `lib/features/source_manager/ai_repair/` | 0／5 | 還沒讀 |
@@ -198,6 +198,7 @@
 | 書源 3 第 4 筆 | 第 36 項 | 校驗寫回蓋掉改動、刪掉的書源回來 |
 | 書源 4 `backstage_webview` | 第 43 項 | `java.webView` 這三個入口沒帶書源標頭 |
 | 書源 4 `backstage_webview` | 第 44 項 | 等跳轉網址的寫法一秒就交回整頁 HTML |
+| 書源 4 `source_login_page` | 第 45 項 | 登入只換了 Cookie 檔裡的 Cookie 時當成沒變、不重抓 |
 
 ## 拿不準
 
