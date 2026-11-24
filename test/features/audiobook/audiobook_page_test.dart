@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
@@ -154,6 +155,75 @@ void main() {
     expect(find.text('第 1 集').hitTestable(), findsNothing);
     await close(tester);
   });
+
+  // 拖進度條的途中這一集播完、換到下一集（播放出錯按播放重載也一樣）：
+  // 拖動作廢，進度條跟著新的這一集，不把新的一集跳到舊那集拖到的位置。
+  for (final liftWhileLoading in [true, false]) {
+    testWidgets('switching episodes in the middle of a drag drops the drag '
+        '(finger lifted ${liftWhileLoading ? 'while' : 'after'} loading)', (
+      tester,
+    ) async {
+      final book = _book();
+      world = _World(AppDatabase.forTesting(NativeDatabase.memory()));
+      await tester.runAsync(() async {
+        await world.addSource();
+        await world.addBook(book);
+      });
+      await open(tester, book);
+      await settle(tester);
+
+      final slider = find.byType(Slider);
+      final box = tester.getRect(slider);
+      final gesture = await tester.startGesture(
+        box.centerLeft + const Offset(20, 0),
+      );
+      await gesture.moveTo(box.center);
+      await tester.pump();
+
+      world.engine.openGate = Completer<void>();
+      final opens = world.engine.opened.length;
+      world.engine.finish();
+      for (var i = 0; i < 100 && world.engine.opened.length == opens; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      expect(world.engine.opened.length, opens + 1, reason: '換到下一集');
+      if (liftWhileLoading) {
+        await gesture.up();
+        await tester.pump();
+      }
+      world.engine.openGate!.complete();
+      for (var i = 0; i < 5; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      if (!liftWhileLoading) {
+        await gesture.up();
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+
+      expect(
+        world.engine.position,
+        lessThan(const Duration(seconds: 5)),
+        reason: '新的一集從頭播，不跳到舊那集拖到的位置',
+      );
+      world.engine.advance(const Duration(minutes: 1));
+      await tester.pump();
+      expect(
+        tester.widget<Slider>(slider).value,
+        const Duration(minutes: 1).inMilliseconds,
+      );
+      await close(tester);
+    });
+  }
 
   testWidgets('dragging the progress bar while playing keeps the thumb under '
       'the finger and seeks where it is let go', (tester) async {
