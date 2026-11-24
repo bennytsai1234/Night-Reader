@@ -5,6 +5,14 @@
 # 啟用：git config core.hooksPath .githooks
 set -e
 
+# Git 執行 hook 時帶著 GIT_DIR、GIT_INDEX_FILE 這類變數。flutter 與 dart 啟動時用
+# `git -C <Flutter SDK> rev-parse HEAD` 讀自己的版本，帶著這些變數讀到的是夜讀的提交，
+# 寫進 Flutter 工具的版本紀錄，下一次一般的呼叫就認為版本變了、整個重建工具，同一台
+# 的其他 worktree 都在等它的鎖。所以只替 flutter 與 dart 拿掉這些變數；hook 裡的 git
+# 指令照舊要用它們（例如 commit -a 的暫存區在 GIT_INDEX_FILE）。
+flutter() { env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_PREFIX -u GIT_COMMON_DIR flutter "$@"; }
+dart() { env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_PREFIX -u GIT_COMMON_DIR dart "$@"; }
+
 # 技能只裝在本機，CI 檢查不到，所以放在這裡，只改說明文件的推送也跑。
 sh tool/skill_refs.sh
 
