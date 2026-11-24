@@ -110,8 +110,9 @@ void main() {
         'sources': [],
       });
 
-      await BookshelfExchangeService().importFromText(file);
+      final result = await BookshelfExchangeService().importFromText(file);
 
+      expect(result.summary, '1 本已經在書架上，照這台的留著');
       final book = (await books.getByUrl(url))!;
       expect(book.chapterIndex, 5);
       expect(book.group, 4);
@@ -169,5 +170,52 @@ void main() {
       hasLength(1),
       reason: '抓失敗的紀錄不寫進來',
     );
+  });
+
+  String fileWith(Book book, List<String> titles) => jsonEncode({
+    'kind': 'night_reader.bookshelf',
+    'version': 1,
+    'books': [book.toJson()],
+    'chapters': [for (final c in toc(titles)) c.toJson()],
+    'chapterContents': [],
+    'sources': [],
+  });
+
+  test('a book on this shelf without a TOC gets the file\'s', () async {
+    await BookDao(db).upsert(
+      Book(bookUrl: url, origin: origin, name: '夜航', isInBookshelf: true),
+    );
+
+    await BookshelfExchangeService().importFromText(
+      fileWith(Book(bookUrl: url, origin: origin, name: '夜航'), ['序', '一']),
+    );
+
+    expect(await ChapterDao(db).titlesByBook(url), ['序', '一']);
+  });
+
+  test('a book only opened in its details here (not on the shelf) joins the '
+      'shelf with the file\'s progress and TOC together', () async {
+    await BookDao(
+      db,
+    ).upsert(Book(bookUrl: url, origin: origin, name: '夜航', chapterIndex: 0));
+    await ChapterDao(db).insertChapters(toc(['甲', '乙']));
+
+    await BookshelfExchangeService().importFromText(
+      fileWith(
+        Book(
+          bookUrl: url,
+          origin: origin,
+          name: '夜航',
+          chapterIndex: 2,
+          durChapterTitle: '二',
+        ),
+        ['序', '一', '二'],
+      ),
+    );
+
+    final book = (await BookDao(db).getByUrl(url))!;
+    expect(book.isInBookshelf, isTrue);
+    expect(book.chapterIndex, 2);
+    expect((await ChapterDao(db).titlesByBook(url))[2], '二');
   });
 }

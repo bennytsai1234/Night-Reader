@@ -25,12 +25,29 @@ class BookshelfImportResult {
   final int sources;
   final int contents;
 
+  /// 檔裡已經在這台書架上、照這台留著的書（不算進 [books]）。
+  final int alreadyOnShelf;
+
   const BookshelfImportResult({
     required this.books,
     required this.chapters,
     required this.sources,
     this.contents = 0,
+    this.alreadyOnShelf = 0,
   });
+
+  /// 給讀者看的一句結果；什麼都沒寫進來、也沒有已在書架上的書時是 null。
+  String? get summary {
+    final added = [
+      if (books > 0) '$books 本書',
+      if (chapters > 0) '$chapters 個章節',
+      if (sources > 0) '$sources 個書源',
+      if (contents > 0) '$contents 份正文快取',
+    ];
+    final kept = alreadyOnShelf > 0 ? '$alreadyOnShelf 本已經在書架上，照這台的留著' : null;
+    if (added.isEmpty) return kept;
+    return ['已匯入 ${added.join('、')}', ?kept].join('，');
+  }
 }
 
 class BookshelfExchangeService {
@@ -215,12 +232,13 @@ class BookshelfExchangeService {
     for (final source in sources) {
       await _sourceDao.upsert(source);
     }
-    // 目錄只寫這台還沒有的書。
-    final tocs = <String, bool>{};
+    // 書架上已有的書，目錄只在這台還沒有時寫；其他的書照檔裡寫（書與目錄
+    // 一起換成檔裡的，閱讀進度才對得上目錄）。
+    final noToc = <String, bool>{};
     final newChapters = <BookChapter>[
       for (final chapter in chapters)
-        if (!kept.contains(chapter.bookUrl) &&
-            (tocs[chapter.bookUrl] ??= (await _chapterDao.getByBook(
+        if (!kept.contains(chapter.bookUrl) ||
+            (noToc[chapter.bookUrl] ??= (await _chapterDao.getByBook(
               chapter.bookUrl,
             )).isEmpty))
           chapter,
@@ -257,9 +275,10 @@ class BookshelfExchangeService {
       }
     }
 
-    // 書照檔裡的算（書架上已有的也在書架上了）；目錄與正文照實際寫進來的。
+    // 照實際寫進來的算；書架上已有、照這台留著的另外算。
     return BookshelfImportResult(
-      books: books.length,
+      books: books.length - kept.length,
+      alreadyOnShelf: kept.length,
       chapters: newChapters.length,
       sources: sources.length,
       contents: contents,
