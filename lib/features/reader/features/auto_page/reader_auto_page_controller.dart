@@ -37,8 +37,9 @@ class ReaderAutoPageController extends ChangeNotifier {
   static const double _defaultAutoPageSpeed =
       ReaderPrefsRepository.defaultAutoPageSpeed;
 
-  /// 單幀最多推進的時間。卡頓超過這麼久時不一口氣補上，免得正文跳一大段。
-  static const double _maxFrameSeconds = 0.08;
+  /// 單幀最多推進的時間（秒）。卡頓、或 App 在背景一陣子沒畫幀時不一口氣
+  /// 補上，免得正文跳一大段；漫畫閱讀器的自動捲動也照它。
+  static const double maxFrameSeconds = 0.08;
 
   final ReaderRuntime runtime;
   final ReaderViewportController? _viewportController;
@@ -129,10 +130,12 @@ class ReaderAutoPageController extends ChangeNotifier {
 
   Future<bool> _step(int run, double seconds) async {
     bool current() => run == _run && !_paused;
-    // 等跳章正文、或紙還蓋著正文（跳章排好後掀紙前的預留停頓）時紙下的
-    // 正文不動；這一步跳過，不當成到了書尾而停下。
+    // 等跳章正文、正文照新的排版或內容重排（轉螢幕、分割畫面之後），或紙
+    // 還蓋著正文（排好後掀紙前的預留停頓）時紙下的正文不動；這一步跳過，
+    // 不當成到了書尾而停下。
     if (runtime.stateMachine.currentOperation?.kind ==
             ReaderOperationKind.jump ||
+        runtime.isRebuildingText ||
         (_viewportController?.isTextCovered?.call() ?? false)) {
       return true;
     }
@@ -158,7 +161,7 @@ class ReaderAutoPageController extends ChangeNotifier {
         ? explicit
         : runtime.state.layoutSpec.viewportSize.height;
     if (!viewportHeight.isFinite || viewportHeight <= 0) return 0;
-    final bounded = seconds.clamp(0.0, _maxFrameSeconds).toDouble();
+    final bounded = seconds.clamp(0.0, maxFrameSeconds).toDouble();
     return viewportHeight * _speed * bounded;
   }
 
