@@ -155,6 +155,45 @@ void main() {
     await close(tester);
   });
 
+  testWidgets('dragging the progress bar while playing keeps the thumb under '
+      'the finger and seeks where it is let go', (tester) async {
+    final book = _book();
+    world = _World(AppDatabase.forTesting(NativeDatabase.memory()));
+    await tester.runAsync(() async {
+      await world.addSource();
+      await world.addBook(book);
+    });
+    await open(tester, book);
+    await settle(tester);
+    expect(world.player.playing, isTrue);
+
+    final slider = find.byType(Slider);
+    final box = tester.getRect(slider);
+    final gesture = await tester.startGesture(
+      box.centerLeft + const Offset(20, 0),
+    );
+    await gesture.moveTo(box.center);
+    await tester.pump();
+    final dragged = tester.widget<Slider>(slider).value;
+    expect(dragged, greaterThan(const Duration(minutes: 5).inMilliseconds));
+
+    // 拖的途中引擎照常報播放位置。
+    world.engine.advance(const Duration(seconds: 30));
+    await tester.pump();
+    expect(tester.widget<Slider>(slider).value, dragged);
+
+    await gesture.up();
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    expect(
+      world.engine.position.inMilliseconds,
+      closeTo(dragged, const Duration(seconds: 1).inMilliseconds),
+    );
+    await close(tester);
+  });
+
   testWidgets('the header is measured in the interface font the title is '
       'drawn in', (tester) async {
     // 測試預設字型每個字都是一整格寬：照它量，這個書名要兩行；照介面字型
