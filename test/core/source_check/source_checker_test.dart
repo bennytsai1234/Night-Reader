@@ -458,6 +458,21 @@ void main() {
     expect(service.contentRequests, contains('第一章'));
   });
 
+  // ADR 0057：章名的字樣只用來挑章，不單憑章名丟掉書源。每一章的章名都
+  // 寫了 VIP 這類字樣、書源沒標付費時，照樣讀正文。
+  test('when every title says VIP the chapters are still read', () async {
+    final service = _FakeBookSourceService(
+      chapters: (_) async => [
+        BookChapter(url: 'https://site.example/1.html', title: 'VIP包廂'),
+      ],
+    );
+    final (result, checked) = await _check(service);
+
+    expect(service.contentRequests, contains('VIP包廂'));
+    expect(result.isHealthy, isTrue);
+    expect(checked.groupTags, isNot(contains(loginRequiredSourceGroupTag)));
+  });
+
   test(
     'a book served as a download file marks a download-only source',
     () async {
