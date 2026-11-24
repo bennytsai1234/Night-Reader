@@ -322,9 +322,7 @@ class GroupedRow extends StatelessWidget
       ),
     );
 
-    if (!enabled) {
-      row = Opacity(opacity: AppDisabled.opacity, child: row);
-    }
+    row = DisabledDim(disabled: !enabled, child: row);
     if (onTap == null && onLongPress == null) {
       // 標題文字本來就會併進這個節點，再設 label 讀屏會念成「標題、標題、值」。
       // 卡片第一列的粗字資料在讀屏裡是標題，可以照組跳。
@@ -432,9 +430,12 @@ class GroupedSwitch extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? () => toggle(value, onChanged!) : null,
-        // 開關的開或關是狀態，停用時軌道顏色留著，只降透明度。
+        // 開關的開或關是狀態，停用時軌道顏色留著，只降透明度；所在的列
+        // 已經整列灰掉時不再降。
         child: Opacity(
-          opacity: enabled ? 1 : AppDisabled.opacity,
+          opacity: enabled || DisabledDim.covers(context)
+              ? 1
+              : AppDisabled.opacity,
           child: track,
         ),
       ),

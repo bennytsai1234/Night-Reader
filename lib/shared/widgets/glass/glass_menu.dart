@@ -171,9 +171,7 @@ class GlassMenuButton<T> extends StatelessWidget {
             child: PressScale(
               onTap: onTap,
               // 停用時同 [GlassIconButton]（[AppDisabled]）。
-              child: enabled
-                  ? child!
-                  : Opacity(opacity: AppDisabled.opacity, child: child!),
+              child: DisabledDim(disabled: !enabled, child: child!),
             ),
           );
         }
@@ -513,8 +511,8 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                 onTap: entry.enabled
                     ? () => Navigator.of(context).pop(entry.value)
                     : null,
-                child: Opacity(
-                  opacity: entry.enabled ? 1 : AppDisabled.opacity,
+                child: DisabledDim(
+                  disabled: !entry.enabled,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       minHeight: entry.subtitle == null
