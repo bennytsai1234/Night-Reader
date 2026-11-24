@@ -21,3 +21,5 @@
 3. 這個提交的 CI 通過後，`git push origin <這個提交>:main` 快轉 `main`。CI 建置簽章 APK、打 `vX.Y.Z` tag、以 `## X.Y.Z` 當說明發 Release。確認 Android Release 開始建置就走。
 
 `v*` tag 只由 CI 建，本機不建也不推。`channel=test` 的手動執行與 `internal-test/**` 分支只建測試 APK，不打 tag、不發布。
+
+IPA 要先過 iPhone 模擬器上的檢查（ADR 0003）。沒過時那一版只有 APK：看發版紀錄裡 `iOS simulator smoke test` 那一項，它印出卡在哪一步與當時畫面上的字，失敗時另存一張模擬器截圖（artifact `ios-smoke-screenshot`）。
