@@ -115,8 +115,18 @@ abstract final class IllustrationFetcher {
     Book book,
     String src,
     Uint8List bytes,
+  ) => decodeWith(source.ruleContent?.imageDecode, source, book, src, bytes);
+
+  /// 用書源的解密程式 [js] 解圖（插圖的 `imageDecode`、封面的
+  /// `coverDecodeJs`，同 Legado `ImageUtils.decode`）；沒有程式時原樣傳回，
+  /// 解不出圖時是 null。
+  static Uint8List? decodeWith(
+    String? js,
+    BookSource source,
+    Book? book,
+    String src,
+    Uint8List bytes,
   ) {
-    final js = source.ruleContent?.imageDecode;
     if (js == null || js.trim().isEmpty) return bytes;
     final rule = AnalyzeRule(source: source, ruleData: book).setContent(src);
     try {

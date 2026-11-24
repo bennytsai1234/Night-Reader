@@ -79,6 +79,7 @@ class _NoArtwork extends NowPlayingArtwork {
     String? coverSource,
     String bookName, {
     BookSourceKind kind = BookSourceKind.novel,
+    String? origin,
   }) async => Uri.file(
     '${Directory.systemTemp.path}${Platform.pathSeparator}cover.png',
   );

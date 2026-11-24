@@ -27,7 +27,8 @@ import 'package:night_reader/core/chinese/ui_language.dart';
 class BookInfoHeader extends StatelessWidget {
   final Book book;
   final BookDetailProvider provider;
-  final void Function(BuildContext context, String url) showPhotoView;
+  final void Function(BuildContext context, String url, String origin)
+  showPhotoView;
 
   /// null 時加入／移出書架灰掉（從閱讀器開的詳情，見 BookDetailPage）。
   final VoidCallback? onToggleBookshelf;
@@ -74,11 +75,12 @@ class BookInfoHeader extends StatelessWidget {
         GestureDetector(
           onLongPress: () {
             if (coverUrl != null && coverUrl.isNotEmpty) {
-              showPhotoView(context, coverUrl);
+              showPhotoView(context, coverUrl, book.origin);
             }
           },
           child: BookCoverWidget(
             coverUrl: coverUrl,
+            origin: book.origin,
             bookName: context.zh(book.name),
             bookUrl: book.bookUrl,
             kind: book.bookKind,

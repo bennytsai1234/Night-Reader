@@ -14,7 +14,7 @@ import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:provider/provider.dart';
 import 'package:super_sliver_list/super_sliver_list.dart' as super_list;
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:night_reader/shared/widgets/book/source_cover_image.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 import 'package:night_reader/features/book_detail/change_cover_sheet.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
@@ -247,6 +247,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                             coverUrl: UnifiedCovers.coverOf(currentBook),
                             bookName: context.zh(currentBook.name),
                             bookUrl: currentBook.bookUrl,
+                            origin: currentBook.origin,
                             kind: currentBook.bookKind,
                           ),
                         ),
@@ -936,7 +937,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     });
   }
 
-  void _showPhotoView(BuildContext context, String url) {
+  void _showPhotoView(BuildContext context, String url, String origin) {
     final isLocal = url.startsWith('local://') || url.startsWith('file://');
     Navigator.push(
       context,
@@ -956,7 +957,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
                         ? File(url.replaceFirst('local://', ''))
                         : File(Uri.parse(url).toFilePath()),
                   )
-                : CachedNetworkImage(imageUrl: url),
+                : Image(
+                    image: SourceCoverImage(url, origin),
+                    errorBuilder: (context, error, stackTrace) =>
+                        const SizedBox.shrink(),
+                  ),
           ),
         ),
       ),

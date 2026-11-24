@@ -17,6 +17,7 @@ class NowPlaying {
     required this.bookName,
     required this.author,
     this.coverSource,
+    this.coverOrigin,
     this.kind = BookSourceKind.novel,
     this.duration,
   });
@@ -33,6 +34,9 @@ class NowPlaying {
   /// 書的封面來源（網址、`local://`、`file://`、`memory://`）；null 是畫
   /// 預設封面（夜空）。
   final String? coverSource;
+
+  /// 書的書源網址：網路封面照這個書源抓（[SourceCoverLoader]）。
+  final String? coverOrigin;
 
   /// 這本書是哪一類：沒有封面時照它畫預設封面的變體。
   final BookSourceKind kind;
@@ -54,12 +58,21 @@ class NowPlaying {
       other.bookName == bookName &&
       other.author == author &&
       other.coverSource == coverSource &&
+      other.coverOrigin == coverOrigin &&
       other.kind == kind &&
       other.duration == duration;
 
   @override
-  int get hashCode =>
-      Object.hash(id, title, bookName, author, coverSource, kind, duration);
+  int get hashCode => Object.hash(
+    id,
+    title,
+    bookName,
+    author,
+    coverSource,
+    coverOrigin,
+    kind,
+    duration,
+  );
 }
 
 /// 系統播放資訊上除了播放／暫停以外的按鈕。只宣告當下真的做得到的：系統照
@@ -293,7 +306,12 @@ class _SessionHandler extends BaseAudioHandler {
       if (art == null) {
         unawaited(
           artwork
-              .resolve(item.coverSource, item.bookName, kind: item.kind)
+              .resolve(
+                item.coverSource,
+                item.bookName,
+                kind: item.kind,
+                origin: item.coverOrigin,
+              )
               .then(
                 (uri) {
                   if (_item != item) return;

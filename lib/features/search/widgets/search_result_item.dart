@@ -46,6 +46,7 @@ typedef _ResultContent = ({
   String? wordCount,
   String? latestChapterTitle,
   String? coverUrl,
+  String origin,
   bool inBookshelf,
   BookSourceKind bookKind,
 });
@@ -63,6 +64,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
       wordCount: book.wordCount,
       latestChapterTitle: book.latestChapterTitle,
       coverUrl: widget.coverUrl ?? book.coverUrl,
+      origin: book.origin,
       inBookshelf: widget.isInBookshelf,
       bookKind: BookSourceKind.ofBookType(book.type as int),
     );
@@ -150,6 +152,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
             book.bookKind,
             BookCoverWidget(
               coverUrl: book.coverUrl,
+              origin: book.origin,
               bookName: context.zh(book.name),
               kind: book.bookKind,
               author: context.zh(book.author ?? ''),

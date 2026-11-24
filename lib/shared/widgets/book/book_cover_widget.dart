@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/storage/resource_service.dart';
+import 'package:night_reader/core/storage/source_cover_loader.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
+import 'package:night_reader/shared/widgets/book/source_cover_image.dart';
 import 'package:night_reader/shared/widgets/skeleton/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 
@@ -21,6 +23,10 @@ class BookCoverWidget extends StatefulWidget {
   /// 書的網址：預設封面用它找書在書架上的位置（[DefaultBookCover.bookUrl]）。
   final String? bookUrl;
 
+  /// 書的書源網址：網路封面照這個書源的標頭、Cookie 與解密抓
+  /// （[SourceCoverImage]，同 Legado 封面帶著的 `sourceOrigin`）。
+  final String? origin;
+
   /// 書的類別：沒有封面時畫哪一種預設封面（[DefaultBookCover]）。
   final BookSourceKind kind;
   final String? author;
@@ -33,6 +39,7 @@ class BookCoverWidget extends StatefulWidget {
     this.coverUrl,
     required this.bookName,
     this.bookUrl,
+    this.origin,
     this.kind = BookSourceKind.novel,
     this.author,
     this.width = 50,
@@ -221,6 +228,7 @@ class _BookCoverWidgetState extends State<BookCoverWidget>
                             source: layer.source,
                             bookName: widget.bookName,
                             bookUrl: widget.bookUrl,
+                            origin: widget.origin,
                             kind: widget.kind,
                             width: widget.width,
                             height: widget.height,
@@ -277,6 +285,7 @@ class _CoverImage extends StatefulWidget {
     required this.source,
     required this.bookName,
     required this.bookUrl,
+    required this.origin,
     required this.kind,
     required this.width,
     required this.height,
@@ -288,6 +297,7 @@ class _CoverImage extends StatefulWidget {
   final String? source;
   final String bookName;
   final String? bookUrl;
+  final String? origin;
   final BookSourceKind kind;
   final double width;
   final double height;
@@ -347,16 +357,23 @@ class _CoverImageState extends State<_CoverImage> {
   }
 
   /// 查一次這張網路封面是不是已經在手機裡（`CachedNetworkImageProvider`
-  /// 用的同一個磁碟快取）；查不到或出錯都算不在。
+  /// 用的同一個磁碟快取，照書源抓的在 [SourceCoverLoader.sourceKey]）；查不到
+  /// 或出錯都算不在。
   void _checkOnDevice(String source) {
     if (_checking || _onDevice != null) return;
     _checking = true;
-    CachedNetworkImageProvider.defaultCacheManager
-        .getFileFromCache(source)
-        .then(
-          (file) => _onDeviceChecked(file != null),
-          onError: (Object _) => _onDeviceChecked(false),
-        );
+    final cache = CachedNetworkImageProvider.defaultCacheManager;
+    final origin = widget.origin;
+    Future<bool> inCache() async =>
+        await cache.getFileFromCache(source) != null ||
+        (origin != null &&
+            origin.isNotEmpty &&
+            await cache.getFileFromCache(SourceCoverLoader.sourceKey(source)) !=
+                null);
+    inCache().then(
+      _onDeviceChecked,
+      onError: (Object _) => _onDeviceChecked(false),
+    );
   }
 
   void _onDeviceChecked(bool onDevice) {
@@ -457,7 +474,13 @@ class _CoverImageState extends State<_CoverImage> {
       image: ResizeImage.resizeIfNeeded(
         cacheWidth,
         cacheHeight,
-        CachedNetworkImageProvider(source),
+        switch (widget.origin) {
+          final origin? when origin.isNotEmpty => SourceCoverImage(
+            source,
+            origin,
+          ),
+          _ => CachedNetworkImageProvider(source),
+        },
       ),
       fit: BoxFit.cover,
       width: width,

@@ -31,4 +31,25 @@ void main() {
     );
     expect(BackstageWebView.sourceIn(page, r'\.mp4'), isNull);
   });
+
+  test('等的是網頁載入過、整段符合 sourceRegex 的資源網址（同 Legado）', () {
+    const loaded = [
+      'https://cdn.test/app.js',
+      'https://api.test/chapter?id=1&sign=abc',
+      'https://cdn.test/a.m3u8?t=1',
+    ];
+    expect(
+      BackstageWebView.resourceMatching(
+        loaded,
+        r'https://api\.test/chapter\?.*',
+      ),
+      'https://api.test/chapter?id=1&sign=abc',
+    );
+    expect(
+      BackstageWebView.resourceMatching(loaded, r'.*\.m3u8.*'),
+      'https://cdn.test/a.m3u8?t=1',
+    );
+    // 整段：只符合一部分不算（Java String.matches）。
+    expect(BackstageWebView.resourceMatching(loaded, r'\.m3u8'), isNull);
+  });
 }

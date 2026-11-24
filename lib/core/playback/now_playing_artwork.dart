@@ -4,12 +4,12 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/resource_service.dart';
+import 'package:night_reader/core/storage/source_cover_loader.dart';
 import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 
 /// 系統播放資訊的封面：把書的封面變成手機上的一個圖檔，交給系統去讀。
@@ -22,7 +22,7 @@ import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 class NowPlayingArtwork {
   NowPlayingArtwork({
     Future<Directory> Function()? directory,
-    Future<File> Function(String url)? download,
+    Future<File> Function(String url, String? origin)? download,
     Future<List<int>?> Function(String key)? memoryResource,
   }) : _directory = directory ?? _defaultDirectory,
        _download = download ?? _downloadToCoverCache,
@@ -31,7 +31,7 @@ class NowPlayingArtwork {
            ((key) => ResourceService().getMemoryResource(key));
 
   final Future<Directory> Function() _directory;
-  final Future<File> Function(String url) _download;
+  final Future<File> Function(String url, String? origin) _download;
   final Future<List<int>?> Function(String key) _memoryResource;
 
   /// 預設封面的大小：書封面的 5:7，系統再照自己的版面縮放與裁切。
@@ -50,9 +50,10 @@ class NowPlayingArtwork {
   final Set<String> _unavailable = {};
 
   /// 網路封面和書架的封面（`CachedNetworkImageProvider`）用同一個磁碟快取：
-  /// 看過的封面不再下載。
-  static Future<File> _downloadToCoverCache(String url) =>
-      CachedNetworkImageProvider.defaultCacheManager.getSingleFile(url);
+  /// 看過的封面不再下載。有書源網址 [origin] 時照書源抓（[SourceCoverLoader]，
+  /// 帶書源標頭、Cookie 與解密），抓好的在同一個快取裡。
+  static Future<File> _downloadToCoverCache(String url, String? origin) =>
+      SourceCoverLoader.file(url, origin);
 
   static Future<Directory> _defaultDirectory() async {
     final temp = await getTemporaryDirectory();
@@ -77,10 +78,14 @@ class NowPlayingArtwork {
     String? coverSource,
     String bookName, {
     BookSourceKind kind = BookSourceKind.novel,
+    String? origin,
   }) async {
     final source = _usableSource(coverSource);
     if (source != null) {
-      final cover = await _once(_coverKey(source), () => _coverUri(source));
+      final cover = await _once(
+        _coverKey(source),
+        () => _coverUri(source, origin),
+      );
       if (cover != null) return cover;
     }
     final fallback = await _once(
@@ -117,9 +122,9 @@ class NowPlayingArtwork {
   }
 
   /// [source] 換成解得開的圖檔；載不到或不是圖時記進 [_unavailable]，是 null。
-  Future<Uri?> _coverUri(String source) async {
+  Future<Uri?> _coverUri(String source, String? origin) async {
     try {
-      final file = await _coverFile(source);
+      final file = await _coverFile(source, origin);
       if (file != null && await _isImage(file)) return file.uri;
     } catch (error) {
       AppLog.d('NowPlayingArtwork: cover unavailable, use default: $error');
@@ -128,7 +133,7 @@ class NowPlayingArtwork {
     return null;
   }
 
-  Future<File?> _coverFile(String source) async {
+  Future<File?> _coverFile(String source, String? origin) async {
     if (source.startsWith('local://')) {
       return File(source.substring('local://'.length));
     }
@@ -146,7 +151,7 @@ class NowPlayingArtwork {
       return file;
     }
     if (source.startsWith('http://') || source.startsWith('https://')) {
-      return _download(source);
+      return _download(source, origin);
     }
     return null;
   }

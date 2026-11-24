@@ -1052,6 +1052,7 @@ class _BookshelfPageState extends State<BookshelfPage>
             kind: book.bookKind,
             author: book.author,
             coverUrl: UnifiedCovers.coverOf(book),
+            origin: book.origin,
             width: sourceRect.width,
             height: sourceRect.height,
             borderRadius: AppRadius.cardXs,

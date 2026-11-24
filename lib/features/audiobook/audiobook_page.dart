@@ -652,6 +652,7 @@ class _BookHeader extends StatelessWidget {
               child: switch (UnifiedCovers.coverOf(book)) {
                 final cover? when cover.trim().isNotEmpty => BookCoverWidget(
                   coverUrl: cover,
+                  origin: book.origin,
                   bookName: context.zh(book.name),
                   bookUrl: book.bookUrl,
                   kind: BookSourceKind.audio,

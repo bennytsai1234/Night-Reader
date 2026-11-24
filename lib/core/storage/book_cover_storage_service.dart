@@ -3,11 +3,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-import 'package:dio/dio.dart';
 import 'package:night_reader/core/models/book/book.dart';
-import 'package:night_reader/core/network/source_tls.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/resource_service.dart';
+import 'package:night_reader/core/storage/source_cover_loader.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:path/path.dart' as p;
 
@@ -16,8 +15,6 @@ class BookCoverStorageService {
       BookCoverStorageService._internal();
   factory BookCoverStorageService() => _instance;
   BookCoverStorageService._internal();
-
-  final Dio _dio = Dio()..httpClientAdapter = sourceHttpClientAdapter();
 
   /// 從別處收進來的書（還原備份、匯入書架檔）：封面的本機檔是存的那台
   /// 手機的，這台沒有時拿掉，顯示改回封面網址。同一台手機還原時檔案還在，
@@ -221,7 +218,7 @@ class BookCoverStorageService {
     required String prefix,
   }) async {
     try {
-      final bytes = await _readCoverBytes(source);
+      final bytes = await _readCoverBytes(source, book);
       if (bytes == null || bytes.isEmpty) return null;
 
       final sourceHash = sha1.convert(utf8.encode(source)).toString();
@@ -253,7 +250,7 @@ class BookCoverStorageService {
     return file.path;
   }
 
-  Future<Uint8List?> _readCoverBytes(String source) async {
+  Future<Uint8List?> _readCoverBytes(String source, Book book) async {
     if (source.startsWith('memory://')) {
       return ResourceService().getMemoryResource(source);
     }
@@ -269,12 +266,9 @@ class BookCoverStorageService {
     }
     final uri = Uri.tryParse(source);
     if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-      final response = await _dio.get<List<int>>(
-        source,
-        options: Options(responseType: ResponseType.bytes),
-      );
-      final data = response.data;
-      return data == null ? null : Uint8List.fromList(data);
+      // 照這本書的書源抓（標頭、Cookie、封面解密），和畫面上的封面同一份
+      // 快取。
+      return SourceCoverLoader.load(source, book.origin, book: book);
     }
     final file = File(source);
     if (await file.exists()) {

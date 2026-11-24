@@ -803,6 +803,7 @@ class _AiFindPickRow extends StatelessWidget implements GroupedSkeletonItem {
               book.bookKind,
               BookCoverWidget(
                 coverUrl: book.coverUrl,
+                origin: book.origin,
                 bookName: context.zh(book.name),
                 bookUrl: book.bookUrl,
                 kind: book.bookKind,
