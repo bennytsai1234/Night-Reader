@@ -623,11 +623,12 @@ class SourceRepairBatch extends ChangeNotifier {
   Future<bool> _passes(RepairItem item, BookSource candidate) async {
     if (_halting) return false;
     final draft = const Uuid().v4();
-    final started = await BaseSource.startDraftVariables(
-      draft,
-      item.source.getKey(),
-    );
     try {
+      // 抄到一半出錯時，已經抄進草稿的也在下面丟掉。
+      final started = await BaseSource.startDraftVariables(
+        draft,
+        item.source.getKey(),
+      );
       final checked = await BaseSource.inDraftVariables(
         draft,
         () => _check(candidate, _cancelToken),
