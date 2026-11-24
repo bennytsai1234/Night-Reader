@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
@@ -39,8 +40,11 @@ void main() {
     server.listen((request) async {
       request.response.headers.contentType = ContentType.html;
       request.response.write(
-        '<html><body><h1>第1章 開端</h1>'
-        '<div id="content">第一章的正文。</div></body></html>',
+        request.uri.path == '/locked'
+            ? '<html><body><h1>請先登入</h1>'
+                  '<div id="content">請先登錄後閱讀</div></body></html>'
+            : '<html><body><h1>第1章 開端</h1>'
+                  '<div id="content">第一章的正文。</div></body></html>',
       );
       await request.response.close();
     });
@@ -111,6 +115,17 @@ void main() {
       final chapter = BookChapter(url: '$baseUrl/c/1', title: '第1章');
       await CompleteContentFetcher.fetch(source('h1@text'), book, chapter);
       expect(chapter.title, '第1章 開端');
+    });
+
+    // 整章抓完、沒被登入牆擋住才換：失敗時呼叫端照樣存回章節欄位，目錄
+    // 不能變成登入提示。
+    test('a chapter behind a login wall keeps its title', () async {
+      final chapter = BookChapter(url: '$baseUrl/locked', title: '第1章');
+      await expectLater(
+        CompleteContentFetcher.fetch(source('h1@text'), book, chapter),
+        throwsA(isA<LoginCheckException>()),
+      );
+      expect(chapter.title, '第1章');
     });
 
     test('an empty or broken title rule keeps the title', () async {

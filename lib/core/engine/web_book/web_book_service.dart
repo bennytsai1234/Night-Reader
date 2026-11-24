@@ -338,7 +338,10 @@ class WebBook {
       for (var i = 0; i < chapters.length; i++) {
         final chapter = chapters[i];
         try {
-          rule.setChapter(chapter);
+          // `page` 是夜讀原本給的序號（Legado 沒有這個變數），照舊給。
+          rule
+            ..setChapter(chapter)
+            ..page = i + 1;
           final out = rule.evalJS(
             'var index = ${i + 1}; var gInt = ${jsonEncode(gInt)};'
             ' var __lrTitle = eval($code);'

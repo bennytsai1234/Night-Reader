@@ -63,6 +63,15 @@ void main() {
     ]);
   }, skip: quickJsUnavailableReason());
 
+  // Legado 沒有 page；夜讀原本給的是序號，照舊。
+  test('page is still the chapter number', () async {
+    expect(await titles(source("page+'.'+title"), book()), [
+      '1.開端',
+      '2.相遇',
+      '3.離別',
+    ]);
+  }, skip: quickJsUnavailableReason());
+
   test('numbers follow the order shown when the list is reversed', () async {
     // 書源寫了 `-`：網站列的是倒序，排好後是 離別、相遇、開端。
     expect(

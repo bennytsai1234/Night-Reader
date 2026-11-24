@@ -17,7 +17,15 @@ class ContentResult {
   /// - 長度 > 1：可並發
   final List<String> nextUrls;
 
-  const ContentResult({required this.content, this.nextUrls = const []});
+  /// 正文規則的 `title` 從這一頁取到的章名（[ContentParser.parse] 的
+  /// `readTitle`）；沒取到是 null。
+  final String? title;
+
+  const ContentResult({
+    required this.content,
+    this.nextUrls = const [],
+    this.title,
+  });
 }
 
 class ContentParser {
@@ -44,7 +52,7 @@ class ContentParser {
     try {
       final contentRule = source.ruleContent;
       if (contentRule == null) return const ContentResult(content: '');
-      if (readTitle && chapter != null) _readTitle(rule, contentRule, chapter);
+      final title = readTitle ? _readTitle(rule, contentRule) : null;
 
       var content = rule.getString(contentRule.content ?? '', unescape: false);
       // 先清標籤再解實體（同 Legado `BookContent`）：倒過來的話，原文寫著的
@@ -75,27 +83,23 @@ class ContentParser {
         }
       }
 
-      return ContentResult(content: content, nextUrls: nextUrls);
+      return ContentResult(content: content, nextUrls: nextUrls, title: title);
     } finally {
       rule.dispose();
     }
   }
 
-  /// 正文規則的 `title`：從正文頁取章名，算出不是空的就換掉這一章的章名
-  /// （同 Legado `BookContent.analyzeContent`）；規則出錯時留著原本的章名。
-  /// 呼叫端照規則改過的章節欄位存回目錄（`updateFetchedChapter`）。
-  static void _readTitle(
-    AnalyzeRule rule,
-    ContentRule contentRule,
-    BookChapter chapter,
-  ) {
+  /// 正文規則的 `title`：從正文頁取章名（同 Legado `BookContent`），算出
+  /// 空白或規則出錯時是 null。
+  static String? _readTitle(AnalyzeRule rule, ContentRule contentRule) {
     final titleRule = contentRule.title;
-    if (titleRule == null || titleRule.trim().isEmpty) return;
+    if (titleRule == null || titleRule.trim().isEmpty) return null;
     try {
       final title = rule.getString(titleRule);
-      if (title.trim().isNotEmpty) chapter.title = title;
+      return title.trim().isEmpty ? null : title;
     } on Exception catch (error, stackTrace) {
       AppLog.e('正文的章名規則失敗，留著原本的章名', error: error, stackTrace: stackTrace);
+      return null;
     }
   }
 
