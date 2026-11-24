@@ -9,6 +9,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/local_book/local_book_fingerprint.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/engine/book/book_help.dart';
 import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:path/path.dart' as p;
@@ -93,7 +94,10 @@ class LocalBookService {
     final existing = await bookDao.getByUrl('local://$storedPath');
     if (existing != null && existing.isInBookshelf) return existing;
     try {
-      final result = await importBook(storedPath);
+      final result = await importBook(
+        storedPath,
+        pickedName: p.basenameWithoutExtension(path),
+      );
       if (result == null) {
         await _discardUnusedCopy(storedPath, existing == null);
         return null;
@@ -471,8 +475,13 @@ class LocalBookService {
     List<({String title, int start, int end})> ranges,
   ) => _chapters(book, ranges);
 
-  /// 解析本地書籍並回傳 Book + chapters（不做持久化）
-  Future<LocalBookImportResult?> importBook(String path) async {
+  /// 解析本地書籍並回傳 Book + chapters（不做持久化）。書名與作者從
+  /// [pickedName]（使用者選的檔名，不含副檔名；沒給時用 [path] 的）拆，見
+  /// [_localBook]。
+  Future<LocalBookImportResult?> importBook(
+    String path, {
+    String? pickedName,
+  }) async {
     final file = File(path);
     if (!await file.exists()) return null;
 
@@ -480,33 +489,43 @@ class LocalBookService {
     if (!isSupportedLocalBookExtension(ext)) {
       throw UnsupportedError('不支援的本地格式: $ext');
     }
-    return ext == 'epub' ? _importEpub(path) : _importTxt(file);
+    return ext == 'epub'
+        ? _importEpub(path, pickedName)
+        : _importTxt(file, pickedName);
   }
 
-  Future<LocalBookImportResult> _importTxt(File file) async {
+  Future<LocalBookImportResult> _importTxt(
+    File file,
+    String? pickedName,
+  ) async {
     final result = await compute((File f) async {
       final parser = TxtParser(f);
       return await parser.splitChapters();
     }, file);
-    final book = _localBook(file.path)..charset = result.charset;
-    return LocalBookImportResult(
-      book: book,
-      chapters: _chapters(book, [
-        for (final (i, chapter) in result.chapters.indexed)
-          (
-            title: chapter['title'] as String? ?? '第 $i 章',
-            start: chapter['start'] as int,
-            end: chapter['end'] as int,
-          ),
-      ]),
-    );
+    final book = _localBook(file.path, pickedName)..charset = result.charset;
+    final chapters = _chapters(book, [
+      for (final (i, chapter) in result.chapters.indexed)
+        (
+          title: chapter['title'] as String? ?? '第 $i 章',
+          start: chapter['start'] as int,
+          end: chapter['end'] as int,
+        ),
+    ]);
+    for (final (i, chapter) in result.chapters.indexed) {
+      chapters[i].isVolume = chapter['isVolume'] == true;
+    }
+    return LocalBookImportResult(book: book, chapters: chapters);
   }
 
-  Future<LocalBookImportResult> _importEpub(String path) async {
-    final book = _localBook(path)..charset = 'utf-8';
+  Future<LocalBookImportResult> _importEpub(
+    String path,
+    String? pickedName,
+  ) async {
+    final book = _localBook(path, pickedName)..charset = 'utf-8';
     final info = await EpubParser.convert(path, await epubTextPath(book));
+    // 書名照 Legado：書裡沒寫時用檔名，不拆。
     book
-      ..name = info.title ?? book.name
+      ..name = info.title ?? p.basenameWithoutExtension(path)
       ..author = info.author ?? book.author;
     return LocalBookImportResult(
       book: book,
@@ -516,16 +535,55 @@ class LocalBookService {
     );
   }
 
-  Book _localBook(String path) {
+  /// 書名與作者照 [nameAndAuthorFromFileName] 從使用者選的檔名
+  /// [pickedName] 拆。存進本地書資料夾時同名的檔另取了「名字 (2)」
+  /// （[storeInLibrary]）：拆的是原本的檔名，「 (2)」接在書名後面，同名的
+  /// 兩本書才分得開（書籤與標註照書名加作者認書）。
+  Book _localBook(String path, String? pickedName) {
+    final stored = p.basenameWithoutExtension(path);
+    final picked = pickedName ?? stored;
+    final copySuffix = stored != picked && stored.startsWith(picked)
+        ? stored.substring(picked.length)
+        : '';
+    final (:name, :author) = nameAndAuthorFromFileName(picked);
     return Book(
       bookUrl: 'local://$path',
-      name: p.basenameWithoutExtension(path),
-      author: '本地',
+      name: '$name$copySuffix',
+      author: author.isEmpty ? '本地' : author,
       origin: BookType.localOrigin,
       originName: '本地',
       isInBookshelf: true,
       type: 0,
     );
+  }
+
+  static final _nameAuthorPatterns = [
+    RegExp(r'(.*?)《([^《》]+)》.*?作者：(.*)'),
+    RegExp(r'(.*?)《([^《》]+)》(.*)'),
+    RegExp(r'(^)(.+) 作者：(.+)$'),
+    RegExp(r'(^)(.+) by (.+)$'),
+  ];
+
+  /// 從檔名（不含副檔名）拆出書名與作者，照 Legado
+  /// `LocalBook.analyzeNameAuthor`：「《書名》作者：某某」「書名 作者：某某」
+  /// 「書名 by 某某」；都不合時書名去掉「作者…」這類字樣。拆不出作者時
+  /// 作者是空字串。
+  static ({String name, String author}) nameAndAuthorFromFileName(
+    String fileName,
+  ) {
+    for (final pattern in _nameAuthorPatterns) {
+      final match = pattern.firstMatch(fileName);
+      if (match == null) continue;
+      return (
+        name: match.group(2)!,
+        author: BookHelp.formatBookAuthor(
+          '${match.group(1) ?? ''}${match.group(3) ?? ''}',
+        ),
+      );
+    }
+    final name = BookHelp.formatBookName(fileName);
+    final author = BookHelp.formatBookAuthor(fileName.replaceAll(name, ''));
+    return (name: name, author: author.length == fileName.length ? '' : author);
   }
 
   List<BookChapter> _chapters(

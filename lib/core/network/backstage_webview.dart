@@ -6,6 +6,8 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 import 'package:html_unescape/html_unescape.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/network/cookie_store.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/network/webview_js_result.dart';
 import 'package:night_reader/core/network/webview_cloudflare_solver.dart';
@@ -18,6 +20,11 @@ class BackstageWebView {
   final String? overrideUrlRegex;
   final Map<String, String>? headerMap;
   final int delayTime;
+
+  /// 書源的 key（[BookSource.getKey]）：網頁每載完一頁，就把那一頁的 Cookie
+  /// 存進這個書源（同 Legado `BackstageWebView` 的 `tag`），之後不開網頁的
+  /// 請求帶得到網頁程式寫下的 Cookie。null 是不存。
+  final String? tag;
 
   Timer? _timer;
 
@@ -37,6 +44,7 @@ class BackstageWebView {
     this.overrideUrlRegex,
     this.headerMap,
     this.delayTime = 0,
+    this.tag,
   });
 
   /// 取得隱藏的 WebView 元件 (可以掛在 app 根節點的 Stack 底層)
@@ -64,6 +72,27 @@ class BackstageWebView {
     return match.groupCount > 0
         ? (match.group(1) ?? match.group(0) ?? '')
         : (match.group(0) ?? '');
+  }
+
+  /// 瀏覽器裡 [pageUrl] 那一頁的 Cookie 存進書源 [tag]（同 Legado：整份換成
+  /// 瀏覽器那一份，`CookieStore.setCookie`）。[read] 是測試換掉讀瀏覽器 Cookie
+  /// 的那一步。
+  @visibleForTesting
+  static Future<void> saveCookies(
+    String tag,
+    String pageUrl, {
+    Future<String?> Function(Uri uri) read = WebViewNative.cookies,
+  }) async {
+    try {
+      final uri = Uri.tryParse(pageUrl);
+      if (uri == null || !uri.hasScheme || uri.host.isEmpty) return;
+      final cookie = await read(uri);
+      if (cookie == null || cookie.isEmpty) return;
+      await CookieStore().setCookie(tag, cookie);
+    } catch (error) {
+      // 只記錯誤的種類：資料庫的錯誤訊息會帶出寫入的 Cookie 值。
+      AppLog.w('存背景網頁的 Cookie 失敗: ${error.runtimeType}');
+    }
   }
 
   Future<Map<String, dynamic>> getStrResponse() async {
@@ -136,6 +165,7 @@ class BackstageWebView {
         // 書源網站的憑證不驗（同書源的連線，見 sourceHttpClient）。
         onSslAuthError: (error) => error.proceed(),
         onPageFinished: (String currentUrl) async {
+          if (tag case final key?) unawaited(saveCookies(key, currentUrl));
           if (isCompleted) return;
 
           await Future.delayed(Duration(milliseconds: 1000 + delayTime));

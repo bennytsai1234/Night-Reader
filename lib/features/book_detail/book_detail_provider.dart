@@ -619,7 +619,8 @@ class BookDetailProvider extends ChangeNotifier {
       return sourceIssueMessage ?? '目前沒有可下載的章節。';
     }
 
-    await _bookDao.upsert(_book);
+    // 只確定這本書在資料庫裡（下載照它排）；已經有的不拿手上這份蓋回去。
+    await _bookDao.insertIfMissing(_book);
     await _saveChapterMetadataIfPossible();
 
     return null;
@@ -634,7 +635,7 @@ class BookDetailProvider extends ChangeNotifier {
       _book.syncTime = DateTime.now().millisecondsSinceEpoch;
     }
     _book.fillChapterTitle(_allChapters);
-    await _bookDao.upsert(_book);
+    await _bookDao.saveJoinedShelf(_book);
     AppEventBus().fire(AppEventBus.upBookshelf);
     notifyListeners();
   }
@@ -812,7 +813,7 @@ class BookDetailProvider extends ChangeNotifier {
           await _loadChapters();
         }
         _book.fillChapterTitle(_allChapters);
-        await _bookDao.upsert(_book);
+        await _bookDao.saveJoinedShelf(_book);
         await _saveChapterMetadataIfPossible();
       } catch (e) {
         AppLog.e('加入書架失敗: $e', error: e);
@@ -940,7 +941,7 @@ class BookDetailProvider extends ChangeNotifier {
     next.customCoverLocalPath = null;
     try {
       await _coverStorage.ensureDisplayCoverStored(next);
-      await _bookDao.upsert(next);
+      await _bookDao.saveCover(next);
       _book = next;
       AppEventBus().fire(AppEventBus.upBookshelf);
       notifyListeners();
@@ -1051,17 +1052,10 @@ class BookDetailProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _saveChapterMetadataIfPossible() {
-    if (_allChapters.isEmpty) return Future<void>.value();
-    final chapterContentDao = _chapterContentDao;
-    if (chapterContentDao == null) {
-      return _chapterDao.insertChapters(_allChapters);
-    }
-    return ReaderChapterContentStore(
-      chapterDao: _chapterDao,
-      contentDao: chapterContentDao,
-    ).saveChapterMetadata(_allChapters);
-  }
+  /// 這本書還沒有目錄時存進手上這份；詳情開著時背景檢查更新已經換上新
+  /// 目錄的話照新的，舊目錄裡被拿掉的章不加回去。
+  Future<void> _saveChapterMetadataIfPossible() =>
+      _chapterDao.insertChaptersIfNone(_book.bookUrl, _allChapters);
 
   Future<Set<String>> _storedChapterUrls() async {
     // 漫畫一話一個 CBZ（ADR 0052），不看正文快取。
@@ -1155,7 +1149,8 @@ class BookDetailProvider extends ChangeNotifier {
   Future<void> _storeDisplayCover() async {
     try {
       await _coverStorage.ensureDisplayCoverStored(_book);
-      await _bookDao.upsert(_book);
+      // 封面下載完才寫：只補封面檔的位置，這段期間換了封面或移出書架就不寫。
+      await _bookDao.saveStoredCover(_book);
       _announceCover();
       if (hasReadyWorld) notifyListeners();
     } catch (error) {

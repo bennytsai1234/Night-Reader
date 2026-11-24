@@ -157,13 +157,13 @@ class _ReaderReplaceRuleSheetState extends State<ReaderReplaceRuleSheet> {
       apply(value);
     });
     try {
-      await widget.bookDao.upsert(widget.book);
+      await widget.bookDao.saveReadConfig(widget.book);
       await widget.onReload();
     } catch (error) {
       if (!mounted) return;
       setState(() => apply(previous));
       try {
-        await widget.bookDao.upsert(widget.book);
+        await widget.bookDao.saveReadConfig(widget.book);
       } catch (rollbackError, rollbackStack) {
         AppLog.e(
           '$action rollback 持久化失敗: $rollbackError',
@@ -287,9 +287,7 @@ class _ReaderReplaceRuleSheetState extends State<ReaderReplaceRuleSheet> {
                   context,
                   constraints: widget.sheetConstraints,
                   onSave: (rule) async {
-                    final nextOrder = (await widget.replaceDao.getAll()).length;
-                    rule.order = nextOrder;
-                    await widget.replaceDao.upsert(rule);
+                    await widget.replaceDao.append(rule);
                     saved = true;
                   },
                 );

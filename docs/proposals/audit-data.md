@@ -13,7 +13,7 @@
 | 資料 1 下載與儲存 | `lib/core/download/` 的 `book_update_service`、`download_base`、`download_executor`、`download_failure`、`download_scheduler`、`download_service`（6 檔，`audio_chapter_download` 在閱讀器 4）、`lib/features/downloads/download_manager_page.dart`（1 檔）、`lib/core/utils/cache_manager.dart`、`lib/core/storage/` 的 `book_storage_service`、`book_chapter_files`、`reader_chapter_content_store`、`reader_chapter_content_storage`、`book_illustration_storage`、`book_cover_storage_service`、`bookshelf_state_tracker`、`books_in_use`（8 檔） | 2 |
 | 資料 2 備份還原、本地書與更新 | `lib/core/local_book/`（5 檔）、`lib/core/backup/` 的 `backup_service`、`restore_service`、`bookshelf_exchange_service`、`export_book_service`、`highlight_export`（5 檔，`login_data_backup` 在書源 4）、`lib/core/app_update/`（4 檔）、`lib/core/playback/tts_service.dart`（1 檔） | 2 |
 | 資料 3 啟動、背景工作與 Android | `lib/main.dart`、`lib/app_providers.dart`、`lib/core/` 的 `startup/`（1）、`di/`（1）、`config/`（1）、`constant/`（5）、`exception/`（2）、`fonts/`（2）、`base/`（1）、`background_work/`（4）、`diagnostics/`（4）、`platform/`（2）、`app_lock/`（1）；`android/app/src/main/` 的 Kotlin（7 檔）與 `AndroidManifest.xml`；`lib/core/utils/` 的 `encoder_utils`、`lru_map`；`lib/core/storage/resource_service.dart` | 0 |
-| 資料 4 同步 | `lib/core/sync/`（21 檔）；另走了呼叫端 `lib/features/settings/local_book_sync_dialog.dart`、`lib/features/book_detail/change_cover_sheet.dart`、`lib/shared/widgets/book/book_cover_widget.dart`、`BookStorageService.discardBook` | 3 |
+| 資料 4 同步 | `lib/core/sync/`（21 檔）；另走了呼叫端 `lib/features/settings/local_book_sync_dialog.dart`、`lib/features/book_detail/change_cover_sheet.dart`、`lib/shared/widgets/book/book_cover_widget.dart`、`BookStorageService.discardBook` | 3（修 4-2 時另外發現 1 筆，4-4） |
 
 ## 問題
 
@@ -175,7 +175,7 @@
 
 **輕重**：畫面錯
 
-#### 4-2. 兩台互相補齊同一本本地漫畫後，在這台移出書架，下次按「同步本地書」整本又被下載回來
+#### 4-2. 兩台互相補齊同一本本地漫畫後，在這台移出書架，下次按「同步本地書」整本又被下載回來（已修，#539）
 
 **會發生什麼**：同一本本地漫畫兩台各有對方沒有的話（例如一台之後補了前面幾話），按「同步本地書」會同時上傳這台多的、下載雲端多的。之後在這台把這本移出書架，再按一次「同步本地書」，確認框列的是「下載」而不是刪掉雲端的：開始同步後整本重新下載、加回書架，雲端那本也沒刪，另一台不會跟著移出。
 
@@ -211,7 +211,7 @@
 
 **輕重**：功能沒反應或結果錯
 
-#### 4-3. 同一本網路書在兩台的書名不同時，全面同步幾次後，其中一台的那本被移出書架、已下載的章節全部刪掉
+#### 4-3. 同一本網路書在兩台的書名不同時，全面同步幾次後，其中一台的那本被移出書架、已下載的章節全部刪掉（已修，#538）
 
 **會發生什麼**：同一本網路書（書的網址相同）在兩台的書名或作者不一樣，而且不是「兩台都同步過之後才改名」：例如在開始用同步之前，在一台「編輯資訊」改過書名，或那台的書源更新了書名。開同步後，兩台各按幾次「立即全面同步」，其中一台會把書名不同的那一本當成「另一台移出書架了」：那台的這本被移出書架，已下載的正文、目錄、封面都刪掉；接著可能照另一台的書名重新加入、整本重新下載（閱讀進度換成另一台的），也可能下一輪連另一台的那本一起刪掉，兩台都沒有這本書。沒網路或書源失效時，原本離線可讀的章節就讀不到了。
 
@@ -240,6 +240,29 @@
 **修法方向**：修在第 2 步：這台書架上的那本書鍵不同時，不要回報成套用了這個鍵（這台沒有這個鍵的書，就不該記成同步過）；要嘛照雲端那筆原地改名、兩台統一成同一個書名，要嘛這一筆留在雲端不動。同一個原因要一起看 `existing` 不在書架上時改名的那條（同檔 `245-258`），兩條對同一個網址的處理要一致。
 
 **輕重**：資料遺失或寫壞
+
+#### 4-4. 本地漫畫上傳到一半失敗後移出書架，已經傳上去的那幾話一直留在同步空間
+
+修 4-2（#539）時審查發現，以前就有。
+
+**會發生什麼**：按「同步本地書」上傳本地漫畫，傳了幾話之後失敗（後面某一話傳不上去、連線斷了，或雲端紀錄寫不進去），讀者在下一次成功同步之前把這本移出書架。之後再按「同步本地書」，傳上去的那幾話不會被刪，一直佔著同步空間；漫畫一話常有好幾 MB。
+
+**為什麼**：
+1. 上傳本地漫畫是一話一話寫，全部寫完才寫雲端紀錄（記著有哪幾話）：`lib/core/sync/local_book_sync.dart:495-509` → `517-532`（`_putRecord`）。中途丟出錯誤的話，已經寫上去的那幾話沒有任何紀錄指著。
+2. 移出書架後刪雲端，只刪雲端紀錄列出的那幾話：同檔 `450-468`（`_deleteRemote` 照 `task.chapters`，來自雲端紀錄）。沒寫進紀錄的那幾話不在裡面。
+3. 從沒傳成過的漫畫（雲端沒有紀錄）移出書架後，「刪掉沒人記著的原檔」那條只認 TXT、EPUB，本地漫畫直接略過：同檔 `747-751`
+   ```dart
+   // 本地漫畫不知道傳了哪幾話，沒人記著的章檔留在雲端。
+   if (theirs == null &&
+       last != null &&
+       isSupportedLocalBookExtension(last.local)) {
+   ```
+
+**怎麼確認**：`test/core/sync/local_book_sync_test.dart` 加一項：一本本地漫畫有三話，第三話的上傳設成失敗（`failingBlobs`）；按一次（失敗）；移出書架；再按一次並執行；斷言同步空間裡沒有 `comic_` 開頭的檔。另一項是已同步過、補了兩話、第二話失敗，同樣斷言補上去的第一話被清掉。
+
+**修法方向**：上傳每一話之前，先在這台上次同步的紀錄旁記下「傳上去、還沒寫進雲端紀錄的話」，寫進雲端紀錄後清掉；下一次失敗或下一次按「同步本地書」時，這本已經不在書架上（或那幾話不在雲端紀錄裡、也沒有別筆紀錄記著），就把這些話刪掉。
+
+**輕重**：功能沒反應或結果錯
 
 ## 拿不準
 

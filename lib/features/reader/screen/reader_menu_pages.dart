@@ -237,13 +237,13 @@ final class ReaderMenuPages {
     final enabled = !config.reSegment;
     config.reSegment = enabled;
     try {
-      await _host.dependencies.bookDao.upsert(book);
+      await _host.dependencies.bookDao.saveReadConfig(book);
       await _host.runtime?.reloadContentPreservingLocation();
     } catch (error, stackTrace) {
       AppLog.e('更新重新分段設定失敗', error: error, stackTrace: stackTrace);
       config.reSegment = !enabled;
       try {
-        await _host.dependencies.bookDao.upsert(book);
+        await _host.dependencies.bookDao.saveReadConfig(book);
       } catch (rollbackError, rollbackStack) {
         AppLog.e(
           '更新重新分段設定 rollback 持久化失敗: $rollbackError',

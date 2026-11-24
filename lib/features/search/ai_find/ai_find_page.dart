@@ -52,9 +52,7 @@ const String aiFindCountKey = 'ai_find.count';
 Future<void> openAiFind(BuildContext context) async {
   final navigator = Navigator.of(context);
   if (aiFindRuns.current case final AiFindRun current when !current.isDone) {
-    await navigator.push(
-      MaterialPageRoute<void>(builder: (_) => current.page()),
-    );
+    await navigator.push(current.pageRoute());
     return;
   }
   await navigator.push(MaterialPageRoute<void>(builder: (_) => AiFindPage()));

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:html/parser.dart' as html_parser;
+import 'package:intl/intl.dart';
 
 import '../encode/charsets.dart';
 import '../js_extensions.dart';
@@ -142,10 +143,13 @@ extension JsStringExtensions on JsExtensions {
       }
     });
 
+    // Legado：FastDateFormat("yyyy/MM/dd HH:mm")，手機當地時間。
     runtime.onMessage('_timeFormat', (dynamic args) {
-      final time = args;
-      final t = time is int ? time : int.tryParse(time.toString()) ?? 0;
-      return DateTime.fromMillisecondsSinceEpoch(t).toIso8601String();
+      final t = args is num
+          ? args.toInt()
+          : num.tryParse('$args')?.toInt() ?? 0;
+      return DateFormat('yyyy/MM/dd HH:mm')
+          .format(DateTime.fromMillisecondsSinceEpoch(t));
     });
 
     runtime.onMessage('_htmlFormat', (dynamic args) {

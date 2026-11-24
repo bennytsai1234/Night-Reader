@@ -14,6 +14,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/js/js_encode_utils.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
@@ -95,6 +96,24 @@ Future<Object?> _backstageInSourceIsolate(String html) => SourceIsolate.run(
     sourceRegex: 'b+',
   ).getStrResponse())['body'],
 );
+
+/// 在書源 isolate 裡照網址選項開 `webView` 抓一頁、跑規則 JS 的
+/// `java.webView`，傳回主 isolate 收到的兩個請求各帶的書源 key。
+Future<Object?> _webViewTagsInSourceIsolate(Map<String, dynamic> sourceJson) =>
+    SourceIsolate.run((_) async {
+      final source = BookSource.fromJson(sourceJson);
+      final option = await AnalyzeUrl(
+        'https://web.test/p,{"webView":true}',
+        source: source,
+      ).getStrResponse();
+      final rule = AnalyzeRule(source: source);
+      final js = rule.evalJS(
+        'java.webView(null, "https://web.test/q", null)',
+        null,
+      );
+      rule.dispose();
+      return '${option.body}|$js';
+    });
 
 /// 在書源 isolate 裡照書源校驗的方式記請求與回應，抓 [chapterUrl] 的正文；
 /// 傳回記下的行與看起來是暫時性失敗的回應數。
@@ -229,21 +248,25 @@ Future<String> _siteCookieRoundTrip(String baseUrl) =>
     });
 
 /// 在書源 isolate 用帶著 [jsLib] 的書源跑一段規則 JS。
-Future<String> _evaluateSourceJs(String code, {String? jsLib}) =>
-    SourceIsolate.run((_) async {
-      final engine = JsEngine(
-        source: BookSource(
-          bookSourceUrl: 'https://jslib.test',
-          bookSourceName: 'jsLib',
-          jsLib: jsLib,
-        ),
-      );
-      try {
-        return '${engine.evaluate(code)}';
-      } finally {
-        engine.dispose();
-      }
-    });
+Future<String> _evaluateSourceJs(
+  String code, {
+  String? jsLib,
+  String? header,
+}) => SourceIsolate.run((_) async {
+  final engine = JsEngine(
+    source: BookSource(
+      bookSourceUrl: 'https://jslib.test',
+      bookSourceName: 'jsLib',
+      jsLib: jsLib,
+      header: header,
+    ),
+  );
+  try {
+    return '${engine.evaluate(code)}';
+  } finally {
+    engine.dispose();
+  }
+});
 
 /// 在書源 isolate 對 [url] 的請求跑登入檢查 [loginCheckJs]，抓到的回應先給
 /// 一個 401 的，傳回登入檢查交出的回應內文。
@@ -710,6 +733,19 @@ void main() {
 
       expect(await _backstageInSourceIsolate('<p>aa</p>'), '<p>aa</p>|b+');
     });
+
+    // 同 Legado：背景網頁帶著書源的 key，載完把網頁寫的 Cookie 存進書源。
+    test('webView pages carry the source key', () async {
+      BackstageWebView.delegate = (request) async => {'body': request.tag};
+
+      expect(
+        await _webViewTagsInSourceIsolate({
+          'bookSourceUrl': 'https://web.test',
+          'bookSourceName': '網頁',
+        }),
+        'https://web.test|https://web.test',
+      );
+    }, skip: quickJsUnavailableReason());
   });
 
   test('logs reach the main isolate', () async {
@@ -782,6 +818,53 @@ void main() {
         '2,200,true,true,true',
       );
       expect(await _evaluateJs('java.ajaxAll([]).length'), '0');
+    });
+
+    // Legado 的 java.connect(url, header) 收的是 JSON 文字（Gson 寬鬆讀），
+    // 書源寫 `JSON.stringify({...})` 或直接一段 JSON；物件照樣收。
+    test('java.connect sends headers given as JSON text like Legado', () async {
+      expect(
+        await _evaluateJs(
+          'java.connect("$baseUrl/echo", \'{"X-Token":"text"}\').body()',
+        ),
+        'echo:text|',
+      );
+      expect(
+        await _evaluateJs(
+          'java.connect("$baseUrl/echo", JSON.stringify({"X-Token": "s"})).body()',
+        ),
+        'echo:s|',
+      );
+      expect(
+        await _evaluateJs(
+          'java.connect("$baseUrl/echo", {"X-Token": "map"}).body()',
+        ),
+        'echo:map|',
+      );
+      expect(
+        await _evaluateJs('java.connect("$baseUrl/echo", "not json").body()'),
+        'echo:null|',
+      );
+    });
+
+    // Legado：給了標頭就取代書源的標頭（headerMapF），網址選項的再蓋過它；
+    // 讀不成物件時照書源的。
+    test('java.connect headers replace the source headers like Legado', () async {
+      const header = '{"X-Token":"source"}';
+      Future<String> connect(String args) =>
+          _evaluateSourceJs('java.connect($args).body()', header: header);
+      expect(await connect('"$baseUrl/echo"'), 'echo:source|');
+      expect(await connect('"$baseUrl/echo", "not json"'), 'echo:source|');
+      expect(
+        await connect('"$baseUrl/echo", \'{"X-Other":"1"}\''),
+        'echo:null|',
+      );
+      expect(
+        await connect(
+          '\'$baseUrl/echo,{"headers":{"X-Token":"inline"}}\', \'{"X-Token":"call"}\'',
+        ),
+        'echo:inline|',
+      );
     });
 
     // Legado 的 java.importScript 原樣交出腳本，由書源自己 eval；腳本裡的函式

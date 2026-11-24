@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:isolate';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
@@ -266,15 +265,13 @@ class ReaderPageCoordinator {
     final name = _ruleNameOf(pattern);
     final int id;
     try {
-      final rules = await replaceDao.getAll();
-      id = await replaceDao.insert(
+      id = await replaceDao.append(
         ReplaceRule(
           name: name,
           group: _hiddenTextGroup,
           pattern: pattern,
           replacement: '',
           isRegex: false,
-          order: rules.fold(0, (last, rule) => math.max(last, rule.order + 1)),
         ),
       );
     } catch (error, stackTrace) {
@@ -313,12 +310,7 @@ class ReaderPageCoordinator {
       ),
       testSample: paragraph,
       onSave: (rule) async {
-        final rules = await replaceDao.getAll();
-        rule.order = rules.fold(
-          0,
-          (last, existing) => math.max(last, existing.order + 1),
-        );
-        id = await replaceDao.insert(rule);
+        id = await replaceDao.append(rule);
       },
     );
     final saved = id;

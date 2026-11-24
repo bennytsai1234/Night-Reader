@@ -52,14 +52,20 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
 
   bool _syncReloadPending = false;
 
-  /// 同步套用了另一台的規則：安靜地重讀清單（不轉圈）。被別的頁面蓋著
-  /// 時等露出來才讀，不疊在換頁動畫上（ADR 0018）。
+  /// 同步套用了另一台的規則：安靜地重讀清單。被別的頁面蓋著時等露出來才
+  /// 讀，不疊在換頁動畫上（ADR 0018）。
   Future<void> _rulesSynced() async {
     if (_syncReloadPending) return;
     _syncReloadPending = true;
     await TransitionSettled.uncovered(context);
     _syncReloadPending = false;
     if (!mounted) return;
+    await _refreshRules();
+  }
+
+  /// 改了規則（新增、編輯、刪除、切換啟用、同步）之後重讀：清單留在畫面上，
+  /// 讀到了直接換內容，不回到載入中。
+  Future<void> _refreshRules() async {
     try {
       final rules = await _replaceDao.getAll();
       if (!mounted) return;
@@ -68,10 +74,11 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
         _loadError = null;
       });
     } catch (error) {
-      AppLog.e('同步後重讀替換規則失敗', error: error);
+      AppLog.e('重讀替換規則失敗', error: error);
     }
   }
 
+  /// 第一次讀與失敗後按「重試」：讀到之前畫骨架。
   Future<void> _loadRules() async {
     setState(() {
       _loading = true;
@@ -99,18 +106,19 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
       rule: rule,
       onSave: (next) async {
         if (next.id == 0) {
-          next.order = _rules.length;
+          await _replaceDao.append(next);
+        } else {
+          await _replaceDao.upsert(next);
         }
-        await _replaceDao.upsert(next);
       },
     );
-    if (mounted) await _loadRules();
+    if (mounted) await _refreshRules();
   }
 
   Future<void> _deleteRule(ReplaceRule rule) async {
     try {
       await _replaceDao.deleteById(rule.id);
-      await _loadRules();
+      await _refreshRules();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -122,7 +130,7 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
   Future<void> _toggleEnabled(ReplaceRule rule, bool enabled) async {
     try {
       await _replaceDao.updateEnabled(rule.id, enabled);
-      await _loadRules();
+      await _refreshRules();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -155,11 +163,11 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
     final padding = MediaQuery.paddingOf(context);
     return Padding(
       padding: EdgeInsets.only(
-        top: _loading || _loadError != null || _rules.isEmpty ? padding.top : 0,
+        top: _loadError != null || (!_loading && _rules.isEmpty)
+            ? padding.top
+            : 0,
       ),
-      child: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _loadError != null
+      child: _loadError != null
           ? AppStateView(
               icon: Icons.error_outline,
               title: '替換規則載入失敗',
@@ -171,7 +179,7 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
                 onPressed: _loadRules,
               ),
             )
-          : _rules.isEmpty
+          : !_loading && _rules.isEmpty
           ? AppStateView(
               icon: Icons.rule_rounded,
               title: '還沒有替換規則',
@@ -181,12 +189,20 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
                 onPressed: _openEditor,
               ),
             )
+          // 推入時只畫骨架（照幾條規則的樣子），讀到了先照真正的規則變一次
+          // 形狀再換場（[GroupedListView.ready]）。
           : SwipeActionsGroup(
               child: GroupedListView(
+                ready: !_loading,
+                loadingLabel: '正在載入替換規則',
                 children: [
                   GroupedSection(
                     children: [
-                      for (final rule in _rules) _buildRuleRow(context, rule),
+                      if (_loading)
+                        for (final rule in _placeholderRules)
+                          _buildRuleRow(context, rule)
+                      else
+                        for (final rule in _rules) _buildRuleRow(context, rule),
                     ],
                   ),
                 ],
@@ -194,6 +210,12 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
             ),
     );
   }
+
+  /// 載入中骨架照的幾條規則：只給骨架量形狀，不會顯示出來。
+  static final List<ReplaceRule> _placeholderRules = [
+    for (final (i, pattern) in const ['廣告文字', '本章未完', '最新章節網址'].indexed)
+      ReplaceRule(id: -1 - i, name: '替換規則名稱', pattern: pattern),
+  ];
 
   Widget _buildRuleRow(BuildContext context, ReplaceRule rule) {
     return SwipeActions(

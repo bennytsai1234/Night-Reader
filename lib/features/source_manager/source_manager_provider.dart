@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -601,6 +602,7 @@ class SourceManagerProvider with ChangeNotifier {
     checkService.addListener(_handleCheckServiceChanged);
     _repairRuns.addListener(_handleRepairRunsChanged);
     this.pausedCheck.addListener(notifyListeners);
+    BackgroundWork.instance.addListener(_handleSlotChanged);
     unawaited(
       entrance.then((_) {
         if (_disposed) return;
@@ -695,6 +697,7 @@ class SourceManagerProvider with ChangeNotifier {
     checkService.removeListener(_handleCheckServiceChanged);
     _repairRuns.removeListener(_handleRepairRunsChanged);
     pausedCheck.removeListener(notifyListeners);
+    BackgroundWork.instance.removeListener(_handleSlotChanged);
     if (_listeningSync) SourceSync.applied.removeListener(_handleSourcesSynced);
     duplicatesMerged.dispose();
     super.dispose();
@@ -909,6 +912,12 @@ class SourceManagerProvider with ChangeNotifier {
       checkService.cancel();
     }
     clearSelection();
+  }
+
+  /// 別件背景工作（AI 找書、自動換源…）佔住或空出位置：暫停中校驗的「繼續」
+  /// 跟著灰掉或亮起來。
+  void _handleSlotChanged() {
+    if (pausedCheck.isPaused) notifyListeners();
   }
 
   /// 暫停中的校驗按了繼續：沒有別的背景工作在跑才接著校驗剩下的。
@@ -1230,21 +1239,30 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
+  /// 開始新的一次校驗：先佔住背景工作的位置，佔不到（按下去之後別件剛好
+  /// 開始）就不做，暫停中的那次與勾選照舊；佔到了才存設定、結束暫停中的那次
+  /// （做完的那些不再接著校驗）。傳回校驗有沒有跑。
+  Future<bool> _checkAnew(List<String> urls, SourceCheckConfig? config) async {
+    final job = SourceCheckJob.of(checkService, SourceCheckPlan(urls));
+    if (!job.reserve()) return false;
+    try {
+      if (config != null) await checkService.updateConfig(config);
+      await pausedCheck.end();
+      await job.run();
+      return true;
+    } finally {
+      job.release();
+    }
+  }
+
   Future<void> checkSelectedSources({SourceCheckConfig? config}) async {
     final selectedUrls = Set<String>.from(_selectedUrls);
     if (selectedUrls.isEmpty || !_beginBatchOperation()) return;
+    var checked = false;
     try {
-      if (config != null) {
-        await checkService.updateConfig(config);
-      }
-      // 開始新的一次：暫停中的那次結束，做完的那些不再接著校驗。
-      await pausedCheck.end();
-      await SourceCheckJob.of(
-        checkService,
-        SourceCheckPlan(selectedUrls.toList(growable: false)),
-      ).run();
+      checked = await _checkAnew(selectedUrls.toList(growable: false), config);
     } finally {
-      _selectedUrls.removeAll(selectedUrls);
+      if (checked) _selectedUrls.removeAll(selectedUrls);
       _endBatchOperation();
     }
   }
@@ -1358,14 +1376,11 @@ class SourceManagerProvider with ChangeNotifier {
     final urls = _sources.map((s) => s.bookSourceUrl).toList();
     if (urls.isEmpty || !_beginBatchOperation()) return;
     final selectedAtStart = Set<String>.from(_selectedUrls);
+    var checked = false;
     try {
-      if (config != null) {
-        await checkService.updateConfig(config);
-      }
-      await pausedCheck.end();
-      await SourceCheckJob.of(checkService, SourceCheckPlan(urls)).run();
+      checked = await _checkAnew(urls, config);
     } finally {
-      _selectedUrls.removeAll(selectedAtStart);
+      if (checked) _selectedUrls.removeAll(selectedAtStart);
       _endBatchOperation();
     }
   }
