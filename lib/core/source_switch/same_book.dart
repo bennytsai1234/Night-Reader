@@ -30,7 +30,8 @@ List<String> searchKeyVariants(String key) =>
 
 /// 書名 [name]、作者 [author] 的結果是不是《[bookName]》這本書：書名正規化後
 /// 相同；[checkAuthor] 時作者正規化後也要相同。正規化和搜尋合併卡同一套；
-/// 換源（手動、自動）與換封面都照這一條認同一本書。
+/// 自動換源（同 Legado 的精準搜尋，ADR 0069）與換封面照這一條認同一本書，
+/// 手動換源與單章借源照 [isChangeSourceMatch]。
 bool isSameBook(
   String name,
   String? author,
@@ -53,6 +54,38 @@ bool Function(String name, String author) sameBookFilter(
   required bool checkAuthor,
 }) =>
     (name, author) => isSameBook(
+      name,
+      author,
+      bookName,
+      bookAuthor,
+      checkAuthor: checkAuthor,
+    );
+
+/// 手動換源與單章借源的清單列不列 [name]、[author] 這個結果（同 Legado
+/// `ChangeBookSourceViewModel`）：書名正規化後相同；[checkAuthor] 時搜到的
+/// 作者「含」這本書的作者 [bookAuthor]（「張三（著）」「張三／李四」也算）。
+bool isChangeSourceMatch(
+  String name,
+  String? author,
+  String bookName,
+  String? bookAuthor, {
+  required bool checkAuthor,
+}) {
+  if (normalizeSearchText(name) != normalizeSearchText(bookName)) {
+    return false;
+  }
+  return !checkAuthor ||
+      normalizeSearchText(author).contains(normalizeSearchText(bookAuthor));
+}
+
+/// 手動換源搜尋的過濾條件（[isChangeSourceMatch]），跟著搜尋送進書源
+/// isolate。
+bool Function(String name, String author) changeSourceFilter(
+  String bookName,
+  String bookAuthor, {
+  required bool checkAuthor,
+}) =>
+    (name, author) => isChangeSourceMatch(
       name,
       author,
       bookName,
