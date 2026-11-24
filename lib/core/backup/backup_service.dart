@@ -193,12 +193,51 @@ class BackupService {
     final file = File(p.join(folder.path, name));
     final jsonList = data.map((e) {
       try {
-        return (e as dynamic).toJson();
+        final json = (e as dynamic).toJson();
+        return json is Map<String, dynamic>
+            ? _legadoReadable(name, json)
+            : json;
       } catch (err) {
         AppLog.w('Backup: toJson failed for item in $name: $err');
         return e;
       }
     }).toList();
     await file.writeAsString(jsonEncode(jsonList));
+  }
+
+  /// 同一份備份 Legado 也還原得了：Legado 用 Gson 整份讀，開關讀到 `1`／`0`、
+  /// 閱讀設定讀到字串時整份放棄（書源還會改用舊格式讀成沒有規則的空殼，
+  /// 蓋掉同網址的書源）。這裡只改備份檔：同步的紀錄照 `toJson` 算指紋，
+  /// 改了會讓兩台認不出同一條規則。夜讀自己讀兩種寫法都認得。
+  static const Map<String, List<String>> _legadoSwitches = {
+    'bookshelf.json': ['canUpdate', 'isInBookshelf'],
+    'bookSource.json': ['enabled', 'enabledExplore', 'enabledCookieJar'],
+    'replaceRule.json': ['scopeTitle', 'scopeContent', 'isEnabled', 'isRegex'],
+  };
+
+  static Map<String, dynamic> _legadoReadable(
+    String name,
+    Map<String, dynamic> json,
+  ) {
+    final switches = _legadoSwitches[name];
+    if (switches == null) return json;
+    final out = {
+      ...json,
+      for (final key in switches)
+        if (json[key] is int) key: json[key] == 1,
+    };
+    if (name == 'bookshelf.json') {
+      // Legado 的閱讀設定是物件；「模擬追讀」的起始日 Legado 存成日期物件，
+      // 夜讀沒有這個功能，不帶。
+      final config = json['readConfig'];
+      if (config is String) {
+        out['readConfig'] = (jsonDecode(config) as Map<String, dynamic>)
+          ..remove('startDate');
+      }
+      // Legado 的閱讀進度欄位。
+      out['durChapterIndex'] = json['chapterIndex'];
+      out['durChapterPos'] = json['charOffset'];
+    }
+    return out;
   }
 }

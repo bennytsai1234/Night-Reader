@@ -19,7 +19,9 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
+import 'package:night_reader/core/constant/book_type.dart';
 import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/json_read.dart';
 import 'package:night_reader/core/models/reading/bookmark.dart';
 import 'package:night_reader/core/models/search/ai_find_record.dart';
 import 'package:night_reader/core/models/reading/highlight.dart';
@@ -96,7 +98,11 @@ class RestoreService {
         error: backup.manifestError,
       );
     }
-    if (!_isManifestCompatible(backup.manifest)) {
+    // Legado 的備份沒有 manifest（`Backup.kt`），照裡面的檔名認。
+    final fromLegado =
+        backup.manifest == null &&
+        backup.files.any((file) => _legadoFiles.contains(file.fileName));
+    if (!fromLegado && !_isManifestCompatible(backup.manifest)) {
       AppLog.w('Restore aborted: missing or incompatible manifest');
       return const RestoreResult.invalid();
     }
@@ -112,6 +118,12 @@ class RestoreService {
         readStatsFiles.add(file);
         continue;
       }
+      // 夜讀不還原的檔（Legado 的 `config.xml`、夜讀沒有的功能）讀不懂也
+      // 不算失敗。
+      if (!_restorableFiles.contains(fileName) &&
+          !LoginDataBackup.files.contains(fileName)) {
+        continue;
+      }
       try {
         if (error != null) throw error;
         if (LoginDataBackup.files.contains(fileName)) {
@@ -119,7 +131,11 @@ class RestoreService {
           final restored = await LoginDataBackup.restore(fileName, decoded);
           restoredAny = restoredAny || restored;
         } else if (decoded is List<dynamic>) {
-          final restored = await _importListData(fileName, decoded);
+          final restored = await _importListData(
+            fileName,
+            decoded,
+            fromLegado: fromLegado,
+          );
           restoredAny = restoredAny || restored;
         } else if (fileName == 'config.json' &&
             decoded is Map<String, dynamic>) {
@@ -160,6 +176,7 @@ class RestoreService {
             await _restoreReadingStats(
               readStatsFiles,
               fromDevice: backup.manifest?['syncDeviceId'] as String?,
+              fromLegado: fromLegado,
             ) ||
             restoredAny;
       } catch (e) {
@@ -170,19 +187,56 @@ class RestoreService {
     return RestoreResult(restoredAny: restoredAny, failedFiles: failedFiles);
   }
 
+  /// Legado 備份 ZIP 裡的檔（`Backup.kt` 的 `backupFileNames`，夜讀讀得懂的
+  /// 那幾個）。
+  static const Set<String> _legadoFiles = {
+    'bookshelf.json',
+    'bookmark.json',
+    'bookGroup.json',
+    'bookSource.json',
+    'replaceRule.json',
+    'readRecord.json',
+    'config.xml',
+  };
+
   static const Set<String> _readStatsFiles = {
     'readRecord.json',
     'readRecords.json',
     'readDay.json',
   };
 
+  /// 一筆一筆寫進資料庫的清單檔（含舊備份的檔名）。
+  static const Set<String> _listFiles = {
+    'books.json',
+    'bookshelf.json',
+    'bookSources.json',
+    'bookSource.json',
+    'replaceRules.json',
+    'replaceRule.json',
+    'bookGroups.json',
+    'bookGroup.json',
+    'bookmark.json',
+    'bookmarks.json',
+    'highlight.json',
+    'aiFind.json',
+    'downloadTask.json',
+    'downloadTasks.json',
+    'readerChapterContent.json',
+    'readerChapterContents.json',
+  };
+
+  /// 夜讀會還原的檔；登入資料另見 [LoginDataBackup.files]，閱讀統計另外
+  /// 收（[_readStatsFiles]）。
+  static const Set<String> _restorableFiles = {..._listFiles, 'config.json'};
+
   /// 任一檔讀不出來就整組不還原，免得累計與每日只換了一半。備份那台用過
   /// 同步（[fromDevice]）時記下還原了哪些，同步時不再算一次（ADR 0039）。
   Future<bool> _restoreReadingStats(
     List<_DecodedFile> files, {
     required String? fromDevice,
+    required bool fromLegado,
   }) async {
-    final records = <ReadRecord>[];
+    var records = <ReadRecord>[];
     final days = <ReadDay>[];
     for (final (:fileName, :decoded, :error) in files) {
       if (error != null) throw error;
@@ -195,6 +249,7 @@ class RestoreService {
         }
       }
     }
+    if (fromLegado) records = _fromLegadoRecords(records);
     await _readRecordDao.restoreReadingStats(records: records, days: days);
     await RestoredStats.remember(
       await SharedPreferences.getInstance(),
@@ -251,38 +306,84 @@ class RestoreService {
     );
   }
 
-  Future<bool> _importListData(String fileName, List<dynamic> list) async {
-    const supportedFiles = <String>{
-      'books.json',
-      'bookshelf.json',
-      'bookSources.json',
-      'bookSource.json',
-      'replaceRules.json',
-      'replaceRule.json',
-      'bookGroups.json',
-      'bookGroup.json',
-      'bookmark.json',
-      'bookmarks.json',
-      'highlight.json',
-      'aiFind.json',
-      'downloadTask.json',
-      'downloadTasks.json',
-      'readerChapterContent.json',
-      'readerChapterContents.json',
-    };
-    if (!supportedFiles.contains(fileName)) return false;
+  /// Legado 的閱讀時長以毫秒記（`ReadBook.upReadTime`），一台一筆；夜讀以秒記、
+  /// 一本書一筆：換成秒，同一本書各台的加起來（Legado 顯示的也是加總，
+  /// `ReadRecordDao.getReadTime`），最後閱讀時間取最晚的。
+  static List<ReadRecord> _fromLegadoRecords(List<ReadRecord> records) {
+    final byBook = <String, ReadRecord>{};
+    for (final record in records) {
+      final seconds = record.readTime ~/ 1000;
+      final existing = byBook[record.bookName];
+      if (existing == null) {
+        byBook[record.bookName] = ReadRecord(
+          deviceId: record.deviceId,
+          bookName: record.bookName,
+          readTime: seconds,
+          lastRead: record.lastRead,
+        );
+        continue;
+      }
+      existing
+        ..readTime += seconds
+        ..lastRead = existing.lastRead > record.lastRead
+            ? existing.lastRead
+            : record.lastRead;
+    }
+    return byBook.values.toList();
+  }
+
+  /// Legado 的書：沒有「在不在書架上」這欄，記在類型的位元裡
+  /// （`BookType.notShelf`）；閱讀進度叫 `durChapterIndex`、`durChapterPos`。
+  static Map<String, dynamic> _fromLegadoBook(Map<String, dynamic> item) => {
+    ...item,
+    'isInBookshelf': BookType.isOnShelf(readJsonInt(item['type'], fallback: 0)),
+    'chapterIndex': ?item['durChapterIndex'],
+    'charOffset': ?item['durChapterPos'],
+  };
+
+  /// Legado 書籤的附註（`content`）：夜讀的附註寫在標註的備忘（ADR 0044），
+  /// 有附註的書籤另存一筆同一句的標註。選到的字（`bookText`）是空的就沒有
+  /// 可以畫的字，只留書籤。
+  static Highlight? _noteOfLegadoBookmark(
+    Bookmark bookmark,
+    Map<String, dynamic> item,
+  ) {
+    final note = readJsonString(item['content'])?.trim() ?? '';
+    if (note.isEmpty || bookmark.excerpt.isEmpty) return null;
+    return Highlight(
+      id: bookmark.id * 1000,
+      bookName: bookmark.bookName,
+      bookAuthor: bookmark.bookAuthor,
+      chapterIndex: bookmark.chapterIndex,
+      chapterTitle: bookmark.chapterTitle,
+      charOffset: bookmark.charOffset,
+      quote: bookmark.excerpt,
+      note: note,
+    );
+  }
+
+  Future<bool> _importListData(
+    String fileName,
+    List<dynamic> list, {
+    required bool fromLegado,
+  }) async {
+    if (!_listFiles.contains(fileName)) return false;
 
     // 一個檔案在一個交易裡寫完：書架、書源這些清單只在交易結束時重新查詢
     // 一次，不會每寫一筆就讓發現、書源管理整份重算（上百個書源時還原會
     // 卡住數秒）。檔案中途失敗時整個檔案不寫入，由呼叫端記為失敗。
     var importedAny = false;
     await getIt<AppDatabase>().transaction(() async {
-      importedAny = await _importItems(fileName, list);
+      importedAny = await _importItems(fileName, list, fromLegado: fromLegado);
     });
     return list.isEmpty || importedAny;
   }
 
-  Future<bool> _importItems(String fileName, List<dynamic> list) async {
+  Future<bool> _importItems(
+    String fileName,
+    List<dynamic> list, {
+    required bool fromLegado,
+  }) async {
     var importedAny = false;
     // 正文裡有插圖的網路書：插圖不在備份裡，留記號讓書架自動下載抓回來
     // （ADR 0050）。
@@ -295,7 +396,9 @@ class RestoreService {
           case 'bookshelf.json':
             // 舊備份也帶著書架以外的書（打開詳情或閱讀器時的暫存）：不還原，
             // 也不拿它把這台書架上的同一本蓋成不在書架上。
-            final book = Book.fromJson(item);
+            final book = Book.fromJson(
+              fromLegado ? _fromLegadoBook(item) : item,
+            );
             if (book.isInBookshelf) {
               // 書本資料夾不在備份裡（`BookChapterFiles`）：新手機上沒有
               // 存好的封面檔，改用網址。
@@ -323,6 +426,11 @@ class RestoreService {
             final bookmark = Bookmark.fromJson(item);
             if (bookmark.id > 0 && bookmark.bookName.isNotEmpty) {
               await _bookmarkDao.upsertAll([bookmark]);
+              if (fromLegado) {
+                if (_noteOfLegadoBookmark(bookmark, item) case final note?) {
+                  await _highlightDao.upsertAll([note]);
+                }
+              }
             }
             break;
           case 'highlight.json':

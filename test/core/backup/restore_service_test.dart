@@ -514,4 +514,124 @@ void main() {
       isTrue,
     );
   });
+  group('Legado 的備份 ZIP（沒有 manifest）', () {
+    Future<File> legadoZip(String name) => writeZip(name, {
+      // 夜讀不讀的檔：Android 的偏好設定與夜讀沒有的功能。
+      'config.xml': '<?xml version="1.0"?><map></map>',
+      'httpTTS.json': '[]',
+      'readConfig.json': '[{"name":"x"}]',
+      'bookSource.json': jsonEncode([
+        {'bookSourceUrl': 'https://lg.example', 'bookSourceName': '乙'},
+      ]),
+      'bookshelf.json': jsonEncode([
+        {
+          'bookUrl': 'https://lg.example/b/1',
+          'origin': 'https://lg.example',
+          'name': '雪中悍刀行',
+          'author': '烽火戏诸侯',
+          'type': 8,
+          'durChapterIndex': 12,
+          'durChapterPos': 345,
+          'durChapterTitle': '第十三章',
+          'durChapterTime': 1700000000000,
+          'canUpdate': true,
+          'readConfig': {'reSegment': false},
+        },
+        {
+          'bookUrl': 'https://lg.example/b/2',
+          'origin': 'https://lg.example',
+          'name': '只是看過',
+          'author': '某某',
+          'type': 8 | 1024,
+        },
+      ]),
+      'bookmark.json': jsonEncode([
+        {
+          'time': 1700000000123,
+          'bookName': '雪中悍刀行',
+          'bookAuthor': '烽火戏诸侯',
+          'chapterIndex': 3,
+          'chapterPos': 20,
+          'chapterName': '第四章',
+          'bookText': '天下第二',
+          'content': '這句要記住',
+        },
+        {
+          'time': 1700000000456,
+          'bookName': '雪中悍刀行',
+          'bookAuthor': '烽火戏诸侯',
+          'chapterIndex': 5,
+          'chapterPos': 0,
+          'chapterName': '第六章',
+          'bookText': '開頭',
+          'content': '',
+        },
+      ]),
+      'readRecord.json': jsonEncode([
+        {
+          'deviceId': 'phone',
+          'bookName': '雪中悍刀行',
+          'readTime': 3600000,
+          'lastRead': 1700000000000,
+        },
+        {
+          'deviceId': 'tablet',
+          'bookName': '雪中悍刀行',
+          'readTime': 1800000,
+          'lastRead': 1700000500000,
+        },
+      ]),
+    });
+
+    test('沒有 manifest、有 Legado 的檔案就照 Legado 的備份還原', () async {
+      final result = await RestoreService().restoreFromZip(
+        await legadoZip('legado.zip'),
+      );
+      expect(result.invalidArchive, isFalse);
+      expect(result.failedFiles, isEmpty);
+      expect(await BookSourceDao(db).getByUrl('https://lg.example'), isNotNull);
+    });
+
+    test('書架上的書照 Legado 的類型還原、閱讀進度對上', () async {
+      await RestoreService().restoreFromZip(
+        await legadoZip('legado-shelf.zip'),
+      );
+      final book = await BookDao(db).getByUrl('https://lg.example/b/1');
+      expect(book, isNotNull);
+      expect(book!.isInBookshelf, isTrue);
+      expect(book.chapterIndex, 12);
+      expect(book.charOffset, 345);
+      expect(book.durChapterTitle, '第十三章');
+      expect(
+        (await BookDao(db).getByUrl('https://lg.example/b/2'))?.isInBookshelf ??
+            false,
+        isFalse,
+      );
+    });
+
+    test('書籤的附註變成同一句的標註備忘，書籤照留', () async {
+      await RestoreService().restoreFromZip(await legadoZip('legado-mark.zip'));
+      final bookmarks = await BookmarkDao(db).getAll();
+      expect(
+        bookmarks.where((b) => b.bookName == '雪中悍刀行').map((b) => b.excerpt),
+        containsAll(['天下第二', '開頭']),
+      );
+      final highlights = (await HighlightDao(
+        db,
+      ).getAll()).where((h) => h.bookName == '雪中悍刀行').toList();
+      expect(highlights, hasLength(1));
+      expect(highlights.single.quote, '天下第二');
+      expect(highlights.single.note, '這句要記住');
+      expect(highlights.single.chapterIndex, 3);
+      expect(highlights.single.chapterTitle, '第四章');
+      expect(highlights.single.charOffset, 20);
+    });
+
+    test('閱讀時長從毫秒換成秒，同一本書各台的時間加起來', () async {
+      await RestoreService().restoreFromZip(await legadoZip('legado-time.zip'));
+      final record = await ReadRecordDao(db).getByBookName('雪中悍刀行');
+      expect(record?.readTime, 5400);
+      expect(record?.lastRead, 1700000500000);
+    });
+  });
 }

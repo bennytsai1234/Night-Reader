@@ -19,6 +19,8 @@ import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/book/book_base.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/backup/backup_service.dart';
@@ -168,6 +170,54 @@ void main() {
       entry('readerChapterContent.json')
           .map((content) => '${content['bookUrl']} ${content['chapterUrl']}'),
       ['shelf c1'],
+    );
+  });
+
+  test('書架、書源與替換規則照 Legado 讀得懂的型別寫（開關是 true／false）', () async {
+    await BookDao(db).upsert(
+      Book(
+        bookUrl: 'legado-shelf',
+        origin: 'https://a.example',
+        name: '書',
+        isInBookshelf: true,
+        chapterIndex: 5,
+        charOffset: 9,
+        readConfig: ReadConfig(reSegment: true),
+      ),
+    );
+    await BookSourceDao(db).upsert(
+      BookSource(bookSourceUrl: 'https://b.example', bookSourceName: '乙'),
+    );
+    await ReplaceRuleDao(db)
+        .upsert(ReplaceRule(id: 7, name: '規則', pattern: 'a', scopeTitle: true));
+
+    final zip = await BackupService().createBackupZip();
+    final archive = ZipDecoder().decodeBytes(await zip!.readAsBytes());
+    List<dynamic> entry(String name) =>
+        jsonDecode(utf8.decode(archive.findFile(name)!.content as List<int>));
+
+    final book = entry('bookshelf.json')
+        .firstWhere((b) => b['bookUrl'] == 'legado-shelf');
+    expect(book['canUpdate'], isTrue);
+    expect(book['isInBookshelf'], isTrue);
+    expect(book['readConfig'], isA<Map<String, dynamic>>());
+    expect(book['readConfig']['reSegment'], isTrue);
+    expect(book['durChapterIndex'], 5);
+    expect(book['durChapterPos'], 9);
+    final source = entry('bookSource.json')
+        .firstWhere((s) => s['bookSourceUrl'] == 'https://b.example');
+    expect(source['enabled'], isTrue);
+    expect(source['enabledExplore'], isA<bool>());
+    expect(source['enabledCookieJar'], isA<bool>());
+    final rule = entry('replaceRule.json').firstWhere((r) => r['id'] == 7);
+    expect(
+      [
+        rule['scopeTitle'],
+        rule['scopeContent'],
+        rule['isEnabled'],
+        rule['isRegex'],
+      ],
+      [true, true, true, true],
     );
   });
 }
