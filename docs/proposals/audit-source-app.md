@@ -3,7 +3,7 @@
 把書源管理、搜尋、發現、書源校驗、自動換源、登入、網頁驗證、AI 修復、AI 建立書源與 AI 找書的程式讀一遍，列出讀者會碰到的錯。只列不修；每一筆都從觸發點走到出錯的那一行，查過以前的 issue 沒報過。
 
 - 範圍：`docs/agents/auto-audit.md`「舊程式」表上的書源 3、書源 4，檔案以表上為準。
-- 讀的是 `origin/beta` 的 `fff55f9c3ad30947f9b3d76012fb84989d98c095`，下面的「檔案:行號」都是這個提交的；書源 4 的檔案到 `de5f8e51` 都沒改過。
+- 讀的是 `origin/beta` 的 `fff55f9c3ad30947f9b3d76012fb84989d98c095`，下面的「檔案:行號」都是這個提交的；書源 4 的檔案與它們引用到的書源 3 檔案，到 `40386e30` 都沒改過。
 - 標準照 `docs/agents/auto-audit.md`「算問題的」「不報的」；`PLAN.md` 第二、第四階段已列的（背景工作互搶、AI 的幾條）不重列。
 
 ## 進度表
@@ -21,7 +21,7 @@
 | 書源 4 | `lib/features/source_login/` | 4／4 | 0（另 1 筆在 #529） |
 | 書源 4 | `lib/core/ai_repair/` | 23／23 | 1（另 6 筆在 #529） |
 | 書源 4 | `lib/core/ai_find/` | 4／4 | 0 |
-| 書源 4 | `lib/features/source_manager/ai_repair/` | 0／5 | 還沒讀 |
+| 書源 4 | `lib/features/source_manager/ai_repair/` | 5／5 | 0（另 1 筆在 #529） |
 | 書源 4 | `lib/core/source/` 的 `source_login_session`、`source_interaction` | 2／2 | 0 |
 | 書源 4 | `lib/core/network/` 的 `cookie_store`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service` | 4／4 | 1（另 2 筆在 #529） |
 | 書源 4 | `lib/core/backup/login_data_backup.dart` | 1／1 | 0 |
@@ -226,7 +226,9 @@
 | 書源 4 `site_check` | 第 50 項 | 網站檢查把沒呼叫的登出函式當成轉址去抓 |
 | 書源 4 `site_check` | 第 51 項 | 空殼判斷只認小寫 `<script`，大寫的單頁式網站被判失效 |
 | 書源 4 `ai_repair_session`、`repair_agent` | 第 52 項 | 修到一半拿到的新登入值，先寫進紀錄才重讀秘密 |
+| 書源 4 `ai_create_source_page`、`ai_repair_settings_page` | 第 53 項 | 改 AI 服務返回後，開始前顯示的「送到」還是舊的 |
 
 ## 拿不準
 
 - **書源校驗的整體時限可能把慢但能用的書源判成逾時**：一個書源整個校驗最多 120 秒（`lib/core/source_check/check_source_service.dart:303-313`），開了正文抽查時要搜兩次、讀完整目錄、抓最多八、九章正文（每章可能分頁、失敗再重試一次），每段又各自有時限。卡在：沒有實際的書源量過一次要多久，說不出多慢的網站會超過；逾時的書源會被隔離、建議移除（ADR 0081）。
+- **網址選項開了 `webView` 的背景網頁沒有接到畫面上，網頁的計時器可能不跑**：背景網頁建好瀏覽器後只把它放進一個靜態欄位（`lib/core/network/backstage_webview.dart:210-218` 的 `_hiddenWebViewWidget`），整個 App 沒有地方畫它（`grep hiddenWebViewWidget` 只有這個檔）；Cloudflare 檢查那一個則掛在 App 根部，註解寫明「瀏覽器要接在畫面上，網頁的計時器與動畫幀才照常跑」（`lib/core/network/webview_cloudflare_solver.dart:170-176`，ADR 0033）。卡在：Legado 的背景網頁也沒接到畫面上（`legado/app/src/main/java/io/legado/app/help/http/BackstageWebView.kt:108-110` 直接 `WebView(appCtx)`）照樣能用；靠計時器或動畫幀才把內容填進去的網頁，在夜讀的 Android 與 iPhone 上會不會停住，要在手機上實際開一次才知道。
