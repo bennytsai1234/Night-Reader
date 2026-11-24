@@ -7,12 +7,14 @@ import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/core/diagnostics/crash_trail.dart';
 import 'package:night_reader/core/source_check/source_check_isolate.dart';
 import 'package:night_reader/core/utils/public_suffix.dart';
+import 'package:uuid/uuid.dart';
 
 import 'ai_repair_backups.dart';
 import 'ai_repair_defaults.dart';
@@ -614,23 +616,54 @@ class SourceRepairBatch extends ChangeNotifier {
   }
 
   /// 校驗 [candidate]，通過（或只剩原本就壞的發現頁）就存進去，傳回存了沒。
+  ///
+  /// 候選書源（換了網址、套用同網站修好的規則）還沒採用：校驗時規則存的
+  /// 變數寫在它自己的一份草稿（[BaseSource.inDraftVariables]，同 AI 修書源），
+  /// 存好了才寫回改過的，沒採用就丟掉。
   Future<bool> _passes(RepairItem item, BookSource candidate) async {
     if (_halting) return false;
-    final checked = await _check(candidate, _cancelToken);
-    if (_halting ||
-        checked == null ||
-        !usableFix(checked, item.source, candidate, before: item.before)) {
-      return false;
-    }
-    final saved = BookSource.fromJson(checked.updatedSourceJson);
+    final draft = const Uuid().v4();
     try {
-      await _save(saved, item.source);
-    } catch (error) {
-      item.detail = '$error';
-      return false;
+      // 抄到一半出錯時，已經抄進草稿的也在下面丟掉。
+      final started = await BaseSource.startDraftVariables(
+        draft,
+        item.source.getKey(),
+      );
+      final checked = await BaseSource.inDraftVariables(
+        draft,
+        () => _check(candidate, _cancelToken),
+      );
+      if (_halting ||
+          checked == null ||
+          !usableFix(checked, item.source, candidate, before: item.before)) {
+        return false;
+      }
+      final saved = BookSource.fromJson(checked.updatedSourceJson);
+      try {
+        await _save(saved, item.source);
+      } catch (error) {
+        item.detail = '$error';
+        return false;
+      }
+      item.source = saved;
+      // 寫不回去只記下來：書源已經存好了。
+      try {
+        await BaseSource.commitDraftVariables(
+          draft,
+          saved.getKey(),
+          started: started,
+        );
+      } catch (error) {
+        AppLog.w('修復異常書源的草稿變數沒寫回書源: $error');
+      }
+      return true;
+    } finally {
+      try {
+        await BaseSource.discardDraftVariables(draft);
+      } catch (error) {
+        AppLog.w('修復異常書源的草稿變數沒丟掉: $error');
+      }
     }
-    item.source = saved;
-    return true;
   }
 
   // ── 做完之後：使用者自行刪掉網站失效、不穩定的書源 ──────────────────
