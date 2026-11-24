@@ -6,6 +6,8 @@ import 'package:night_reader/features/source_manager/ai_repair/ai_create_source_
 import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -92,5 +94,30 @@ void main() {
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     expect(find.text('AI 建立書源'), findsOneWidget, reason: '取消就留在輸入頁');
+  });
+
+  // 第一次設定服務：在設定頁選好、返回時就有「送到」（頁面一關上就讀，
+  // 設定頁要等返回動畫播完才拆掉）。
+  testWidgets('setting up a service shows where it sends on coming back', (
+    tester,
+  ) async {
+    await pumpPage(tester, withService: false);
+    expect(find.text('送到'), findsNothing);
+
+    await tester.tap(find.byType(GlassMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AI 服務設定'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('常用服務'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OpenCode Go'));
+    await tester.pumpAndSettle();
+    await tester.state<NavigatorState>(find.byType(Navigator)).maybePop();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.widgetWithText(GroupedRow, 'opencode.ai · deepseek-v4.1-flash'),
+      findsOneWidget,
+    );
   });
 }
