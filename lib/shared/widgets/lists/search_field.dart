@@ -112,9 +112,7 @@ class SearchField extends StatelessWidget {
         ),
       ],
     );
-    final field = enabled
-        ? content
-        : Opacity(opacity: AppDisabled.opacity, child: content);
+    final field = DisabledDim(disabled: !enabled, child: content);
     return SizedBox(
       height: height,
       child: glass
