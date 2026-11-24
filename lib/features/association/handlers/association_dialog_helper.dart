@@ -109,11 +109,7 @@ mixin AssociationDialogHelper on AssociationBase {
           );
           if (!context.mounted) return;
           await context.read<BookshelfProvider>().loadBooks();
-          final total =
-              result.books + result.chapters + result.sources + result.contents;
-          message = total > 0
-              ? '已匯入 ${result.books} 本書、${result.chapters} 個章節'
-              : '未找到可匯入的書架資料';
+          message = result.summary ?? '未找到可匯入的書架資料';
         case ImportContentKind.replaceRule:
           final count = await _importReplaceRules(content);
           message = count > 0 ? '成功匯入 $count 個替換規則' : '未匯入有效替換規則';
