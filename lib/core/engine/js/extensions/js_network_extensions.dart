@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:archive/archive.dart';
 import 'package:intl/intl.dart';
 
 import '../js_extensions.dart';
@@ -7,6 +6,7 @@ import 'js_blocking_tasks.dart';
 import 'js_jsoup_http.dart';
 
 import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/source/lenient_json.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
@@ -50,16 +50,19 @@ extension JsNetworkExtensions on JsExtensions {
       final url = _parseUrlArg(payload);
       final AnalyzeUrl analyzeUrl;
       try {
-        analyzeUrl = _analyzeUrl(url);
+        // 同 Legado：給了標頭就取代書源與登入的標頭（`headerMapF`），網址
+        // 選項的標頭再蓋過它；沒給或讀不成物件時照書源的。
+        analyzeUrl = AnalyzeUrl(
+          url,
+          source: source as BookSource?,
+          headers: _parseOptionalHeaderMap(payload)
+              ?.map((key, value) => MapEntry(key, value?.toString() ?? '')),
+        );
       } catch (e) {
         // 網址組不起來（例如網址裡的 JS 出錯）也照請求失敗傳回，不丟出。
         AppLog.e('java.connect failed: $e');
         return failedResponse(url, e);
       }
-      analyzeUrl.headerMap.addAll(
-        _parseOptionalHeaderMap(payload)
-            .map((key, value) => MapEntry(key, value?.toString() ?? '')),
-      );
       return BlockingCall.run(connectResponse(analyzeUrl));
     });
 
@@ -200,21 +203,6 @@ extension JsNetworkExtensions on JsExtensions {
       return code;
     });
 
-    // ─── java.getZipByteArrayContent(url, innerPath) ─────────────
-    onBlocking('getZipByteArrayContent', (payload) {
-      if (payload is! List || payload.length < 2) return null;
-      final url = payload[0].toString();
-      if (!url.startsWith('http')) return null;
-      try {
-        final bytes =
-            BlockingCall.run(responseBytes(_analyzeUrl(url))) as Uint8List;
-        final file = ZipDecoder().decodeBytes(bytes).findFile('${payload[1]}');
-        return file?.content as List<int>?;
-      } catch (_) {
-        return null;
-      }
-    });
-
     // ─── java.getWebViewUA — 手機內建瀏覽器的標識，還沒讀到時用預設 ──
     runtime.onMessage(
       'getWebViewUA',
@@ -301,14 +289,20 @@ extension JsNetworkExtensions on JsExtensions {
     return payload.toString();
   }
 
-  Map<String, dynamic> _parseOptionalHeaderMap(dynamic payload) {
-    if (payload is! List || payload.length < 2) {
-      return <String, dynamic>{};
-    }
+  /// `java.connect` 第二個參數給的標頭：物件，或 Legado 的 JSON 文字（Gson
+  /// 寬鬆讀）。沒給、讀不成物件時是 null。
+  Map<String, dynamic>? _parseOptionalHeaderMap(dynamic payload) {
+    if (payload is! List || payload.length < 2) return null;
     final rawHeaders = payload[1];
-    if (rawHeaders is Map) {
-      return Map<String, dynamic>.from(rawHeaders);
+    if (rawHeaders is Map) return Map<String, dynamic>.from(rawHeaders);
+    if (rawHeaders is String) {
+      try {
+        final decoded = decodeLenientJson(rawHeaders, numbersAsText: true);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } on FormatException {
+        // 不是 JSON。
+      }
     }
-    return <String, dynamic>{};
+    return null;
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'dart:io' show gzip;
+import 'dart:io' show File, gzip;
 
+import 'package:archive/archive.dart';
 import 'package:flutter_js/flutter_js.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/js/js_extensions.dart';
@@ -254,6 +255,74 @@ void main() {
         '$cbc|$plain',
       );
     }, skip: quickJsSkip);
+
+    // Legado 的 queryTTF 收網址、Base64，也收 ByteArray（先抓成位元組再交給它）。
+    test('java.queryTTF reads a font given as bytes like Legado', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      JsExtensions(runtime!).inject();
+      final font = base64Encode(
+        File('test/fixtures/fonts/mixed_width_test.ttf').readAsBytesSync(),
+      );
+
+      final result = runtime!.evaluate('''
+        var b64 = "$font";
+        [java.queryTTF(b64) != null,
+          java.queryTTF(java.base64DecodeToByteArray(b64)) != null,
+          java.queryTTF(java.base64DecodeToByteArray(b64), false) != null,
+          java.queryTTF(new Uint8Array(java.base64DecodeToByteArray(b64))) != null
+        ].join(",")
+      ''');
+
+      expect(result.stringResult, 'true,true,true,true');
+    });
+
+    // Legado：dateFormat = FastDateFormat("yyyy/MM/dd HH:mm")，手機當地時間。
+    test('java.timeFormat writes yyyy/MM/dd HH:mm like Legado', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      JsExtensions(runtime!).inject();
+      const millis = 1764000000000;
+      final local = DateTime.fromMillisecondsSinceEpoch(millis);
+      String two(int n) => n.toString().padLeft(2, '0');
+      final expected =
+          '${local.year}/${two(local.month)}/${two(local.day)} '
+          '${two(local.hour)}:${two(local.minute)}';
+
+      expect(
+        runtime!.evaluate('java.timeFormat($millis)').stringResult,
+        expected,
+      );
+      expect(
+        runtime!.evaluate('java.timeFormat("$millis")').stringResult,
+        expected,
+      );
+    });
+
+    // Legado 的 getZipByteArrayContent(url, path)：不是網址時當十六進位的內容。
+    test('java.getZipByteArrayContent reads hex zip content like Legado', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      JsExtensions(runtime!).inject();
+      final zip = ZipEncoder().encode(
+        Archive()..addFile(ArchiveFile.string('a.txt', '夜讀')),
+      );
+      final hex = [for (final b in zip) b.toRadixString(16).padLeft(2, '0')]
+          .join();
+
+      final result = runtime!.evaluate('''
+        java.bytesToStr(java.getZipByteArrayContent("$hex", "a.txt"), "UTF-8")
+      ''');
+
+      expect(result.isError, isFalse, reason: result.stringResult);
+      expect(result.stringResult, '夜讀');
+    });
 
     test('java.log returns the original value like Legado', () {
       if (runtime == null) {

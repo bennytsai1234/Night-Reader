@@ -18,21 +18,32 @@ extension JsFontExtensions on JsExtensionsBase {
     // Future，JS 拿到的是還沒完成的結果。
     runtime.onMessage('queryTTF', (dynamic args) {
       try {
-        final dataStr = args[0].toString();
+        final data = args[0];
         final useCache = args.length > 1 ? args[1] as bool : true;
-        final key = useCache
-            ? md5.convert(utf8.encode(dataStr)).toString()
-            : '';
+        // 位元組（Legado 的 ByteArray）直接當字型；文字是網址或 Base64。
+        final bytes = data is List
+            ? Uint8List.fromList([
+                for (final b in data) (b as num).toInt() & 0xFF,
+              ])
+            : null;
+        final dataStr = bytes == null ? data.toString() : '';
+        final key = !useCache
+            ? ''
+            : bytes != null
+            ? md5.convert(bytes).toString()
+            : md5.convert(utf8.encode(dataStr)).toString();
         if (useCache && JsExtensionsBase.ttfCache.containsKey(key)) return key;
 
-        final buffer = dataStr.startsWith('http')
-            ? BlockingCall.run(
-                plainBytes(
-                  dataStr,
-                  cookieJar: source?.enabledCookieJar == true,
-                ),
-              ) as Uint8List
-            : EncodeUtilsBase64.decodeAndroid(dataStr);
+        final buffer =
+            bytes ??
+            (dataStr.startsWith('http')
+                ? BlockingCall.run(
+                    plainBytes(
+                      dataStr,
+                      cookieJar: source?.enabledCookieJar == true,
+                    ),
+                  ) as Uint8List
+                : EncodeUtilsBase64.decodeAndroid(dataStr));
         final qTTF = QueryTTF(buffer);
         final cacheKey = key.isNotEmpty ? key : md5.convert(buffer).toString();
         JsExtensionsBase.ttfCache[cacheKey] = qTTF;
