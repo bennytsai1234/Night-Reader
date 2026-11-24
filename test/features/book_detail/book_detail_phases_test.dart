@@ -128,7 +128,7 @@ class _Switch implements SourceSwitchService {
     PreparedSourceSwitch prepared, {
     dynamic bookDao,
     dynamic chapterDao,
-    bool Function()? abandonIf,
+    dynamic refresh,
   }) async {
     await db.bookDao.deleteByUrl(oldBook.bookUrl);
     await db.bookDao.upsert(prepared.migratedBook);

@@ -260,6 +260,34 @@ void main() {
     },
   );
 
+  // 換源要先等這本的下載收尾，等的這段時間使用者移除了它的下載；換源最後
+  // 沒換（放回原狀）時不把下載加回來。
+  test('a download removed while a source switch waits stays removed when '
+      'the switch is called off', () async {
+    final service = DownloadService();
+    final book = Book(
+      bookUrl: '$base/book/removed',
+      origin: '$base/source/removed',
+      name: '換源時移除下載的書',
+      isInBookshelf: true,
+    );
+    service.tasks.add(
+      DownloadTask(
+        bookUrl: book.bookUrl,
+        bookName: book.name,
+        totalCount: 3,
+        status: DownloadTask.statusPaused,
+      ),
+    );
+
+    final lease = await service.quiesceForSourceSwitch(book);
+    service.removeTask(book.bookUrl);
+    lease.rolledBack();
+
+    expect(service.tasks.where((t) => t.bookUrl == book.bookUrl), isEmpty);
+    expect(service.isTaskRetiring(book.bookUrl), isFalse);
+  });
+
   test('a chapter waiting to retry stops when cancelled', () async {
     final book = Book(
       bookUrl: '$base/book/retry',

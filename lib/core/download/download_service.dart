@@ -160,17 +160,16 @@ class DownloadService extends DownloadBase
     DownloadTask? task,
     int? previousStatus,
   ) {
-    if (task != null && previousStatus != null) {
+    // 等的這段時間使用者移除了這本的下載，就不加回來。
+    final restored = task != null && tasks.contains(task);
+    if (restored && previousStatus != null) {
       task.status = previousStatus == DownloadTask.statusDownloading
           ? DownloadTask.statusWaiting
           : previousStatus;
-      if (!tasks.contains(task)) {
-        tasks.add(task);
-      }
     }
     clearTaskRetiring(bookUrl);
     update();
-    if (task != null && task.isWaiting && !isDownloading) {
+    if (restored && task.isWaiting && !isDownloading) {
       startDownloads();
     }
   }
