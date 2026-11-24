@@ -2,10 +2,12 @@
 //
 //   node tool/website_preview/shoot.mjs <輸出資料夾> [desktop,mobile]
 //
-// 自己開一個 http 伺服器與無頭 Chrome；每一段存成 <尺寸>-<序號>-<名稱>.png，
+// 自己開一個 http 伺服器與無頭 Chrome（都用這次挑的空連接埠，同一台電腦上別的預覽與
+// 瀏覽器不會被接到）；每一段存成 <尺寸>-<序號>-<名稱>.png，
 // 主控台的錯誤印在最後。短片在拍之前停在封面（不等它播）。
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { mkdirSync, writeFileSync, mkdtempSync, readFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,23 +20,47 @@ if (!outDir) {
 mkdirSync(outDir, { recursive: true });
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../website');
 const chromePath = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const httpPort = 8793, cdpPort = 9336;
-
-const server = spawn('python', ['-I', '-m', 'http.server', String(httpPort), '--bind', '127.0.0.1', '--directory', root], { stdio: 'ignore' });
-const chrome = spawn(chromePath, [`--remote-debugging-port=${cdpPort}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), 'nr-shoot-'))}`, '--headless=new', '--hide-scrollbars', '--no-first-run', 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// 向系統要一個現在沒人用的連接埠。
+const freePort = () => new Promise((res, rej) => {
+  const probe = createServer();
+  probe.on('error', rej);
+  probe.listen(0, '127.0.0.1', () => { const { port } = probe.address(); probe.close(() => res(port)); });
+});
+
+const httpPort = await freePort();
+const server = spawn('python', ['-I', '-m', 'http.server', String(httpPort), '--bind', '127.0.0.1', '--directory', root], { stdio: 'ignore' });
+// Chrome 自己挑偵錯連接埠，寫在這次新開的設定資料夾的 DevToolsActivePort，只連這一個。
+const profile = mkdtempSync(join(tmpdir(), 'nr-shoot-'));
+const chrome = spawn(chromePath, ['--remote-debugging-port=0', `--user-data-dir=${profile}`, '--headless=new', '--hide-scrollbars', '--no-first-run', 'about:blank'], { stdio: 'ignore' });
+const stop = (message) => { chrome.kill(); server.kill(); console.error(message); process.exit(1); };
+
+async function serverReady() {
+  for (let i = 0; i < 60; i++) {
+    if (server.exitCode !== null) stop('網站伺服器沒起來');
+    try {
+      if ((await fetch(`http://127.0.0.1:${httpPort}/index.html`)).ok) return;
+    } catch (_) {}
+    await sleep(250);
+  }
+  stop('網站伺服器沒起來');
+}
 
 async function connect() {
   for (let i = 0; i < 60; i++) {
+    if (chrome.exitCode !== null) stop('chrome 沒起來');
     try {
+      const cdpPort = readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0].trim();
       const list = await (await fetch(`http://127.0.0.1:${cdpPort}/json`)).json();
       const page = list.find((t) => t.type === 'page');
       if (page) return page.webSocketDebuggerUrl;
     } catch (_) {}
     await sleep(250);
   }
-  throw new Error('chrome 沒起來');
+  stop('chrome 沒起來');
 }
+
+await serverReady();
 
 const ws = new WebSocket(await connect());
 await new Promise((r) => (ws.onopen = r));

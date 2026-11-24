@@ -77,6 +77,8 @@ img.src = /*DATA_PNG*/;
 function init(DATA){
 const AREAS = /*AREAS*/;
 const STILL = new Set(['靜止','紙','骨架停住']);
+// 這一幀畫面沒在變：照錄影量到的畫面變化，和單頁儀表板同一個判斷；舊的錄影沒有時照段落名稱。
+const still = (m, i) => m.moving ? !m.moving[i] : STILL.has(m.phases[i]);
 const LIMIT = 4.2;
 const tip = document.getElementById('tip');
 function showTip(e, html){tip.innerHTML=html;tip.style.display='block';tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY+12)+'px';}
@@ -85,9 +87,10 @@ const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).
 // 只看畫面在動的幀：over 是動畫中超過 4.2ms 的幀數，peak 是動畫中最忙的一幀。
 function stats(m){ if(!m) return null; const c=m.costs; let peak=0,at=-1,over=0;
   // 第 0 幀是點下去後的第一幀，可以重（ADR 0036 第 1 條），不算。
-  c.forEach((v,i)=>{ if(i===0||STILL.has(m.phases[i])) return; if(v>LIMIT) over++; if(v>peak){peak=v;at=i;} });
+  c.forEach((v,i)=>{ if(i===0||still(m,i)) return; if(v>LIMIT) over++; if(v>peak){peak=v;at=i;} });
   return {peak, at, over, n:c.length, phase:at<0?null:m.phases[at]}; }
-DATA.forEach(r=>{for(const k of ['light','dark']) if(r[k]) r[k].phases=r[k].phases.flatMap(([p,n])=>Array(n).fill(p));
+DATA.forEach(r=>{for(const k of ['light','dark']) if(r[k]) { r[k].phases=r[k].phases.flatMap(([p,n])=>Array(n).fill(p));
+    if(r[k].moving) r[k].moving=r[k].moving.flatMap(([v,n])=>Array(n).fill(v)); }
   r.ls=stats(r.light); r.ds=stats(r.dark); r.area=r.page.replace(/-(\d+|錄影中)$/,'');
   r.over=(r.ls?r.ls.over:0)+(r.ds?r.ds.over:0);});
 const fmt = v => v>=100? v.toFixed(0) : v.toFixed(1);
@@ -127,9 +130,9 @@ function strip(m, row, mode){
   const c=m.costs, bw=Math.max(0.5,Math.min(2.5,140/c.length)), W=Math.ceil(c.length*bw), H=34, cap=32;
   const y=v=>H-2-(H-6)*Math.min(v,cap)/cap;
   let s=`<svg width="${W}" height="${H}" data-row="${row}" data-mode="${mode}" style="cursor:crosshair">`;
-  c.forEach((v,i)=>{ if(!STILL.has(m.phases[i])) s+=`<rect x="${i*bw}" y="0" width="${bw}" height="${H}" fill="${css('--move')}"/>`; });
+  c.forEach((v,i)=>{ if(!still(m,i)) s+=`<rect x="${i*bw}" y="0" width="${bw}" height="${H}" fill="${css('--move')}"/>`; });
   s+=`<line x1="0" x2="${W}" y1="${y(LIMIT)}" y2="${y(LIMIT)}" stroke="${css('--crit')}" stroke-width="0.6" stroke-dasharray="2 2"/>`;
-  c.forEach((v,i)=>{ const yy=y(v), still=STILL.has(m.phases[i]), col=v<=LIMIT?css('--ok'):still?css('--still'):css('--crit');
+  c.forEach((v,i)=>{ const yy=y(v), isStill=still(m,i), col=v<=LIMIT?css('--ok'):isStill?css('--still'):css('--crit');
     s+=`<rect x="${i*bw+0.25}" y="${yy}" width="${Math.max(0.5,bw-0.5)}" height="${H-2-yy}" fill="${col}"/>`;
     if(v>cap) s+=`<rect x="${i*bw}" y="0" width="${bw}" height="3" fill="${col}"/>`; });
   s+=`<line x1="0" x2="${W}" y1="${H-1.5}" y2="${H-1.5}" stroke="${css('--axis')}"/></svg>`;
@@ -181,6 +184,15 @@ def main():
                 else:
                     runs.append([p, 1])
             m['phases'] = runs
+            # 畫面在變的幀（ADR 0037，錄影照圖層判斷）；舊的錄影沒有時頁面照段落名稱。
+            if m.get('moving') is not None:
+                flags = []
+                for v in m['moving']:
+                    if flags and flags[-1][0] == v:
+                        flags[-1][1] += 1
+                    else:
+                        flags.append([v, 1])
+                m['moving'] = flags
     raw = json.dumps(data, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
     payload = len(raw).to_bytes(4, 'big') + b'\0\0' + raw
     side = math.ceil(math.sqrt(math.ceil(len(payload) / 3)))
