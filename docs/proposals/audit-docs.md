@@ -24,6 +24,9 @@
 | 給 agent 看的文件 | `AGENTS.md`、`DESIGN.md`、`CODING_STANDARDS.md`、`docs/agents/` 十七份全文，寫到的路徑、檔案、指令、函式與類別逐一對過還在，數值與行為只抽查（候選圖的預設風格與玻璃、崩潰日誌最多 50 份、「我的」九個入口、推送前檢查、PR 標題長度）；ADR 本文、`GLOSSARY.md`、`docs/state-machines.md` 只機械比對（寫到的路徑與類別、函式名稱在不在程式裡），沒逐條對行為；`docs/design/` 的日期與經過照 `DESIGN.md` 自己的規則評 | 6 |
 | CI 與腳本 | 全文：`.github/workflows/` 四份、`.githooks/` 三支、`tool/changelog.sh`、`flutter_test.sh`、`skill_refs.sh`；`frame_budget_compare.sh` 只讀檔頭與參數；`tool/` 其餘只對過每一支都有文件或程式指到、文件寫的用法與參數；四份 workflow 的 Flutter 版本一致（3.47.2）；跑過 `changelog_test.sh`、`frame_budget_compare_test.sh`、`skill_refs.sh`，都通過 | 0（兩處檢查的缺口併在第 8、13 筆） |
 | 沒排進分段的程式 | `lib/features/` 17 個、`lib/core/` 31 個資料夾，`lib/core/source/` 9、`storage/` 15、`utils/` 12 個檔，逐一對 `docs/agents/auto-audit.md` 的分段表；表上寫的檔名反過來也都對過還在 | 交辦範圍內 0；範圍外 3 處 |
+| 補讀：`lib/shared/shelf_look.dart` | 全文；所有呼叫的地方（開 App 讀回、書架寫入與重讀、同步套用、換源搬位置、預設封面取位置） | 0 |
+| 補讀：iOS 的 Swift 程式 | `ios/Runner/AppDelegate.swift`、`SceneDelegate.swift` 全文；每個平台通道對 Dart 呼叫的方法名稱，iOS 沒實作的通道與方法 Dart 端有沒有擋（App 內更新、背景工作、選漫畫資料夾、啟動畫面、系統結束紀錄、音量鍵、亮度、挖孔、狀態列）；`Info.plist` 的 Face ID 說明 | 0 |
+| 補讀：`flutter_tts`、`file_picker`、`xpath_selector` 的修補 | 三份 `PATCHES.md` 全文；從 pub.dev 下載三個上游封存檔（雜湊和 `PATCHES.md` 寫的一樣），整份比對改過哪些檔、都有記；`xpath_selector` 的存在條件、相對路徑、聯集切分三處讀程式；`flutter_tts` 的 Android 外掛讀了連線、念、重連與回覆的部分 | 1 |
 
 ## 問題
 
@@ -178,6 +181,16 @@
 - `ios/Runner/AppDelegate.swift`（280 行，斷詞、網頁、電量、閱讀器裝置、系統列的平台通道）與 `SceneDelegate.swift`：資料 3 只排了 Android 那一半（`auto-audit.md:38`）。
 - `third_party/flutter_tts/`、`file_picker/`、`xpath_selector/` 的修補：只有 `flutter_js` 排進書源 0（`auto-audit.md:25`）；「不報的」說 `PATCHES.md` 記的修補可以看，但沒有段會看到（見第 11 筆）。
 
+## 補讀：沒排進分段的三處
+
+照 `docs/agents/auto-audit.md` 的標準讀，讀的是 `origin/beta` 的 `2b98b434`。書架列表的設定檔與 iOS 程式沒有找到問題；Dart 端呼叫 iOS 沒實作的方法時都有接住或先擋掉平台。
+
+#### 15. `flutter_tts` 與 `file_picker` 的修補紀錄，開頭寫的版本與「沒改」的說法過時了
+
+- **文件寫的**：`third_party/file_picker/PATCHES.md:9`「Local version: `11.0.3+nightreader.1`」；`third_party/flutter_tts/PATCHES.md:23`「Dart and native runtime sources are unchanged from the published archive.」
+- **程式做的**：`file_picker` 已經是 `11.0.3+nightreader.3`（`third_party/file_picker/pubspec.yaml:3`，同一份 `PATCHES.md` 後面也記了 `nightreader.2`、`.3`）。`flutter_tts` 的 `nightreader.3` 改了 `getEngines` 的回傳（`third_party/flutter_tts/PATCHES.md:47`；`lib/flutter_tts.dart:496-503`），`nightreader.5` 重寫了 Android 外掛的執行緒與回覆（`PATCHES.md:59`；`android/src/main/kotlin/com/eyedeadevelopment/fluttertts/FlutterTtsPlugin.kt` 和上游 4.2.5 整份不同）。照開頭那句，升級或對照上游的人會以為執行的程式和上游一樣。
+- **該改哪一邊**：改文件，`file_picker` 那行改成 `nightreader.3`；`flutter_tts` 那句改成只說建置設定那一段沒動到執行的程式，或直接拿掉。
+
 ## 拿不準
 
 - **第 1 筆**的「用檔案開書」是照「從檔案管理員選用夜讀開啟」讀的；作者原意若是 App 裡選檔，這筆不成立。
@@ -185,4 +198,5 @@
 - **ADR 本文與 `docs/state-machines.md` 的日期與經過**：76 份 ADR 共 342 處日期、`state-machines.md` 18 處，照 `auto-audit.md` 也算沉積；但 ADR 照它的索引就是記「考慮過什麼、否決了什麼」（`docs/adr/README.md:3`），`state-machines.md` 是每做完一個狀態機加一節的紀錄（`docs/state-machines.md:3`），沒算進第 14 筆。類別名稱也沒算：`docs/design/` 寫了不少（例如 `components.md:22` 的 `DragOverflowText`），是不是沉積和日期一樣由使用者定。
 - **只改 `.gitignore` 這類檔也會發測試版**：`tool/changelog.sh` 的 `is_app_path` 把文件、網站、測試、hook、工具與三份 workflow 以外的路徑都算 App 內容（`tool/changelog.sh:32-40`），`.gitignore`、`.gitattributes`、`LICENSE`、`.metadata` 也算；上一個發布之後只改了這些時，`android-release.yml` 仍會發一版（`.github/workflows/android-release.yml:79-88`、`:202`）。實際有沒有碰過、要不要排除沒查。
 - **第 13 筆**：`a21f85a4` 整理「指向不存在的技能」時改了 `git-flow`、`codex-review` 這幾個，留著 `/triage`、`/wayfinder`、`/grill-with-docs`；這三份是 mattpocock 技能的設定範本產生的，可能是刻意留著等之後裝，若是就不算問題。
+- **沒有任何能用的朗讀引擎時，按朗讀可能一直等、外掛一直重連**：照程式推，`speak` 碰到連線不能用時重建引擎、把這句排回去（`third_party/flutter_tts/android/src/main/kotlin/com/eyedeadevelopment/fluttertts/FlutterTtsPlugin.kt:785-789`、`:414-417`）；引擎初始化失敗時 `ttsStatus` 照樣設成失敗碼，接著重跑排著的呼叫（`:320-356`），`speak` 又看到連線不能用、再重建，沒有上限，Dart 的 `speak` 一直收不到回覆（`lib/core/playback/tts_service.dart:297` 沒有逾時）。上游 4.2.5 也是同一個重連條件。沒把握的一步是 Android 的 `TextToSpeech` 連不上任何引擎時 `mServiceConnection` 是不是一直是 null（照 AOSP 原始碼推的，沒在手機上看過）；`PATCHES.md` 的 `nightreader.5` 說「失敗會回覆、不會卡住」，這條路不在裡面。
 - **這台 Linux 電腦**：`docs/agents/environment.md`、`emulator.md`、`phone.md` 只寫了家裡與公司兩台 Windows（Legado 在 `C:\…`、模擬器在 `C:/Android/Sdk`、Git Bash、「家裡這台沒有 `jq`」）；這台有 `jq`、沒有模擬器、Legado 在 `~/.cache/audit-legado/legado`。是不是會長期用的電腦不知道，沒列成問題。`issue-tracker.md:8` 要用 `jq` 過濾留言，和 `environment.md:24`「家裡這台沒有 `jq`」也對不上。
