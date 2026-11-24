@@ -7,6 +7,7 @@ import 'package:night_reader/shared/widgets/glass/tab_bar_look.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/storage/book_storage_service.dart';
+import 'package:night_reader/core/backup/backup_service.dart';
 import 'package:night_reader/core/backup/login_data_backup.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -362,6 +363,7 @@ class RestoreService {
     final prefs = await SharedPreferences.getInstance();
     var restoredAny = false;
     for (final entry in values.entries) {
+      if (BackupService.deviceOnlyKeys.contains(entry.key)) continue;
       final val = entry.value;
       if (val is String) {
         restoredAny = await prefs.setString(entry.key, val) || restoredAny;

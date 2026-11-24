@@ -1,4 +1,5 @@
 import Flutter
+import LocalAuthentication
 import UIKit
 import WebKit
 
@@ -113,6 +114,99 @@ private enum UserAgentReader {
         }
         result(screenCornerRadius())
       }
+    AppPrivacyCover.shared.install(messenger: messenger)
+  }
+}
+
+// 離開時蓋住畫面（ADR 0083）：離開夜讀的那一刻由系統畫一層模糊，不等 Flutter
+// 的一幀，多工畫面拍到的就是模糊的。回來後 Dart 畫好那一幀（鎖的畫面或內容）
+// 才拿掉；Dart 沒說時 1 秒後自己拿掉。鎖住時鎖的畫面已經蓋著，不再疊模糊。
+private final class AppPrivacyCover {
+  static let shared = AppPrivacyCover()
+
+  private var cover = false
+  private var locked = false
+  private var blurView: UIVisualEffectView?
+  private var fallback: DispatchWorkItem?
+
+  func install(messenger: FlutterBinaryMessenger) {
+    FlutterMethodChannel(name: "night_reader/app_lock", binaryMessenger: messenger)
+      .setMethodCallHandler { [weak self] call, result in
+        guard let self else { return result(nil) }
+        switch call.method {
+        case "configure":
+          let args = call.arguments as? [String: Any]
+          self.cover = args?["cover"] as? Bool ?? false
+          self.locked = args?["locked"] as? Bool ?? false
+          result(nil)
+        case "uncover":
+          self.uncover()
+          result(nil)
+        case "supported":
+          result(true)
+        case "faceIdStatus":
+          result(Self.faceIdStatus())
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+    let center = NotificationCenter.default
+    center.addObserver(
+      forName: UIApplication.willResignActiveNotification, object: nil, queue: .main
+    ) { [weak self] _ in self?.show() }
+    center.addObserver(
+      forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+    ) { [weak self] _ in self?.scheduleFallback() }
+  }
+
+  private func show() {
+    guard cover, !locked, blurView == nil, let window = Self.keyWindow() else { return }
+    fallback?.cancel()
+    let view = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
+    view.frame = window.bounds
+    view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    window.addSubview(view)
+    blurView = view
+  }
+
+  private func uncover() {
+    fallback?.cancel()
+    fallback = nil
+    guard let view = blurView else { return }
+    blurView = nil
+    UIView.animate(withDuration: 0.25, animations: { view.alpha = 0 }) { _ in
+      view.removeFromSuperview()
+    }
+  }
+
+  private func scheduleFallback() {
+    guard blurView != nil else { return }
+    fallback?.cancel()
+    let work = DispatchWorkItem { [weak self] in self?.uncover() }
+    fallback = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+  }
+
+  private static func keyWindow() -> UIWindow? {
+    UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap { $0.windows }
+      .first { $0.isKeyWindow }
+  }
+
+  // 「權限」頁的 Face ID：none（這台不是 Face ID）、available、denied（使用者
+  // 不讓夜讀用）、notEnrolled（還沒設定 Face ID）。
+  private static func faceIdStatus() -> String {
+    let context = LAContext()
+    var error: NSError?
+    let usable = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+    guard context.biometryType == .faceID else { return "none" }
+    if usable { return "available" }
+    switch LAError.Code(rawValue: error?.code ?? 0) {
+    case .some(.biometryNotAvailable): return "denied"
+    case .some(.biometryNotEnrolled): return "notEnrolled"
+    default: return "denied"
+    }
   }
 }
 

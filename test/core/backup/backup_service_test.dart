@@ -4,6 +4,7 @@ import 'package:archive/archive.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/ai_find_dao.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -68,6 +69,11 @@ void main() {
       BookSource(bookSourceUrl: 'https://a.example', bookSourceName: '甲'),
     );
 
+    // 這台手機自己的設定不進備份（ADR 0083）。
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(PreferKey.appLockMode, 'onLeave');
+    await prefs.setBool(PreferKey.appCoverOnLeave, true);
+
     final zip = await BackupService().createBackupZip();
 
     expect(zip, isNotNull);
@@ -103,7 +109,10 @@ void main() {
       jsonDecode(entry('bookSource.json')).single['bookSourceUrl'],
       'https://a.example',
     );
-    expect(jsonDecode(entry('config.json'))['reader.fontSize'], 20);
+    final config = jsonDecode(entry('config.json')) as Map<String, dynamic>;
+    expect(config['reader.fontSize'], 20);
+    expect(config.keys, isNot(contains(PreferKey.appLockMode)));
+    expect(config.keys, isNot(contains(PreferKey.appCoverOnLeave)));
   });
 
   test('the backup carries only shelf books, their downloads and the chapters '

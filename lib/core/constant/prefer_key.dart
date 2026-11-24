@@ -126,6 +126,13 @@ class PreferKey {
   /// 全部」才接著下載。
   static const String downloadsPausedAll = 'downloads_paused_all';
 
+  /// 「離開時蓋住畫面」（bool，ADR 0083）。這台手機自己的：不同步、不進備份。
+  static const String appCoverOnLeave = 'app_cover_on_leave';
+
+  /// 「解鎖才能打開」（`AppLockMode.name`，ADR 0083）。這台手機自己的：不同步、
+  /// 不進備份；另一台不一定有指紋。
+  static const String appLockMode = 'app_lock_mode';
+
   /// 這台已經替書源不在了的書架網路書找過一次替代書源（bool，ADR 0069）：
   /// 自動換源之前就沒有書源的書，更新後只找一次。只屬於這台，不進備份。
   static const String orphanedBooksSwitched = 'orphaned_books_switched';

@@ -64,15 +64,16 @@ void main() {
     expect(prefs.getBool('update.auto_download_unmetered'), isFalse);
   });
 
-  testWidgets('privacy, permissions and clearing web data live here', (
-    tester,
-  ) async {
-    await pumpPage(tester);
-    for (final title in ['隱私說明', '權限', '清除網頁資料']) {
-      await tester.ensureVisible(find.text(title));
-      expect(find.text(title), findsOneWidget, reason: title);
-    }
-  });
+  testWidgets(
+    'privacy, permissions, the lock and clearing web data live here',
+    (tester) async {
+      await pumpPage(tester);
+      for (final title in ['隱私說明', '權限', '離開時蓋住畫面', '解鎖才能打開', '清除網頁資料']) {
+        await tester.ensureVisible(find.text(title));
+        expect(find.text(title), findsOneWidget, reason: title);
+      }
+    },
+  );
 
   testWidgets('system tools turn the launch shelf check off', (tester) async {
     await pumpPage(tester);

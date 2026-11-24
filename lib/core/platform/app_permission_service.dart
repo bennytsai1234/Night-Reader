@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 enum AppPermissionStatusTone { ok, attention, blocked, neutral }
@@ -24,6 +25,10 @@ abstract interface class AppPermissionGateway {
 }
 
 typedef AppPermissionPlatformPredicate = bool Function();
+
+/// iPhone 的 Face ID 能不能給夜讀用：`none`（這台不是 Face ID）、
+/// `available`、`denied`（使用者不讓夜讀用）、`notEnrolled`（還沒設定）。
+typedef FaceIdStatusReader = Future<String?> Function();
 
 /// 點權限列時要做的事；權限已可用或不適用時沒有動作。
 enum AppPermissionAction { request, openSettings }
@@ -55,15 +60,18 @@ class AppPermissionService {
     AppPermissionGateway? gateway,
     AppPermissionPlatformPredicate? isAndroid,
     AppPermissionPlatformPredicate? isIOS,
+    FaceIdStatusReader? faceIdStatus,
   }) : _gateway = gateway ?? const _PermissionHandlerGateway(),
        _isAndroid = isAndroid ?? _isAndroidPlatform,
-       _isIOS = isIOS ?? _isIOSPlatform;
+       _isIOS = isIOS ?? _isIOSPlatform,
+       _faceIdStatus = faceIdStatus ?? _readFaceIdStatus;
 
   final AppPermissionGateway _gateway;
   final AppPermissionPlatformPredicate _isAndroid;
   final AppPermissionPlatformPredicate _isIOS;
+  final FaceIdStatusReader _faceIdStatus;
 
-  /// 權限尚未查完時仍能知道固定的五列結構；狀態文字拿到後才換成真值。
+  /// 權限尚未查完時仍能知道固定的列結構；狀態文字拿到後才換成真值。
   /// 與 [loadSnapshot] 使用相同的列順序和平台分支。
   AppPermissionSnapshot loadingSnapshot() => _snapshot(
     AppPermissionItem(
@@ -76,19 +84,32 @@ class AppPermissionService {
       status: _isIOS() ? '讀取中…' : '不需授權',
       tone: AppPermissionStatusTone.neutral,
     ),
+    _isIOS()
+        ? const AppPermissionItem(
+            title: 'Face ID',
+            status: '讀取中…',
+            tone: AppPermissionStatusTone.neutral,
+          )
+        : null,
   );
 
-  Future<AppPermissionSnapshot> loadSnapshot() async =>
-      _snapshot(await _notificationItem(), await _photoLibraryItem());
+  Future<AppPermissionSnapshot> loadSnapshot() async => _snapshot(
+    await _notificationItem(),
+    await _photoLibraryItem(),
+    _isIOS() ? await _faceIdItem() : null,
+  );
 
-  /// 等待中與完成後的五列由同一處組裝，不會因新增權限讓兩邊列數分岔。
+  /// 等待中與完成後的列由同一處組裝，不會因新增權限讓兩邊列數分岔。Face ID
+  /// 只有 iPhone 有（「解鎖才能打開」，ADR 0083；Android 的辨識不用詢問）。
   AppPermissionSnapshot _snapshot(
     AppPermissionItem notification,
     AppPermissionItem photos,
+    AppPermissionItem? faceId,
   ) => AppPermissionSnapshot(
     items: [
       notification,
       photos,
+      ?faceId,
       _filePickerItem(),
       _allFilesItem(),
       _backgroundAudioItem(),
@@ -146,6 +167,38 @@ class AppPermissionService {
       target: AppPermissionTarget.photos,
       action: _actionFor(status),
     );
+  }
+
+  Future<AppPermissionItem> _faceIdItem() async {
+    String? status;
+    try {
+      status = await _faceIdStatus();
+    } catch (_) {
+      status = null;
+    }
+    return switch (status) {
+      'available' => const AppPermissionItem(
+        title: 'Face ID',
+        status: '可用',
+        tone: AppPermissionStatusTone.ok,
+      ),
+      'denied' => const AppPermissionItem(
+        title: 'Face ID',
+        status: '未允許',
+        tone: AppPermissionStatusTone.blocked,
+        action: AppPermissionAction.openSettings,
+      ),
+      'notEnrolled' => const AppPermissionItem(
+        title: 'Face ID',
+        status: '未設定',
+        tone: AppPermissionStatusTone.neutral,
+      ),
+      _ => const AppPermissionItem(
+        title: 'Face ID',
+        status: '不適用',
+        tone: AppPermissionStatusTone.neutral,
+      ),
+    };
   }
 
   AppPermissionItem _filePickerItem() {
@@ -239,6 +292,10 @@ class AppPermissionService {
 bool _isAndroidPlatform() => Platform.isAndroid;
 
 bool _isIOSPlatform() => Platform.isIOS;
+
+Future<String?> _readFaceIdStatus() =>
+    const MethodChannel('night_reader/app_lock')
+        .invokeMethod<String>('faceIdStatus');
 
 class _PermissionHandlerGateway implements AppPermissionGateway {
   const _PermissionHandlerGateway();

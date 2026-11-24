@@ -5,6 +5,8 @@ import 'package:archive/archive.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/backup/backup_service.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/ai_find_dao.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -85,6 +87,29 @@ void main() {
     expect(result.failedFiles, ['replaceRules.json']);
     expect(await BookSourceDao(db).getByUrl('https://a.example'), isNotNull);
   });
+
+  test(
+    'settings that belong to one phone are not taken from a backup',
+    () async {
+      final zip = await writeZip('config.zip', {
+        'manifest.json': jsonEncode({'schemaVersion': db.schemaVersion}),
+        'config.json': jsonEncode({
+          'reader.fontSize': 22,
+          PreferKey.appLockMode: 'onLeave',
+          PreferKey.appCoverOnLeave: true,
+          PreferKey.downloadsPausedAll: true,
+        }),
+      });
+
+      await RestoreService().restoreFromZip(zip);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('reader.fontSize'), 22);
+      for (final key in BackupService.deviceOnlyKeys) {
+        expect(prefs.containsKey(key), isFalse, reason: key);
+      }
+    },
+  );
 
   test('a book follows its source kind whichever file comes first in the '
       'backup (ADR 0053)', () async {

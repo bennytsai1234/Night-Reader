@@ -25,6 +25,17 @@ import 'package:night_reader/core/backup/login_data_backup.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 
 class BackupService {
+  /// 只屬於這台手機的設定：不寫進備份，還原時也不套用（舊的備份可能帶著）。
+  /// 這台在同步裡的名字、下載佇列的「暫停全部」、找過沒有書源的書，與離開
+  /// 時蓋住畫面、解鎖才能打開（另一台不一定有指紋，ADR 0083）。
+  static final Set<String> deviceOnlyKeys = {
+    SyncSettings.deviceIdKey,
+    PreferKey.downloadsPausedAll,
+    PreferKey.orphanedBooksSwitched,
+    PreferKey.appCoverOnLeave,
+    PreferKey.appLockMode,
+  };
+
   static final BackupService _instance = BackupService._internal();
   factory BackupService() => _instance;
   BackupService._internal();
@@ -137,13 +148,7 @@ class BackupService {
       // 2. 導出偏好設定 (對標 config.xml)
       final Map<String, dynamic> config = {};
       for (var key in prefs.getKeys()) {
-        // 這台手機在同步裡的名字、下載佇列的「暫停全部」、找過沒有書源的書
-        // 只屬於這台，還原到另一台不能沿用。
-        if (key == SyncSettings.deviceIdKey ||
-            key == PreferKey.downloadsPausedAll ||
-            key == PreferKey.orphanedBooksSwitched) {
-          continue;
-        }
+        if (deviceOnlyKeys.contains(key)) continue;
         config[key] = prefs.get(key);
       }
       await File(p.join(backupFolder.path, 'config.json'))

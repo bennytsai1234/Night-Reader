@@ -1,3 +1,4 @@
+import 'package:night_reader/core/app_lock/app_lock.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 
@@ -44,9 +45,12 @@ class GoogleSignInDriveAuth implements GoogleDriveAuth {
   Future<String> signIn() async {
     await _ensureInitialized();
     try {
+      // 登入畫面是系統的，回來不算離開夜讀（ADR 0083）。
+      await AppLock.instance.markOwnExcursion();
       final account = await GoogleSignIn.instance.authenticate(
         scopeHint: const [scope],
       );
+      await AppLock.instance.markOwnExcursion();
       await account.authorizationClient.authorizeScopes(const [scope]);
       return account.email;
     } on GoogleSignInException catch (error) {

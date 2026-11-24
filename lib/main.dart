@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:night_reader/core/app_lock/app_lock.dart';
+import 'package:night_reader/shared/widgets/app_lock_scope.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -174,6 +176,8 @@ Future<void> _startApp() async {
     // 分頁列與書架列表的樣子：第一幀就照它們畫。
     TabBarLook.restore(getIt<SharedPreferences>());
     ShelfLook.restore(getIt<SharedPreferences>());
+    // 在 App 的導覽之前註冊：鎖住時返回鍵先問到這裡（ADR 0083）。
+    AppLock.instance.start(getIt<SharedPreferences>());
 
     runApp(
       MultiProvider(
@@ -424,9 +428,11 @@ class NightReaderApp extends StatelessWidget {
                     child: BackdropGroup(
                       child: UiLanguageScope(
                         locale: locale,
-                        child: ChineseDisplayScope(
-                          child: HiddenWebViews(
-                            child: child ?? const SizedBox.shrink(),
+                        child: AppLockScope(
+                          child: ChineseDisplayScope(
+                            child: HiddenWebViews(
+                              child: child ?? const SizedBox.shrink(),
+                            ),
                           ),
                         ),
                       ),
