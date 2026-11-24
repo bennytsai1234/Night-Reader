@@ -224,6 +224,7 @@ class _MiniFace extends StatelessWidget {
                 child: cover != null && cover.trim().isNotEmpty
                     ? BookCoverWidget(
                         coverUrl: cover,
+                        origin: book.origin,
                         bookName: context.zh(book.name),
                         bookUrl: book.bookUrl,
                         kind: BookSourceKind.audio,

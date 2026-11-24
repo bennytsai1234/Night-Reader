@@ -18,6 +18,7 @@ import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
 import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart';
+import 'package:night_reader/core/engine/web_book/cover_fetcher.dart';
 import 'package:night_reader/core/engine/web_book/illustration_fetcher.dart';
 import 'package:night_reader/core/engine/web_book/web_book_service.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -122,6 +123,20 @@ class BookSourceService {
     CancelToken? cancelToken,
   }) => _runOnSource(
     _illustrationTask(source, book, content, dir, retryMissing),
+    source: source,
+    book: book,
+    cancelToken: cancelToken,
+  );
+
+  /// 書源的封面照書源抓（[CoverFetcher.fetch]：書源標頭、網址選項、Cookie
+  /// 與 `coverDecodeJs`）。
+  Future<Uint8List> fetchCover(
+    BookSource source,
+    String url, {
+    Book? book,
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _coverTask(source, book, url),
     source: source,
     book: book,
     cancelToken: cancelToken,
@@ -411,6 +426,10 @@ _Work<String> _contentTask(
       pageConcurrency: pageConcurrency,
       cancelToken: cancelToken,
     );
+
+_Work<Uint8List> _coverTask(BookSource source, Book? book, String url) =>
+    (cancelToken) =>
+        CoverFetcher.fetch(source, book, url, cancelToken: cancelToken);
 
 _Work<int> _illustrationTask(
   BookSource source,

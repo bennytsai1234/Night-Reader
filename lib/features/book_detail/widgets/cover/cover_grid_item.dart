@@ -49,6 +49,7 @@ class CoverGridItem extends StatelessWidget {
                 // 預設封面（Legado 換封面的候選也是）。
                 : BookCoverWidget(
                     coverUrl: result.book.coverUrl,
+                    origin: result.book.origin,
                     bookName: result.book.name,
                     author: result.book.author,
                     kind: result.book.bookKind,
