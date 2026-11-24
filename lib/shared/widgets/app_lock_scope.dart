@@ -109,7 +109,9 @@ class _LockScreen extends StatelessWidget {
     // 擋住底下所有點擊；鎖的畫面自己只有「解鎖」一顆。
     return AbsorbPointer(
       absorbing: !showUnlock,
-      child: ColoredBox(
+      // 蓋在導覽之上、外面沒有頁面的 Material：自己墊一層，字才有 App 的
+      // 字樣（不然是 Flutter 標錯用的黃色底線）。
+      child: Material(
         color: theme.scaffoldBackgroundColor,
         child: Center(
           child: Column(
