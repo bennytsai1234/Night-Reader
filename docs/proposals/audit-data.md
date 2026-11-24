@@ -12,6 +12,7 @@
 | 資料 0 資料庫與模型 | `lib/core/database/`（19 檔，不含 `*.g.dart`；另把 `app_tables.dart` 和初版 `5a4c55ee` 逐欄比過，後加的欄位都有升級步驟）、`lib/core/models/`（34 檔）、`lib/core/storage/` 的 `app_cache`、`app_storage_paths`、`reader_layout_cache`、`storage_metrics`（4 檔） | 0 |
 | 資料 1 下載與儲存 | `lib/core/download/` 的 `book_update_service`、`download_base`、`download_executor`、`download_failure`、`download_scheduler`、`download_service`（6 檔，`audio_chapter_download` 在閱讀器 4）、`lib/features/downloads/download_manager_page.dart`（1 檔）、`lib/core/utils/cache_manager.dart`、`lib/core/storage/` 的 `book_storage_service`、`book_chapter_files`、`reader_chapter_content_store`、`reader_chapter_content_storage`、`book_illustration_storage`、`book_cover_storage_service`、`bookshelf_state_tracker`、`books_in_use`（8 檔） | 2 |
 | 資料 2 備份還原、本地書與更新 | `lib/core/local_book/`（5 檔）、`lib/core/backup/` 的 `backup_service`、`restore_service`、`bookshelf_exchange_service`、`export_book_service`、`highlight_export`（5 檔，`login_data_backup` 在書源 4）、`lib/core/app_update/`（4 檔）、`lib/core/playback/tts_service.dart`（1 檔） | 2 |
+| 資料 3 啟動、背景工作與 Android | `lib/main.dart`、`lib/app_providers.dart`、`lib/core/` 的 `startup/`（1）、`di/`（1）、`config/`（1）、`constant/`（5）、`exception/`（2）、`fonts/`（2）、`base/`（1）、`background_work/`（4）、`diagnostics/`（4）、`platform/`（2）、`app_lock/`（1）；`android/app/src/main/` 的 Kotlin（7 檔）與 `AndroidManifest.xml`；`lib/core/utils/` 的 `encoder_utils`、`lru_map`；`lib/core/storage/resource_service.dart` | 0 |
 
 ## 問題
 
@@ -141,6 +142,10 @@
 **修法方向**：匯入書架檔是「加入這些書」：書架上已有的書（同 `bookUrl`）不整筆覆寫，只補這台沒有的（或照同步的「新的贏」只換閱讀進度）；目錄只在這台沒有目錄時寫；正文只寫好的、而且只在這台沒有好的正文時寫（`fillContent`）。匯出端也只帶好的正文，和備份一致。
 
 **輕重**：資料遺失或寫壞
+
+### 資料 3 啟動、背景工作與 Android
+
+沒有找到。
 
 ## 拿不準
 
