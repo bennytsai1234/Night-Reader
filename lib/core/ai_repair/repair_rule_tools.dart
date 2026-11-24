@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:drift/isolate.dart';
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/engine/web_book/book_info_parser.dart';
@@ -22,7 +23,8 @@ import 'package:night_reader/core/source/chapter_content_kind.dart';
 /// 解析：用 [source] 的規則、夜讀的解析程式把已經抓到的一頁 [body]（網址
 /// [url]）當成 [stage]（`search`、`explore`、`info`、`toc`、`content`）
 /// 解析，不重抓那一頁。傳回給 AI 的一段：幾筆、前 [_shownItems] 筆的每個
-/// 欄位；正文給字數、類型與開頭。
+/// 欄位；正文給字數、類型與開頭。[secrets] 在截短前遮掉（ADR 0054）：截在
+/// 一段秘密中間時，留下的半段認不出來。
 Future<String> parseRepairPage(
   BookSource source, {
   required String stage,
@@ -30,10 +32,11 @@ Future<String> parseRepairPage(
   required String url,
   required Duration timeout,
   CancelToken? cancelToken,
+  Set<String> secrets = const {},
   @visibleForTesting Future<DriftIsolate>? database,
 }) => _inWorker(
   'RepairParse',
-  _parseTask(source.toJson(), stage, body, url),
+  _parseTask(source.toJson(), stage, body, url, secrets),
   timeout: timeout,
   cancelToken: cancelToken,
   database: database,
@@ -48,12 +51,15 @@ Future<String> parseRepairPage(
 /// 請求一邊跑一邊交回來（[RequestLog.live]）：規則 JS 同步等網路、超過時間
 /// 時，已經送出的請求和網站回了什麼照樣附上（2026-11-14 Codex 審查用本機
 /// 伺服器重現：超時就只剩「超過時間，沒做完」）。
+///
+/// 傳回值與請求在截短前先遮掉 [secrets]（同 [parseRepairPage]）。
 Future<String> runRepairJs(
   BookSource source, {
   required String code,
   required Map<int, String> pages,
   required Duration timeout,
   CancelToken? cancelToken,
+  Set<String> secrets = const {},
   @visibleForTesting Future<DriftIsolate>? database,
 }) async {
   // 只留要附上的那麼多字：送了很多請求的程式不在這裡越積越多。
@@ -61,13 +67,14 @@ Future<String> runRepairJs(
   var cut = false;
   final result = await _inWorker(
     'RepairJs',
-    _jsTask(source.toJson(), code, pages),
+    _jsTask(source.toJson(), code, pages, secrets),
     timeout: timeout,
     cancelToken: cancelToken,
     database: database,
     onProgress: (entry) {
       if (entry is! LoggedRequestLine || cut) return;
-      final line = sent.isEmpty ? entry.line : '\n${entry.line}';
+      final logged = redactAiRepairSecrets(entry.line, secrets);
+      final line = sent.isEmpty ? logged : '\n$logged';
       final room = _jsRequestsLength - sent.length;
       cut = line.length > room;
       sent.write(cut ? line.substring(0, room) : line);
@@ -120,14 +127,17 @@ Future<String> Function(CancelToken) _parseTask(
   String stage,
   String body,
   String url,
+  Set<String> secrets,
 ) => (_) async {
   final source = BookSource.fromJson(sourceJson);
+  String clip(String text, int length) =>
+      _clip(redactAiRepairSecrets(text, secrets), length);
   try {
     return switch (stage) {
-      'search' || 'explore' => await _books(source, stage, body, url),
-      'info' => await _info(source, body, url),
+      'search' || 'explore' => await _books(source, stage, body, url, clip),
+      'info' => await _info(source, body, url, clip),
       'toc' => await _toc(source, body, url),
-      'content' => await _content(source, body, url),
+      'content' => await _content(source, body, url, clip),
       _ => '不認得的段：$stage（要 search、explore、info、toc 或 content）',
     };
   } catch (error) {
@@ -135,11 +145,15 @@ Future<String> Function(CancelToken) _parseTask(
   }
 };
 
+/// 截短一段要給 AI 看的值（先遮秘密再截，[_clip]）。
+typedef _Clip = String Function(String text, int length);
+
 Future<String> _books(
   BookSource source,
   String stage,
   String body,
   String url,
+  _Clip clip,
 ) async {
   final books = await BookListParser.parse(
     source: source,
@@ -150,18 +164,23 @@ Future<String> _books(
   return [
     '解析成${stage == 'search' ? '搜尋' : '發現'}頁：${books.length} 本',
     for (final (i, book) in books.take(_shownItems).indexed)
-      '${i + 1}. ${_fields({'書名': book.name, '作者': book.author, '分類': book.kind, '最新章節': book.latestChapterTitle, '簡介': book.intro, '封面': book.coverUrl, '網址': book.bookUrl, '目錄': book.tocUrl})}',
+      '${i + 1}. ${_fields({'書名': book.name, '作者': book.author, '分類': book.kind, '最新章節': book.latestChapterTitle, '簡介': book.intro, '封面': book.coverUrl, '網址': book.bookUrl, '目錄': book.tocUrl}, clip)}',
   ].join('\n');
 }
 
-Future<String> _info(BookSource source, String body, String url) async {
+Future<String> _info(
+  BookSource source,
+  String body,
+  String url,
+  _Clip clip,
+) async {
   final book = await BookInfoParser.parse(
     source: source,
     book: Book(bookUrl: url, origin: source.bookSourceUrl),
     body: body,
     baseUrl: url,
   );
-  return '解析成詳情頁：${_fields({'書名': book.name, '作者': book.author, '分類': book.kind, '最新章節': book.latestChapterTitle, '簡介': book.intro, '封面': book.coverUrl, '目錄': book.tocUrl})}';
+  return '解析成詳情頁：${_fields({'書名': book.name, '作者': book.author, '分類': book.kind, '最新章節': book.latestChapterTitle, '簡介': book.intro, '封面': book.coverUrl, '目錄': book.tocUrl}, clip)}';
 }
 
 Future<String> _toc(BookSource source, String body, String url) async {
@@ -195,7 +214,12 @@ const String _noBook =
     '（規則用到 book 的變數：解析只拿這一頁，沒有書，book.name 這類都是空的，'
     '章名空的章節會被丟掉；要照真的書跑用 test）';
 
-Future<String> _content(BookSource source, String body, String url) async {
+Future<String> _content(
+  BookSource source,
+  String body,
+  String url,
+  _Clip clip,
+) async {
   final result = await ContentParser.parse(
     source: source,
     chapter: BookChapter(title: '第一章', url: url, bookUrl: url),
@@ -211,16 +235,16 @@ Future<String> _content(BookSource source, String body, String url) async {
   };
   return [
     '解析成正文頁：${content.length} 字，看起來是$kind',
-    _clip(content, 300),
+    clip(content, 300),
     if (result.nextUrls.isNotEmpty) '下一頁：${result.nextUrls.join('、')}',
     if (_usesBook(source.ruleContent?.toJson())) _noBook,
   ].join('\n');
 }
 
 /// 有值的欄位，`名稱：值` 用「｜」接起來；太長的值只留開頭。
-String _fields(Map<String, String?> fields) => [
+String _fields(Map<String, String?> fields, _Clip clip) => [
   for (final MapEntry(:key, :value) in fields.entries)
-    if (value != null && value.trim().isNotEmpty) '$key：${_clip(value, 80)}',
+    if (value != null && value.trim().isNotEmpty) '$key：${clip(value, 80)}',
 ].join('｜');
 
 String _clip(String text, int length) {
@@ -234,6 +258,7 @@ Future<String> Function(CancelToken) _jsTask(
   Map<String, dynamic> sourceJson,
   String code,
   Map<int, String> pages,
+  Set<String> secrets,
 ) => (_) async {
   final source = BookSource.fromJson(sourceJson);
   final prelude =
@@ -247,11 +272,11 @@ Future<String> Function(CancelToken) _jsTask(
   return requests.run(() async {
     try {
       final value = AnalyzeRule(source: source).evalJS(prelude + code, null);
-      final text = switch (value) {
+      final text = redactAiRepairSecrets(switch (value) {
         null => 'null',
         final String string => string,
         _ => _encode(value),
-      };
+      }, secrets);
       return text.length <= _jsResultLength
           ? '傳回：$text'
           : '傳回（共 ${text.length} 字，只給前 $_jsResultLength 字）：'

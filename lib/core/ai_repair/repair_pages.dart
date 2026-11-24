@@ -2,6 +2,7 @@ import 'dart:isolate';
 
 import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html_parser;
+import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
 import 'package:night_reader/core/network/page_digest.dart';
 import 'package:night_reader/core/network/request_log.dart';
 
@@ -72,14 +73,21 @@ final class RepairPages {
 
 /// 讀頁：[page] 從第 [from] 字起 [length] 字（最多 [maxReadLength]）。[raw]
 /// 給原文，否則給精簡後的（[digestPage]，在背景 isolate 做）。
+///
+/// [secrets] 先在整頁遮掉再分段（ADR 0054）：分段切在一段秘密中間時，兩半
+/// 各自認不出來。字數與下一段從哪接都照遮過的那一份算。
 Future<String> readRepairPage(
   RepairPage page, {
   int from = 0,
   int length = defaultReadLength,
   bool raw = false,
+  Set<String> secrets = const {},
 }) async {
   final body = page.body;
-  final text = raw ? body : await Isolate.run(() => digestPage(body));
+  final text = redactAiRepairSecrets(
+    raw ? body : await Isolate.run(() => digestPage(body)),
+    secrets,
+  );
   final start = from.clamp(0, text.length);
   final end = (start + length.clamp(1, maxReadLength)).clamp(0, text.length);
   final kind = raw ? '原文' : '精簡後';
@@ -95,20 +103,34 @@ const int defaultReadLength = 8000;
 const int maxReadLength = 20000;
 
 /// 找字：在 [page] 找 [query]，在背景 isolate 解析網頁（[findInPage]）。
-Future<String> findInRepairPage(RepairPage page, String query, {int from = 0}) {
+Future<String> findInRepairPage(
+  RepairPage page,
+  String query, {
+  int from = 0,
+  Set<String> secrets = const {},
+}) {
   final body = page.body;
   final id = page.id;
   return Isolate.run(
-    () => '# 在頁 $id 找「$query」：${findInPage(body, query, from: from)}',
+    () =>
+        '# 在頁 $id 找「$query」：'
+        '${findInPage(body, query, from: from, secrets: secrets)}',
   );
 }
 
 /// 在網頁 [body] 裡找 [query]：[query] 當正則，編不了時當純文字（回覆寫明）。
 /// 每處給那個元素的選擇器路徑與它的 HTML（太長只留開頭）；字在屬性值裡的
 /// 也算。不是 HTML 的（JSON、純文字）給前後文。從第 [from] 處起最多
-/// [_maxFinds] 處，寫出共幾處與下一段怎麼拿。
-String findInPage(String body, String query, {int from = 0}) {
+/// [_maxFinds] 處，寫出共幾處與下一段怎麼拿。[secrets] 先在整頁遮掉，元素
+/// 與前後文截短時不會留下半段秘密。
+String findInPage(
+  String body,
+  String query, {
+  int from = 0,
+  Set<String> secrets = const {},
+}) {
   if (query.isEmpty) return '沒有要找的字';
+  body = redactAiRepairSecrets(body, secrets);
   RegExp pattern;
   var note = '';
   try {

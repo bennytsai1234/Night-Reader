@@ -48,6 +48,10 @@ abstract interface class RepairAgentHost {
   /// 送給 AI、寫進紀錄的文字遮掉秘密。
   String redact(String text);
 
+  /// 現在要遮的秘密：讀頁、找字、試解析、跑程式截短前先遮（[redact] 用的
+  /// 同一份）。
+  Set<String> get secrets;
+
   /// 重讀這個書源的秘密：工具可能寫了新的 Cookie 或變數。
   Future<void> refreshSecrets();
 
@@ -374,7 +378,13 @@ final class RepairAgent implements AgentTask<AiRepairCommand> {
         final found = _pages[page];
         final reply = found == null
             ? _noPage(page)
-            : await readRepairPage(found, from: from, length: length, raw: raw);
+            : await readRepairPage(
+                found,
+                from: from,
+                length: length,
+                raw: raw,
+                secrets: _host.secrets,
+              );
         // 讀頁在別的 isolate 做，回來前按了暫停或結束：步驟已經收成失敗，
         // 不再蓋回去（同解析頁、跑程式）。
         if (_host.stopped) return _cancelled;
@@ -384,7 +394,12 @@ final class RepairAgent implements AgentTask<AiRepairCommand> {
         final found = _pages[page];
         final reply = found == null
             ? _noPage(page)
-            : await findInRepairPage(found, query, from: from);
+            : await findInRepairPage(
+                found,
+                query,
+                from: from,
+                secrets: _host.secrets,
+              );
         if (_host.stopped) return _cancelled;
         _local(step, '在頁 $page 找「$query」', reply);
         return _answer(reply);
@@ -409,7 +424,8 @@ final class RepairAgent implements AgentTask<AiRepairCommand> {
         step.detail = '解析頁 $page…';
         _host.notify();
         final result = await _host.guard(
-          (cancelToken) => _parsePage(source, stage, found, cancelToken),
+          (cancelToken) =>
+              _parsePage(source, stage, found, cancelToken, _host.secrets),
         );
         if (_host.stopped || result == null) return _cancelled;
         final reply =
@@ -429,7 +445,8 @@ final class RepairAgent implements AgentTask<AiRepairCommand> {
         step.detail = '跑程式…';
         _host.notify();
         final result = await _host.guard(
-          (cancelToken) => _runJs(source, code, pages, cancelToken),
+          (cancelToken) =>
+              _runJs(source, code, pages, cancelToken, _host.secrets),
         );
         if (_host.stopped || result == null) return _cancelled;
         _log.full('### 程式\n$code');
