@@ -23,8 +23,8 @@
 | 書源 4 | `lib/core/ai_find/` | 0／4 | 還沒讀 |
 | 書源 4 | `lib/features/source_manager/ai_repair/` | 0／5 | 還沒讀 |
 | 書源 4 | `lib/core/source/` 的 `source_login_session`、`source_interaction` | 2／2 | 0 |
-| 書源 4 | `lib/core/network/` 的 `cookie_store`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service` | 0／4 | 還沒讀 |
-| 書源 4 | `lib/core/backup/login_data_backup.dart` | 0／1 | 還沒讀 |
+| 書源 4 | `lib/core/network/` 的 `cookie_store`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service` | 4／4 | 1（另 2 筆在 #529） |
+| 書源 4 | `lib/core/backup/login_data_backup.dart` | 1／1 | 0 |
 
 ## 問題
 
@@ -156,6 +156,48 @@
 **修法方向**：單一書源的範圍照 Legado：有這個書源就用它，不看啟用與校驗標記；不在了退回全部（同分組的退回，`onScopeNarrowed` 會把頁首改成全部）。
 
 **輕重**：功能沒反應或結果錯。
+
+### 書源 4
+
+和 GPT 那份（#529）重複的不重寫，在「和 #529 重複的」一節列對照。
+
+#### 6. 網址選項開了 `webView` 的請求，網頁寫下的 Cookie 沒存回書源，之後不開網頁的請求帶不到、被網站擋下
+
+**會發生什麼**：網站用網頁程式寫一個通行 Cookie 才放行（常見的 JS 防護頁），書源在搜尋或詳情開 `webView` 讓網頁跑過一次，目錄、正文用一般請求。Legado 把網頁跑完的 Cookie 存進這個書源，之後的一般請求帶著它就過了；夜讀的一般請求沒有這個 Cookie，又拿到防護頁，目錄或正文解析不出東西。
+
+**為什麼**：
+- 開了 `webView` 的請求交給背景網頁，沒有帶書源（`lib/core/engine/analyze_url.dart:688-700`）；規則的 `java.webView` 也一樣（`lib/core/engine/js/extensions/js_blocking_tasks.dart:296`）。
+- 背景網頁跑完只交回內容，沒有讀網頁的 Cookie（`lib/core/network/backstage_webview.dart:115-123`）：
+
+  ```dart
+  void finish(Map<String, dynamic> result) {
+    if (!isCompleted) {
+      isCompleted = true;
+      _timer?.cancel();
+      controller.loadHtmlString('<html></html>');
+      completer.complete(result);
+    }
+  }
+  ```
+
+- 一般請求只從 `CookieStore` 與 Cookie 檔拿 Cookie（`lib/core/engine/analyze_url.dart:731-742`），網頁那一份的 Cookie 只有 Cloudflare 檢查（`lib/core/network/webview_cloudflare_solver.dart:97`）與網頁登入（`lib/features/source_login/source_browser_page.dart:146-158`）會讀回來。
+- Legado 每次網頁載完就把那一頁的 Cookie 存進書源（`legado/app/src/main/java/io/legado/app/help/http/BackstageWebView.kt:139-145` 的 `setCookie`，在 `onPageFinished` 呼叫，`165-166`、`296-297`）；`tag` 由 `AnalyzeUrl` 與 `java.webView` 傳書源的 key（`legado/app/src/main/java/io/legado/app/model/analyzeRule/AnalyzeUrl.kt:426、436`，`legado/app/src/main/java/io/legado/app/help/JsExtensions.kt:180、198、222`）。
+
+**怎麼確認**：`test/core/network/backstage_webview_test.dart` 換掉 `WebViewNative` 的平台頻道，讓 `getCookies` 回 `jsl=abc`；用假的 WebView 平台讓一次 `webView` 請求載完。斷言之後 `CookieStore().getCookie(書源網址)` 含 `jsl=abc`；現在是空字串。
+
+**修法方向**：照 Legado，背景網頁帶上書源的 key，每次載完把那一頁的 Cookie 併進書源的 `CookieStore`（用 `replaceCookie`，不蓋掉登入存的）；網址選項與三個 `java.webView*` 入口一起改。
+
+**輕重**：功能沒反應或結果錯。
+
+## 和 #529 重複的
+
+讀到、走過一遍，GPT 那份已經報了的：
+
+| 這份 | #529 | 一句話 |
+|---|---|---|
+| 書源 3 第 4 筆 | 第 36 項 | 校驗寫回蓋掉改動、刪掉的書源回來 |
+| 書源 4 `backstage_webview` | 第 43 項 | `java.webView` 這三個入口沒帶書源標頭 |
+| 書源 4 `backstage_webview` | 第 44 項 | 等跳轉網址的寫法一秒就交回整頁 HTML |
 
 ## 拿不準
 
