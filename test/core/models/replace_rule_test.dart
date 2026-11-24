@@ -63,6 +63,11 @@ void main() {
     expect(plain.isValid(), isTrue);
   });
 
+  test(r'規則寫 \p{P}、\p{IsHan} 這類 Java 的字元類別也對得到（#553 的轉換）', () {
+    expect(regex(r'\p{P}', '#').apply('你好，世界！'), '你好#世界#');
+    expect(regex(r'\p{IsHan}+', '字').apply('abc中文def'), 'abc字def');
+  });
+
   group('「替換為」照 Java 的取代字串（同 Legado）', () {
     String apply(String pattern, String replacement, String content) =>
         ReplaceRule(pattern: pattern, replacement: replacement).apply(content);
