@@ -84,6 +84,13 @@ class LocalBookTask {
   final bool unrecordedOnly;
 }
 
+/// 一本本地漫畫傳上去、還沒寫進雲端紀錄的話（章指紋），與那本的書名、作者。
+typedef UnrecordedChapters = ({
+  String name,
+  String author,
+  List<String> chapters,
+});
+
 /// 本地漫畫的一話：章指紋與章名（ADR 0052）。
 typedef ComicSyncChapter = ({String fingerprint, String title});
 
@@ -179,26 +186,65 @@ class LocalBookSync {
   /// 同一份小紀錄被別台同時寫入時，重讀再寫的次數。
   static const int _maxAttempts = 3;
 
-  /// 本地漫畫傳上去、還沒寫進雲端紀錄的話：書的指紋 → 章指紋。存在上次同步
-  /// 的紀錄旁邊（換同步空間時一起清掉）。上傳到一半失敗、之後移出書架的，
-  /// 下次按的時候照它刪掉（[planLocalBookSync]）。
+  /// 本地漫畫傳上去、還沒寫進雲端紀錄的話：書的指紋 → 書名、作者與章指紋。
+  /// 存在上次同步的紀錄旁邊（換同步空間時一起清掉）。上傳到一半失敗、之後
+  /// 移出書架的，下次按的時候照它刪掉（[planLocalBookSync]）。
   static const String _unrecordedFile = 'local_books_unrecorded';
 
-  Future<Map<String, List<String>>> _unrecorded() async => {
+  Future<Map<String, UnrecordedChapters>> _unrecorded() async => {
     for (final MapEntry(:key, :value) in (await _bases.readJson(
       _unrecordedFile,
     )).entries)
-      if (value is List) key: [for (final print in value) '$print'],
+      if (value case {
+        'name': final String name,
+        'author': final String author,
+        'chapters': final List chapters,
+      })
+        key: (
+          name: name,
+          author: author,
+          chapters: [for (final print in chapters) '$print'],
+        ),
   };
 
-  Future<void> _setUnrecorded(String book, List<String>? chapters) async {
+  Future<void> _writeUnrecorded(Map<String, UnrecordedChapters> all) =>
+      _bases.writeJson(_unrecordedFile, {
+        for (final MapEntry(:key, :value) in all.entries)
+          key: {
+            'name': value.name,
+            'author': value.author,
+            'chapters': value.chapters,
+          },
+      });
+
+  /// 傳 [chapter] 之前記下。
+  Future<void> _noteUnrecorded(LocalBookTask task, String chapter) async {
     final all = await _unrecorded();
-    if (chapters == null || chapters.isEmpty) {
-      if (all.remove(book) == null) return;
+    final chapters = {...?all[task.fingerprint]?.chapters, chapter};
+    all[task.fingerprint] = (
+      name: task.name,
+      author: task.author,
+      chapters: chapters.toList(),
+    );
+    await _writeUnrecorded(all);
+  }
+
+  /// 這本記下的話寫進雲端紀錄或刪掉了：[only] 給了的話只清那幾話。
+  Future<void> _clearUnrecorded(String book, {Set<String>? only}) async {
+    final all = await _unrecorded();
+    final entry = all[book];
+    if (entry == null) return;
+    final left = [
+      if (only != null)
+        for (final chapter in entry.chapters)
+          if (!only.contains(chapter)) chapter,
+    ];
+    if (left.isEmpty) {
+      all.remove(book);
     } else {
-      all[book] = chapters;
+      all[book] = (name: entry.name, author: entry.author, chapters: left);
     }
-    await _bases.writeJson(_unrecordedFile, all);
+    await _writeUnrecorded(all);
   }
 
   /// 雲端原檔的檔名：`book_<指紋>.txt.gz`、`book_<指紋>.epub`。EPUB 本身就
@@ -360,7 +406,7 @@ class LocalBookSync {
           case LocalBookAction.deleteRemote:
             await _deleteRemote(task);
             if (task.extension == comicExtension) {
-              await _setUnrecorded(task.fingerprint, null);
+              await _clearUnrecorded(task.fingerprint);
             }
             // 留著上次同步的紀錄：刪除紀錄被別台同時寫入蓋回去時，下次按
             // 的時候還認得出是這台移出的，再刪一次。只刪沒記著的那幾話的，
@@ -545,10 +591,7 @@ class LocalBookSync {
       size += await local.length();
       if (uploaded.contains(chapter.fingerprint)) continue;
       // 先記下再傳：傳了、雲端紀錄卻沒寫成的話，還找得到這一話。
-      await _setUnrecorded(task.fingerprint, [
-        ...?(await _unrecorded())[task.fingerprint],
-        chapter.fingerprint,
-      ]);
+      await _noteUnrecorded(task, chapter.fingerprint);
       await _store.writeBytes(
         comicChapterName(chapter.fingerprint),
         await local.readAsBytes(),
@@ -577,7 +620,10 @@ class LocalBookSync {
         },
       ),
     );
-    await _setUnrecorded(task.fingerprint, null);
+    await _clearUnrecorded(
+      task.fingerprint,
+      only: {for (final chapter in all) chapter.fingerprint},
+    );
     return time;
   }
 
@@ -734,7 +780,7 @@ LocalBookSyncPlan planLocalBookSync({
   required Map<String, LocalShelfBook> local,
   required Map<String, SyncRecord> remote,
   required Map<String, SyncBaseEntry> base,
-  Map<String, List<String>> unrecorded = const {},
+  Map<String, UnrecordedChapters> unrecorded = const {},
 }) {
   final tasks = <LocalBookTask>[];
   final settled = <String, SyncBaseEntry>{};
@@ -788,8 +834,9 @@ LocalBookSyncPlan planLocalBookSync({
       continue;
     }
     // 這台傳上去、沒寫進雲端紀錄的話（本地漫畫上傳到一半失敗）。
+    final strayBook = unrecorded[print];
     final stray = [
-      for (final chapter in unrecorded[print] ?? const <String>[])
+      for (final chapter in strayBook?.chapters ?? const <String>[])
         (fingerprint: chapter, title: ''),
     ];
     if (alive) {
@@ -820,8 +867,8 @@ LocalBookSyncPlan planLocalBookSync({
         LocalBookTask(
           action: LocalBookAction.deleteRemote,
           fingerprint: print,
-          name: '沒傳完的漫畫',
-          author: '',
+          name: strayBook!.name,
+          author: strayBook.author,
           extension: LocalBookSync.comicExtension,
           size: 0,
           chapters: stray,
@@ -953,7 +1000,7 @@ Future<LocalBookSyncPlan> _planOn(
   String? content,
   Map<String, LocalShelfBook> local,
   Map<String, SyncBaseEntry> base,
-  Map<String, List<String>> unrecorded,
+  Map<String, UnrecordedChapters> unrecorded,
 ) => run(
   () => planLocalBookSync(
     local: local,

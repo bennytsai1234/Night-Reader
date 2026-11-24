@@ -723,13 +723,27 @@ void main() {
             isNotEmpty,
           ]);
 
+          // 再按一次還是失敗：同一話不重複記。
+          final again = await a.localBooks().plan();
+          expect((await a.localBooks().run(again)).failures, hasLength(1));
+
           store.failingBlobs.clear();
-          await removeAndPressAgain(a);
+          a.use();
+          await BookStorageService(
+            bookDao: a.books,
+            chapterDao: a.chapters,
+          ).discardBook((await a.shelf()).single);
+          final next = await a.localBooks().plan();
+          final clean = next.of(LocalBookAction.deleteRemote).single;
+          expect(clean.name, '夜行', reason: '確認框寫得出是哪一本');
+          expect(clean.chapters, hasLength(3), reason: '傳之前先記，失敗的那一話也在');
+          expect((await a.localBooks().run(next)).failures, isEmpty);
 
           expect(
             store.blobs.keys.where((k) => k.startsWith('comic_')),
             isEmpty,
           );
+          expect((await a.localBooks().plan()).isEmpty, isTrue);
         });
 
         test('chapters added to a synced comic', () async {
