@@ -39,6 +39,10 @@ enum AxesAxis {
   precedingSibling,
   self,
   attribute,
+  // Night Reader patch: JsoupXpath's axes.
+  preceding,
+  followingSiblingOne,
+  precedingSiblingOne,
 }
 
 class SelectorAxes {
@@ -65,6 +69,9 @@ class SelectorAxes {
       'preceding-sibling': AxesAxis.precedingSibling,
       'self': AxesAxis.self,
       'attribute': AxesAxis.attribute,
+      'preceding': AxesAxis.preceding,
+      'following-sibling-one': AxesAxis.followingSiblingOne,
+      'preceding-sibling-one': AxesAxis.precedingSiblingOne,
     };
     if (!map.containsKey(axis)) {
       throw FormatException('not support axis: $axis');

@@ -230,8 +230,10 @@ class AnalyzeByXPath {
 
       final queryResult = _query(rule);
 
-      // 1. 處理屬性提取 /@attr 或 /attr()
-      if (rule.contains('/@')) {
+      // 1. 處理屬性提取 /@attr、attribute:: 與 JsoupXpath 的函式
+      // （`/num()`、`/substring-after(text(),'：')`、整段是 `concat(…)`）：
+      // 結果是字，不是節點。
+      if (rule.contains('/@') || _valueStep.hasMatch(rule)) {
         final attrs = queryResult.attrs.whereType<String>().toList();
         if (attrs.isNotEmpty) {
           return attrs;
@@ -320,6 +322,14 @@ class AnalyzeByXPath {
       return textList.isEmpty ? null : textList.join('\n');
     }
   }
+
+  /// 規則最後一步交回的是字：`attribute::名稱`、帶參數或 `num()` 這類
+  /// JsoupXpath 的函式，或整段就是一個函式呼叫。`text()`、`node()` 與
+  /// [_customFunctionPattern] 那幾個另外處理。
+  static final RegExp _valueStep = RegExp(
+    r'(?:/attribute::[^/\[\]]+|/(?!text\(\)|node\(\))[\w-]+\(.*\)|'
+    r'^\s*(?!text\(|node\()[\w-]+\(.*\))\s*$',
+  );
 
   /// `…/text()[n]`：每個元素底下直接的第 n 段文字（同 JsoupXpath：照
   /// `textNodes()` 算，只有空白的那段也算一段）。xpath_selector 讀不懂
