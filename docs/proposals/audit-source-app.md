@@ -19,7 +19,7 @@
 | 書源 3 | `lib/features/search/`（含 `ai_find/` 畫面） | 15／15 | 1 |
 | 書源 3 | `lib/features/explore/` | 8／8 | 0 |
 | 書源 4 | `lib/features/source_login/` | 4／4 | 0（另 1 筆在 #529） |
-| 書源 4 | `lib/core/ai_repair/` | 0／23 | 還沒讀 |
+| 書源 4 | `lib/core/ai_repair/` | 23／23 | 1（另 6 筆在 #529） |
 | 書源 4 | `lib/core/ai_find/` | 4／4 | 0 |
 | 書源 4 | `lib/features/source_manager/ai_repair/` | 0／5 | 還沒讀 |
 | 書源 4 | `lib/core/source/` 的 `source_login_session`、`source_interaction` | 2／2 | 0 |
@@ -189,6 +189,27 @@
 
 **輕重**：功能沒反應或結果錯。
 
+#### 7. AI 修書源的提示詞說試抓「第一本打不開會改試第二本」，試抓其實只走第一本，AI 照它把一本書的問題當成規則壞了
+
+**會發生什麼**：搜尋結果第一本剛好下架或打不開時，AI 用 test 試抓看到詳情或正文失敗。提示詞說試抓與校驗都會改試第二本、兩本都打不開才算壞，AI 照這句會以為兩本都打不開，回頭改本來沒壞的詳情、目錄或正文規則，或判成網站壞了放棄；同一段提示詞前面又叫它自己用 from info 拿另一本試，兩句互相矛盾。
+
+**為什麼**：
+- 系統提示「用哪個工具」最後一條（`lib/core/ai_repair/ai_repair_prompt.dart:566`）：
+
+  ```
+  submit 後夜讀跑一次書源校驗才套用：試抓與校驗都從搜尋結果的第一本往下走，第一本打不開（詳情、目錄或正文失效）會改試第二本，兩本都打不開才算壞。
+  ```
+
+- test 走的試抓是書源除錯（`lib/core/ai_repair/source_probe.dart:282-290`），除錯只拿搜尋結果第一本往下走，沒有第二本（`lib/core/source/source_debug_service.dart:150-155`，發現頁那一段 `171-176` 一樣）；失敗就寫 `state: -1`、試抓算沒抓到（`source_probe.dart:75-79`）。
+- 只有書源校驗會改試第二本（`lib/core/source_check/source_checker.dart:279-300`）。
+- 同一段提示詞前面兩行（`ai_repair_prompt.dart:564`）寫的是「第一本是下架或打不開的書時，用 test 的 from info 拿另一本試」，和 566 行的說法相反。
+
+**怎麼確認**：`test/core/ai_repair/source_probe_test.dart` 用本機伺服器：搜尋回兩本，第一本的詳情頁回 404，第二本正常。`probeSource` 之後斷言紀錄裡沒有第二本的詳情網址，`succeeded` 是 false；再斷言 `aiRepairSystemPrompt` 不再說試抓會改試第二本。
+
+**修法方向**：提示詞照程式寫：只有 submit 後的校驗會改試第二本，試抓只走第一本，第一本打不開時照 564 行用 from info 換一本。不改試抓本身：試抓是書源除錯，照 Legado 只走第一本。
+
+**輕重**：功能沒反應或結果錯（AI 修錯規則、多花輪數）。
+
 ## 和 #529 重複的
 
 讀到、走過一遍，GPT 那份已經報了的：
@@ -199,6 +220,12 @@
 | 書源 4 `backstage_webview` | 第 43 項 | `java.webView` 這三個入口沒帶書源標頭 |
 | 書源 4 `backstage_webview` | 第 44 項 | 等跳轉網址的寫法一秒就交回整頁 HTML |
 | 書源 4 `source_login_page` | 第 45 項 | 登入只換了 Cookie 檔裡的 Cookie 時當成沒變、不重抓 |
+| 書源 4 `repair_pages`、`ai_repair_log` | 第 47 項 | 讀頁與紀錄先截字再遮秘密，跨邊界的秘密留下兩半 |
+| 書源 4 `ai_repair_log` | 第 48 項 | 開新紀錄時修剪資料夾不保護還在寫的紀錄 |
+| 書源 4 `source_repair_batch`、`ai_repair_apply` | 第 49 項 | 整批重新校驗改了類型，AI 修好的規則被當成「修的時候被改過」存不進去 |
+| 書源 4 `site_check` | 第 50 項 | 網站檢查把沒呼叫的登出函式當成轉址去抓 |
+| 書源 4 `site_check` | 第 51 項 | 空殼判斷只認小寫 `<script`，大寫的單頁式網站被判失效 |
+| 書源 4 `ai_repair_session`、`repair_agent` | 第 52 項 | 修到一半拿到的新登入值，先寫進紀錄才重讀秘密 |
 
 ## 拿不準
 
