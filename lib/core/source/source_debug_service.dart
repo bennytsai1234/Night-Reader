@@ -147,11 +147,9 @@ class SourceDebugService {
       for (var i = 0; i < books.length && i < 5; i++) {
         log('  [$i] ${books[i].name} - ${books[i].author ?? "未知"}');
       }
-      final firstBook = Book(
-        origin: source.bookSourceUrl,
-        bookUrl: books.first.bookUrl,
-        name: books.first.name,
-      );
+      // 同 Legado `searchBooks[0].toBook()`：書單規則存的變數、目錄網址與
+      // 其他欄位跟著帶進詳情。
+      final firstBook = books.first.toBook();
       await _infoDebug(source, firstBook.bookUrl, book: firstBook);
     } else {
       log('︽未獲取到書籍', state: -1);
@@ -168,11 +166,9 @@ class SourceDebugService {
       for (var i = 0; i < books.length && i < 5; i++) {
         log('  [$i] ${books[i].name} - ${books[i].author ?? "未知"}');
       }
-      final firstBook = Book(
-        origin: source.bookSourceUrl,
-        bookUrl: books.first.bookUrl,
-        name: books.first.name,
-      );
+      // 同 Legado `searchBooks[0].toBook()`：書單規則存的變數、目錄網址與
+      // 其他欄位跟著帶進詳情。
+      final firstBook = books.first.toBook();
       await _infoDebug(source, firstBook.bookUrl, book: firstBook);
     } else {
       log('︽未獲取到書籍', state: -1);
@@ -208,21 +204,27 @@ class SourceDebugService {
       targetBook,
     );
     log('︽目錄頁解析完成，共 ${chapters.length} 章', state: 30);
-    if (chapters.isNotEmpty) {
-      log('  首章: ${chapters.first.title}');
-      log('  末章: ${chapters.last.title}');
+    // 同 Legado：沒有網址的卷名（網址是「卷名＋序號」）不是正文，首章、末章、
+    // 要抓的第一章與下一章都從拿掉它們之後的目錄取。
+    final toc = [
+      for (final chapter in chapters)
+        if (!(chapter.isVolume && chapter.url.startsWith(chapter.title)))
+          chapter,
+    ];
+    if (toc.isNotEmpty) {
+      log('  首章: ${toc.first.title}');
+      log('  末章: ${toc.last.title}');
     }
-
-    if (chapters.isNotEmpty) {
-      final firstChapter = chapters.first;
-      final nextChapterUrl = chapters.length > 1 ? chapters[1].url : null;
+    if (toc.isNotEmpty) {
+      final firstChapter = toc.first;
+      final nextChapterUrl = toc.length > 1 ? toc[1].url : null;
       await _contentDebug(
         source,
         firstChapter.url,
         book: targetBook,
         chapter: firstChapter,
         nextUrl: nextChapterUrl,
-        toc: [for (final chapter in chapters) chapter.url],
+        toc: [for (final chapter in toc) chapter.url],
       );
     } else {
       log('≡沒有正文章節', state: -1);
