@@ -305,12 +305,13 @@ class CrashHandler {
     if (await latest.exists()) await latest.delete();
   }
 
-  /// 崩潰日誌與書源校驗診斷放的資料夾：手機上是 App 的外部資料夾，電腦
-  /// 接上手機就讀得到。
+  /// 崩潰日誌與書源校驗診斷放的資料夾：Android 是 App 的外部資料夾，電腦
+  /// 接上手機就讀得到；iOS 沒有外部資料夾（問了會丟例外），放 App 的文件
+  /// 資料夾。
   static Future<Directory> logDirectory() => _logDirectory();
 
   static Future<Directory> _platformLogDirectory() async =>
-      await getExternalStorageDirectory() ??
+      (Platform.isAndroid ? await getExternalStorageDirectory() : null) ??
       await getApplicationDocumentsDirectory();
 
   /// 全域錯誤處理沒有擁有它的物件，資料夾只好放在靜態變數；測試換掉後要

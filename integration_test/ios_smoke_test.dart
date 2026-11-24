@@ -33,53 +33,63 @@ void main() {
     await txt.writeAsString(_chapters());
     FilePickerPlatform.instance = _PickOneFile(txt.path);
 
-    // 夜讀換掉這兩個錯誤處理；測試結束前換回來，測試框架才不會報錯。
+    // 點不到（被進場、換頁動畫蓋住）就失敗，不要默默點空。
+    WidgetController.hitTestWarningShouldBeFatal = true;
+
+    // 夜讀換掉這兩個錯誤處理。失敗的例外丟回測試框架之前就要換回來，框架
+    // 才記得下這次失敗、結束測試（換不回來時它停在斷言、一直不結束）。
     final onError = FlutterError.onError;
     final errorWidget = ErrorWidget.builder;
-    addTearDown(() {
+    try {
+      app.main();
+      await _walkThrough(tester);
+    } finally {
       FlutterError.onError = onError;
       ErrorWidget.builder = errorWidget;
-    });
-
-    app.main();
-
-    // 1. 進書架：新裝的夜讀沒有書源，空書架上有「加入本地書籍」。
-    final addLocal = find.text('加入本地書籍');
-    await _waitFor(tester, '書架', () => addLocal.evaluate().isNotEmpty);
-
-    // 2. 匯入 TXT：書名出現在書架上。
-    await tester.tap(addLocal.first);
-    final book = find.text(_bookName);
-    await _waitFor(tester, '匯入後的書卡', () => book.evaluate().isNotEmpty);
-
-    // 3. 開書：閱讀器載入的紙掀開，表示第一頁的正文排好了。
-    await tester.tap(book.first);
-    await _waitFor(
-      tester,
-      '閱讀器的正文',
-      () => find.byType(LoadingVeil).evaluate().isNotEmpty,
-    );
-    await _waitFor(tester, '閱讀器的正文排好', _veilLifted, stable: 5);
-
-    // 4. 返回書架，到「我的」進「閱讀偏好」。
-    await tester.binding.handlePopRoute();
-    final mine = find.text('我的');
-    await _waitFor(tester, '分頁列的「我的」', () => mine.evaluate().isNotEmpty);
-    await tester.tap(mine.last);
-    final reading = find.text('閱讀偏好');
-    await _waitFor(tester, '「我的」頁', () => reading.evaluate().isNotEmpty);
-    await tester.tap(reading.last);
-    await _waitFor(
-      tester,
-      '「閱讀偏好」頁',
-      () => find.byType(ReadingSettingsPage).evaluate().isNotEmpty,
-    );
-    await _pumpFor(tester, const Duration(seconds: 2));
-    _expectNoBrokenPart('「閱讀偏好」頁');
+    }
 
     final logs = await CrashHandler.readLogs();
     expect(logs, isEmpty, reason: '走完一遍留下了崩潰日誌：\n${logs.join('\n')}');
   });
+}
+
+Future<void> _walkThrough(WidgetTester tester) async {
+  // 1. 進書架：新裝的夜讀沒有書源，空書架上有「加入本地書籍」。進場播完才點得到。
+  await _tapWhenReady(tester, '書架上的「加入本地書籍」', find.text('加入本地書籍'));
+
+  // 2. 匯入 TXT：書名出現在書架上。
+  await _tapWhenReady(tester, '匯入後的書卡', find.text(_bookName));
+
+  // 3. 開書：閱讀器載入的紙掀開，表示第一頁的正文排好了。
+  await _waitFor(
+    tester,
+    '閱讀器',
+    () => find.byType(LoadingVeil).evaluate().isNotEmpty,
+  );
+  await _waitFor(tester, '閱讀器的正文排好', _veilLifted, stable: 5);
+
+  // 4. 返回書架，到「我的」進「閱讀偏好」。
+  await tester.binding.handlePopRoute();
+  await _tapWhenReady(tester, '分頁列的「我的」', find.text('我的'));
+  await _tapWhenReady(tester, '「我的」頁的「閱讀偏好」', find.text('閱讀偏好'));
+  await _waitFor(
+    tester,
+    '「閱讀偏好」頁',
+    () => find.byType(ReadingSettingsPage).evaluate().isNotEmpty,
+  );
+  await _pumpFor(tester, const Duration(seconds: 2));
+  _expectNoBrokenPart('「閱讀偏好」頁');
+}
+
+/// 等 [target] 點得到（連續幾幀都在最上層），再點最後一個。
+Future<void> _tapWhenReady(
+  WidgetTester tester,
+  String what,
+  Finder target,
+) async {
+  final tappable = target.hitTestable();
+  await _waitFor(tester, what, () => tappable.evaluate().isNotEmpty, stable: 5);
+  await tester.tap(tappable.last);
 }
 
 /// 幾章短短的正文，章名照 TXT 分章認得的「第 N 章」。
@@ -127,7 +137,7 @@ void _expectNoBrokenPart(String where) {
 }
 
 String _visibleTexts() => find
-    .byType(Text)
+    .byWidgetPredicate((widget) => widget is Text)
     .evaluate()
     .map(
       (e) =>
