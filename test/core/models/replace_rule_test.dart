@@ -111,6 +111,11 @@ void main() {
       expect(rule.apply('abc', runJs: runReplacementJs), 'abc');
     });
 
+    test('JS 沒有傳回值時這條規則不套', skip: skip, () {
+      final rule = ReplaceRule(pattern: 'a', replacement: '@js:null');
+      expect(rule.apply('abc', runJs: runReplacementJs), 'abc');
+    });
+
     test('沒有 JS 可以跑時不套，不把 JS 原文貼進正文', () {
       final rule = ReplaceRule(pattern: 'a', replacement: '@js:result + 1');
       expect(rule.apply('abc'), 'abc');
