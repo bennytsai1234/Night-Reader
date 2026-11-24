@@ -287,6 +287,8 @@ class LocalBookSync {
     var done = 0;
     var shelfChanged = false;
     var stopped = false;
+    // 這一輪已經上傳、改寫過雲端紀錄的書。
+    final uploaded = <String>{};
     for (final (index, task) in plan.tasks.indexed) {
       if (cancelled?.call() ?? false) {
         stopped = true;
@@ -304,10 +306,16 @@ class LocalBookSync {
               await _upload(task),
               task.extension,
             );
+            uploaded.add(task.fingerprint);
           case LocalBookAction.download:
             await _download(task);
             shelfChanged = true;
-            base[task.fingerprint] = _entry(task.remoteTime, task.extension);
+            // 本地漫畫兩邊互補時同一輪先上傳：雲端紀錄已經換成上傳寫的那一筆，
+            // 留著它的時間。記回比對時的舊時間的話，之後在這台移出書架，下次
+            // 會被當成雲端有新的而整本下載回來。
+            if (!uploaded.contains(task.fingerprint)) {
+              base[task.fingerprint] = _entry(task.remoteTime, task.extension);
+            }
           case LocalBookAction.removeHere:
             await _removeHere(task);
             shelfChanged = true;

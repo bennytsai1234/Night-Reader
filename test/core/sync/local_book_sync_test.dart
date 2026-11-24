@@ -644,6 +644,28 @@ void main() {
         expect((await b.localBooks().plan()).isEmpty, isTrue);
       });
 
+      test('filled in both ways in one press, then removed here: the next '
+          'press deletes it from the cloud instead of downloading it '
+          'again', () async {
+        await importComic(a, ['第1話', '第2話']);
+        await sync(a);
+        await importComic(b, ['第1話', '第3話']);
+        final both = await b.localBooks().plan();
+        expect(both.of(LocalBookAction.upload), hasLength(1));
+        expect(both.of(LocalBookAction.download), hasLength(1));
+        expect((await b.localBooks().run(both)).failures, isEmpty);
+
+        b.use();
+        await BookStorageService(
+          bookDao: b.books,
+          chapterDao: b.chapters,
+        ).discardBook((await b.shelf()).single);
+        final next = await b.localBooks().plan();
+
+        expect(next.of(LocalBookAction.download), isEmpty);
+        expect(next.of(LocalBookAction.deleteRemote), hasLength(1));
+      });
+
       test('both uploaded under their own keys before seeing each other: '
           'they settle on one key and every chapter file stays', () async {
         await importComic(a, ['第1話', '第2話']);
