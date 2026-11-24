@@ -696,6 +696,7 @@ class AnalyzeUrl {
         sourceRegex: sourceRegex,
         headerMap: Map.of(headerMap),
         delayTime: webViewDelayTime,
+        tag: source?.getKey(),
       ).getStrResponse(),
       cancelToken,
     );
