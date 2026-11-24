@@ -6,7 +6,7 @@
 - Archive: <https://pub.dev/api/archives/file_picker-11.0.3.tar.gz>
 - SHA-256: `29cc1fdb20613876cc7afc529738c1c0f11a9ca159b010edad0c566ac330847e`
 - License: MIT; the upstream `LICENSE` file is retained unchanged.
-- Local version: `11.0.3+nightreader.1`
+- Local version: `11.0.3+nightreader.3`
 
 The imported files are an exact subset of the upstream archive before the
 patches below are applied.

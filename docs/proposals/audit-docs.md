@@ -32,7 +32,7 @@
 
 ### README 與網站
 
-#### 1. README 說「用檔案開書」只有 iOS 沒有，其實 Android 也沒有
+#### 1. README 說「用檔案開書」只有 iOS 沒有，其實 Android 也沒有（已修）
 
 - **文件寫的**：「iOS 版沒有 App 內更新、分享進 App 與用檔案開書，也沒在 iPhone 上試過。」（`README.md:31`）讀起來 Android 有這三項。
 - **程式做的**：Android 只接 `legado://`、`yuedu://` 連結的「開啟」，與 JSON、文字、EPUB 的「分享」；沒有接檔案的「開啟」（從檔案管理員點書檔、選「用夜讀開啟」不會出現夜讀）。`android/app/src/main/AndroidManifest.xml:51-66`：
@@ -50,7 +50,7 @@
   分享進來的檔案由 `lib/features/association/handlers/file_association_handler.dart:18-47` 處理，只有分享這條路。
 - **該改哪一邊**：改文件，拿掉「與用檔案開書」，或寫成 Android 也只能分享進 App。
 
-#### 2. README 說漫畫的圖片資料夾在「加入本地書籍」匯入，其實要用「加入本地漫畫」
+#### 2. README 說漫畫的圖片資料夾在「加入本地書籍」匯入，其實要用「加入本地漫畫」（已修）
 
 - **文件寫的**：「手邊的 TXT、EPUB 與漫畫（CBZ、ZIP、圖片資料夾）不用書源，在書架選「加入本地書籍」。」（`README.md:39`）
 - **程式做的**：書架「加入」選單有兩項，「加入本地書籍」選單一個檔，只收 TXT、EPUB、CBZ、ZIP（`lib/core/platform/app_file_selection_service.dart:22-24`：`allowedExtensions: ['txt', 'epub', 'cbz', 'zip']`）；圖片資料夾、一個作品好幾話的資料夾要按「加入本地漫畫」選資料夾（`lib/features/bookshelf/bookshelf_page.dart:417-424` 兩個選單項；`:1220-1222`「加入本地漫畫（ADR 0052）：選一個作品資料夾」）。照 README 去「加入本地書籍」找不到選資料夾的地方。
@@ -84,13 +84,13 @@
 
 ### `docs/design/`
 
-#### 5. 規格與用語表寫「關於夜讀 → 系統工具」，畫面上沒有「系統工具」這幾個字
+#### 5. 規格與用語表寫「關於夜讀 → 系統工具」，畫面上沒有「系統工具」這幾個字（已修）
 
 - **文件寫的**：「開 App 時照同樣方式檢查一次（「關於夜讀 → 系統工具 → 啟動時檢查書架更新」可關）」（`docs/design/screens.md:10`）；`GLOSSARY.md:24`「更新紀錄」也寫「「關於夜讀 → 系統工具」裡列出各版更新說明的頁面」。寫成路徑，讀的人會去找一個叫「系統工具」的分段。
 - **程式做的**：「關於夜讀」的幾組卡片都沒有段落標題（`lib/features/about/about_page.dart:304`、`:333` 的 `GroupedSection(children: [...])` 都沒給 `header`），照 ADR 0076 卡片外不放小字，只有隱私說明、權限這種說明文件有段落標題（`docs/design/components.md:67`）。「系統工具」只是 `screens.md:143` 描述分組時用的名字。
 - **該改哪一邊**：改文件，`screens.md:10` 與 `GLOSSARY.md:24` 改成「關於夜讀」裡的「啟動時檢查書架更新」「更新紀錄」，不寫成有「系統工具」這一層。
 
-#### 6. 畫面規格的「背景工作」只列四種，漏了 AI 建立書源與自動換源
+#### 6. 畫面規格的「背景工作」只列四種，漏了 AI 建立書源與自動換源（已修）
 
 - **文件寫的**：「修書源（單一、一批）、從書源管理按的校驗（…）、AI 找書與按了「放到背景」的搜尋（ADR 0070）離開頁面、離開夜讀、關螢幕都照跑。」（`docs/design/screens.md:129`）；「一次一件」列哪些入口會灰掉（`:131`）、「通知」逐一寫每一種的標題與內文（`:133-137`），最後「右邊兩顆「暫停」「結束」」（`:138`）。
 - **程式做的**：
@@ -108,7 +108,7 @@
 - **同一個原因**：`GLOSSARY.md`「背景工作」也只列「修書源、校驗書源、AI 找書、按了「放到背景」的搜尋」，並寫「使用者按了才開始」；自動換源是刪書源時夜讀自己開始的。
 - **該改哪一邊**：改文件，`screens.md`「背景工作」與 `GLOSSARY.md`「背景工作」補上這兩種：一次一件的入口、通知的標題與內文，以及自動換源只有「結束」。AI 建立書源一節（`:90`）已寫了灰掉的規則，這裡只差總表。
 
-#### 7. 規格裡的幾句畫面字，程式改字或拿掉後沒跟著改
+#### 7. 規格裡的幾句畫面字，程式改字或拿掉後沒跟著改（已修）
 
 同一個原因：#382（畫面說明文字更精簡）、#369、#487（分組標題拿掉）改了畫面字，規格沒跟上。
 
@@ -129,26 +129,26 @@
 
 ### 給 agent 看的文件
 
-#### 9. 寫碼規範說網站「隨正式版部署」，其實推上 `beta` 就部署
+#### 9. 寫碼規範說網站「隨正式版部署」，其實推上 `beta` 就部署（已修）
 
 - **文件寫的**：「網站隨正式版部署，#92 拿掉朗讀音量後網站寫錯到下一個正式版前才發現。」（`CODING_STANDARDS.md:44`）
 - **程式做的**：`website-deploy.yml` 在 `website/` 推上 `beta` 時就部署（`.github/workflows/website-deploy.yml:3-6`：`push: branches: ["beta"]`、`paths: ["website/**", …]`），#309 改的；網站規格也寫「`website/` 推上 `beta` 就部署」（`docs/design/website.md:9`）。照寫碼規範讀，agent 會以為網站改了要等發正式版才上線。
 - **該改哪一邊**：改文件，`CODING_STANDARDS.md:44` 拿掉「網站隨正式版部署」與 #92 的經過，只留「不符的在同一個 PR 改」。
 
-#### 10. 發測試版的步驟指向一段已經不在的全域指示，而現在的全域指示說的正好相反
+#### 10. 發測試版的步驟指向一段已經不在的全域指示，而現在的全域指示說的正好相反（已修）
 
 - **文件寫的**：「還在跑就在同一輪裡前景等（`gh run watch <run> --exit-status`，逾時設 10 分鐘），不放背景，原因見全域指示「指令與測試」。」（`docs/agents/release.md:9`）
 - **現在的樣子**：全域指示沒有「指令與測試」這一段了；現在的「長指令」寫「等 CI……一律放背景」（`~/.claude/CLAUDE.md:27`）。前景等的規則和原因搬到 `plan` 技能的收尾合併清單：「還要等、十分鐘內跑得完的（例如等主線 CI 再發版），在同一輪前景等……T3 在背景工作結束、PR 已合併時可能自動收尾」（`~/.claude/skills/plan/references/rubric.md:87`）。照指向去找的 agent 找到的是相反的規則。
 - **該改哪一邊**：改文件，`release.md:9` 的「原因見全域指示「指令與測試」」改成指向 `plan` 技能「收尾合併清單」第 6 條。
 
-#### 11. ADR 0001 與索引說自行維護「三個 fork」，`third_party/` 其實有四個
+#### 11. ADR 0001 與索引說自行維護「三個 fork」，`third_party/` 其實有四個（已修）
 
 - **文件寫的**：「自行維護 flutter_tts、flutter_js、file_picker 三個 fork」（`docs/adr/0001-maintain-third-party-plugin-forks.md:1`、`docs/adr/README.md:105`），本文的理由是上游用了 AGP 9 拿掉的 Kotlin 設定（`0001…md:3`）。
 - **程式做的**：`xpath_selector` 也放在 `third_party/`、自己維護（`pubspec.yaml:53-56`：「自行維護（源自 3.0.2），見 third_party/xpath_selector/PATCHES.md」，`:131-133` 連 `xpath_selector_html_parser` 也換成這一份），#214、#217 為了 XPath 照 Legado 改的，理由和 ADR 0001 的不同；`docs/` 裡沒有任何一份寫到它。`a21f85a4`（「third_party 的 fork 是四個，不是三個」）只把 `AGENTS.md` 那句改成「各 fork」，ADR 與索引沒跟著改。
 - **同一個原因**：巡檢的分段表只排了 `third_party/flutter_js/`（`docs/agents/auto-audit.md:25`），另外三個的修補沒有段會看，見「沒排進分段的程式」。
 - **該改哪一邊**：改文件，ADR 0001 與索引補上 `xpath_selector` 與它的理由；要併進 0001 還是另寫一份由使用者定。
 
-#### 12. ADR 0028 寫網址選項 `webView` 經 `HeadlessWebViewService.delegate` 交給主 isolate，這個類別已經拿掉
+#### 12. ADR 0028 寫網址選項 `webView` 經 `HeadlessWebViewService.delegate` 交給主 isolate，這個類別已經拿掉（已修）
 
 - **文件寫的**：「網址選項 `webView` 與 `java.webView` 由書源 isolate 請主 isolate 渲染（`HeadlessWebViewService.delegate`、`BackstageWebView.delegate`）。」（`docs/adr/0028-source-work-in-a-source-isolate.md:13`）
 - **程式做的**：`headless_webview_service.dart` 在 #175 刪掉了，網址選項 `webView` 改走 `BackstageWebView`（`lib/core/engine/analyze_url.dart:692`），書源 isolate 只設 `BackstageWebView.delegate`（`lib/core/engine/source_isolate/source_isolate.dart:952`、`lib/core/network/backstage_webview.dart:30`）。照 ADR 找程式的 agent 找不到前一個。
@@ -185,7 +185,7 @@
 
 照 `docs/agents/auto-audit.md` 的標準讀，讀的是 `origin/beta` 的 `2b98b434`。書架列表的設定檔與 iOS 程式沒有找到問題；Dart 端呼叫 iOS 沒實作的方法時都有接住或先擋掉平台。
 
-#### 15. `flutter_tts` 與 `file_picker` 的修補紀錄，開頭寫的版本與「沒改」的說法過時了
+#### 15. `flutter_tts` 與 `file_picker` 的修補紀錄，開頭寫的版本與「沒改」的說法過時了（已修）
 
 - **文件寫的**：`third_party/file_picker/PATCHES.md:9`「Local version: `11.0.3+nightreader.1`」；`third_party/flutter_tts/PATCHES.md:23`「Dart and native runtime sources are unchanged from the published archive.」
 - **程式做的**：`file_picker` 已經是 `11.0.3+nightreader.3`（`third_party/file_picker/pubspec.yaml:3`，同一份 `PATCHES.md` 後面也記了 `nightreader.2`、`.3`）。`flutter_tts` 的 `nightreader.3` 改了 `getEngines` 的回傳（`third_party/flutter_tts/PATCHES.md:47`；`lib/flutter_tts.dart:496-503`），`nightreader.5` 重寫了 Android 外掛的執行緒與回覆（`PATCHES.md:59`；`android/src/main/kotlin/com/eyedeadevelopment/fluttertts/FlutterTtsPlugin.kt` 和上游 4.2.5 整份不同）。照開頭那句，升級或對照上游的人會以為執行的程式和上游一樣。

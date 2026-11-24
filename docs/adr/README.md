@@ -39,6 +39,7 @@
 | [0020](0020-chosen-transition-everywhere.md) | 選定的換頁動畫用在每一種換頁，拖曳返回與點分頁也一樣 |
 | [0021](0021-covers-are-plain-images.md) | 封面只畫圖片，不做成像一本書 |
 | [0040](0040-day-and-night-styles-pure-black.md) | 淺色、深色各選一個風格，正文可另選，深色預設純黑（可關），風格精簡成六種 |
+| [0079](0079-shelf-merged-list-is-an-option.md) | 書架「列表併成一面」是「整理」選單的一般選項，預設關、跟著同步（使用者點名要選） |
 
 ## 正文排版
 
@@ -102,7 +103,7 @@
 | ADR | 一句話 |
 |---|---|
 | [0049](0049-development-and-release-flow.md) | 開發與發布流程：分支、收尾與合併、審查、CI、測試版與正式版、版號 |
-| [0001](0001-maintain-third-party-plugin-forks.md) | 自行維護 flutter_tts、flutter_js、file_picker 三個 fork |
+| [0001](0001-maintain-third-party-plugin-forks.md) | 自行維護 flutter_tts、flutter_js、file_picker、xpath_selector 四個 fork |
 | [0002](0002-build-and-release-only-in-github-actions.md) | 建置與發布只在 GitHub Actions，tag 只由 CI 建立 |
 | [0003](0003-android-arm64-only.md) | Android 只發布 arm64-v8a，iOS 只附未簽章 IPA |
 

@@ -20,7 +20,8 @@
   built-in Kotlin toolchain.
 - `pubspec.yaml` adds Night Reader build metadata so dependency reports identify
   the patched package.
-- Dart and native runtime sources are unchanged from the published archive.
+- This first patch touches build configuration only; later patches below change
+  the Dart API and the Android runtime.
 
 ## Reason and tracking
 
