@@ -17,7 +17,9 @@ import 'package:night_reader/core/engine/web_book/book_info_parser.dart';
 import 'package:night_reader/core/engine/web_book/chapter_list_parser.dart';
 import 'package:night_reader/core/engine/web_book/login_wall.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/models/source/rule_data.dart';
 import 'package:night_reader/core/network/str_response.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 
 /// WebBook - 書源抓取業務調度 (對標 Android model/webBook/WebBook.kt)
 ///
@@ -44,11 +46,14 @@ class WebBook {
       throw SourceException('搜尋 URL 不能為空', sourceUrl: source.bookSourceUrl);
     }
 
+    // 網址的 JS 用 java.put 存的變數，搜到的每本書都帶著（同 Legado）。
+    final ruleData = RuleData();
     final analyzeUrl = AnalyzeUrl(
       searchUrl,
       source: source,
       key: key,
       page: page,
+      ruleData: ruleData,
     );
 
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
@@ -60,6 +65,8 @@ class WebBook {
       body: res.body,
       baseUrl: res.url,
       isSearch: true,
+      variable: ruleData.variableJson,
+      requestUrl: _requestUrl(analyzeUrl, res),
       filter: filter,
       shouldBreak: shouldBreak,
     );
@@ -73,7 +80,13 @@ class WebBook {
     int? page = 1,
     CancelToken? cancelToken,
   }) async {
-    final analyzeUrl = AnalyzeUrl(url, source: source, page: page);
+    final ruleData = RuleData();
+    final analyzeUrl = AnalyzeUrl(
+      url,
+      source: source,
+      page: page,
+      ruleData: ruleData,
+    );
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
@@ -83,9 +96,19 @@ class WebBook {
       body: res.body,
       baseUrl: res.url,
       isSearch: false,
+      variable: ruleData.variableJson,
+      requestUrl: _requestUrl(analyzeUrl, res),
     );
     return results;
   }
+
+  /// 這一頁直接是一本書的詳情時，書的網址（同 Legado `BookList.getInfoItem`）：
+  /// 轉址過就是轉址後的網址，沒有就是請求的網址，含網址選項（POST、
+  /// 標頭），之後打開這本書才照原樣請求。
+  static String _requestUrl(AnalyzeUrl analyzeUrl, StrResponse res) =>
+      res.isRedirect
+      ? res.url
+      : NetworkUtils.getAbsoluteURL(analyzeUrl.url, analyzeUrl.ruleUrl);
 
   /// 獲取書籍資訊 (對標 getBookInfoAwait)
   static Future<Book> getBookInfoAwait(
