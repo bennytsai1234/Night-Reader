@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/local_book/txt_parser.dart';
+import 'package:night_reader/core/utils/big5.dart';
 
 /// 段落之間夠遠（Legado 挑規則時，相隔不到 1000 字的只算一處）。
 String _body(String marker) => '　　$marker${'正文內容。' * 300}\n';
@@ -213,5 +214,21 @@ void main() {
     test('拆不出作者時書名是檔名、作者照舊寫「本地」', () async {
       expect(await importNamed('西游记.txt'), (name: '西游记', author: '本地'));
     });
+  });
+
+  test('Big5 的 TXT 認得出編碼，章名與正文都不是亂碼（L5）', () async {
+    final dir = await Directory.systemTemp.createTemp('txt_big5_');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/書.txt');
+    String body(String marker) => '　　$marker他說：「我們走吧。」她點了點頭，沒有說話。\n' * 40;
+    await file.writeAsBytes(
+      Big5.encode('第一章 開始\n${body('甲')}第二章 結束\n${body('乙')}'),
+    );
+    final service = LocalBookService();
+    final result = (await service.importBook(file.path))!;
+    expect(result.book.charset, 'Big5');
+    expect(result.chapters.map((c) => c.title), ['第一章 開始', '第二章 結束']);
+    final content = await service.getContent(result.book, result.chapters[1]);
+    expect(content, contains('乙他說：「我們走吧。」'));
   });
 }
