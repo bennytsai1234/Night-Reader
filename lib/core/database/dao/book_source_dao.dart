@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../engine/app_event_bus.dart';
+import '../../exception/app_exception.dart';
 import '../../models/source/base_source.dart';
 import '../../models/source/book_source.dart';
 import '../../diagnostics/app_log_service.dart';
@@ -100,8 +101,18 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
   /// 原網址那筆，記著原網址的書、搜尋結果與已存的正文一起改記新網址，書架
   /// 上的書照樣找得到書源、已下載的章節照樣在。登入資訊與書源變數存在快取
   /// 裡，由 `BookSourceService.saveEditedSource` 搬。
-  Future<void> saveEdited(BookSource source, {String? previousUrl}) {
+  ///
+  /// [editedFrom] 是編輯頁打開的那一筆：它這時已經不在了（編輯時被刪掉或
+  /// 併掉）就不存，丟 [SourceGoneException]。
+  Future<void> saveEdited(
+    BookSource source, {
+    String? previousUrl,
+    String? editedFrom,
+  }) {
     return transaction(() async {
+      if (editedFrom != null && await getByUrl(editedFrom) == null) {
+        throw SourceGoneException();
+      }
       await upsert(source);
       if (previousUrl == null || previousUrl == source.bookSourceUrl) return;
       final to = source.bookSourceUrl;

@@ -9,6 +9,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
@@ -249,6 +250,71 @@ void main() {
     final book = (await getIt<BookDao>().getByUrl('$oldUrl/book/1'))!;
     expect(book.origin, newUrl);
     expect(book.bookKind, BookSourceKind.comic);
+  });
+
+  // 編輯頁開著時書源被刪掉或併進同網站的另一個（外部匯入、同步）：存檔
+  // 不把它寫回來，告訴使用者沒有存——寫回來的下次合併又隨它刪掉。
+  group('a source deleted while it was being edited is not saved back', () {
+    test('with the same URL', () async {
+      await getIt<BookSourceDao>().upsert(
+        BookSource(bookSourceUrl: oldUrl, bookSourceName: '舊名'),
+      );
+      final edited = (await getIt<BookSourceDao>().getByUrl(oldUrl))!
+        ..ruleContent = ContentRule(content: '新的正文規則');
+      await getIt<BookSourceDao>().deleteByUrl(oldUrl);
+
+      await expectLater(
+        BookSourceService().saveEditedSource(
+          edited,
+          previousUrl: oldUrl,
+          editedFrom: oldUrl,
+        ),
+        throwsA(isA<SourceGoneException>()),
+      );
+      expect(await getIt<BookSourceDao>().getByUrl(oldUrl), isNull);
+    });
+
+    test('with a new URL', () async {
+      await getIt<BookSourceDao>().upsert(
+        BookSource(bookSourceUrl: oldUrl, bookSourceName: '舊名'),
+      );
+      final edited = (await getIt<BookSourceDao>().getByUrl(oldUrl))!
+        ..bookSourceUrl = newUrl;
+      await getIt<BookSourceDao>().deleteByUrl(oldUrl);
+
+      await expectLater(
+        BookSourceService().saveEditedSource(
+          edited,
+          previousUrl: oldUrl,
+          editedFrom: oldUrl,
+        ),
+        throwsA(isA<SourceGoneException>()),
+      );
+      expect(await getIt<BookSourceDao>().getByUrl(newUrl), isNull);
+    });
+
+    // 同步照另一台搬書源：這台的舊網址書源可能已經刪了、只剩書記著它。
+    test('but a move from sync still saves', () async {
+      await getIt<BookDao>().upsert(
+        Book(
+          bookUrl: '$oldUrl/book/1',
+          name: '甲書',
+          origin: oldUrl,
+          originName: '舊名',
+          isInBookshelf: true,
+        ),
+      );
+
+      await BookSourceService().saveEditedSource(
+        BookSource(bookSourceUrl: newUrl, bookSourceName: '新名'),
+        previousUrl: oldUrl,
+      );
+      expect(await getIt<BookSourceDao>().getByUrl(newUrl), isNotNull);
+      expect(
+        (await getIt<BookDao>().getByUrl('$oldUrl/book/1'))?.origin,
+        newUrl,
+      );
+    });
   });
 
   test('saving without changing the URL leaves the books alone', () async {

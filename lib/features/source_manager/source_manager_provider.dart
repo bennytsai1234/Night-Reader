@@ -418,7 +418,7 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   /// 讀清單時能不能併重複書源：書源管理自己在改書源（匯入、批次作業、
-  /// 校驗、有一列在改）時不併，做完重讀時再併。
+  /// 校驗、有一列在改、編輯頁開著）時不併，做完重讀時再併。
   bool get _canMerge =>
       switch (_work) {
         _ListWork.opening || _ListWork.idle || _ListWork.reloading => true,
@@ -426,7 +426,8 @@ class SourceManagerProvider with ChangeNotifier {
       } &&
       _merging == null &&
       !checkService.isChecking &&
-      _pendingSourceMutations.isEmpty;
+      _pendingSourceMutations.isEmpty &&
+      _editingUrls.isEmpty;
 
   /// 整份清單忙著：選單、多選工具列、分組管理灰掉，不能開始批次作業與匯入。
   bool get isMutationBusy =>
@@ -805,6 +806,40 @@ class SourceManagerProvider with ChangeNotifier {
 
   /// 獲取完整書源 (用於編輯或除錯)
   Future<BookSource?> getFullSource(String url) => _dao.getByUrl(url);
+
+  /// 編輯頁開著的書源：開著時不併重複書源（[_canMerge]），存的時候它可能
+  /// 已經被併掉，存了的修改會在下次合併時隨它刪掉。
+  final Set<String> _editingUrls = {};
+
+  /// 打開 [url] 的編輯頁前呼叫，傳回要編輯的完整書源；編輯頁關掉後呼叫
+  /// [endEditing]。正在併重複書源時等它併完（ADR 0062），被併掉的傳回
+  /// null，不開。
+  Future<BookSource?> beginEditing(String url) async {
+    for (var merging = _merging; merging != null; merging = _merging) {
+      await merging.then<void>((_) {}, onError: (Object _) {});
+      if (_disposed) return null;
+    }
+    _editingUrls.add(url);
+    try {
+      final full = await _dao.getByUrl(url);
+      if (full == null) _editingUrls.remove(url);
+      return full;
+    } catch (_) {
+      _editingUrls.remove(url);
+      rethrow;
+    }
+  }
+
+  /// [url] 的編輯頁關掉了：存過（[changed]）或開著的期間有重複書源沒併，
+  /// 重讀清單（照常併）。
+  Future<void> endEditing(String url, {required bool changed}) async {
+    _editingUrls.remove(url);
+    if (_disposed) return;
+    if (changed ||
+        (_editingUrls.isEmpty && duplicateSourceGroups(_sources).isNotEmpty)) {
+      await loadSources();
+    }
+  }
 
   void _updateGroups() {
     final groupSet = <String>{};

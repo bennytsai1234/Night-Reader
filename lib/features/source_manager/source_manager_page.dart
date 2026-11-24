@@ -1076,12 +1076,19 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   }
 
   Future<void> _openEditor(SourceManagerProvider p, String sourceUrl) async {
-    final full = await p.getFullSource(sourceUrl);
-    if (full != null && mounted) {
-      final changed = await Navigator.of(context).push<bool>(
-        MaterialPageRoute(builder: (_) => SourceEditorPage(source: full)),
-      );
-      if (changed == true && mounted) await p.loadSources();
+    final full = await p.beginEditing(sourceUrl);
+    if (full == null) return;
+    var changed = false;
+    try {
+      if (mounted) {
+        changed =
+            await Navigator.of(context).push<bool>(
+              MaterialPageRoute(builder: (_) => SourceEditorPage(source: full)),
+            ) ==
+            true;
+      }
+    } finally {
+      await p.endEditing(sourceUrl, changed: changed);
     }
   }
 
