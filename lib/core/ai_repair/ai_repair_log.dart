@@ -241,15 +241,23 @@ final class AiRepairLog {
   Future<File> _open() async {
     final directory = await _directory();
     await directory.create(recursive: true);
+    final file = File('${directory.path}/$_fileName');
+    _writing.add(file.path);
     await _prune(directory, room: 1);
-    return File('${directory.path}/$_fileName');
+    return file;
   }
 
-  /// 這一件寫完了：再修剪一次資料夾，這份寫完後合計超過 [_keptBytes] 的，
-  /// 刪掉較舊的（這一份留著）。開檔時只量得到舊的，寫完才知道這份多大。
+  /// 開了、還沒寫完（[finish]）的紀錄檔：整批修復同時修好幾件，修剪時不刪
+  /// 別件還在寫的那份，不然它接著寫只剩後半。
+  static final Set<String> _writing = {};
+
+  /// 這一件寫完了（或暫停、關掉，不再寫這一段）：不再當成還在寫，再修剪
+  /// 一次資料夾，這份寫完後合計超過 [_keptBytes] 的，刪掉較舊的（這一份
+  /// 留著）。開檔時只量得到舊的，寫完才知道這份多大。
   void finish() {
     _queue = _queue.then((_) async {
       final file = _file;
+      if (file != null) _writing.remove(file.path);
       if (_fileFailed || file == null) return;
       try {
         await _prune(file.parent, keep: file.path);
@@ -260,7 +268,8 @@ final class AiRepairLog {
   }
 
   /// 只留最近的 [_keptFiles] 個、合計 [_keptBytes] 以內：從新的往舊的數，
-  /// 超過的刪掉。[room] 是要騰出的位置（開新檔時是 1）；[keep] 那份不刪。
+  /// 超過的刪掉。[room] 是要騰出的位置（開新檔時是 1）；[keep] 那份與還在
+  /// 寫的（[_writing]）不刪。
   static Future<void> _prune(
     Directory directory, {
     int room = 0,
@@ -273,12 +282,7 @@ final class AiRepairLog {
     var bytes = 0;
     for (final (i, file) in files.indexed) {
       bytes += file.lengthSync();
-      if (file.path == keep) continue;
-      // 寫完時修剪：同時修的別件還在寫自己那份，最近動過的不刪。
-      if (keep != null &&
-          DateTime.now().difference(file.lastModifiedSync()) < _stillWriting) {
-        continue;
-      }
+      if (file.path == keep || _writing.contains(file.path)) continue;
       if (i >= _keptFiles - room || bytes > _keptBytes) {
         try {
           file.deleteSync();
@@ -291,9 +295,6 @@ final class AiRepairLog {
 
   static const int _keptFiles = 100;
   static const int _keptBytes = 50 * 1024 * 1024;
-
-  /// 這麼久內動過的紀錄檔當成還在寫。
-  static const Duration _stillWriting = Duration(minutes: 10);
 
   static const int _responseHead = 200;
   static const int _replyHead = 800;

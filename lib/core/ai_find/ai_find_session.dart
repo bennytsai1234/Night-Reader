@@ -297,11 +297,13 @@ class AiFindSession extends ChangeNotifier {
     }
     stats = end.stats;
     if (end.kind == AgentEndKind.cancelled && _phase == WorkPhase.pausing) {
-      // 暫停：結果不寫、紀錄不收尾；接著做的是最後存的那一輪開頭。
+      // 暫停：結果不寫；接著做的是最後存的那一輪開頭，另開一段接著寫同
+      // 一個檔，這一段的紀錄放回一般的修剪。
       _phase = WorkPhase.paused;
       log
         ..section('暫停')
-        ..both('暫停了，存的是第 ${stats!.rounds} 輪問完之後的樣子');
+        ..both('暫停了，存的是第 ${stats!.rounds} 輪問完之後的樣子')
+        ..finish();
       _notify();
       return;
     }
@@ -441,6 +443,7 @@ class AiFindSession extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已關閉');
+    log.finish();
     super.dispose();
   }
 }

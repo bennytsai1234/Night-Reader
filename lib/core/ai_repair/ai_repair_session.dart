@@ -331,6 +331,8 @@ class AiRepairSession extends ChangeNotifier {
       // 抓到的網頁只給這次的 AI 用；整批修復一次開幾十段，不留在記憶體。
       // 開場試抓的報告也帶著整頁原文：做完了（等貼回書源的不算）一起放掉。
       _pages.clear();
+      // 暫停了也不再寫這份（接著做是另開一段），紀錄放回一般的修剪。
+      if (_phase == WorkPhase.paused) log.finish();
       if (job.outcome != null) {
         log.finish();
         job._firstProbe = null;
@@ -963,6 +965,7 @@ class AiRepairSession extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     stop();
+    log.finish();
     super.dispose();
   }
 

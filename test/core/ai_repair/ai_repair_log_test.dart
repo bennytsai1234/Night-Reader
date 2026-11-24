@@ -113,4 +113,32 @@ void main() {
     );
     expect(left, contains('20260101-000000-006-old.txt'));
   });
+
+  // 整批修復同時修好幾件：較早那件還在寫，後面開新檔時修剪不刪它，分享
+  // 這批的全部紀錄才有開頭。
+  test('opening a new log does not delete one still being written', () async {
+    final earlier = log()..section('開頭');
+    final file = (await earlier.file())!;
+    for (var i = 0; i < 99; i++) {
+      final n = i.toString().padLeft(3, '0');
+      File('${directory.path}/20991231-000000-$n-new.txt')
+          .writeAsStringSync('較新的');
+    }
+    final later = log()..header('AI：api.example · m');
+    await later.file();
+
+    expect(file.existsSync(), isTrue);
+    earlier.section('結尾');
+    await earlier.file();
+    final text = file.readAsStringSync();
+    expect(text, contains('開頭'));
+    expect(text, contains('結尾'));
+
+    // 寫完了就照上限修剪。
+    earlier.finish();
+    later.finish();
+    await earlier.file();
+    await later.file();
+    expect(file.existsSync(), isFalse);
+  });
 }
