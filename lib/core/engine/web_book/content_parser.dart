@@ -31,6 +31,7 @@ class ContentParser {
     required String baseUrl,
     String? redirectUrl,
     String? nextChapterUrl,
+    bool readTitle = false,
   }) async {
     // [baseUrl] 是請求這一頁的網址，[redirectUrl] 是網站轉址後回應的網址
     // （同 Legado）；沒給時是同一個。
@@ -43,6 +44,7 @@ class ContentParser {
     try {
       final contentRule = source.ruleContent;
       if (contentRule == null) return const ContentResult(content: '');
+      if (readTitle && chapter != null) _readTitle(rule, contentRule, chapter);
 
       var content = rule.getString(contentRule.content ?? '', unescape: false);
       // 先清標籤再解實體（同 Legado `BookContent`）：倒過來的話，原文寫著的
@@ -76,6 +78,24 @@ class ContentParser {
       return ContentResult(content: content, nextUrls: nextUrls);
     } finally {
       rule.dispose();
+    }
+  }
+
+  /// 正文規則的 `title`：從正文頁取章名，算出不是空的就換掉這一章的章名
+  /// （同 Legado `BookContent.analyzeContent`）；規則出錯時留著原本的章名。
+  /// 呼叫端照規則改過的章節欄位存回目錄（`updateFetchedChapter`）。
+  static void _readTitle(
+    AnalyzeRule rule,
+    ContentRule contentRule,
+    BookChapter chapter,
+  ) {
+    final titleRule = contentRule.title;
+    if (titleRule == null || titleRule.trim().isEmpty) return;
+    try {
+      final title = rule.getString(titleRule);
+      if (title.trim().isNotEmpty) chapter.title = title;
+    } on Exception catch (error, stackTrace) {
+      AppLog.e('正文的章名規則失敗，留著原本的章名', error: error, stackTrace: stackTrace);
     }
   }
 

@@ -153,8 +153,17 @@ final class CompleteContentFetcher {
     String? nextChapterUrl,
     CancelToken? cancelToken,
   }) async {
+    // 同 Legado `WebBook.getContentAwait`：章節網址那一頁照正文規則的
+    // `webJs`、`sourceRegex` 抓（網址開了 webView 才用得到），也從它取章名
+    // （`title`）；下一頁照一般的請求抓。
+    final firstPage = url == chapter.url;
+    final contentRule = source.ruleContent;
     final analyzeUrl = AnalyzeUrl(url, source: source, ruleData: book);
-    var response = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
+    var response = await analyzeUrl.getStrResponse(
+      cancelToken: cancelToken,
+      jsStr: firstPage ? contentRule?.webJs : null,
+      sourceRegex: firstPage ? contentRule?.sourceRegex : null,
+    );
     response = runLoginCheckJs(analyzeUrl, response);
 
     final result = await ContentParser.parse(
@@ -165,6 +174,7 @@ final class CompleteContentFetcher {
       baseUrl: url,
       redirectUrl: response.url,
       nextChapterUrl: nextChapterUrl,
+      readTitle: firstPage,
     );
     // 任何一頁被登入牆擋住，整章失敗，不存半章。
     LoginWall.checkContent(response, result.content);
