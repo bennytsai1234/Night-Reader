@@ -393,7 +393,7 @@
 - Legado：`L:data/dao/BookSourceDao.kt:84-88`，發現頁只看 `enabledExplore = 1 and hasExploreUrl = 1`，不看 `enabled`。
 - 夜讀：`N:lib/core/models/source/book_source_logic.dart:551-556`，`canParticipateInDiscovery` 要 `enabled && enabledExplore && hasExploreUrl`，另外要校驗沒擋下；沒有 ADR 記這個決定。
 
-### R21 匯入列出好幾個書源檔網址的 `{"sourceUrls": […]}` 時什麼都沒匯入（少數寫法才碰到）
+### R21 匯入列出好幾個書源檔網址的 `{"sourceUrls": […]}` 時什麼都沒匯入（少數寫法才碰到）（已修，#637）
 
 - 讀者會碰到：書源倉庫或別人分享的匯入內容是一個物件，裡面 `sourceUrls` 列著幾個書源檔的網址。Legado 逐一下載匯入；夜讀把它當成一個書源，沒有書源網址就略過，結果是「未解析到有效書源」。網址後面接 `#requestWithoutUA`（下載時不送瀏覽器標識）的，夜讀也照原字串去抓。
 - Legado：`L:ui/association/ImportBookSourceViewModel.kt:135-150`（物件先讀 `$.sourceUrls`，讀到就逐一 `importSourceUrl`），`191-195`（`#requestWithoutUA`）。
