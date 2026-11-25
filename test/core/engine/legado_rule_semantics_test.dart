@@ -94,6 +94,62 @@ void main() {
     });
   });
 
+  group('java.setContent 交 Jsoup 節點', () {
+    final skip = quickJsUnavailableReason();
+
+    AnalyzeRule page() {
+      final r = AnalyzeRule(
+        source: BookSource(bookSourceUrl: 'https://site.test'),
+      ).setContent('<p>舊</p>', baseUrl: 'https://site.test/old/1');
+      addTearDown(r.dispose);
+      return r;
+    }
+
+    test('同一條規則後面的 CSS @abs: 用那份文件的網址', () {
+      expect(
+        page().evalJS('''
+          java.setContent(org.jsoup.Jsoup.parse('<a href="1.html">一</a>',
+            'https://site.test/chapter/'));
+          java.getString('@css:a@abs:href')
+        ''', null),
+        'https://site.test/chapter/1.html',
+      );
+    }, skip: skip);
+
+    test('下一條規則的 CSS @abs: 還是那份文件的網址', () {
+      final r = page();
+      r.evalJS(
+        "java.setContent(org.jsoup.Jsoup.parse('<a href=\"1.html\">一</a>', "
+        "'https://site.test/chapter/')); 1",
+        null,
+      );
+      expect(
+        r.getString('@css:a@abs:href'),
+        'https://site.test/chapter/1.html',
+      );
+    }, skip: skip);
+
+    test('元素的 baseUri()、文件的 location() 讀同一份網址', () {
+      final r = page();
+      r.evalJS(
+        "java.setContent(org.jsoup.Jsoup.parse('<a href=\"1.html\">一</a>', "
+        "'https://site.test/chapter/')); 1",
+        null,
+      );
+      expect(
+        r.evalJS("java.getElement('a').first().baseUri()", null),
+        'https://site.test/chapter/',
+      );
+      expect(
+        r.evalJS(
+          "java.getElement('html').first().ownerDocument().location()",
+          null,
+        ),
+        'https://site.test/chapter/',
+      );
+    }, skip: skip);
+  });
+
   group('@put', () {
     test('取到空的也存，蓋掉上一次存的', () {
       final r = rule('<p>第二章</p>');

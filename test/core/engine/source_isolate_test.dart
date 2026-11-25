@@ -915,6 +915,22 @@ void main() {
       expect(await _evaluateJs('java.ajaxAll([]).length'), '0');
     });
 
+    // Legado 的 java.ajax 用 runCatching 接住請求失敗、回傳錯誤文字，規則
+    // 照常往下跑；ajaxAll 失敗時整批丟出，和 Legado 一樣。
+    test(
+      'java.ajax failure returns the error text and the rule goes on',
+      () async {
+        expect(
+          await _evaluateJs('''
+          var failed = String(java.ajax("http://127.0.0.1:1/never"));
+          [failed.length > 0, failed.indexOf("error") >= 0,
+            java.ajax("$baseUrl/c/1").indexOf("第一章的正文") >= 0].join(",")
+        '''),
+          'true,true,true',
+        );
+      },
+    );
+
     // Legado 的 java.connect(url, header) 收的是 JSON 文字（Gson 寬鬆讀），
     // 書源寫 `JSON.stringify({...})` 或直接一段 JSON；物件照樣收。
     test('java.connect sends headers given as JSON text like Legado', () async {

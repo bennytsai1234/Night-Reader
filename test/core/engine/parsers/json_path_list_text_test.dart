@@ -30,4 +30,13 @@ void main() {
       '正文',
     );
   });
+
+  test('an object result is JSON text so the next rule can JSON.parse it', () {
+    final r = rule('{"data":{"b":1,"c":"x"},"list":[{"n":1},{"n":2}]}');
+    expect(r.getString(r'$.data'), '{"b":1,"c":"x"}');
+    expect(r.getString(r'$.data@js:JSON.parse(result).b'), '1');
+    // 清單照舊一項一行，每一項是物件時也是 JSON（Legado 的 toString）。
+    expect(r.getString(r'$.list'), '{"n":1}\n{"n":2}');
+    expect(r.getStringList(r'$.list'), ['{"n":1}', '{"n":2}']);
+  });
 }

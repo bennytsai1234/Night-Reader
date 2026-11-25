@@ -5,6 +5,7 @@ import 'package:xpath_selector_html_parser/xpath_selector_html_parser.dart';
 
 import '../../parsers/css/analyze_by_css_support.dart';
 import '../../parsers/java_regexp.dart';
+import '../../parsers/jsoup_base_uri.dart';
 import '../../parsers/jsoup_text.dart';
 
 final HtmlUnescape _unescape = HtmlUnescape();
@@ -33,31 +34,21 @@ class JsoupBridge {
   /// 節點與它底下的網址（`abs:` 屬性用），Jsoup 存在元素屬性裡的那個：
   /// 文件、`setBaseUri`、建立與複製出來的元素。查詢時往上找最近有記的
   /// 祖先，所以設在文件上就整份文件適用；被拿出文件的節點和 Jsoup 一樣
-  /// 沒有網址。
-  final Map<dom.Node, String> _baseUris = Map.identity();
-
+  /// 沒有網址。跟著節點留著（見 `jsoup_base_uri.dart`），規則結束時不清。
+  ///
   /// 文字節點是 Jsoup 的 TextNode（false）還是 DataNode（true）。DOM 只有
   /// 一種文字節點：解析出來的照它在不在 `<script>`、`<style>` 底下，交給
   /// JS 時記下來，之後搬到別處也不變；規則自己做的照它做的是哪一種。
   final Map<dom.Text, bool> _textKinds = Map.identity();
 
-  /// 文件的 `location()`：解析時給的頁面網址（Jsoup `Document.location`；
-  /// 沒給是空的），和網頁 `<base href>` 改過的 [_baseUris] 分開。
-  final Map<dom.Document, String> _locations = Map.identity();
   int _nextId = 1;
 
-  bool get isEmpty =>
-      _nodes.isEmpty &&
-      _baseUris.isEmpty &&
-      _textKinds.isEmpty &&
-      _locations.isEmpty;
+  bool get isEmpty => _nodes.isEmpty && _textKinds.isEmpty;
 
   void clear() {
     _nodes.clear();
     _ids.clear();
-    _baseUris.clear();
     _textKinds.clear();
-    _locations.clear();
   }
 
   dom.Node? node(int id) => _nodes[id];
@@ -69,20 +60,10 @@ class JsoupBridge {
   });
 
   /// [node] 與它底下的網址，給 `abs:` 屬性與 `absUrl` 用。
-  void setBaseUri(dom.Node node, String? baseUri) {
-    if (baseUri == null || baseUri.isEmpty) return;
-    _baseUris[node] = baseUri;
-  }
+  void setBaseUri(dom.Node node, String? baseUri) =>
+      setNodeBaseUri(node, baseUri);
 
-  String baseUriOf(dom.Node node) {
-    dom.Node? current = node;
-    while (current != null) {
-      final uri = _baseUris[current];
-      if (uri != null) return uri;
-      current = current.parentNode;
-    }
-    return '';
-  }
+  String baseUriOf(dom.Node node) => nodeBaseUriOf(node);
 
   /// [text] 是不是 Jsoup 的 DataNode（[_textKinds]）。
   bool _isData(dom.Text text) => _textKinds[text] ?? isParsedDataNode(text);
@@ -146,7 +127,7 @@ class JsoupBridge {
       }
     }
     setBaseUri(document, effective);
-    _locations[document] = baseUri ?? '';
+    setDocumentLocation(document, baseUri);
     return document;
   }
 
@@ -364,7 +345,7 @@ class JsoupBridge {
       case 'location':
         return document == null
             ? baseUriOf(node)
-            : _locations[document] ?? baseUriOf(node);
+            : documentLocation(document) ?? baseUriOf(node);
       case 'baseUri':
         return baseUriOf(node);
       case 'setBaseUri':
@@ -792,7 +773,7 @@ class JsoupBridge {
     };
     if (created is dom.Document) {
       created.nodes.clear();
-      _locations[created] = baseUri ?? '';
+      setDocumentLocation(created, baseUri);
     }
     setBaseUri(created, baseUri);
     return created;
@@ -897,11 +878,11 @@ class JsoupBridge {
   }
 
   void _copyMarks(dom.Node from, dom.Node to, {required bool deep}) {
-    final uri = _baseUris[from];
-    if (uri != null) _baseUris[to] = uri;
+    final uri = ownNodeBaseUri(from);
+    if (uri.isNotEmpty) setNodeBaseUri(to, uri);
     if (from is dom.Document && to is dom.Document) {
-      final location = _locations[from];
-      if (location != null) _locations[to] = location;
+      final location = documentLocation(from);
+      if (location != null) setDocumentLocation(to, location);
     }
     if (from is dom.Text && to is dom.Text) _textKinds[to] = _isData(from);
     if (!deep) return;
@@ -987,8 +968,7 @@ class JsoupBridge {
     final replacement = dom.Element.tag(tag.toLowerCase())
       ..attributes.addAll(element.attributes)
       ..nodes.addAll(element.nodes.toList());
-    final uri = _baseUris.remove(element);
-    if (uri != null) _baseUris[replacement] = uri;
+    setNodeBaseUri(replacement, ownNodeBaseUri(element));
     if (element.parentNode != null) element.replaceWith(replacement);
     final id = _ids.remove(element);
     if (id != null) {

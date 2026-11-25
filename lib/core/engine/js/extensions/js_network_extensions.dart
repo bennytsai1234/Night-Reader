@@ -22,13 +22,20 @@ import 'package:night_reader/core/utils/network_utils.dart';
 extension JsNetworkExtensions on JsExtensions {
   void injectNetworkExtensions() {
     // ─── java.ajax(url) — 返回 body 字串 ─────────────────────────
+    // 同 Legado：請求失敗用 runCatching 接住、回傳錯誤文字，規則照常往下跑。
+    // 網址組不起來（AnalyzeUrl 在建構時跑網址裡的 JS）照 Legado 在
+    // runCatching 外面，錯誤丟給規則；主 isolate 不能停住的錯誤也照丟
+    // （ADR 0034）。
     onBlocking('ajax', (payload) {
       final url = _parseUrlArg(payload);
+      final analyzeUrl = _analyzeUrl(url);
       try {
-        return BlockingCall.run(responseBody(_analyzeUrl(url)));
-      } catch (e) {
-        AppLog.e('java.ajax failed: $e');
+        return BlockingCall.run(responseBody(analyzeUrl));
+      } on BlockingCallUnavailable {
         rethrow;
+      } catch (e) {
+        AppLog.e('java.ajax($url) error\n$e', error: e);
+        return '$e';
       }
     });
 
