@@ -65,8 +65,10 @@ void main() {
 
   final controllers = <ReaderProgressController>[];
   tearDown(() async {
-    // 換目錄的對應是全 App 共用的：閱讀器關掉才不再收。
+    // 換目錄的對應是全 App 共用的：閱讀器關掉才不再收。排著與寫到一半的
+    // 進度（例如收到對應後的重存）先寫完，才關資料庫。
     for (final controller in controllers) {
+      await controller.flush();
       controller.dispose();
     }
     controllers.clear();

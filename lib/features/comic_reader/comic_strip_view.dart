@@ -219,7 +219,8 @@ class _ComicStripViewState extends State<ComicStripView>
       _images = _createImages();
       _windowItems = const {};
       _windowSignature = null;
-      _resetScroll(0);
+      _lastLocation = null;
+      _resetScroll(widget.initialFraction);
     }
   }
 
@@ -425,7 +426,8 @@ class _ComicStripViewState extends State<ComicStripView>
     if (!_scroll.hasClients || _screen.isEmpty || !_measured) return;
     final position = _scroll.position;
     final pixels = position.pixels;
-    final location = _locationAt(pixels);
+    // 圖內位置尚未還原時，不把暫時顯示的圖頂記成新進度。
+    final location = _pendingFraction == null ? _locationAt(pixels) : null;
     if (location != null && location != _lastLocation) {
       if (location.chapterIndex != _lastLocation?.chapterIndex) {
         _model.prefetchAround(location.chapterIndex);
