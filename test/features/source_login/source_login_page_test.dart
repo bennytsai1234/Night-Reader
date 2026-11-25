@@ -364,7 +364,16 @@ void main() {
         await source.putLoginInfo('{"帳號":"舊帳號"}');
         await source.putLoginHeader('{"Authorization":"Bearer keep"}');
         await CookieStore().setCookie(url, 'sid=clear');
+        await NetworkService().init(ephemeral: true);
+        await NetworkService().cookieJar.saveFromResponse(Uri.parse(url), [
+          io.Cookie('session', 'jar'),
+        ]);
       });
+      addTearDown(
+        () => tester.runAsync(
+          () => NetworkService().cookieJar.delete(Uri.parse(url), true),
+        ),
+      );
       await openLogin(tester);
       await tester.ensureVisible(find.text('刪除登入標頭'));
       await tester.pumpAndSettle();
@@ -380,6 +389,12 @@ void main() {
       expect(await tester.runAsync(() => source.getLoginHeader()), isNull);
       expect(
         await tester.runAsync(() => CookieStore().getCookie(url)),
+        isEmpty,
+      );
+      expect(
+        await tester.runAsync(
+          () => NetworkService().cookieJar.loadForRequest(Uri.parse(url)),
+        ),
         isEmpty,
       );
       expect(

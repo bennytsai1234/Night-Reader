@@ -133,7 +133,7 @@ String? sourceWebsiteLoginUrl(BookSource source) {
 /// 裡的。表單內容與登入標頭不動（書源編輯頁的「清除 Cookie」）。
 Future<void> clearSourceCookies(BookSource source) async {
   await source.removeLoginCookies();
-  await _clearBrowserCookies(source);
+  await _clearWebViewCookies(source);
 }
 
 /// 清掉 [source] 的登入資料（單獨登出一個書源）：表單內容、登入標頭，以及
@@ -142,15 +142,12 @@ Future<void> clearSourceCookies(BookSource source) async {
 /// `/account/login` 這類路徑，那裡設的 Cookie 從網站根目錄看不到。
 Future<void> clearSourceLoginData(BookSource source) async {
   await source.clearLoginData();
-  await _clearBrowserCookies(source);
+  await _clearWebViewCookies(source);
 }
 
-/// HTTP 請求收存的 Cookie 與手機瀏覽器裡的 Cookie。
-Future<void> _clearBrowserCookies(BookSource source) async {
+/// 手機瀏覽器裡的 Cookie。
+Future<void> _clearWebViewCookies(BookSource source) async {
   final uris = _loginUris(source);
-  for (final uri in uris) {
-    await NetworkService().cookieJar.delete(uri, true);
-  }
   if (uris.isNotEmpty) await WebViewNative.clearCookies(uris);
 }
 

@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io' show File, gzip;
+import 'dart:io' show Cookie, File, gzip;
 
 import 'package:archive/archive.dart';
 import 'package:flutter_js/flutter_js.dart';
@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/js/js_extensions.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/network/cookie_store.dart';
+import 'package:night_reader/core/network/network_service.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
 
 import '../../../test_helper.dart';
@@ -454,6 +455,17 @@ void main() {
       JsExtensions(runtime!, source: source).inject();
       addTearDown(source.clearLoginData);
 
+      await NetworkService().init(ephemeral: true);
+      await NetworkService().cookieJar.saveFromResponse(
+        Uri.parse(source.bookSourceUrl),
+        [Cookie('session', 'jar')],
+      );
+      addTearDown(
+        () => NetworkService().cookieJar.delete(
+          Uri.parse(source.bookSourceUrl),
+          true,
+        ),
+      );
       await CookieStore().setCookie(source.bookSourceUrl, 'sid=js');
       await source.putLoginInfo('{"帳號":"留著"}');
       final result = runtime!.evaluate(
@@ -465,10 +477,20 @@ void main() {
       await JsExtensions.settleWrites();
       expect(await source.getLoginHeader(), '{"token":"abc"}');
 
-      runtime!.evaluate('source.removeLoginHeader()');
+      runtime!.evaluate(
+        'source.removeLoginHeader(); '
+        'cookie.setCookie("${source.bookSourceUrl}", "sid=new")',
+      );
       await JsExtensions.settleWrites();
       expect(await source.getLoginHeader(), isNull);
-      expect(await CookieStore().getCookie(source.bookSourceUrl), isEmpty);
+      // 清掉的只有舊的；清完才寫的新 Cookie 要留著，不能被後到的清除刪掉。
+      expect(await CookieStore().getCookie(source.bookSourceUrl), 'sid=new');
+      expect(
+        await NetworkService().cookieJar.loadForRequest(
+          Uri.parse(source.bookSourceUrl),
+        ),
+        isEmpty,
+      );
       expect(await source.getLoginInfo(), '{"帳號":"留著"}');
     });
 

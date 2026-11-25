@@ -40,7 +40,7 @@ BlockingTask cacheRead(String key) =>
 /// [url] 的站點 Cookie（資料庫）。
 BlockingTask cookieRead(String url) => () async {
   final stored = await CookieStore().getCookie(url);
-  final uri = cookieJarUri(url);
+  final uri = NetworkUtils.cookieJarUri(url);
   if (uri == null) return stored;
   // 同 Legado：它的 CookieStore 就是 Cookie 罐，網站寫的也讀得到。夜讀網站
   // 寫的在 Cookie 罐，規則寫的在 CookieStore，兩份合起來；同名的以規則寫的
@@ -56,23 +56,10 @@ BlockingTask cookieRead(String url) => () async {
 /// 清掉 Cookie 罐裡 [url] 的 Cookie（網站寫的）：規則 JS 等它清完，接著送的
 /// 請求才不會帶著舊的（同 Legado 的 removeCookie 當下就清）。
 BlockingTask cookieJarDelete(String url) => () async {
-  final uri = cookieJarUri(url);
+  final uri = NetworkUtils.cookieJarUri(url);
   if (uri != null) await NetworkService().cookieJar.delete(uri, true);
   return null;
 };
-
-/// 規則給的網址換成 Cookie 罐查得到的網址：去掉 `#` 後面（書源網址常帶
-/// `#註記`），網域照送出請求時換成 punycode（Cookie 罐照送出的網址存）；只給
-/// 網域時當成那個網域的首頁（同 Legado 的 Cookie API 收網址或網域）。沒有
-/// 主機的是 null。
-Uri? cookieJarUri(String url) {
-  var text = url.split('#').first.trim();
-  if (text.isEmpty) return null;
-  if (!text.contains('://')) text = 'https://$text';
-  final uri = Uri.tryParse(NetworkUtils.toRequestUrl(text));
-  if (uri == null || uri.host.isEmpty) return null;
-  return uri;
-}
 
 /// 回應的內文。
 BlockingTask responseBody(AnalyzeUrl url) =>

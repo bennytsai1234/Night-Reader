@@ -15,6 +15,8 @@ import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/core/sync/source_sync.dart';
 import 'package:night_reader/core/sync/sync_records.dart';
+import 'package:night_reader/features/source_login/source_login_page.dart';
+import 'package:night_reader/features/source_manager/source_editor_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/features/source_manager/widgets/select_action_bar.dart';
@@ -94,6 +96,8 @@ void main() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
     gatedDao = _GatedSourceDao(db);
     GetIt.instance.registerSingleton<BookSourceDao>(gatedDao);
+    // 編輯頁把書源換網址時，書、搜尋結果與正文跟著搬。
+    GetIt.instance.registerLazySingleton<BookDao>(() => BookDao(db));
     GetIt.instance.registerLazySingleton<CheckSourceService>(
       CheckSourceService.new,
     );
@@ -571,6 +575,71 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('壞掉的書源'), findsNothing);
     expect(find.textContaining('書源0'), findsOneWidget);
+  });
+
+  testWidgets('編輯頁先存檔（登入）後直接返回，書源清單照新的書名、網址顯示', (tester) async {
+    final dao = GetIt.instance<BookSourceDao>();
+    await tester.runAsync(
+      () => dao.upsert(
+        BookSource(
+          bookSourceUrl: 'https://edit-old.example',
+          bookSourceName: '舊名稱',
+          loginUrl: '@js: function login() {}',
+          loginUi: '[{name: "帳號", type: "text"}]',
+          customOrder: 0,
+        ),
+      ),
+    );
+    await pumpPage(tester, sources: 0);
+    final provider = Provider.of<SourceManagerProvider>(
+      tester.element(find.byType(Scaffold).last),
+      listen: false,
+    );
+    await tester.runAsync(() => provider.loadSources());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('舊名稱'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SourceEditorPage), findsOneWidget);
+    final editorFields = find.descendant(
+      of: find.byType(SourceEditorPage),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(editorFields.at(0), '新名稱');
+    await tester.enterText(editorFields.at(1), 'https://edit-new.example');
+
+    // 登入會先存檔再開登入頁；不按登入，直接回編輯頁、再回書源管理。
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('登入'));
+    for (
+      var i = 0;
+      i < 80 && find.byType(SourceLoginPage).evaluate().isEmpty;
+      i++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.byType(SourceLoginPage), findsOneWidget);
+    await tester.state<NavigatorState>(find.byType(Navigator).first).maybePop();
+    await tester.pumpAndSettle();
+    expect(find.byType(SourceEditorPage), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    // 清單重讀是資料庫的非同步工作，輪流推進。
+    for (var i = 0; i < 20 && find.text('新名稱').evaluate().isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    expect(find.byType(SourceEditorPage), findsNothing);
+    expect(find.text('新名稱'), findsOneWidget);
+    expect(find.text('https://edit-new.example'), findsOneWidget);
+    expect(find.text('舊名稱'), findsNothing);
   });
 
   testWidgets('篩選「可以登入」只留有登入網址的書源', (tester) async {

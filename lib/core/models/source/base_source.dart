@@ -5,6 +5,8 @@ import 'package:night_reader/core/models/source/source_login_ui.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/utils/cache_manager.dart';
 import 'package:night_reader/core/network/cookie_store.dart';
+import 'package:night_reader/core/network/network_service.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 
 /// BaseSource - 資源來源基礎介面
 /// (原 Android data/entities/BaseSource.kt)
@@ -255,10 +257,12 @@ abstract class BaseSource {
   }
 
   /// 刪掉登入標頭，連夜讀存的網站 Cookie 一起清（同 Legado
-  /// `BaseSource.removeLoginHeader`）；表單內容留著。
+  /// `BaseSource.removeLoginHeader`）；表單內容留著。標頭與 Cookie 兩邊都
+  /// 先送出，再一起等：規則 JS 接著寫的新 Cookie 不會被後到的清除刪掉。
   Future<void> removeLoginHeader() async {
-    await CacheManager().delete(loginHeaderCacheKey);
-    await removeLoginCookies();
+    final cookies = removeLoginCookies();
+    final header = CacheManager().delete(loginHeaderCacheKey);
+    await Future.wait([cookies, header]);
   }
 
   /// 這個書源存過任何登入資料：表單內容、登入標頭或網站的 Cookie。
@@ -267,8 +271,25 @@ abstract class BaseSource {
       (await getLoginHeader() ?? '').isNotEmpty ||
       (await CookieStore().getCookie(getKey())).isNotEmpty;
 
-  /// 清掉夜讀自己存的網站 Cookie；表單內容與登入標頭不動。
-  Future<void> removeLoginCookies() => CookieStore().removeCookie(getKey());
+  /// 清掉夜讀自己存的網站 Cookie 與 Cookie 罐裡這個網域的 Cookie（網站寫
+  /// 的）；表單內容與登入標頭不動。
+  Future<void> removeLoginCookies() {
+    final stored = CookieStore().removeCookie(getKey());
+    final jar = _removeCookieJarCookies(getKey());
+    return Future.wait([stored, jar]);
+  }
+
+  /// Cookie 罐裡這個網域的 Cookie。沒初始化網路層的地方（有些測試、只讀
+  /// 資料的呼叫）清不到就記一筆，CookieStore 照清。
+  Future<void> _removeCookieJarCookies(String key) async {
+    final uri = NetworkUtils.cookieJarUri(key);
+    if (uri == null) return;
+    try {
+      await NetworkService().cookieJar.delete(uri, true);
+    } catch (error) {
+      AppLog.w('清 Cookie 罐裡的 Cookie 失敗: $error');
+    }
+  }
 
   /// 清掉這個書源的登入資料：表單內容、登入標頭與夜讀存的網站 Cookie。
   /// 手機瀏覽器裡的 Cookie 由呼叫端另外清（只有主 isolate 碰得到瀏覽器）。
