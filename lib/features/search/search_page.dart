@@ -971,6 +971,14 @@ class _SearchViewState extends State<SearchView> {
             notification.metrics.pixels > 0) {
           p.holdResultOrder();
         }
+        // 捲到底接著搜下一頁（同 Legado `SearchActivity.scrollToBottom`）。
+        if (notification.depth == 0 &&
+            notification.metrics.extentAfter <= 0 &&
+            notification.metrics.maxScrollExtent > 0 &&
+            p.hasMorePages &&
+            !p.isSearching) {
+          unawaited(p.loadMorePages());
+        }
         return false;
       },
       child: ListView.builder(

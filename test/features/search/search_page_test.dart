@@ -34,6 +34,17 @@ class _IdleSearchProvider extends SearchProvider {
   Future<void> search(String keyword) async {}
 }
 
+/// 捲到底的測試：一直有下一頁，記下被叫了幾次。
+class _MorePagesProvider extends _IdleSearchProvider {
+  int loads = 0;
+
+  @override
+  bool get hasMorePages => true;
+
+  @override
+  Future<void> loadMorePages() async => loads++;
+}
+
 class _PushedRouteObserver extends NavigatorObserver {
   Route<dynamic>? pushed;
 
@@ -460,6 +471,38 @@ void main() {
 
     provider.onSearchFinish(isEmpty: false);
     await tester.pumpAndSettle();
+  });
+
+  // 同 Legado `SearchActivity.scrollToBottom`：結果捲到底接著搜下一頁。
+  testWidgets('scrolling to the end of the results loads the next page', (
+    tester,
+  ) async {
+    late _MorePagesProvider provider;
+    await tester.runAsync(() async {
+      provider = _MorePagesProvider();
+      await provider.ready;
+    });
+    await tester.pumpWidget(
+      ChangeNotifierProvider<SearchProvider>(
+        create: (_) => provider,
+        child: MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: const SearchView(),
+        ),
+      ),
+    );
+    tester.widget<SearchAppBar>(find.byType(SearchAppBar)).onSearch('夜');
+    provider.onSearchSuccess([for (var i = 0; i < 30; i++) book('書$i')]);
+    provider.onSearchFinish(isEmpty: false);
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(ListView), const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(provider.loads, 0);
+
+    await tester.fling(find.byType(ListView), const Offset(0, -20000), 5000);
+    await tester.pumpAndSettle();
+    expect(provider.loads, greaterThan(0));
   });
 
   testWidgets('typing suggests matching history in either script', (
