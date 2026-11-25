@@ -35,7 +35,7 @@ mixin FileAssociationHandler on AssociationBase {
         // 不存在的絕對路徑是套件沒解析出檔案時給的 URI 路徑，不是分享的文字：
         // 例如帶 text/plain 類型的 yuedu:// 連結會變成 `/importonline`，
         // 連結本身由 app_links 處理。
-        if (!p.posix.isAbsolute(path)) _handleSharedText(context, path);
+        if (!p.posix.isAbsolute(path)) await _handleSharedText(context, path);
         continue;
       }
       AppLog.d('收到分享檔案: $path');
@@ -70,7 +70,7 @@ mixin FileAssociationHandler on AssociationBase {
   }
 
   /// 分享的文字是網址時照沒寫類型的連結處理（下載後判斷），否則當成內容判斷。
-  void _handleSharedText(BuildContext context, String text) {
+  Future<void> _handleSharedText(BuildContext context, String text) async {
     final trimmed = text.trim();
     final uri = Uri.tryParse(trimmed);
     if (uri != null &&
@@ -78,7 +78,7 @@ mixin FileAssociationHandler on AssociationBase {
         uri.host.isNotEmpty) {
       unawaited(importUntypedLink(context, trimmed));
     } else {
-      importContent(context, '分享的文字', text);
+      await importContent(context, '分享的文字', text);
     }
   }
 
@@ -94,6 +94,6 @@ mixin FileAssociationHandler on AssociationBase {
       return;
     }
     if (!context.mounted) return;
-    importContent(context, p.basename(path), content);
+    await importContent(context, p.basename(path), content);
   }
 }

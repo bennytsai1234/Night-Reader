@@ -12,8 +12,10 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/playback/audio_focus.dart';
 import 'package:night_reader/core/playback/now_playing_artwork.dart';
 import 'package:night_reader/core/playback/system_playback.dart';
+import 'package:night_reader/core/playback/tts_service.dart';
 import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/reader/features/tts/reader_tts_controller.dart';
@@ -137,7 +139,10 @@ class _OtherOwner implements PlaybackOwner {
 class _FakeTtsEngine extends ReaderTtsEngine {
   final StreamController<void> _completions =
       StreamController<void>.broadcast();
-  final StreamController<void> _failures = StreamController<void>.broadcast();
+  final StreamController<TtsFailure> _failures =
+      StreamController<TtsFailure>.broadcast();
+  final StreamController<AudioFocusChange> _focusChanges =
+      StreamController<AudioFocusChange>.broadcast();
   final List<String> spoken = <String>[];
 
   /// 有值時，下一次停止等第一個完成才停好（引擎回覆得慢）。
@@ -164,7 +169,10 @@ class _FakeTtsEngine extends ReaderTtsEngine {
   Stream<void> get completions => _completions.stream;
 
   @override
-  Stream<void> get failures => _failures.stream;
+  Stream<TtsFailure> get failures => _failures.stream;
+
+  @override
+  Stream<AudioFocusChange> get audioFocusChanges => _focusChanges.stream;
 
   @override
   Future<void> speak(String text) async {
@@ -189,12 +197,15 @@ class _FakeTtsEngine extends ReaderTtsEngine {
     _completions.add(null);
   }
 
-  /// 引擎沒念出目前這句（出錯、不收）。
-  void fail() {
+  /// 引擎沒念出目前這句（出錯、不收；[reason] 是要不到音訊焦點時不念）。
+  void fail([TtsFailure reason = TtsFailure.engine]) {
     _text = '';
     _playing = false;
-    _failures.add(null);
+    _failures.add(reason);
   }
+
+  /// 系統的聲音被拿走、還回來或拔掉耳機。
+  void focus(AudioFocusChange change) => _focusChanges.add(change);
 
   @override
   Future<void> setRate(double value) async {}
@@ -850,6 +861,190 @@ void main() {
         expect(tts.isPlaying, isTrue);
       },
     );
+  });
+
+  group('when another sound takes over', () {
+    /// 開始念、念完第一句，正在念「乙。」。
+    Future<void> readingSecond() async {
+      await open({0: '甲。乙。丙。'});
+      await tts.startFromVisibleLocation();
+      engine.complete();
+      await pumpEventQueue();
+      expect(engine.spoken.last, '乙。');
+    }
+
+    test(
+      'an interruption pauses on the sentence, play reads from it',
+      () async {
+        await readingSecond();
+
+        engine.focus(AudioFocusChange.interrupted);
+        await pumpEventQueue();
+        expect(tts.phase, ReaderTtsPhase.paused);
+        expect(tts.currentHighlight?.sentenceStart, 2);
+        expect(system.playing, isFalse);
+        expect(runtime.takeUserNotice(), isNull);
+
+        await tts.toggle();
+        expect(engine.spoken, ['甲。', '乙。', '乙。']);
+        expect(tts.phase, ReaderTtsPhase.reading);
+      },
+    );
+
+    test('the interruption ending reads on from that sentence', () async {
+      await readingSecond();
+      engine.focus(AudioFocusChange.interrupted);
+      await pumpEventQueue();
+
+      engine.focus(AudioFocusChange.regained);
+      await pumpEventQueue();
+      expect(engine.spoken, ['甲。', '乙。', '乙。']);
+      expect(tts.phase, ReaderTtsPhase.reading);
+      expect(system.playing, isTrue);
+    });
+
+    test('an interruption while the next chapter loads stops at its start '
+        'and reads it when it ends', () async {
+      final second = Completer<void>();
+      await open({0: '甲。', 1: '第二章。'}, gates: {1: second});
+      await tts.startFromVisibleLocation();
+      engine.complete();
+      await pumpEventQueue();
+
+      engine.focus(AudioFocusChange.interrupted);
+      await pumpEventQueue();
+      second.complete();
+      await pumpEventQueue();
+      expect(tts.phase, ReaderTtsPhase.paused);
+      expect(engine.spoken, ['甲。']);
+
+      engine.focus(AudioFocusChange.regained);
+      await pumpEventQueue();
+      expect(engine.spoken, ['甲。', '第二章。']);
+    });
+
+    test('previous pressed during an interruption wins over the interruption '
+        'ending while it loads', () async {
+      final earlier = Completer<void>();
+      await open({0: '零。', 1: '甲。', 2: '乙。丙。'}, gates: {1: earlier});
+      moveTo(2);
+      await tts.startFromVisibleLocation();
+      await pumpEventQueue();
+      expect(engine.spoken.last, '乙。');
+      engine.focus(AudioFocusChange.interrupted);
+      await pumpEventQueue();
+
+      // 這一章的第一句按上一句：要載入上一章找它的最後一句。
+      final previous = tts.skipToPreviousSentence();
+      await pumpEventQueue();
+      engine.focus(AudioFocusChange.regained);
+      await pumpEventQueue();
+      earlier.complete();
+      await previous;
+      await pumpEventQueue();
+
+      expect(engine.spoken, ['乙。', '甲。']);
+      expect(tts.phase, ReaderTtsPhase.reading);
+    });
+
+    test('pausing by hand during an interruption stays paused when it '
+        'ends', () async {
+      await readingSecond();
+      engine.focus(AudioFocusChange.interrupted);
+      await pumpEventQueue();
+
+      tts.onPause();
+      engine.focus(AudioFocusChange.regained);
+      await pumpEventQueue();
+      expect(tts.phase, ReaderTtsPhase.paused);
+      expect(engine.spoken, ['甲。', '乙。']);
+    });
+
+    test('another player starting during an interruption keeps playing when '
+        'it ends', () async {
+      await readingSecond();
+      engine.focus(AudioFocusChange.interrupted);
+      await pumpEventQueue();
+
+      final other = _OtherOwner();
+      const audio = NowPlaying(
+        id: 'audio',
+        title: '第一集',
+        bookName: '有聲書',
+        author: '',
+      );
+      playback.show(other, item: audio, playing: true, controls: const {});
+      engine.focus(AudioFocusChange.regained);
+      await pumpEventQueue();
+
+      expect(tts.phase, ReaderTtsPhase.paused);
+      expect(engine.spoken, ['甲。', '乙。']);
+      expect(other.pauses, 0);
+      expect(system.title, '第一集');
+      playback.release(other);
+    });
+
+    test('an interruption while paused by hand changes nothing', () async {
+      await readingSecond();
+      tts.onPause();
+
+      engine.focus(AudioFocusChange.interrupted);
+      engine.focus(AudioFocusChange.regained);
+      await pumpEventQueue();
+      expect(tts.phase, ReaderTtsPhase.paused);
+      expect(engine.spoken, ['甲。', '乙。']);
+    });
+
+    test('an interruption while not reading changes nothing', () async {
+      await open({0: '甲。'});
+
+      engine.focus(AudioFocusChange.interrupted);
+      engine.focus(AudioFocusChange.regained);
+      await pumpEventQueue();
+      expect(tts.phase, ReaderTtsPhase.idle);
+      expect(engine.spoken, isEmpty);
+    });
+
+    test(
+      'unplugging headphones pauses and does not read on by itself',
+      () async {
+        await readingSecond();
+
+        engine.focus(AudioFocusChange.lost);
+        await pumpEventQueue();
+        expect(tts.phase, ReaderTtsPhase.paused);
+        expect(tts.currentHighlight?.sentenceStart, 2);
+
+        engine.focus(AudioFocusChange.regained);
+        await pumpEventQueue();
+        expect(tts.phase, ReaderTtsPhase.paused);
+        expect(engine.spoken, ['甲。', '乙。']);
+      },
+    );
+
+    test('an interruption that ends without resuming stays paused', () async {
+      await readingSecond();
+      engine.focus(AudioFocusChange.interrupted);
+      engine.focus(AudioFocusChange.lost);
+      engine.focus(AudioFocusChange.regained);
+      await pumpEventQueue();
+      expect(tts.phase, ReaderTtsPhase.paused);
+      expect(engine.spoken, ['甲。', '乙。']);
+    });
+
+    test('without audio focus reading does not start and says so', () async {
+      await open({0: '甲。乙。'});
+      await tts.startFromVisibleLocation();
+      engine.fail(TtsFailure.noAudioFocus);
+      await pumpEventQueue();
+
+      expect(tts.phase, ReaderTtsPhase.paused);
+      expect(tts.currentHighlight?.sentenceStart, 0);
+      expect(runtime.takeUserNotice()?.message, noAudioFocusNotice);
+
+      await tts.toggle();
+      expect(engine.spoken.last, '甲。');
+    });
   });
 
   group('when the engine cannot speak', () {

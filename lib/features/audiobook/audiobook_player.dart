@@ -882,7 +882,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     final index = _playable(
       pulled.progress.chapterIndexIn([
         for (final chapter in _chapters) chapter.title,
-      ]),
+      ], reversed: book.getReverseToc()),
     );
     final at = Duration(milliseconds: pulled.progress.charOffset);
     if (index != _index ||

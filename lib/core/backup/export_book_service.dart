@@ -1,3 +1,4 @@
+import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
@@ -7,6 +8,7 @@ import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
+import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:share_plus/share_plus.dart';
@@ -19,6 +21,7 @@ class ExportBookService {
   final ReaderChapterContentDao _chapterContentDao =
       getIt<ReaderChapterContentDao>();
   BookSourceDao get _sourceDao => getIt<BookSourceDao>();
+  BookDao get _bookDao => getIt<BookDao>();
   final BookSourceService _sourceService;
 
   /// 匯出全書為 TXT 檔案。漫畫是圖、沒有文字，丟出 [StateError]（書籍詳情
@@ -39,9 +42,23 @@ class ExportBookService {
     if (book.bookKind == BookSourceKind.comic) {
       throw StateError('漫畫沒有文字可以匯出');
     }
+    var stored = await _chapterDao.getByBook(book.bookUrl);
+    if (book.isLocal &&
+        localBookExtensionFromPath(LocalBookService.filePathOf(book)) ==
+            'epub') {
+      // 本地 EPUB 轉好的文字不見或轉法改過：先重轉、對好目錄再讀，不拿舊
+      // 範圍讀新檔。
+      stored = (await LocalBookService().syncEpubChapters(
+        book,
+        stored,
+        bookDao: _bookDao,
+        chapterDao: _chapterDao,
+        contentDao: _chapterContentDao,
+      )).chapters;
+    }
     // 付費章節沒有正文，不匯出（ADR 0057）。
     final chapters = [
-      for (final chapter in await _chapterDao.getByBook(book.bookUrl))
+      for (final chapter in stored)
         if (!chapter.isLocked) chapter,
     ];
     if (chapters.isEmpty) return;
@@ -55,9 +72,16 @@ class ExportBookService {
     buffer.writeln('---');
 
     for (var i = 0; i < chapters.length; i++) {
-      // 分卷只寫卷名（同 Legado）。
+      // 分卷寫卷名；本地 EPUB 的分卷可能有卷首的字（同 Legado 照樣匯出）。
       if (chapters[i].isVolume) {
-        buffer.writeln('\n${(await present(chapters[i], '')).title}\n');
+        final volume = await present(
+          chapters[i],
+          book.isLocal
+              ? await LocalBookService().getContent(book, chapters[i])
+              : '',
+        );
+        buffer.writeln('\n${volume.title}\n');
+        if (volume.text.trim().isNotEmpty) buffer.writeln(volume.text);
         onProgress?.call((i + 1) / chapters.length);
         continue;
       }

@@ -11,6 +11,7 @@ import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/storage/book_toc_replacer.dart';
+import 'package:night_reader/core/storage/book_toc_reverser.dart';
 
 /// 把書架上一本書還沒下載的章節排進背景下載（ADR 0008）。
 typedef ShelfBookDownloader = Future<void> Function(
@@ -161,7 +162,15 @@ Future<int?> _refreshFromSource(Book book, int checkedAt) async {
     info.customIntro = current.customIntro;
     info.customTag = current.customTag;
     info.readConfig = current.readConfig;
-    final toc = (await tocReplacer.replace(info, chapters)).chapters;
+    // 抓目錄的期間讀者切了反轉目錄（[BookTocReverser]）：抓到的是切之前的
+    // 順序，照現在的翻過來才和存著的一致。
+    final reversedSince =
+        (book.readConfig?.reverseToc ?? false) !=
+        (current.readConfig?.reverseToc ?? false);
+    final toc = (await tocReplacer.replace(
+      info,
+      reversedSince ? reversedToc(chapters) : chapters,
+    )).chapters;
     info.fillChapterTitle(toc);
     final oldTotal = current.totalChapterNum > 0
         ? current.totalChapterNum

@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:xml/xml.dart';
 
 import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/local_book/txt_parser.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/utils/encoding_detect.dart';
@@ -20,6 +21,7 @@ class EpubBookInfo {
     required this.title,
     required this.author,
     required this.chapters,
+    this.intro,
     this.cover,
     this.coverExtension,
   });
@@ -27,8 +29,11 @@ class EpubBookInfo {
   final String? title;
   final String? author;
 
+  /// 書裡寫的簡介（OPF 的第一個 `description`，是 HTML 時只取文字）。
+  final String? intro;
+
   /// 每章在轉好的純文字檔裡的位元組範圍，和 TXT 的章節一樣讀。
-  final List<({String title, int start, int end})> chapters;
+  final List<LocalChapterRange> chapters;
   final Uint8List? cover;
 
   /// 封面檔的副檔名，含點（`.jpg`）。
@@ -40,8 +45,9 @@ class EpubBookInfo {
 class EpubParser {
   EpubParser._();
 
-  /// 轉檔的版本：轉法改了（例如開始留插圖）就加一，舊的文字檔重轉。
-  static const int textVersion = 2;
+  /// 轉檔的版本：轉法改了（例如開始留插圖、標出分卷）就加一，舊的文字檔
+  /// 重轉。
+  static const int textVersion = 3;
 
   /// 轉好的文字檔旁邊記章節範圍與 [textVersion] 的檔案。閱讀器開書時拿它
   /// 對資料庫裡的章節（[LocalBookService.currentEpubChapters]）：不管在哪裡
@@ -50,9 +56,7 @@ class EpubParser {
       p.join(p.dirname(textPath), 'epub-chapters.json');
 
   /// [textPath] 這次轉檔記下的章節範圍；沒有、版本不對或壞了時回傳 null。
-  static List<({String title, int start, int end})>? readChapters(
-    String textPath,
-  ) {
+  static List<LocalChapterRange>? readChapters(String textPath) {
     try {
       final json = jsonDecode(
         File(chaptersPathFor(textPath)).readAsStringSync(),
@@ -62,8 +66,13 @@ class EpubParser {
       }
       return [
         for (final value in json['chapters'] as List<Object?>)
-          if (value case [final String title, final int start, final int end])
-            (title: title, start: start, end: end)
+          if (value case [
+            final String title,
+            final int start,
+            final int end,
+            final bool isVolume,
+          ])
+            (title: title, start: start, end: end, isVolume: isVolume)
           else
             throw const FormatException('Malformed EPUB chapter range.'),
       ];
@@ -79,10 +88,11 @@ class EpubParser {
   /// 在另一個 isolate 把 [epubPath] 轉成一段一行的 UTF-8 純文字寫到
   /// [textPath]，回傳書名、作者、封面與章節。
   ///
-  /// 章節照書內目錄分；沒有文字的章節（只有圖片的封面頁、和下一章指向
-  /// 同一處的卷名）不列。目錄太粗、一章超過 [TxtParser.maxChapterChars]
-  /// 字時（由 TXT 轉成的 EPUB 常只有「封面」一條），那一章照 TXT 的章名
-  /// 規則再切。
+  /// 章節照書內目錄分；底下還有條目的是分卷（同 Legado）。沒有文字的章節
+  /// （只有圖片的封面頁、和下一章指向同一處的卷名）不列，分卷例外：沒有字
+  /// 時只寫卷名，和 TXT 只有一行卷名的分卷一樣。目錄太粗、一章超過
+  /// [TxtParser.maxChapterChars] 字時（由 TXT 轉成的 EPUB 常只有「封面」
+  /// 一條），那一章照 TXT 的章名規則再切。
   static Future<EpubBookInfo> convert(String epubPath, String textPath) =>
       Isolate.run(
         () => _withArchive(epubPath, (archive) => _convert(archive, textPath)),
@@ -106,7 +116,7 @@ T _withArchive<T>(String path, T Function(_Archive archive) action) {
 EpubBookInfo _convert(_Archive archive, String textPath) {
   final package = _Package.read(archive);
   final text = _EpubText(archive, package);
-  final pieces = <({String title, String text})>[];
+  final pieces = <({String title, String text, bool isVolume})>[];
   // 只有插圖的章（彩頁、插圖頁）不列，圖併到下一章開頭（ADR 0050）。
   var pendingImages = '';
   for (final range in _chapterRanges(package, text)) {
@@ -119,6 +129,10 @@ EpubBookInfo _convert(_Archive archive, String textPath) {
             ? content
             : '$pendingImages\n$content';
       }
+      // 只有卷名的分卷照樣是目錄裡的一列，正文只有卷名；圖留給下一章。
+      if (range.isVolume) {
+        pieces.add((title: range.title, text: range.title, isVolume: true));
+      }
       continue;
     }
     if (pendingImages.isNotEmpty) {
@@ -126,13 +140,14 @@ EpubBookInfo _convert(_Archive archive, String textPath) {
       pendingImages = '';
     }
     if (words.length <= TxtParser.maxChapterChars) {
-      pieces.add((title: range.title, text: content));
+      pieces.add((title: range.title, text: content, isVolume: range.isVolume));
       continue;
     }
-    for (final span in _splitKeepingImages(content, range.title)) {
+    for (final (i, span) in _splitKeepingImages(content, range.title).indexed) {
       pieces.add((
         title: span.title,
         text: content.substring(span.start, span.end),
+        isVolume: range.isVolume && i == 0,
       ));
     }
   }
@@ -140,11 +155,15 @@ EpubBookInfo _convert(_Archive archive, String textPath) {
   // 書最後面的插圖頁併到最後一章結尾。
   if (pendingImages.isNotEmpty) {
     final last = pieces.removeLast();
-    pieces.add((title: last.title, text: '${last.text}\n$pendingImages'));
+    pieces.add((
+      title: last.title,
+      text: '${last.text}\n$pendingImages',
+      isVolume: last.isVolume,
+    ));
   }
   _extractImages(archive, text.images, textPath);
 
-  final chapters = <({String title, int start, int end})>[];
+  final chapters = <LocalChapterRange>[];
   final temp = File('$textPath.tmp');
   temp.parent.createSync(recursive: true);
   final output = temp.openSync(mode: FileMode.write);
@@ -159,6 +178,7 @@ EpubBookInfo _convert(_Archive archive, String textPath) {
         title: piece.title,
         start: offset,
         end: offset + bytes.length,
+        isVolume: piece.isVolume,
       ));
       offset += bytes.length + 1;
     }
@@ -171,7 +191,7 @@ EpubBookInfo _convert(_Archive archive, String textPath) {
       'version': EpubParser.textVersion,
       'chapters': [
         for (final chapter in chapters)
-          [chapter.title, chapter.start, chapter.end],
+          [chapter.title, chapter.start, chapter.end, chapter.isVolume],
       ],
     }),
     flush: true,
@@ -182,6 +202,7 @@ EpubBookInfo _convert(_Archive archive, String textPath) {
   return EpubBookInfo(
     title: package.title,
     author: package.author,
+    intro: package.intro,
     chapters: chapters,
     cover: cover == null || cover.isEmpty ? null : cover,
     coverExtension: coverPath == null ? null : p.url.extension(coverPath),
@@ -218,9 +239,11 @@ class _Range {
     required this.endSpine,
     this.startFragment,
     this.endFragment,
+    this.isVolume = false,
   });
 
   final String title;
+  final bool isVolume;
   final int startSpine;
   final String? startFragment;
   final int endSpine;
@@ -236,7 +259,7 @@ List<_Range> _chapterRanges(_Package package, _EpubText text) {
     if (spine == null) continue;
     // 往回指的條目（附錄指回正文）會讓前後章重疊，不列。
     if (starts.isNotEmpty && spine < starts.last.spine) continue;
-    starts.add(_TocStart(entry.title, spine, entry.fragment));
+    starts.add(_TocStart(entry.title, spine, entry.fragment, entry.isVolume));
   }
 
   if (starts.isEmpty) {
@@ -279,6 +302,7 @@ List<_Range> _chapterRanges(_Package package, _EpubText text) {
               ? starts[i + 1].spine - 1
               : starts[i + 1].spine,
           endFragment: starts[i + 1].fragment,
+          isVolume: starts[i].isVolume,
         )
       else
         _Range(
@@ -286,24 +310,34 @@ List<_Range> _chapterRanges(_Package package, _EpubText text) {
           startSpine: starts[i].spine,
           startFragment: starts[i].fragment,
           endSpine: last,
+          isVolume: starts[i].isVolume,
         ),
   ];
 }
 
 class _TocStart {
-  const _TocStart(this.title, this.spine, this.fragment);
+  const _TocStart(
+    this.title,
+    this.spine,
+    this.fragment, [
+    this.isVolume = false,
+  ]);
 
   final String title;
   final int spine;
   final String? fragment;
+  final bool isVolume;
 }
 
 class _TocEntry {
-  const _TocEntry(this.title, this.path, this.fragment);
+  const _TocEntry(this.title, this.path, this.fragment, this.isVolume);
 
   final String title;
   final String path;
   final String? fragment;
+
+  /// 目錄裡底下還有條目（同 Legado 標成分卷）。
+  final bool isVolume;
 }
 
 class _Archive {
@@ -333,6 +367,7 @@ class _Package {
   _Package({
     required this.title,
     required this.author,
+    required this.intro,
     required this.spine,
     required this.toc,
     required this.coverPath,
@@ -343,6 +378,7 @@ class _Package {
 
   final String? title;
   final String? author;
+  final String? intro;
   final List<String> spine;
   final List<_TocEntry> toc;
   final String? coverPath;
@@ -407,10 +443,21 @@ class _Package {
     return _Package(
       title: _text(_elements(opf, 'title').firstOrNull),
       author: _text(_elements(opf, 'creator').firstOrNull),
+      intro: _intro(_elements(opf, 'description').firstOrNull),
       spine: spine,
       toc: toc,
       coverPath: _coverPath(opf, items),
     );
+  }
+
+  /// 照 Legado：第一個 `description`，看起來是 HTML（`<` 開頭、`>` 結尾）時
+  /// 只取文字，否則照原樣。
+  static String? _intro(XmlElement? element) {
+    final text = element?.innerText.trim() ?? '';
+    if (text.isEmpty) return null;
+    if (!text.startsWith('<') || !text.endsWith('>')) return text;
+    final plain = _collapse(html_parser.parse(text).body?.text ?? '');
+    return plain.isEmpty ? null : plain;
   }
 
   static String? _coverPath(XmlDocument opf, Map<String, _ManifestItem> items) {
@@ -451,10 +498,48 @@ class _Package {
         navs.firstOrNull;
     if (toc == null) return const [];
     final dir = p.url.dirname(path);
+    final entries = <_TocEntry>[];
+    _navItems(toc, dir, entries);
+    if (entries.isNotEmpty) return entries;
+    // 沒有照 `<li>` 寫的目錄：連結依序攤平。
     return [
       for (final link in toc.getElementsByTagName('a'))
         ?_tocEntry(dir, _collapse(link.text), link.attributes['href']),
     ];
+  }
+
+  /// [parent] 底下的每個 `<li>` 依文件順序是一條：卷名是它自己的連結（沒有
+  /// 連結的標題指向底下第一個連結），底下還有 `<li>` 的是分卷。
+  static void _navItems(
+    dom.Element parent,
+    String dir,
+    List<_TocEntry> entries,
+  ) {
+    for (final child in parent.children) {
+      if (child.localName != 'li') {
+        _navItems(child, dir, entries);
+        continue;
+      }
+      final label = child.children
+          .where((e) => e.localName != 'ol' && e.localName != 'ul')
+          .firstOrNull;
+      // 沒有包在元素裡的卷名（`<li>第一卷<ol>…`）取 `<li>` 自己的字。
+      final title =
+          label?.text ??
+          child.nodes.whereType<dom.Text>().map((t) => t.data).join();
+      final nested = child.getElementsByTagName('li').isNotEmpty;
+      final link = label?.localName == 'a'
+          ? label
+          : label?.getElementsByTagName('a').firstOrNull;
+      final href =
+          link?.attributes['href'] ??
+          (nested
+              ? child.getElementsByTagName('a').firstOrNull?.attributes['href']
+              : null);
+      final entry = _tocEntry(dir, _collapse(title), href, isVolume: nested);
+      if (entry != null) entries.add(entry);
+      _navItems(child, dir, entries);
+    }
   }
 
   /// EPUB 2 的 NCX：巢狀的 navPoint 依文件順序攤平。
@@ -473,12 +558,23 @@ class _Package {
         ?_tocEntry(
           dir,
           _text(_child(point, 'navLabel')),
-          _child(point, 'content')?.getAttribute('src'),
+          // 沒有自己位置的卷名指向底下第一章。
+          _child(point, 'content')?.getAttribute('src') ??
+              point.descendantElements
+                  .where((e) => e.localName == 'content')
+                  .firstOrNull
+                  ?.getAttribute('src'),
+          isVolume: _child(point, 'navPoint') != null,
         ),
     ];
   }
 
-  static _TocEntry? _tocEntry(String dir, String? title, String? href) {
+  static _TocEntry? _tocEntry(
+    String dir,
+    String? title,
+    String? href, {
+    bool isVolume = false,
+  }) {
     if (title == null || title.isEmpty || href == null || href.isEmpty) {
       return null;
     }
@@ -488,6 +584,7 @@ class _Package {
       title,
       _resolve(dir, href),
       fragment.isEmpty ? null : _decodeComponent(fragment),
+      isVolume,
     );
   }
 }

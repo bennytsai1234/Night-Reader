@@ -37,6 +37,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/book/toc_search_dialog.dart';
 import 'package:night_reader/shared/widgets/text/clause_text.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
@@ -731,6 +732,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
           .showSnackBar(SnackBar(content: UiText(failureMessage('匯出', e))));
     } finally {
       if (mounted) setState(() => _exportProgress = null);
+      // 本地 EPUB 匯出前可能重轉、換了目錄與進度（匯出失敗也可能已經換
+      // 了）：照資料庫重讀，之後開閱讀器才帶新目錄。
+      if (mounted && provider.book.isLocal) {
+        await provider.reloadAfterReading();
+      }
     }
   }
 
@@ -1055,27 +1061,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
   Future<void> _showSearchTocDialog(
     BuildContext context,
     BookDetailProvider p,
-  ) async {
-    await showStatefulAppAlert<void>(
-      context: context,
-      fieldTexts: [p.tocSearchQuery],
-      builder: (ctx, _, fields) => AppAlert<void>(
-        title: '搜尋目錄',
-        content: AlertGroupedCard(
-          rows: [
-            GroupedTextFieldRow(
-              controller: fields.single,
-              autofocus: true,
-              onChanged: p.setSearchQuery,
-            ),
-          ],
-        ),
-        actions: const [
-          AppAlertAction(label: '關閉', value: null, isDefault: true),
-        ],
-      ),
-    );
-  }
+  ) => showTocSearchDialog(
+    context,
+    initial: p.tocSearchQuery,
+    onChanged: p.setSearchQuery,
+  );
 
   /// 編輯書籍資訊：底部面板裡三組欄位，頁首右邊「儲存」。點面板外面或往下
   /// 拉不會關掉，免得改到一半的內容不見；儲存中連返回也擋住。儲存失敗的

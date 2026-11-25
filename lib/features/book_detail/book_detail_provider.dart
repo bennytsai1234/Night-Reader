@@ -17,6 +17,7 @@ import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/reader_chapter_content.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
+import 'package:night_reader/core/models/book/toc_search.dart';
 import 'package:night_reader/core/models/book/toc_volumes.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/storage/book_cover_storage_service.dart';
@@ -220,11 +221,13 @@ class BookDetailProvider extends ChangeNotifier {
   bool get supportsBackgroundDownload => !_book.isLocal;
   DownloadService get _resolvedDownloadService =>
       _downloadService ??= DownloadService();
+
+  /// 書源狀態照校驗結果寫（同讀書這一側，不看「啟用」：停用只管搜尋，在
+  /// 書源管理看得到）。
   String get sourceStatusLabel {
     if (_book.isLocal) return '本地';
     final source = _currentSource;
     if (source == null) return '找不到書源';
-    if (!source.enabled) return '停用';
     return source.runtimeHealth.label;
   }
 
@@ -232,14 +235,12 @@ class BookDetailProvider extends ChangeNotifier {
     if (_book.isLocal) return '本地書籍不依賴線上書源';
     final source = _currentSource;
     if (source == null) return '目前找不到這本書對應的書源';
-    if (!source.enabled) return '書源已停用';
     return source.runtimeHealth.description;
   }
 
   bool get sourceStatusIsHealthy =>
       _book.isLocal ||
       (_currentSource != null &&
-          _currentSource!.enabled &&
           _currentSource!.runtimeHealth.category ==
               SourceHealthCategory.healthy);
 
@@ -349,8 +350,8 @@ class BookDetailProvider extends ChangeNotifier {
     _switchedBookUrl = event.toBookUrl;
   }
 
-  /// 從閱讀器回到這頁：閱讀器把進度、加入書架與換源都寫進資料庫，這裡照
-  /// 資料庫裡的這本書重新顯示。閱讀器沒加入書架就退出時，書與目錄已經刪
+  /// 從閱讀器回到這頁（閱讀器把進度、加入書架與換源都寫進資料庫），或這頁
+  /// 匯出本地書時重寫了目錄與進度之後：照資料庫裡的這本書重新顯示。閱讀器沒加入書架就退出時，書與目錄已經刪
   /// 掉，照舊顯示手上的書（不在書架上）。
   Future<void> reloadAfterReading() async {
     if (_disposed || !hasReadyWorld) return;
@@ -734,14 +735,11 @@ class BookDetailProvider extends ChangeNotifier {
       _collapsedVolumes.remove(_volumes.volumeAt(current));
     }
     _shownCurrent = current;
-    final query = _searchQuery.toLowerCase();
     var positions = groupsVolumes
         ? _volumes.rows(_collapsedVolumes)
         : [
             for (var i = 0; i < _allChapters.length; i++)
-              if (query.isEmpty ||
-                  _allChapters[i].title.toLowerCase().contains(query))
-                i,
+              if (tocTitleMatches(_allChapters[i].title, _searchQuery)) i,
           ];
     if (_isReversed) positions = positions.reversed.toList();
     _displayPositions = positions;

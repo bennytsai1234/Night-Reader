@@ -8,7 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
 import 'package:night_reader/core/network/interceptors/cloudflare_interceptor.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
-import 'package:night_reader/core/network/source_tls.dart';
+import 'package:night_reader/core/network/source_proxy.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 
 /// 書源的連線（[dio]：Cookie、轉址、Cloudflare 攔截器，憑證不驗，見
@@ -60,7 +60,7 @@ class NetworkService {
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 15),
       ),
-    )..httpClientAdapter = sourceHttpClientAdapter();
+    )..httpClientAdapter = SourceProxyAdapter();
 
     // 最先：中文網域換成 punycode，Cookie 與後面的攔截器看到的是送出的網址。
     _dio.interceptors.add(

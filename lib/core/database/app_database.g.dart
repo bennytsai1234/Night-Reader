@@ -7423,6 +7423,20 @@ class $BookmarksTable extends Bookmarks
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _tocReversedMeta = const VerificationMeta(
+    'tocReversed',
+  );
+  @override
+  late final GeneratedColumn<bool> tocReversed = GeneratedColumn<bool>(
+    'tocReversed',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("tocReversed" IN (0, 1))',
+    ),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -7433,6 +7447,7 @@ class $BookmarksTable extends Bookmarks
     charOffset,
     anchor,
     excerpt,
+    tocReversed,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7499,6 +7514,15 @@ class $BookmarksTable extends Bookmarks
         excerpt.isAcceptableOrUnknown(data['excerpt']!, _excerptMeta),
       );
     }
+    if (data.containsKey('tocReversed')) {
+      context.handle(
+        _tocReversedMeta,
+        tocReversed.isAcceptableOrUnknown(
+          data['tocReversed']!,
+          _tocReversedMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -7540,6 +7564,10 @@ class $BookmarksTable extends Bookmarks
         DriftSqlType.string,
         data['${effectivePrefix}excerpt'],
       )!,
+      tocReversed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}tocReversed'],
+      ),
     );
   }
 
@@ -7558,6 +7586,7 @@ class BookmarksCompanion extends UpdateCompanion<Bookmark> {
   final Value<int> charOffset;
   final Value<String?> anchor;
   final Value<String> excerpt;
+  final Value<bool?> tocReversed;
   const BookmarksCompanion({
     this.id = const Value.absent(),
     this.bookName = const Value.absent(),
@@ -7567,6 +7596,7 @@ class BookmarksCompanion extends UpdateCompanion<Bookmark> {
     this.charOffset = const Value.absent(),
     this.anchor = const Value.absent(),
     this.excerpt = const Value.absent(),
+    this.tocReversed = const Value.absent(),
   });
   BookmarksCompanion.insert({
     this.id = const Value.absent(),
@@ -7577,6 +7607,7 @@ class BookmarksCompanion extends UpdateCompanion<Bookmark> {
     this.charOffset = const Value.absent(),
     this.anchor = const Value.absent(),
     this.excerpt = const Value.absent(),
+    this.tocReversed = const Value.absent(),
   }) : bookName = Value(bookName);
   static Insertable<Bookmark> custom({
     Expression<int>? id,
@@ -7587,6 +7618,7 @@ class BookmarksCompanion extends UpdateCompanion<Bookmark> {
     Expression<int>? charOffset,
     Expression<String>? anchor,
     Expression<String>? excerpt,
+    Expression<bool>? tocReversed,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -7597,6 +7629,7 @@ class BookmarksCompanion extends UpdateCompanion<Bookmark> {
       if (charOffset != null) 'charOffset': charOffset,
       if (anchor != null) 'anchor': anchor,
       if (excerpt != null) 'excerpt': excerpt,
+      if (tocReversed != null) 'tocReversed': tocReversed,
     });
   }
 
@@ -7609,6 +7642,7 @@ class BookmarksCompanion extends UpdateCompanion<Bookmark> {
     Value<int>? charOffset,
     Value<String?>? anchor,
     Value<String>? excerpt,
+    Value<bool?>? tocReversed,
   }) {
     return BookmarksCompanion(
       id: id ?? this.id,
@@ -7619,6 +7653,7 @@ class BookmarksCompanion extends UpdateCompanion<Bookmark> {
       charOffset: charOffset ?? this.charOffset,
       anchor: anchor ?? this.anchor,
       excerpt: excerpt ?? this.excerpt,
+      tocReversed: tocReversed ?? this.tocReversed,
     );
   }
 
@@ -7649,6 +7684,9 @@ class BookmarksCompanion extends UpdateCompanion<Bookmark> {
     if (excerpt.present) {
       map['excerpt'] = Variable<String>(excerpt.value);
     }
+    if (tocReversed.present) {
+      map['tocReversed'] = Variable<bool>(tocReversed.value);
+    }
     return map;
   }
 
@@ -7662,7 +7700,8 @@ class BookmarksCompanion extends UpdateCompanion<Bookmark> {
           ..write('chapterTitle: $chapterTitle, ')
           ..write('charOffset: $charOffset, ')
           ..write('anchor: $anchor, ')
-          ..write('excerpt: $excerpt')
+          ..write('excerpt: $excerpt, ')
+          ..write('tocReversed: $tocReversed')
           ..write(')'))
         .toString();
   }
@@ -7682,6 +7721,7 @@ class _$BookmarkInsertable implements Insertable<Bookmark> {
       charOffset: Value(_object.charOffset),
       anchor: Value(_object.anchor),
       excerpt: Value(_object.excerpt),
+      tocReversed: Value(_object.tocReversed),
     ).toColumns(false);
   }
 }
@@ -7815,6 +7855,20 @@ class $HighlightsTable extends Highlights
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _tocReversedMeta = const VerificationMeta(
+    'tocReversed',
+  );
+  @override
+  late final GeneratedColumn<bool> tocReversed = GeneratedColumn<bool>(
+    'tocReversed',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("tocReversed" IN (0, 1))',
+    ),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -7828,6 +7882,7 @@ class $HighlightsTable extends Highlights
     color,
     style,
     note,
+    tocReversed,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7900,6 +7955,15 @@ class $HighlightsTable extends Highlights
         note.isAcceptableOrUnknown(data['note']!, _noteMeta),
       );
     }
+    if (data.containsKey('tocReversed')) {
+      context.handle(
+        _tocReversedMeta,
+        tocReversed.isAcceptableOrUnknown(
+          data['tocReversed']!,
+          _tocReversedMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -7957,6 +8021,10 @@ class $HighlightsTable extends Highlights
         DriftSqlType.string,
         data['${effectivePrefix}note'],
       )!,
+      tocReversed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}tocReversed'],
+      ),
     );
   }
 
@@ -7983,6 +8051,7 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
   final Value<HighlightColor> color;
   final Value<HighlightStyle> style;
   final Value<String> note;
+  final Value<bool?> tocReversed;
   const HighlightsCompanion({
     this.id = const Value.absent(),
     this.bookName = const Value.absent(),
@@ -7995,6 +8064,7 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
     this.color = const Value.absent(),
     this.style = const Value.absent(),
     this.note = const Value.absent(),
+    this.tocReversed = const Value.absent(),
   });
   HighlightsCompanion.insert({
     this.id = const Value.absent(),
@@ -8008,6 +8078,7 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
     this.color = const Value.absent(),
     this.style = const Value.absent(),
     this.note = const Value.absent(),
+    this.tocReversed = const Value.absent(),
   }) : bookName = Value(bookName);
   static Insertable<Highlight> custom({
     Expression<int>? id,
@@ -8021,6 +8092,7 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
     Expression<String>? color,
     Expression<String>? style,
     Expression<String>? note,
+    Expression<bool>? tocReversed,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -8034,6 +8106,7 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
       if (color != null) 'color': color,
       if (style != null) 'style': style,
       if (note != null) 'note': note,
+      if (tocReversed != null) 'tocReversed': tocReversed,
     });
   }
 
@@ -8049,6 +8122,7 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
     Value<HighlightColor>? color,
     Value<HighlightStyle>? style,
     Value<String>? note,
+    Value<bool?>? tocReversed,
   }) {
     return HighlightsCompanion(
       id: id ?? this.id,
@@ -8062,6 +8136,7 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
       color: color ?? this.color,
       style: style ?? this.style,
       note: note ?? this.note,
+      tocReversed: tocReversed ?? this.tocReversed,
     );
   }
 
@@ -8105,6 +8180,9 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
     if (note.present) {
       map['note'] = Variable<String>(note.value);
     }
+    if (tocReversed.present) {
+      map['tocReversed'] = Variable<bool>(tocReversed.value);
+    }
     return map;
   }
 
@@ -8121,7 +8199,8 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
           ..write('quote: $quote, ')
           ..write('color: $color, ')
           ..write('style: $style, ')
-          ..write('note: $note')
+          ..write('note: $note, ')
+          ..write('tocReversed: $tocReversed')
           ..write(')'))
         .toString();
   }
@@ -8144,6 +8223,7 @@ class _$HighlightInsertable implements Insertable<Highlight> {
       color: Value(_object.color),
       style: Value(_object.style),
       note: Value(_object.note),
+      tocReversed: Value(_object.tocReversed),
     ).toColumns(false);
   }
 }
@@ -13481,6 +13561,7 @@ typedef $$BookmarksTableCreateCompanionBuilder = BookmarksCompanion Function({
   Value<int> charOffset,
   Value<String?> anchor,
   Value<String> excerpt,
+  Value<bool?> tocReversed,
 });
 typedef $$BookmarksTableUpdateCompanionBuilder = BookmarksCompanion Function({
   Value<int> id,
@@ -13491,6 +13572,7 @@ typedef $$BookmarksTableUpdateCompanionBuilder = BookmarksCompanion Function({
   Value<int> charOffset,
   Value<String?> anchor,
   Value<String> excerpt,
+  Value<bool?> tocReversed,
 });
 
 class $$BookmarksTableFilterComposer
@@ -13539,6 +13621,11 @@ class $$BookmarksTableFilterComposer
 
   ColumnFilters<String> get excerpt => $composableBuilder(
     column: $table.excerpt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get tocReversed => $composableBuilder(
+    column: $table.tocReversed,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -13591,6 +13678,11 @@ class $$BookmarksTableOrderingComposer
     column: $table.excerpt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get tocReversed => $composableBuilder(
+    column: $table.tocReversed,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$BookmarksTableAnnotationComposer
@@ -13633,6 +13725,11 @@ class $$BookmarksTableAnnotationComposer
 
   GeneratedColumn<String> get excerpt =>
       $composableBuilder(column: $table.excerpt, builder: (column) => column);
+
+  GeneratedColumn<bool> get tocReversed => $composableBuilder(
+    column: $table.tocReversed,
+    builder: (column) => column,
+  );
 }
 
 class $$BookmarksTableTableManager
@@ -13671,6 +13768,7 @@ class $$BookmarksTableTableManager
                 Value<int> charOffset = const Value.absent(),
                 Value<String?> anchor = const Value.absent(),
                 Value<String> excerpt = const Value.absent(),
+                Value<bool?> tocReversed = const Value.absent(),
               }) => BookmarksCompanion(
                 id: id,
                 bookName: bookName,
@@ -13680,6 +13778,7 @@ class $$BookmarksTableTableManager
                 charOffset: charOffset,
                 anchor: anchor,
                 excerpt: excerpt,
+                tocReversed: tocReversed,
               ),
           createCompanionCallback:
               ({
@@ -13691,6 +13790,7 @@ class $$BookmarksTableTableManager
                 Value<int> charOffset = const Value.absent(),
                 Value<String?> anchor = const Value.absent(),
                 Value<String> excerpt = const Value.absent(),
+                Value<bool?> tocReversed = const Value.absent(),
               }) => BookmarksCompanion.insert(
                 id: id,
                 bookName: bookName,
@@ -13700,6 +13800,7 @@ class $$BookmarksTableTableManager
                 charOffset: charOffset,
                 anchor: anchor,
                 excerpt: excerpt,
+                tocReversed: tocReversed,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -13744,6 +13845,7 @@ typedef $$HighlightsTableCreateCompanionBuilder = HighlightsCompanion Function({
   Value<HighlightColor> color,
   Value<HighlightStyle> style,
   Value<String> note,
+  Value<bool?> tocReversed,
 });
 typedef $$HighlightsTableUpdateCompanionBuilder = HighlightsCompanion Function({
   Value<int> id,
@@ -13757,6 +13859,7 @@ typedef $$HighlightsTableUpdateCompanionBuilder = HighlightsCompanion Function({
   Value<HighlightColor> color,
   Value<HighlightStyle> style,
   Value<String> note,
+  Value<bool?> tocReversed,
 });
 
 class $$HighlightsTableFilterComposer
@@ -13824,6 +13927,11 @@ class $$HighlightsTableFilterComposer
     column: $table.note,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<bool> get tocReversed => $composableBuilder(
+    column: $table.tocReversed,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$HighlightsTableOrderingComposer
@@ -13889,6 +13997,11 @@ class $$HighlightsTableOrderingComposer
     column: $table.note,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get tocReversed => $composableBuilder(
+    column: $table.tocReversed,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$HighlightsTableAnnotationComposer
@@ -13940,6 +14053,11 @@ class $$HighlightsTableAnnotationComposer
 
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<bool> get tocReversed => $composableBuilder(
+    column: $table.tocReversed,
+    builder: (column) => column,
+  );
 }
 
 class $$HighlightsTableTableManager
@@ -13984,6 +14102,7 @@ class $$HighlightsTableTableManager
                 Value<HighlightColor> color = const Value.absent(),
                 Value<HighlightStyle> style = const Value.absent(),
                 Value<String> note = const Value.absent(),
+                Value<bool?> tocReversed = const Value.absent(),
               }) => HighlightsCompanion(
                 id: id,
                 bookName: bookName,
@@ -13996,6 +14115,7 @@ class $$HighlightsTableTableManager
                 color: color,
                 style: style,
                 note: note,
+                tocReversed: tocReversed,
               ),
           createCompanionCallback:
               ({
@@ -14010,6 +14130,7 @@ class $$HighlightsTableTableManager
                 Value<HighlightColor> color = const Value.absent(),
                 Value<HighlightStyle> style = const Value.absent(),
                 Value<String> note = const Value.absent(),
+                Value<bool?> tocReversed = const Value.absent(),
               }) => HighlightsCompanion.insert(
                 id: id,
                 bookName: bookName,
@@ -14022,6 +14143,7 @@ class $$HighlightsTableTableManager
                 color: color,
                 style: style,
                 note: note,
+                tocReversed: tocReversed,
               ),
           withReferenceMapper: (p0) => p0
               .map(

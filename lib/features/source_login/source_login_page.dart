@@ -129,16 +129,25 @@ String? sourceWebsiteLoginUrl(BookSource source) {
       : sourceUrl;
 }
 
+/// 清掉 [source] 的 Cookie：夜讀自己存的、HTTP 請求自動收存的、手機瀏覽器
+/// 裡的。表單內容與登入標頭不動（書源編輯頁的「清除 Cookie」）。
+Future<void> clearSourceCookies(BookSource source) async {
+  await source.removeLoginCookies();
+  await _clearWebViewCookies(source);
+}
+
 /// 清掉 [source] 的登入資料（單獨登出一個書源）：表單內容、登入標頭，以及
 /// 這個網站在三個地方的 Cookie——夜讀自己存的、HTTP 請求自動收存的、手機
 /// 瀏覽器裡的。瀏覽器照書源網址與登入網頁的每一層路徑清，登入網頁常在
 /// `/account/login` 這類路徑，那裡設的 Cookie 從網站根目錄看不到。
 Future<void> clearSourceLoginData(BookSource source) async {
   await source.clearLoginData();
+  await _clearWebViewCookies(source);
+}
+
+/// 手機瀏覽器裡的 Cookie。
+Future<void> _clearWebViewCookies(BookSource source) async {
   final uris = _loginUris(source);
-  for (final uri in uris) {
-    await NetworkService().cookieJar.delete(uri, true);
-  }
   if (uris.isNotEmpty) await WebViewNative.clearCookies(uris);
 }
 
@@ -297,7 +306,11 @@ class _SourceLoginPageState extends State<SourceLoginPage>
   /// 正在清除登入資料：和按鈕、打勾一樣算一個動作，一次只跑一個。
   bool _clearing = false;
 
-  bool get _busy => _running != null || _submitting || _clearing;
+  /// 正在刪除登入標頭：同上。
+  bool _deletingHeader = false;
+
+  bool get _busy =>
+      _running != null || _submitting || _clearing || _deletingHeader;
 
   @override
   void initState() {
@@ -485,6 +498,19 @@ class _SourceLoginPageState extends State<SourceLoginPage>
     }
   }
 
+  Future<void> _deleteLoginHeader() async {
+    if (_busy) return;
+    setState(() => _deletingHeader = true);
+    try {
+      await widget.source.removeLoginHeader();
+      _showNotice('已刪除登入標頭');
+    } catch (error, stackTrace) {
+      _showNotice(failureMessage('刪除登入標頭', error, stackTrace));
+    } finally {
+      if (mounted) setState(() => _deletingHeader = false);
+    }
+  }
+
   void _showNotice(String message) {
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (messenger == null) return;
@@ -617,6 +643,14 @@ class _SourceLoginPageState extends State<SourceLoginPage>
         leading: const GroupedIconTile(Icons.badge_outlined),
         enabled: !_busy,
         onTap: _showLoginHeader,
+      ),
+      GroupedRow(
+        title: '刪除登入標頭',
+        leading: const GroupedIconTile(Icons.delete_outline_rounded),
+        destructive: true,
+        showChevron: false,
+        enabled: !_busy,
+        onTap: _deleteLoginHeader,
       ),
       GroupedRow(
         title: '清除登入資料',

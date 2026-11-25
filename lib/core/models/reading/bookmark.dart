@@ -18,6 +18,7 @@ class Bookmark {
     this.charOffset = 0,
     this.anchor,
     this.excerpt = '',
+    this.tocReversed,
   });
 
   /// 這筆書籤的編號：建立時間的毫秒乘 1000 加隨機三位數
@@ -31,6 +32,11 @@ class Bookmark {
   /// [chapterTitle] 為準，序號只在找不到同名章時用。
   final int chapterIndex;
   final String chapterTitle;
+
+  /// 記下 [chapterIndex] 時這本書的目錄是不是反轉的（反轉目錄，ADR 0085）：
+  /// 和現在的方向不同時，序號從目錄的另一頭數。null 是沒記（舊版、Legado
+  /// 的書籤），當成和這本書現在一樣。
+  final bool? tocReversed;
 
   /// 章內第幾個字（正文顯示文字的位置）。
   final int charOffset;
@@ -49,6 +55,7 @@ class Bookmark {
     String? chapterTitle,
     int? charOffset,
     String? anchor,
+    bool? tocReversed,
   }) => Bookmark(
     id: id ?? this.id,
     bookName: bookName ?? this.bookName,
@@ -58,6 +65,7 @@ class Bookmark {
     charOffset: charOffset ?? this.charOffset,
     anchor: anchor ?? this.anchor,
     excerpt: excerpt,
+    tocReversed: tocReversed ?? this.tocReversed,
   );
 
   Map<String, dynamic> toJson() => {
@@ -69,6 +77,7 @@ class Bookmark {
     'charOffset': charOffset,
     'anchor': ?anchor,
     'excerpt': excerpt,
+    'tocReversed': ?tocReversed,
   };
 
   /// 也讀得懂 2026-09 以前的備份與 Legado 的書籤（`bookmark.json`）：那時的
@@ -97,6 +106,9 @@ class Bookmark {
       ),
       anchor: anchor is String && anchor.isNotEmpty ? anchor : null,
       excerpt: readString('excerpt', 'bookText'),
+      tocReversed: json['tocReversed'] is bool
+          ? json['tocReversed'] as bool
+          : null,
     );
   }
 }

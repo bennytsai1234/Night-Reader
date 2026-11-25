@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -11,6 +12,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
@@ -106,6 +108,50 @@ void main() {
 
     expect(shared, hasLength(1));
     expect(await BookIllustrationStorage.isUnfetched(book), isTrue);
+  });
+
+  // 本地 EPUB 的分卷有卷首的字：匯出時照 Legado 寫進去，不只寫卷名。
+  test('a local volume with its own text exports the text too', () async {
+    final file = File('${root.path}/卷.txt');
+    const volume = '第一卷\n卷首語。\n';
+    const chapter = '第一章\n正文。\n';
+    await file.writeAsString('$volume$chapter');
+    final book = Book(
+      bookUrl: 'local://${file.path}',
+      origin: 'local',
+      name: '卷',
+      isInBookshelf: true,
+      charset: 'utf-8',
+    );
+    final volumeBytes = utf8.encode(volume).length;
+    await ChapterDao(db).insertChapters([
+      BookChapter(
+        url: '${book.bookUrl}#0',
+        title: '第一卷',
+        bookUrl: book.bookUrl,
+        index: 0,
+        start: 0,
+        end: volumeBytes,
+        isVolume: true,
+      ),
+      BookChapter(
+        url: '${book.bookUrl}#1',
+        title: '第一章',
+        bookUrl: book.bookUrl,
+        index: 1,
+        start: volumeBytes,
+        end: await file.length(),
+      ),
+    ]);
+
+    await ExportBookService().exportToTxt(book, present: present);
+    // Windows 上開著的原檔刪不掉。
+    await LocalBookService().closeOpenFile();
+
+    final exported = await (await AppStoragePaths.shareExportFile('卷.txt'))
+        .readAsString();
+    expect(exported, contains('卷首語。'));
+    expect(exported, contains('正文。'));
   });
 
   // 本地書的原檔不在這台（例如匯入了別台的書架檔）：匯出要說失敗，不能把

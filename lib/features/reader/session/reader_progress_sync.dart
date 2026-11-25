@@ -191,7 +191,7 @@ class ReaderProgressSync {
     if (!_samePlace(current, since)) return;
     final index = pulled.progress.chapterIndexIn([
       for (var i = 0; i < runtime.chapterCount; i++) runtime.titleFor(i),
-    ]);
+    ], reversed: book.getReverseToc());
     final target = ReaderLocation(
       chapterIndex: index,
       charOffset: pulled.progress.charOffset,

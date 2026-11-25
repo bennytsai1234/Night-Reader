@@ -7,6 +7,13 @@ import '../utils/gb18030.dart';
 
 /// TxtParser - 高性能 TXT 解析器
 /// 深度還原 Android model/localBook/TextFile.kt 的物理位移邏輯
+/// [TxtParser.splitBytes] 的結果：章節範圍、用的編碼與「前言」當成的簡介。
+typedef TxtSplitResult = ({
+  List<Map<String, dynamic>> chapters,
+  String charset,
+  String? intro,
+});
+
 class TxtParser {
   final File file;
 
@@ -69,15 +76,18 @@ class TxtParser {
   /// 掃描文件並獲取章節位移 (不讀取全量內容入記憶體)。[charset] 給了就照它
   /// 解碼（讀者在「更多」手動指定的編碼）；沒給時照 [EncodingDetect.getEncode]
   /// 偵測。
-  Future<({List<Map<String, dynamic>> chapters, String charset})>
-  splitChapters({RegExp? customPattern, String? charset}) async {
+  Future<TxtSplitResult> splitChapters({
+    RegExp? customPattern,
+    String? charset,
+  }) async {
     final bytes = await file.readAsBytes();
     return splitBytes(bytes, customPattern: customPattern, charset: charset);
   }
 
   /// 解碼 [bytes] 並分章；回傳的章節範圍是檔案裡的位元組位移。自動偵測與
-  /// 手動指定編碼走同一條路。
-  static ({List<Map<String, dynamic>> chapters, String charset}) splitBytes(
+  /// 手動指定編碼走同一條路。第一個章名之前有字（「前言」）時，前 500 字是
+  /// 這本書的簡介（同 Legado `TextFile`）。
+  static TxtSplitResult splitBytes(
     Uint8List bytes, {
     RegExp? customPattern,
     String? charset,
@@ -93,7 +103,8 @@ class TxtParser {
       bytes.sublist(bomLength, sampleEnd),
       charsetName,
     );
-    final spans = _split(content, customPattern ?? pickTocRule(sample));
+    final rule = customPattern ?? pickTocRule(sample);
+    final spans = _split(content, rule);
     // 只映射章界與實際切塊端點，避免為大型書籍的每個 code unit 建立
     // 一筆位移資料。
     final byteOffsets = _buildByteOffsets(
@@ -122,7 +133,21 @@ class TxtParser {
         'isVolume': span.isVolume,
       });
     }
-    return (chapters: result, charset: charsetName);
+    return (
+      chapters: result,
+      charset: charsetName,
+      intro: _leadIntro(content, rule),
+    );
+  }
+
+  /// 第一個章名之前的字（「前言」）的前 500 字；沒有章名或前面只有空白時是
+  /// null。
+  static String? _leadIntro(String content, RegExp? rule) {
+    final first = rule?.firstMatch(content);
+    if (first == null) return null;
+    final lead = content.substring(0, first.start).trim();
+    if (lead.isEmpty) return null;
+    return lead.length <= 500 ? lead : lead.substring(0, 500);
   }
 
   /// 照 Legado 從 [tocRules] 挑一條（`TextFile.getTocRule`）：拿 [sample]

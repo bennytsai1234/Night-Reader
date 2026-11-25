@@ -23,7 +23,9 @@ class BookmarkSync extends SyncKind {
 
   /// 書籤的內容是「哪本書、哪一章（章名）的第幾個字、選了什麼字」。章節
   /// 序號與錨點裡的序號只是這台目錄裡的座標：換源、書源插章時跟著變，讀到
-  /// 的地方沒變，不算改過；沒有章名時才看序號。
+  /// 的地方沒變，不算改過；沒有章名時才看序號。記下序號時的目錄方向
+  /// （`tocReversed`）記了就算：同名的章（好幾個「番外」）要靠它和序號
+  /// 分，反轉目錄記下方向時一定送出（ADR 0085）；沒記的和舊版的一樣。
   @override
   SyncFingerprint get fingerprint => _fingerprintOf;
 
@@ -37,6 +39,7 @@ class BookmarkSync extends SyncKind {
       'bookAuthor': data['bookAuthor'],
       if (hasTitle) 'chapterTitle': title.trim(),
       if (!hasTitle) 'chapterIndex': data['chapterIndex'],
+      'tocReversed': ?data['tocReversed'],
       'charOffset': data['charOffset'],
       'excerpt': data['excerpt'],
     });

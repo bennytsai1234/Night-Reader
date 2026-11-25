@@ -22,23 +22,31 @@ typedef BookmarkHighlightExportBook = ({
   List<BookmarkHighlightExportItem> items,
 });
 
-/// 一本書的書籤與標註合成匯出的一筆一筆：章照 [toc] 對到這台目錄（還沒抓
-/// 目錄時照記下的序號），同一章照第幾個字；同一個位置先書籤、再標註。
+/// 一本書的書籤與標註合成匯出的一筆一筆：章照 [toc]（[reversed] 是這本書
+/// 反轉了沒）對到這台目錄（[chapterIndexByTitle]，還沒抓目錄時照記下的
+/// 序號），同一章照第幾個字；同一個位置先書籤、再標註。
 List<BookmarkHighlightExportItem> bookmarkHighlightExportItems({
   required Iterable<Bookmark> bookmarks,
   required Iterable<Highlight> highlights,
   required List<BookChapter> toc,
+  required bool reversed,
 }) {
-  int chapterOf(int chapterIndex, String chapterTitle) => alignChapterIndex(
-    oldIndex: chapterIndex,
-    oldTitle: chapterTitle,
-    oldTotalCount: 0,
-    newChapters: toc,
-  );
+  int chapterOf(int chapterIndex, String chapterTitle, bool? tocReversed) =>
+      chapterIndexByTitle(
+        chapterIndex: chapterIndex,
+        chapterTitle: chapterTitle,
+        countedReversed: tocReversed,
+        reversed: reversed,
+        chapters: toc,
+      );
   final items = [
     for (final bookmark in bookmarks)
       (
-        chapter: chapterOf(bookmark.chapterIndex, bookmark.chapterTitle),
+        chapter: chapterOf(
+          bookmark.chapterIndex,
+          bookmark.chapterTitle,
+          bookmark.tocReversed,
+        ),
         charOffset: bookmark.charOffset,
         chapterTitle: bookmark.chapterTitle,
         text: bookmark.excerpt,
@@ -46,7 +54,11 @@ List<BookmarkHighlightExportItem> bookmarkHighlightExportItems({
       ),
     for (final highlight in highlights)
       (
-        chapter: chapterOf(highlight.chapterIndex, highlight.chapterTitle),
+        chapter: chapterOf(
+          highlight.chapterIndex,
+          highlight.chapterTitle,
+          highlight.tocReversed,
+        ),
         charOffset: highlight.charOffset,
         chapterTitle: highlight.chapterTitle,
         text: highlight.quote,
