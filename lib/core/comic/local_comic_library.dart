@@ -59,7 +59,7 @@ abstract final class LocalComicLibrary {
           sources.add(
             LocalComicSource(path: entity.path, title: _titleOf(name)),
           );
-        } else if (_isImage(name)) {
+        } else if (ComicChapterFiles.isImagePath(entity.path)) {
           looseImages = true;
         }
       } else if (entity is Directory && _hasImages(entity)) {
@@ -149,12 +149,11 @@ abstract final class LocalComicLibrary {
 
   static String _titleOf(String path) => p.basenameWithoutExtension(path);
 
-  static bool _isImage(String name) => ComicChapterFiles.imageExtensions
-      .contains(p.extension(name).toLowerCase());
-
   static bool _hasImages(Directory dir) {
     for (final entity in dir.listSync(followLinks: false)) {
-      if (entity is File && _isImage(entity.path)) return true;
+      if (entity is File && ComicChapterFiles.isImagePath(entity.path)) {
+        return true;
+      }
     }
     return false;
   }
