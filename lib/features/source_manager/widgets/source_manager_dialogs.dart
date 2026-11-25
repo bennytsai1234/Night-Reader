@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/source/explore_kind.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -381,27 +383,26 @@ class SourceManagerDialogs {
     }
   }
 
+  /// 除錯前問關鍵字，書源管理的長按與書源編輯共用（同 Legado
+  /// `BookSourceDebugActivity`）：預先填書源的校驗關鍵字，沒有時「我的世界」；
+  /// 輸入框下面是校驗關鍵字與第一個發現分類，點了就用它除錯（發現分類寫成
+  /// `分類::網址`，除錯從發現開始）。[loadExploreKinds] 給測試換掉讀發現分類。
   static Future<void> showDebugInput(
     BuildContext context,
-    BookSource source,
-  ) async {
+    BookSource source, {
+    Future<List<ExploreKind>> Function(BookSource source)? loadExploreKinds,
+  }) async {
     String? inputError;
     final pageContext = context;
+    final checkKey = source.ruleSearch?.checkKeyWord?.trim() ?? '';
+    final firstExploreKind = source.hasExploreUrl
+        ? _firstExploreKind(source, loadExploreKinds)
+        : null;
     await showStatefulAppAlert<void>(
       context: context,
-      fieldTexts: const ['我的世界'],
-      builder: (dialogContext, setDialogState, fields) => AppAlert<bool>(
-        title: '輸入除錯關鍵字',
-        onAction: (confirmed) {
-          if (!confirmed) {
-            Navigator.pop(dialogContext);
-            return;
-          }
-          final debugKey = fields.single.text.trim();
-          if (debugKey.isEmpty) {
-            setDialogState(() => inputError = '請輸入除錯關鍵字或 URL');
-            return;
-          }
+      fieldTexts: [checkKey.isEmpty ? '我的世界' : checkKey],
+      builder: (dialogContext, setDialogState, fields) {
+        void start(String debugKey) {
           Navigator.pop(dialogContext);
           Navigator.push(
             pageContext,
@@ -410,23 +411,123 @@ class SourceManagerDialogs {
                   SourceDebugPage(source: source, debugKey: debugKey),
             ),
           );
-        },
-        content: AlertTextField(
-          controller: fields.single,
-          autofocus: true,
-          hintText: '搜尋詞或 URL',
-          errorText: inputError,
-          onChanged: (_) {
-            if (inputError != null) {
-              setDialogState(() => inputError = null);
+        }
+
+        return AppAlert<bool>(
+          title: '輸入除錯關鍵字',
+          onAction: (confirmed) {
+            if (!confirmed) {
+              Navigator.pop(dialogContext);
+              return;
             }
+            final debugKey = fields.single.text.trim();
+            if (debugKey.isEmpty) {
+              setDialogState(() => inputError = '請輸入除錯關鍵字或 URL');
+              return;
+            }
+            start(debugKey);
           },
-        ),
-        actions: const [
-          AppAlertAction(label: '取消', value: false),
-          AppAlertAction(label: '開始除錯', value: true, isDefault: true),
-        ],
-      ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AlertTextField(
+                controller: fields.single,
+                autofocus: true,
+                hintText: '搜尋詞或 URL',
+                errorText: inputError,
+                onChanged: (_) {
+                  if (inputError != null) {
+                    setDialogState(() => inputError = null);
+                  }
+                },
+              ),
+              _DebugKeyShortcuts(
+                checkKey: checkKey,
+                exploreKind: firstExploreKind,
+                onPick: start,
+              ),
+            ],
+          ),
+          actions: const [
+            AppAlertAction(label: '取消', value: false),
+            AppAlertAction(label: '開始除錯', value: true, isDefault: true),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 第一個有網址的發現分類（同 Legado `initExploreKinds`）；讀不到或規則
+  /// 出錯時沒有。
+  static Future<ExploreKind?> _firstExploreKind(
+    BookSource source,
+    Future<List<ExploreKind>> Function(BookSource source)? load,
+  ) async {
+    try {
+      final kinds =
+          await (load ??
+              (s) => BookSourceService().exploreKinds(s.exploreUrl, source: s))(
+            source,
+          );
+      for (final kind in kinds) {
+        if (kind.title.startsWith('ERROR:')) return null;
+        if (kind.url?.trim().isNotEmpty ?? false) return kind;
+      }
+    } catch (_) {
+      // 讀不到發現分類就不放這一個。
+    }
+    return null;
+  }
+}
+
+/// 除錯關鍵字輸入框下面的捷徑：書源的校驗關鍵字、第一個發現分類。
+class _DebugKeyShortcuts extends StatelessWidget {
+  const _DebugKeyShortcuts({
+    required this.checkKey,
+    required this.exploreKind,
+    required this.onPick,
+  });
+
+  final String checkKey;
+  final Future<ExploreKind?>? exploreKind;
+  final void Function(String debugKey) onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<ExploreKind?>(
+      future: exploreKind,
+      builder: (context, snapshot) {
+        final kind = snapshot.data;
+        final capsules = [
+          if (checkKey.isNotEmpty)
+            GlassCapsule(
+              label: checkKey,
+              translate: false,
+              blur: false,
+              tint: AppChrome.of(context).groupedBackground,
+              onTap: () => onPick(checkKey),
+            ),
+          if (kind != null)
+            GlassCapsule(
+              label: kind.title,
+              icon: Icons.explore_outlined,
+              translate: false,
+              blur: false,
+              tint: AppChrome.of(context).groupedBackground,
+              onTap: () => onPick('${kind.title}::${kind.url}'),
+            ),
+        ];
+        if (capsules.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: AppSpacing.sm),
+          child: Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xs,
+            children: capsules,
+          ),
+        );
+      },
     );
   }
 }

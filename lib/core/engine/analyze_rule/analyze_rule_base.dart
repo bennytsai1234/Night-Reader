@@ -11,7 +11,6 @@ import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/models/source/rule_data_interface.dart';
-import 'package:night_reader/core/source/rule_big_data_service.dart';
 import 'package:night_reader/core/utils/lru_map.dart';
 
 // 導入同目錄下的其它部分
@@ -55,30 +54,6 @@ abstract class AnalyzeRuleBase {
 
   void put(String key, String? value) {
     if (value == null) return;
-
-    // 如果數據過大 (例如 > 5000 字元)，存入 BigData
-    if (value.length > 5000) {
-      final bigData = RuleBigDataService();
-      // 根據當前上下文決定存儲類型
-      try {
-        final ch = chapter;
-        if (ch != null && ch.bookUrl != null) {
-          bigData.putChapterVariable(ch.bookUrl, ch.url, key, value);
-        } else {
-          final rd = ruleData;
-          if (rd != null) {
-            final dynamic dRd = rd;
-            try {
-              if (dRd.bookUrl != null) {
-                bigData.putBookVariable(dRd.bookUrl, key, value);
-              }
-            } catch (_) {}
-          }
-        }
-      } catch (_) {
-        // Fallback or ignore if properties missing
-      }
-    }
 
     // 同 Legado：章節、書，都沒有時存進書源（`source.put`，和規則 JS 的
     // `source.put` 同一份），之後別的規則讀得到。

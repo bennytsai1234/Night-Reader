@@ -10,6 +10,7 @@ import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
 import 'package:night_reader/features/explore/explore_provider.dart';
 import 'package:night_reader/features/explore/widgets/explore_skeletons.dart';
+import 'package:night_reader/features/source_login/source_login_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
@@ -19,14 +20,21 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeSourceDao extends Fake implements BookSourceDao {
-  _FakeSourceDao(List<BookSource> sources) : _sources = Stream.value(sources);
+  _FakeSourceDao(List<BookSource> sources)
+    : _all = sources,
+      _sources = Stream.value(sources);
 
-  _FakeSourceDao.stream(this._sources);
+  _FakeSourceDao.stream(this._sources) : _all = const [];
 
   final Stream<List<BookSource>> _sources;
+  final List<BookSource> _all;
 
   @override
   Stream<List<BookSource>> watchDiscoveryPart() => _sources;
+
+  @override
+  Future<BookSource?> getByUrl(String url) async =>
+      _all.where((source) => source.bookSourceUrl == url).firstOrNull;
 
   bool hasAny = true;
 
@@ -810,5 +818,70 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('匯入書源'), findsOneWidget);
     expect(find.text('沒有支援發現的書源'), findsNothing);
+  });
+
+  group('長按選單', () {
+    BookSource source({String? loginUrl, String? loginUi}) => BookSource(
+      bookSourceUrl: 'https://s.example',
+      bookSourceName: '書源甲',
+      exploreUrl: 'https://s.example/explore',
+      loginUrl: loginUrl,
+      loginUi: loginUi,
+    );
+
+    Future<void> longPress(WidgetTester tester) async {
+      await tester.longPress(find.text('書源甲'));
+      await tester.pumpAndSettle();
+    }
+
+    bool enabled(WidgetTester tester, String label) =>
+        tester
+            .widget<InkWell>(
+              find.ancestor(
+                of: find.text(label),
+                matching: find.byType(InkWell),
+              ),
+            )
+            .onTap !=
+        null;
+
+    testWidgets('沒有登入網址的書源，登入灰掉', (tester) async {
+      await pumpExplore(tester, _FakeSourceDao([source()]));
+      await tester.pumpAndSettle();
+      await longPress(tester);
+
+      expect(find.text('登入'), findsOneWidget);
+      expect(enabled(tester, '登入'), isFalse);
+    });
+
+    testWidgets('有登入網址的書源，登入開書源管理的同一個登入頁', (tester) async {
+      await pumpExplore(
+        tester,
+        _FakeSourceDao([
+          source(
+            loginUrl: '@js: function login() {}',
+            loginUi: '[{name: "帳號", type: "text"}]',
+          ),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      await longPress(tester);
+
+      expect(enabled(tester, '登入'), isTrue);
+      await tester.tap(find.text('登入'));
+      for (
+        var i = 0;
+        i < 80 && find.byType(SourceLoginPage).evaluate().isEmpty;
+        i++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(find.byType(SourceLoginPage), findsOneWidget);
+      expect(find.text('登入 · 書源甲'), findsOneWidget);
+    });
   });
 }
