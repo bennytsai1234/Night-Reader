@@ -429,6 +429,8 @@ void main() {
       BookSource.fromJson({
         'bookSourceName': '還原',
         'bookSourceUrl': book.origin,
+        // 正文規則空白時不抓網頁（同 Legado），要有規則才會發出請求。
+        'ruleContent': {'content': 'tag.body@text'},
       }),
     );
     await getIt<BookDao>().upsert(book);
