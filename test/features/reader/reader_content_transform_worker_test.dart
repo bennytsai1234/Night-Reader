@@ -321,6 +321,16 @@ void main() {
       expect(result['content'], '　　她的头发很长。');
     });
 
+    test('同一條規則的兩種寫法每一處只換一次，不把剛換上的字再換一次', () async {
+      final result = await worker.process(
+        chapter('我爱看小说。', [
+          ReplaceRule(pattern: '小说|小說', replacement: '網路小說', scopeTitle: true),
+        ], title: '第一章 小说'),
+      );
+      expect(result['content'], '　　我愛看網路小說。');
+      expect(result['displayTitle'], '第一章 網路小說');
+    });
+
     test('選字找原文用的段落也是轉過的寫法', () async {
       final sources = await ReaderContentTransformer.ruleStageParagraphs(
         book: Book(bookUrl: 'b', name: '測試書', origin: 'local')

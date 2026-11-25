@@ -55,8 +55,9 @@ class ReplaceRulePreview {
   _PreviewRun? _current;
 
   /// 依序套用 [rules] 到 [text]；被下一次試跑或 [cancel] 取代時傳回 null。
-  /// 規則照閱讀器一樣，字面與轉成 [chineseConvertType] 的寫法各比一次
-  /// （[ReplaceRuleScript.matchVariants]）：[text] 是轉過繁簡的字。
+  /// 規則照閱讀器一樣，字面與轉成 [chineseConvertType] 的寫法都比、每一處
+  /// 只換一次（[ReplaceRuleScript.applyMatchingVariants]）：[text] 是轉過
+  /// 繁簡的字。
   Future<ReplaceRulePreviewResult?> run(
     List<ReplaceRule> rules,
     String text, {
@@ -64,8 +65,9 @@ class ReplaceRulePreview {
   }) {
     cancel();
     if (rules.isEmpty) return Future.value(ReplaceRulePreviewDone(text));
-    final run = _current = _PreviewRun([
-      for (final rule in rules) ...rule.matchVariants([chineseConvertType]),
+    final run = _current = _PreviewRun(rules, [
+      // 規則的字在這裡轉：試跑的 isolate 沒有繁簡字典。
+      for (final rule in rules) rule.matchVariants([chineseConvertType]),
     ], text);
     return run.result;
   }
@@ -78,11 +80,11 @@ class ReplaceRulePreview {
 }
 
 class _PreviewRun {
-  _PreviewRun(this._rules, String text) {
+  _PreviewRun(this._rules, List<List<ReplaceRule>> variants, String text) {
     _port.listen(_onMessage);
     Isolate.spawn(
       _previewMain,
-      (_port.sendPort, _rules, text),
+      (_port.sendPort, variants, text),
       onExit: _port.sendPort,
       onError: _port.sendPort,
       debugName: 'replace-rule-preview',
@@ -142,14 +144,15 @@ class _PreviewRun {
   }
 }
 
-void _previewMain((SendPort, List<ReplaceRule>, String) args) {
+/// [variants] 是每條規則要比的寫法（[ReplaceRuleScript.matchVariants]）。
+void _previewMain((SendPort, List<List<ReplaceRule>>, String) args) {
   // 這個 isolate 沒有 rootBundle：替換規則的 `@js:` 用不到 fetch。
   fetchPolyfillSource ??= '';
-  final (reply, rules, input) = args;
+  final (reply, variants, input) = args;
   var text = input;
-  for (var i = 0; i < rules.length; i++) {
+  for (var i = 0; i < variants.length; i++) {
     reply.send(('rule', i));
-    text = rules[i].apply(text, runJs: runReplacementJs);
+    text = applyVariants(text, variants[i], runJs: runReplacementJs);
   }
   disposeReplacementJs();
   reply.send(('done', text));

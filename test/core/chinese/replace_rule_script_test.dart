@@ -124,4 +124,36 @@ void main() {
       });
     }
   });
+
+  group('兩種寫法對同一段字比，每一處只換一次', () {
+    String applied(String text, ReplaceRule rule, List<int> types) =>
+        rule.applyMatchingVariants(text, types);
+
+    test('換上的字含有轉過的寫法時不再換一次', () {
+      final rule = ReplaceRule(pattern: '小说|小說', replacement: '網路小說');
+      expect(applied('我愛看小說。', rule, [_s2t]), '我愛看網路小說。');
+    });
+
+    test('兩種寫法對到重疊的字時照字面那一種換', () {
+      // 字面「广告词」對不到，轉過的「廣告詞」與字面的「告詞」重疊。
+      final rule = ReplaceRule(pattern: '告詞|广告词', replacement: r'[$0]');
+      expect(applied('廣告詞', rule, [_s2t]), '廣[告詞]');
+    });
+
+    test('兩種寫法各自對到不同的地方，都換', () {
+      final rule = ReplaceRule(pattern: '广告', replacement: '', isRegex: false);
+      expect(rule.applyMatchingVariants('广告與廣告', [_s2t]), '與');
+    });
+
+    test('長度是零的對法（行首）在同一處只插一次', () {
+      // 字面與轉過的（[說說]）都在兩行的行首對到。
+      final rule = ReplaceRule(pattern: '(?m)^(?=[说說])', replacement: '>');
+      expect(applied('說話\n说话', rule, [_s2t]), '>說話\n>说话');
+    });
+
+    test('不轉繁簡時和一條規則套一次一樣', () {
+      final rule = ReplaceRule(pattern: '小说|小說', replacement: '網路小說');
+      expect(applied('小说', rule, [0]), rule.apply('小说'));
+    });
+  });
 }

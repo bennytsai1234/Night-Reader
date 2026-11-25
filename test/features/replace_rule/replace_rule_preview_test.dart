@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_preview.dart';
 
@@ -21,6 +24,19 @@ void main() {
     ], '包含 junk123 內容');
     expect(result, isA<ReplaceRulePreviewDone>());
     expect(result!.display, '包含 一二三 內容');
+  });
+
+  test('開了繁簡轉換：同一條規則的兩種寫法每一處只換一次', () async {
+    ChineseUtils.initializeFromDictionaryData([
+      for (final path in ChineseUtils.dictionaryAssetPaths)
+        File(path).readAsStringSync(),
+    ]);
+    final result = await ReplaceRulePreview().run(
+      [ReplaceRule(pattern: '小说|小說', replacement: '網路小說')],
+      '我愛看小說。',
+      chineseConvertType: 1,
+    );
+    expect(result!.display, '我愛看網路小說。');
   });
 
   test('「替換為」寫 @js: 的規則試跑時照樣跑 JS', skip: quickJsUnavailableReason(), () async {

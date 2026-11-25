@@ -17,12 +17,17 @@ class BookTocReplacer {
   /// 書源拿掉的章節移出目錄，但已下載或正在讀的留下來，插回原本的位置：
   /// 網站壞掉時常只回一部分目錄（例如側欄的最新章節），照單全收會讓已下載
   /// 的章節點不到、進度跑掉。新目錄裡的新章照章名對得到它的不留，那是書源
-  /// 換了網址（例如整站搬家，見 [keepDroppedChapters]）。書源回傳空目錄時丟
-  /// [StateError]，什麼都不寫。
-  Future<({List<BookChapter> chapters, bool progressMoved})> replace(
-    Book book,
-    List<BookChapter> fetched,
-  ) async {
+  /// 換了網址（例如整站搬家，見 [mergeFetchedToc]）。`moved` 是這些換了網址
+  /// 的章：舊網址 → 新網址；閱讀進度照它搬，開著的閱讀器存進度也照它找
+  /// （`MovedChapters`）。書源回傳空目錄時丟 [StateError]，什麼都不寫。
+  Future<
+    ({
+      List<BookChapter> chapters,
+      bool progressMoved,
+      Map<String, String> moved,
+    })
+  >
+  replace(Book book, List<BookChapter> fetched) async {
     if (fetched.isEmpty) throw StateError('書源回傳的目錄是空的');
     final oldToc = await chapterDao.getByBook(book.bookUrl);
     final storedUrls =
@@ -31,7 +36,7 @@ class BookTocReplacer {
           bookUrl: book.bookUrl,
         ) ??
         const <String>{};
-    final chapters = keepDroppedChapters(
+    final (:chapters, :moved) = mergeFetchedToc(
       oldToc: oldToc,
       fetched: fetched,
       keep: (chapter) =>
@@ -42,13 +47,17 @@ class BookTocReplacer {
       chapters[i].index = i;
       chapters[i].bookUrl = book.bookUrl;
     }
-    final progressMoved = book.realignProgress(chapters, oldToc: oldToc);
+    final progressMoved = book.realignProgress(
+      chapters,
+      oldToc: oldToc,
+      moved: moved,
+    );
     // 目錄沒變就不重寫：書架檢查每本書都會走這裡，大多數時候目錄一樣，
     // 整份刪掉再寫回要組上千筆寫入。
     if (!_sameAsStored(oldToc, chapters)) {
       await chapterDao.replaceByBook(book.bookUrl, chapters);
     }
-    return (chapters: chapters, progressMoved: progressMoved);
+    return (chapters: chapters, progressMoved: progressMoved, moved: moved);
   }
 }
 
@@ -81,28 +90,32 @@ bool _sameAsStored(List<BookChapter> stored, List<BookChapter> chapters) {
   return true;
 }
 
-/// [fetched] 加上 [oldToc] 裡書源拿掉、但 [keep] 要留的章節。留下的章節接在
-/// 舊目錄裡它前面最近一個還在的章節後面；前面都不在了就放最前面。
+/// [fetched] 加上 [oldToc] 裡書源拿掉、但 [keep] 要留的章節，和書源換了網址
+/// 的章（`moved`：舊網址 → 新網址）。留下的章節接在舊目錄裡它前面最近一個
+/// 還在的章節後面；前面都不在了就放最前面。兩份目錄要是同一個方向（存著
+/// 的順序，反轉目錄時都是翻過的）。
 ///
-/// 書源換了網址的不留：[fetched] 裡網址不在舊目錄的新章，照章名找得到同一
-/// 章時（[ChapterMatcher.sameChapter]：章名一樣、繁簡不同，或只差章號的寫法
-/// 「第3章 風起」與「第三章 風起」；沒有章名的「第3章」與「第三章」比章號），
-/// 閱讀進度照同一個比法對過去。網址還在舊目錄的章就是它自己，不拿來比：
+/// 書源換了網址的不留、記進 `moved`：舊目錄裡網址不在 [fetched] 的章，在
+/// [fetched] 裡網址不在舊目錄的新章中，照章名找得到同一章時
+/// （[ChapterMatcher.sameChapter]：章名一樣、繁簡不同，或只差章號的寫法
+/// 「第3章 風起」與「第三章 風起」；沒有章名的「第3章」與「第三章」比章號）。
+/// 位置照兩份完整目錄的序號估。網址還在舊目錄的章就是它自己，不拿來比：
 /// 「大戰（上）」被拿掉、「大戰（下）」還在，或網站只回最新幾章、章名都叫
 /// 「正文」時，拿掉的章照樣留著。
-List<BookChapter> keepDroppedChapters({
+({List<BookChapter> chapters, Map<String, String> moved}) mergeFetchedToc({
   required List<BookChapter> oldToc,
   required List<BookChapter> fetched,
   required bool Function(BookChapter chapter) keep,
 }) {
   final fetchedUrls = {for (final chapter in fetched) chapter.url};
-  // 只有真的遇到書源拿掉、又要留的章節才準備比章名：一般檢查更新沒有
-  // 章節被拿掉，不必把上千個章名都轉一次。
+  // 只有真的遇到書源拿掉的章節才準備比章名：一般檢查更新沒有章節被拿掉，
+  // 不必把上千個章名都轉一次。
   late final oldUrls = {for (final chapter in oldToc) chapter.url};
-  late final matcher = ChapterMatcher([
-    for (final chapter in fetched)
-      if (!oldUrls.contains(chapter.url)) chapter,
-  ]);
+  late final matcher = ChapterMatcher(
+    fetched,
+    among: (chapter) => !oldUrls.contains(chapter.url),
+  );
+  final moved = <String, String>{};
   final front = <BookChapter>[];
   final after = <String, List<BookChapter>>{};
   String? lastKeptUrl;
@@ -111,25 +124,29 @@ List<BookChapter> keepDroppedChapters({
       lastKeptUrl = chapter.url;
       continue;
     }
-    if (!keep(chapter) ||
-        matcher.sameChapter(
-              oldIndex: position,
-              oldTitle: chapter.title,
-              oldTotalCount: oldToc.length,
-              byNumber: ChapterNumberMatch.untitledOnly,
-            ) !=
-            null) {
+    final same = matcher.sameChapter(
+      oldIndex: position,
+      oldTitle: chapter.title,
+      oldTotalCount: oldToc.length,
+      byNumber: ChapterNumberMatch.untitledOnly,
+    );
+    if (same != null) {
+      moved[chapter.url] = fetched[same].url;
       continue;
     }
+    if (!keep(chapter)) continue;
     // 複製一份：呼叫端會重編序號，[oldToc] 要留著對進度。
     final anchor = lastKeptUrl;
     (anchor == null ? front : after.putIfAbsent(anchor, () => [])).add(
       chapter.copyWith(),
     );
   }
-  if (front.isEmpty && after.isEmpty) return fetched;
-  return [
-    ...front,
-    for (final chapter in fetched) ...[chapter, ...?after[chapter.url]],
-  ];
+  if (front.isEmpty && after.isEmpty) return (chapters: fetched, moved: moved);
+  return (
+    chapters: [
+      ...front,
+      for (final chapter in fetched) ...[chapter, ...?after[chapter.url]],
+    ],
+    moved: moved,
+  );
 }

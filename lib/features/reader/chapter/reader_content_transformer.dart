@@ -957,11 +957,13 @@ class ReaderContentTransformer {
     ]..sort((a, b) => a.order.compareTo(b.order));
   }
 
-  /// 依序套用 [rules]，每開始一條告訴 [onRule]，套完傳 null。[keep] 判斷
-  /// 套用後的字要不要留下。
+  /// 依序套用 [rules]，每條的字面與轉成 [convertTypes] 的寫法都比
+  /// （[ReplaceRuleScript.applyMatchingVariants]，ADR 0084）。每開始一條告訴
+  /// [onRule]，套完傳 null。[keep] 判斷套用後的字要不要留下。
   static String _applyEach(
     String text,
-    Iterable<ReplaceRule> rules, {
+    Iterable<ReplaceRule> rules,
+    List<int> convertTypes, {
     _RuleProgress? onRule,
     bool Function(String next)? keep,
   }) {
@@ -970,26 +972,16 @@ class ReaderContentTransformer {
     for (final rule in rules) {
       started = true;
       onRule?.call(rule._sourceIndex);
-      final next = rule.apply(result, runJs: runReplacementJs);
+      final next = rule.applyMatchingVariants(
+        result,
+        convertTypes,
+        runJs: runReplacementJs,
+      );
       if (keep == null || keep(next)) result = next;
     }
     if (started) onRule?.call(null);
     return result;
   }
-
-  /// [rules] 每條依序要比的寫法（[ReplaceRuleScript.matchVariants]：字面，
-  /// 再來是規則的字轉成 [convertTypes] 的寫法），保留每條在 `rulesJson` 的
-  /// 位置（逾時計時照它找規則）。
-  static Iterable<ReplaceRule> _matchVariants(
-    Iterable<ReplaceRule> rules,
-    List<int> convertTypes,
-  ) => rules.expand((rule) {
-    final variants = rule.matchVariants(convertTypes);
-    for (final variant in variants) {
-      variant._sourceIndex = rule._sourceIndex;
-    }
-    return variants;
-  });
 
   static List<ReplaceRule> _titleRulesOf(
     List<ReplaceRule> rules,
@@ -1048,8 +1040,9 @@ class ReaderContentTransformer {
 
   /// 去掉開頭重複的章名與分頁留下的頁碼（[removePageLeftovers]）、重新分段、
   /// 繁簡轉換（[convertType]），再每行 trim 並套用替換規則；排版整理之前。
-  /// 先轉再套規則同 Legado（`ContentProcessor.getContent`），規則照字面與照
-  /// 顯示的寫法各比一次（[ReplaceRuleScript.matchVariants]，ADR 0084）。
+  /// 先轉再套規則同 Legado（`ContentProcessor.getContent`），規則的字面與
+  /// 顯示的寫法都比，每一處只換一次（[ReplaceRuleScript.applyMatchingVariants]，
+  /// ADR 0084）。
   static String _applyRules({
     required String bookName,
     required String bookOrigin,
@@ -1138,15 +1131,11 @@ class ReaderContentTransformer {
       }
       content = _applyEach(
         buffer.toString(),
-        _matchVariants(
-          rules.where(
-            (rule) => rule.appliesToContent(
-              bookName: bookName,
-              bookOrigin: bookOrigin,
-            ),
-          ),
-          [convertType],
+        rules.where(
+          (rule) =>
+              rule.appliesToContent(bookName: bookName, bookOrigin: bookOrigin),
         ),
+        [convertType],
         onRule: onRule,
       );
     }
@@ -1157,7 +1146,7 @@ class ReaderContentTransformer {
   /// 章名：先轉繁簡（[convertType]）再套標題規則，同 Legado
   /// `BookChapter.getDisplayTitle`。
   /// [matchTypes] 是規則的字另外要轉成哪些寫法來比，沒給時是 [convertType]
-  /// （[_matchVariants]）。
+  /// （[ReplaceRuleScript.applyMatchingVariants]）。
   static String _processTitle({
     required String chapterTitle,
     required List<ReplaceRule> rules,
@@ -1173,10 +1162,8 @@ class ReaderContentTransformer {
     if (useReplaceRules) {
       displayTitle = _applyEach(
         displayTitle,
-        _matchVariants(
-          rules.where((rule) => rule.pattern.isNotEmpty),
-          matchTypes ?? [convertType],
-        ),
+        rules.where((rule) => rule.pattern.isNotEmpty),
+        matchTypes ?? [convertType],
         onRule: onRule,
         keep: (next) => next.trim().isNotEmpty,
       );

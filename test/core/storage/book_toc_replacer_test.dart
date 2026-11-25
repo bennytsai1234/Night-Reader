@@ -118,4 +118,76 @@ void main() {
     expect(result.chapters, hasLength(4));
     expect(result.chapters[book.chapterIndex].title, '第三章');
   });
+
+  group('書源換了部分章節網址', () {
+    // 60 章，書源換了前 25 章的網址，正在讀的「第25章 風起」改成「第二十五章
+    // 風起」。
+    List<BookChapter> forward({required bool moved}) => [
+      for (var n = 1; n <= 60; n++)
+        BookChapter(
+          url: moved && n <= 25
+              ? 'https://new.example/c/$n'
+              : 'https://old.example/c/$n',
+          title: n == 25 ? (moved ? '第二十五章 風起' : '第25章 風起') : '第$n章 名$n',
+          bookUrl: 'https://s.example/book/1',
+        ),
+    ];
+    List<BookChapter> numbered(List<BookChapter> chapters) => [
+      for (final (i, chapter) in chapters.indexed) chapter.copyWith(index: i),
+    ];
+
+    for (final reversed in [false, true]) {
+      test(reversed ? '反轉目錄：不多留一章，進度對到新網址' : '正向：不多留一章，進度對到新網址', () async {
+        List<BookChapter> ordered(List<BookChapter> chapters) =>
+            numbered(reversed ? chapters.reversed.toList() : chapters);
+        final old = ordered(forward(moved: false));
+        final at = old.indexWhere((c) => c.title == '第25章 風起');
+        final book = reading(at, '第25章 風起');
+        await chapterDao.replaceByBook(book.bookUrl, old);
+
+        final result = await BookTocReplacer(chapterDao: chapterDao)
+            .replace(book, ordered(forward(moved: true)));
+
+        expect(result.chapters, hasLength(60));
+        expect(
+          result.chapters[book.chapterIndex].url,
+          'https://new.example/c/25',
+        );
+        expect(book.durChapterTitle, '第二十五章 風起');
+        // 每一章換掉的網址都記下新網址，開著的閱讀器存進度照它找。
+        expect(result.moved, hasLength(25));
+        expect(
+          result.moved['https://old.example/c/3'],
+          'https://new.example/c/3',
+        );
+        expect(
+          result.moved['https://old.example/c/25'],
+          'https://new.example/c/25',
+        );
+      });
+    }
+  });
+
+  test('「番外（校訂）」換網址並改名「番外」：進度對到它，不是網址沒變的另一篇「番外」', () async {
+    final old = toc('s.example', ['第1章 甲', '第2章 乙', '第3章 丙', '番外', '番外（校訂）']);
+    final book = reading(4, '番外（校訂）');
+    await chapterDao.replaceByBook(book.bookUrl, old);
+    final renamed = BookChapter(
+      url: 'https://new.example/extra',
+      title: '番外',
+      bookUrl: book.bookUrl,
+    );
+    // 網站把改過的番外移到最前面。
+    final fetched = [
+      for (final (i, chapter) in [renamed, ...old.sublist(0, 4)].indexed)
+        chapter.copyWith(index: i),
+    ];
+
+    final result = await BookTocReplacer(chapterDao: chapterDao)
+        .replace(book, fetched);
+
+    expect(result.chapters, hasLength(5));
+    expect(result.chapters[book.chapterIndex].url, renamed.url);
+    expect(result.moved, {old[4].url: renamed.url});
+  });
 }

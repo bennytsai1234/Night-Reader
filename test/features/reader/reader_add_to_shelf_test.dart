@@ -7,6 +7,8 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/storage/book_toc_replacer.dart';
+import 'package:night_reader/core/storage/moved_chapters.dart';
 import 'package:night_reader/features/reader/chapter/reader_content.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/session/reader_open_target.dart';
@@ -158,6 +160,46 @@ void main() {
     final saved = (await bookDao.getByUrl(book.bookUrl))!;
     expect(saved.chapterIndex, 2);
     expect(saved.durChapterTitle, 'B');
+    expect(ReaderOpenTarget.resume(saved).location.chapterIndex, 2);
+  });
+
+  test('閱讀中檢查更新換了這一章的網址：加入書架時照換目錄記下的新網址對到同一章', () async {
+    addTearDown(MovedChapters.clear);
+    final book = unshelvedBook()..durChapterTime = 1;
+    BookChapter chapter(String host, String id, int index) => BookChapter(
+      url: 'https://$host/c/$id',
+      title: '第$id章 名$id',
+      bookUrl: book.bookUrl,
+      index: index,
+    );
+    // 新到舊的目錄：開書時是 3、2、1；檢查更新多了 4，2 和 1 換了網址。
+    final opened = [
+      chapter('s.example', '3', 0),
+      chapter('s.example', '2', 1),
+      chapter('s.example', '1', 2),
+    ];
+    await bookDao.upsert(book.copyWith());
+    await chapterDao.insertChapters(opened);
+    final result = await BookTocReplacer(chapterDao: chapterDao)
+        .replace(book.copyWith(), [
+          chapter('s.example', '4', 0),
+          chapter('s.example', '3', 1),
+          chapter('new.example', '2', 2),
+          chapter('new.example', '1', 3),
+        ]);
+    MovedChapters.record(book.bookUrl, result.moved);
+
+    await const ReaderSessionFacade().addCurrentBookToBookshelf(
+      book: book,
+      chapters: opened,
+      location: const ReaderLocation(chapterIndex: 1, charOffset: 30),
+      chapterTitle: '第2章 名2',
+      bookDao: bookDao,
+      chapterDao: chapterDao,
+    );
+
+    final saved = (await bookDao.getByUrl(book.bookUrl))!;
+    expect(saved.chapterIndex, 2);
     expect(ReaderOpenTarget.resume(saved).location.chapterIndex, 2);
   });
 }

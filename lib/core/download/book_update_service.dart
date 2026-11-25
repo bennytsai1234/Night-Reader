@@ -12,6 +12,7 @@ import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/storage/book_toc_replacer.dart';
 import 'package:night_reader/core/storage/book_toc_reverser.dart';
+import 'package:night_reader/core/storage/moved_chapters.dart';
 
 /// 把書架上一本書還沒下載的章節排進背景下載（ADR 0008）。
 typedef ShelfBookDownloader = Future<void> Function(
@@ -68,10 +69,13 @@ class BookUpdateService {
   Future<BookUpdateCheckResult> _check(Book book) async {
     final checkedAt = DateTime.now().millisecondsSinceEpoch;
     try {
-      final newCount = await _refreshInSourceIsolate(book, checkedAt);
-      if (newCount == null) {
+      final refreshed = await _refreshInSourceIsolate(book, checkedAt);
+      if (refreshed == null) {
         return BookUpdateCheckResult(bookUrl: book.bookUrl, newChapterCount: 0);
       }
+      final (:newCount, :moved) = refreshed;
+      // 換了網址的章：開著的閱讀器存進度照它找到同一章。
+      MovedChapters.record(book.bookUrl, moved);
       // 目錄寫好了：新章節（或之前沒排到的章節）接著下載。不在書架上的書
       // 由下載服務略過。
       try {
@@ -95,21 +99,22 @@ class BookUpdateService {
   }
 }
 
-/// 在書源 isolate 抓詳情與目錄並寫回資料庫，只把新章節數傳回來：上千章的
-/// 目錄不必複製回畫面執行緒，比對與寫入也不在畫面執行緒上做。工作會送進
-/// 書源 isolate，所以在頂層函式裡建立，只捕捉書與時間。
-Future<int?> _refreshInSourceIsolate(Book book, int checkedAt) =>
+/// 在書源 isolate 抓詳情與目錄並寫回資料庫，只把新章節數與換了網址的章
+/// 傳回來：上千章的目錄不必複製回畫面執行緒，比對與寫入也不在畫面執行緒
+/// 上做。工作會送進書源 isolate，所以在頂層函式裡建立，只捕捉書與時間。
+Future<_Refreshed?> _refreshInSourceIsolate(Book book, int checkedAt) =>
     SourceIsolate.run(
       (cancelToken) => _refreshFromSource(book, checkedAt),
       affinity: book.origin,
     );
 
-/// 寫回資料庫並回傳新章節數；檢查期間書被移出書架或換了書源時不寫，回傳
+/// 寫回資料庫並回傳新章節數與換了網址的章（舊網址 → 新網址，
+/// [BookTocReplacer.replace]）；檢查期間書被移出書架或換了書源時不寫，回傳
 /// null。
 ///
 /// 網路請求期間使用者可能在讀這本書、改了設定或把它移出書架，所以寫回時
 /// 以資料庫裡最新的一筆為準，只換掉書源給的欄位。
-Future<int?> _refreshFromSource(Book book, int checkedAt) async {
+Future<_Refreshed?> _refreshFromSource(Book book, int checkedAt) async {
   final bookDao = getIt<BookDao>();
   final tocReplacer = BookTocReplacer(
     chapterDao: getIt<ChapterDao>(),
@@ -136,7 +141,7 @@ Future<int?> _refreshFromSource(Book book, int checkedAt) async {
   if (info.tocUrl.isEmpty) {
     info.tocUrl = book.tocUrl;
   }
-  return bookDao.transaction<int?>(() async {
+  return bookDao.transaction<_Refreshed?>(() async {
     final stored = await bookDao.getByUrl(book.bookUrl);
     // 檢查期間移出書架或換了書源：不寫回，免得書又回到書架上。不在
     // 書架上的書（從搜尋或發現打開的詳情）照樣寫回。
@@ -167,10 +172,10 @@ Future<int?> _refreshFromSource(Book book, int checkedAt) async {
     final reversedSince =
         (book.readConfig?.reverseToc ?? false) !=
         (current.readConfig?.reverseToc ?? false);
-    final toc = (await tocReplacer.replace(
+    final (chapters: toc, progressMoved: _, :moved) = await tocReplacer.replace(
       info,
       reversedSince ? reversedToc(chapters) : chapters,
-    )).chapters;
+    );
     info.fillChapterTitle(toc);
     final oldTotal = current.totalChapterNum > 0
         ? current.totalChapterNum
@@ -184,6 +189,8 @@ Future<int?> _refreshFromSource(Book book, int checkedAt) async {
       info.latestChapterTime = checkedAt;
     }
     await bookDao.upsert(info);
-    return newCount;
+    return (newCount: newCount, moved: moved);
   });
 }
+
+typedef _Refreshed = ({int newCount, Map<String, String> moved});

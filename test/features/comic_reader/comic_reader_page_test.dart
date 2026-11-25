@@ -12,6 +12,7 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/storage/moved_chapters.dart';
 import 'package:night_reader/features/comic_reader/comic_reader_page.dart';
 import 'package:night_reader/features/comic_reader/comic_strip_view.dart';
 import 'package:night_reader/features/reader/features/settings/comic_paper_tint.dart';
@@ -136,6 +137,41 @@ void main() {
       final stored = (await getIt<BookDao>().getByUrl(book.bookUrl))!
         ..chapterIndex = 2;
       await getIt<BookDao>().upsert(stored);
+    });
+
+    await tester.drag(find.byType(ComicStripView), const Offset(0, -700));
+    await settle(tester);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 600)),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await settle(tester);
+
+    final saved = (await tester.runAsync(
+      () => getIt<BookDao>().getByUrl(book.bookUrl),
+    ))!;
+    expect(saved.chapterIndex, 2);
+    expect(saved.durChapterTitle, '第2話');
+  });
+
+  testWidgets('閱讀中檢查更新換了話的網址，存的第幾話照換目錄記下的新網址對到新目錄', (tester) async {
+    addTearDown(MovedChapters.clear);
+    await open(tester);
+    // 檢查更新換上新目錄：最前面多了一話，每一話都換了網址。
+    await tester.runAsync(() async {
+      await getIt<ChapterDao>().replaceByBook(book.bookUrl, [
+        BookChapter(
+          url: 'local://comic/1/extra',
+          title: '番外',
+          bookUrl: book.bookUrl,
+          index: 0,
+        ),
+        for (final chapter in chapters)
+          chapter.copyWith(url: '${chapter.url}/v2', index: chapter.index + 1),
+      ]);
+      MovedChapters.record(book.bookUrl, {
+        for (final chapter in chapters) chapter.url: '${chapter.url}/v2',
+      });
     });
 
     await tester.drag(find.byType(ComicStripView), const Offset(0, -700));

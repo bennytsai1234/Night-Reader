@@ -69,19 +69,44 @@ int chapterIndexByTitle({
 }
 
 /// 在一份目錄 [chapters] 裡找舊目錄的某一章。一份目錄要找很多章時（檢查
-/// 更新對每個書源拿掉的章節）共用一個，章名的比對用字只算一次。
+/// 更新對每個書源換掉網址的章節）共用一個，章名的比對用字只算一次。
+///
+/// [among] 限定哪些章可以被認成同一章（檢查更新只比網址不在舊目錄的新章）；
+/// 估位置照整份 [chapters] 的序號與章數，和舊目錄同一個方向數，反轉目錄時
+/// 也估得準。
 class ChapterMatcher {
-  ChapterMatcher(this.chapters);
+  ChapterMatcher(this.chapters, {bool Function(BookChapter chapter)? among})
+    : _candidates = [
+        for (final (i, chapter) in chapters.indexed)
+          if (among == null || among(chapter)) i,
+      ];
 
   final List<BookChapter> chapters;
 
-  late final List<String> _keys = [
-    for (final chapter in chapters) _titleKey(chapter.title),
-  ];
-  late final List<int?> _numbers = [
-    for (final chapter in chapters) _extractChapterNumber(chapter.title),
-  ];
+  /// 可以被認成同一章的序號，由小到大。
+  final List<int> _candidates;
+
+  late final Set<int> _candidateSet = _candidates.toSet();
+  late final Map<String, List<int>> _byTitle = _group((i) => chapters[i].title);
+  late final Map<String, List<int>> _byKey = _group(
+    (i) => _titleKey(chapters[i].title),
+  );
+  late final Map<int, List<int>> _byNumber = _group(_numberAt);
+  final Map<int, int?> _numbers = {};
   final Map<int, String> _pureNames = {};
+
+  Map<K, List<int>> _group<K>(K? Function(int index) keyOf) {
+    final groups = <K, List<int>>{};
+    for (final i in _candidates) {
+      final key = keyOf(i);
+      if (key != null) groups.putIfAbsent(key, () => []).add(i);
+    }
+    return groups;
+  }
+
+  int? _numberAt(int index) => _numbers.containsKey(index)
+      ? _numbers[index]
+      : _numbers[index] = _extractChapterNumber(chapters[index].title);
 
   String _pureAt(int index) =>
       _pureNames[index] ??= _pureChapterName(chapters[index].title);
@@ -109,17 +134,17 @@ class ChapterMatcher {
     required int oldTotalCount,
     ChapterNumberMatch byNumber = ChapterNumberMatch.always,
   }) {
-    if (chapters.isEmpty) return null;
+    if (_candidates.isEmpty) return null;
     final newSize = chapters.length;
     var estimatedIndex = oldIndex;
     if (oldTotalCount > 0) {
       estimatedIndex = (oldIndex * newSize / oldTotalCount).round();
     }
 
-    int? nearest(bool Function(int index) matches) {
+    int? nearest(List<int>? indexes) {
+      if (indexes == null) return null;
       int? best;
-      for (var i = 0; i < newSize; i++) {
-        if (!matches(i)) continue;
+      for (final i in indexes) {
         if (best == null ||
             (i - estimatedIndex).abs() < (best - estimatedIndex).abs()) {
           best = i;
@@ -129,10 +154,9 @@ class ChapterMatcher {
     }
 
     if (oldTitle != null && oldTitle.isNotEmpty) {
-      final exact = nearest((i) => chapters[i].title == oldTitle);
+      final exact = nearest(_byTitle[oldTitle]);
       if (exact != null) return exact;
-      final oldKey = _titleKey(oldTitle);
-      final converted = nearest((i) => _keys[i] == oldKey);
+      final converted = nearest(_byKey[_titleKey(oldTitle)]);
       if (converted != null) return converted;
     }
 
@@ -151,10 +175,11 @@ class ChapterMatcher {
       var bestSimilarity = _similarEnough;
       var bestSameNumber = false;
       for (var i = windowStart; i <= windowEnd; i++) {
+        if (!_candidateSet.contains(i)) continue;
         final similarity = _jaccard(oldPure, _pureAt(i));
         if (similarity <= _similarEnough) continue;
         final sameNumber =
-            oldChapterNumber != null && _numbers[i] == oldChapterNumber;
+            oldChapterNumber != null && _numberAt(i) == oldChapterNumber;
         final better =
             best == null ||
             similarity > bestSimilarity ||
@@ -174,7 +199,7 @@ class ChapterMatcher {
 
     if (oldChapterNumber != null &&
         (byNumber == ChapterNumberMatch.always || _onlyNumber(oldTitle))) {
-      return nearest((i) => _numbers[i] == oldChapterNumber);
+      return nearest(_byNumber[oldChapterNumber]);
     }
     return null;
   }
