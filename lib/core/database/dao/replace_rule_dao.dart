@@ -163,6 +163,13 @@ class ReplaceRuleDao extends DatabaseAccessor<AppDatabase>
     await (delete(replaceRules)..where((t) => t.id.equals(current))).go();
   });
 
+  /// 多選一起刪除；被同步換過編號的照新編號（[_current]）。
+  Future<void> deleteManyByIds(Iterable<int> ids) => transaction(() async {
+    final current = [for (final id in ids) await _current(id)];
+    if (current.isEmpty) return;
+    await (delete(replaceRules)..where((t) => t.id.isIn(current))).go();
+  });
+
   Future<List<ReplaceRule>> getEnabled() {
     return (select(replaceRules)
           ..where((t) => t.isEnabled.equals(true))
@@ -196,12 +203,44 @@ class ReplaceRuleDao extends DatabaseAccessor<AppDatabase>
     );
   });
 
+  /// 多選一起啟用或停用；被同步換過編號的照新編號（[_current]）。
+  Future<void> updateEnabledByIds(Iterable<int> ids, bool enabled) =>
+      transaction(() async {
+        final current = [for (final id in ids) await _current(id)];
+        if (current.isEmpty) return;
+        await (update(replaceRules)..where((t) => t.id.isIn(current))).write(
+          ReplaceRulesCompanion(isEnabled: Value(enabled)),
+        );
+      });
+
   Future<void> updateOrder(int id, int order) => transaction(() async {
     final current = await _current(id);
     await (update(replaceRules)..where((t) => t.id.equals(current))).write(
       ReplaceRulesCompanion(order: Value(order)),
     );
   });
+
+  /// 置頂、置底（同 Legado）：順序號換到現有最小／最大的前後，其他規則的
+  /// 順序不動。被同步換過編號的照新編號（[_current]）。
+  Future<void> moveToTop(int id) => _moveToEdge(id, toTop: true);
+
+  Future<void> moveToBottom(int id) => _moveToEdge(id, toTop: false);
+
+  Future<void> _moveToEdge(int id, {required bool toTop}) =>
+      transaction(() async {
+        final current = await _current(id);
+        final minOrder = replaceRules.order.min();
+        final maxOrder = replaceRules.order.max();
+        final row = await (selectOnly(
+          replaceRules,
+        )..addColumns([minOrder, maxOrder])).getSingle();
+        final min = row.read(minOrder);
+        final max = row.read(maxOrder);
+        if (min == null || max == null) return;
+        await (update(replaceRules)..where((t) => t.id.equals(current))).write(
+          ReplaceRulesCompanion(order: Value(toTop ? min - 1 : max + 1)),
+        );
+      });
 
   Future<List<ReplaceRule>> _getEnabledScoped({
     required String name,

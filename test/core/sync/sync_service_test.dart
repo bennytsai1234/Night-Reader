@@ -1838,6 +1838,25 @@ void main() {
       expect(onB, {1: '甲', 2: '乙'});
     });
 
+    test('the order changed by 置頂 or 置底 goes to the other phone', () async {
+      await a.rules.upsertAll([
+        ReplaceRule(id: 1, name: '甲', pattern: 'a', order: 0),
+        ReplaceRule(id: 2, name: '乙', pattern: 'b', order: 1),
+        ReplaceRule(id: 3, name: '丙', pattern: 'c', order: 2),
+      ]);
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+
+      await a.rules.moveToBottom(1);
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+
+      expect(
+        [for (final rule in await b.rules.getAll()) rule.name],
+        ['乙', '丙', '甲'],
+      );
+    });
+
     test('rules added at the same moment both stay', () async {
       // 已有的規則編號比現在的時間還大，兩條新的都會想接在它後面。
       final future = DateTime.now().millisecondsSinceEpoch + 600000;
