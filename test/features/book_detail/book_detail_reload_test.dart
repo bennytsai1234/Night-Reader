@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
@@ -7,6 +9,7 @@ import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
+import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 
 /// 從詳情開的閱讀器換了源，回到詳情時（[BookDetailProvider.reloadAfterReading]）
@@ -44,7 +47,10 @@ void main() {
       ),
   ];
 
-  Future<BookDetailProvider> openDetail({String? intro}) async {
+  Future<BookDetailProvider> openDetail({
+    String? intro,
+    BookCoverStorageService? coverStorage,
+  }) async {
     final book = bookAt(
       oldUrl,
       'https://old.example',
@@ -60,6 +66,7 @@ void main() {
       sourceDao: db.bookSourceDao,
       chapterContentDao: db.readerChapterContentDao,
       downloadService: _Downloads(),
+      coverStorage: coverStorage,
     );
     addTearDown(provider.dispose);
     while (!provider.hasReadyWorld) {
@@ -260,6 +267,58 @@ void main() {
     // 下次開編輯頁拿到的是存過的規則，不會蓋掉剛才的修改。
     expect(provider.currentSource?.bookSourceName, '新名字');
   });
+
+  test('書源改了類型，回來後這本書跟著換類別（ADR 0053）', () async {
+    await db.bookSourceDao.upsert(
+      BookSource(bookSourceUrl: 'https://old.example', bookSourceName: '書源'),
+    );
+    final provider = await openDetail();
+    expect(provider.book.bookKind, BookSourceKind.novel);
+
+    // 書源編輯頁把類型改成有聲。
+    await db.bookSourceDao.upsert(
+      BookSource(
+        bookSourceUrl: 'https://old.example',
+        bookSourceName: '書源',
+        bookSourceType: 1,
+      ),
+    );
+    await provider.reloadSource();
+
+    expect(provider.book.bookKind, BookSourceKind.audio);
+  });
+
+  test('換封面：後選的封面先存好，先選的晚到也不蓋回去', () async {
+    final covers = _Covers();
+    final provider = await openDetail(coverStorage: covers);
+
+    final first = provider.updateCover('https://img.example/a.jpg');
+    final second = provider.updateCover('https://img.example/b.jpg');
+    // 等的時候關掉自動檢查更新。
+    await provider.setCanUpdate(false);
+    covers.finish('https://img.example/b.jpg');
+    await second;
+    expect(provider.book.customCoverUrl, 'https://img.example/b.jpg');
+
+    covers.finish('https://img.example/a.jpg');
+    await first;
+    expect(provider.book.customCoverUrl, 'https://img.example/b.jpg');
+    expect(provider.book.canUpdate, isFalse);
+  });
+}
+
+/// 存封面要等下載：照網址各自放行。
+class _Covers implements BookCoverStorageService {
+  final Map<String, Completer<void>> _pending = {};
+
+  void finish(String url) => _pending[url]!.complete();
+
+  @override
+  Future<void> ensureDisplayCoverStored(Book book) =>
+      (_pending[book.customCoverUrl!] = Completer<void>()).future;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// 加入書架時排的整本下載：這裡不下載。

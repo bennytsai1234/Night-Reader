@@ -26,7 +26,7 @@ mixin RuleAnalyzerSplit on RuleAnalyzerBase, RuleAnalyzerMatch {
 
     while (true) {
       final st = findToAny(['[', '(']);
-      if (st == -1 || st > end) {
+      if (st == -1) {
         ruleList = [queue.substring(startX, end)];
         elementsType = queue.substring(end, end + step);
         pos = end + step;
@@ -37,6 +37,19 @@ mixin RuleAnalyzerSplit on RuleAnalyzerBase, RuleAnalyzerMatch {
         }
         ruleList.add(queue.substring(pos));
         return ruleList;
+      }
+      if (st > end) {
+        // 括號在第一個分隔符之後：後面的分隔符可能在括號裡，交給會跳過
+        // 括號的二段切分（同 Legado `splitRule` 的 `st > end`）。
+        ruleList = [queue.substring(startX, end)];
+        elementsType = queue.substring(end, end + step);
+        startX = end + step;
+        pos = end + step;
+        if (!consumeTo(elementsType)) {
+          ruleList.add(queue.substring(pos));
+          return ruleList;
+        }
+        return _splitRuleRecursive();
       }
 
       pos = st;

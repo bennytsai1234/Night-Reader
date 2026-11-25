@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -17,6 +18,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 const _source = 'https://cover.example';
 const _disabled = 'https://disabled.example';
 const _searchable = 'https://search.example';
+
+/// 每次搜尋各自等一個 [Completer]，照順序放行。
+class _SlowSite extends BookSourceService {
+  final List<Completer<List<SearchBook>>> calls = [];
+
+  @override
+  Future<List<SearchBook>> searchBooks(
+    BookSource source,
+    String key, {
+    int page = 1,
+    bool Function(String name, String author)? filter,
+    bool Function(int size)? shouldBreak,
+    CancelToken? cancelToken,
+  }) {
+    final call = Completer<List<SearchBook>>();
+    calls.add(call);
+    return call.future;
+  }
+}
 
 /// 有封面規則的書源搜尋時回 [results]，記下被搜了幾次。
 class _CoverSite extends BookSourceService {
@@ -187,6 +207,36 @@ void main() {
 
       expect(site.searches, 0);
       expect(await storedCovers('甲書', '乙作者'), isEmpty);
+    });
+    test('停止後馬上重搜：上一輪晚到的結果不把這一輪停掉', () async {
+      final site = _SlowSite();
+      final provider = ChangeCoverProvider(service: site);
+      addTearDown(provider.dispose);
+      Future<void> untilCalls(int count) async {
+        while (site.calls.length < count) {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        }
+      }
+
+      final first = provider.init('甲書', '乙作者');
+      await untilCalls(1);
+
+      provider.stopSearch();
+      final again = provider.search('甲書', '乙作者');
+      await untilCalls(2);
+
+      // 上一輪的請求先回來（空的）。
+      site.calls[0].complete(const []);
+      await first;
+      expect(provider.isSearching, isTrue, reason: '這一輪還在等網站');
+
+      site.calls[1].complete([_found('甲書', '乙作者', 'b.jpg')]);
+      await again;
+      expect(provider.isSearching, isFalse);
+      expect(
+        [for (final c in provider.covers.skip(1)) c.book.coverUrl],
+        ['b.jpg'],
+      );
     });
   });
 }

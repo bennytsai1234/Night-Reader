@@ -227,7 +227,9 @@ class GroupedTextFieldRow extends StatelessWidget
         : TextFormField(
             controller: controller,
             focusNode: focusNode,
-            validator: validator,
+            // 驗證器回的錯誤是介面字，照介面語言轉（ADR 0066）。
+            validator: (value) =>
+                UiLanguageText.convertNullable(context, validator!(value)),
             onChanged: onChanged,
             onFieldSubmitted: onSubmitted,
             keyboardType: keyboardType,

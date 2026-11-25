@@ -69,6 +69,19 @@ void main() {
     expect(find.text('置頂'), findsNothing);
   });
 
+  testWidgets('讀屏點兩下露出的動作，照樣執行並收合', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await pumpList(tester);
+    await swipe(tester, 'row0', -120);
+    final node = tester.getSemantics(find.bySemanticsLabel('置頂'));
+    expect(node.getSemanticsData().hasAction(ui.SemanticsAction.tap), isTrue);
+    node.owner!.performAction(node.id, ui.SemanticsAction.tap);
+    await tester.pumpAndSettle();
+    expect(log, ['row0:pin']);
+    expect(find.text('置頂'), findsNothing);
+    semantics.dispose();
+  });
+
   testWidgets('展開時點列本身只收合，不觸發列的點擊', (tester) async {
     await pumpList(tester);
     await swipe(tester, 'row0', -120);

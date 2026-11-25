@@ -15,6 +15,7 @@ import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/book/reader_chapter_content.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/network/network_service.dart';
+import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:share_plus/share_plus.dart';
@@ -263,6 +264,7 @@ class BookshelfExchangeService {
           updatedAt: content.updatedAt,
         )) {
           contents++;
+          await BookIllustrationStorage.markUnfetchedIfIllustrated(content);
         }
       }
     }

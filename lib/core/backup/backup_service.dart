@@ -33,6 +33,8 @@ class BackupService {
   static final Set<String> deviceOnlyKeys = {
     SyncSettings.deviceIdKey,
     RestoredStats.prefKey,
+    SyncSettings.lastSyncKey,
+    SyncSettings.lastSyncSpaceKey,
     PreferKey.downloadsPausedAll,
     PreferKey.orphanedBooksSwitched,
     PreferKey.appCoverOnLeave,

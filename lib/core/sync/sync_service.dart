@@ -64,6 +64,7 @@ class SyncStatus {
     SyncSpace? space,
     SyncPhase? phase,
     DateTime? lastSyncAt,
+    bool clearLastSyncAt = false,
     String? error,
     bool clearError = false,
     ({String kind, int step, int total})? progress,
@@ -71,7 +72,7 @@ class SyncStatus {
   }) => SyncStatus(
     space: space ?? this.space,
     phase: phase ?? this.phase,
-    lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+    lastSyncAt: clearLastSyncAt ? null : lastSyncAt ?? this.lastSyncAt,
     error: clearError ? null : error ?? this.error,
     progress: clearProgress ? null : progress ?? this.progress,
   );
@@ -315,9 +316,11 @@ class SyncService {
 
   /// 讀出設定，更新 [status]。
   Future<void> load() async {
+    final lastSyncAt = await _settings.lastSyncAt();
     status.value = status.value.copyWith(
       space: await _settings.space(),
-      lastSyncAt: await _settings.lastSyncAt(),
+      lastSyncAt: lastSyncAt,
+      clearLastSyncAt: lastSyncAt == null,
     );
   }
 
@@ -338,14 +341,28 @@ class SyncService {
   /// 上次同步的紀錄是另一個同步空間的（在「同步空間」換了，或還原備份直接
   /// 改了同步設定），就全部作廢，照從沒同步過合併；不然會拿另一個空間的
   /// 紀錄判斷，把舊資料當成新的改動蓋掉這個空間。只在 [_lock] 裡呼叫。
-  Future<void> _claimBases() async {
+  /// 回傳是不是換了空間。
+  Future<bool> _claimBases() async {
     final identity = await _settings.identity();
     final owner = (await _bases.readJson(_ownerFile))['space'];
-    if (owner == identity) return;
+    if (owner == identity) return false;
     _generation++;
     _settled.clear();
     await _bases.clear();
     await _bases.writeJson(_ownerFile, {'space': identity});
+    return true;
+  }
+
+  /// 選好同步空間之後的狀態：上次全面同步的時間照這個空間的（換了空間時
+  /// 沒有）；換了空間時上一個空間的錯誤也不留。
+  Future<void> _showSpace(SyncSpace space, {required bool changed}) async {
+    final lastSyncAt = await _settings.lastSyncAt();
+    status.value = status.value.copyWith(
+      space: space,
+      lastSyncAt: lastSyncAt,
+      clearLastSyncAt: lastSyncAt == null,
+      clearError: changed,
+    );
   }
 
   /// 改用 [account] 的 WebDAV：先試連，連得上才存起來。換了空間照從沒同步過
@@ -354,11 +371,11 @@ class SyncService {
   Future<void> useWebDav(WebDavAccount account) async {
     final store = _storeFactory(SyncSpace.webdav, account, null);
     await store!.check();
-    await _lock.synchronized(() async {
+    final changed = await _lock.synchronized(() async {
       await _settings.useWebDav(account);
-      await _claimBases();
+      return _claimBases();
     });
-    status.value = status.value.copyWith(space: SyncSpace.webdav);
+    await _showSpace(SyncSpace.webdav, changed: changed);
   }
 
   /// 改用這個 Google 帳號的雲端硬碟：跳出 Google 登入與授權，連得上才存起來；
@@ -370,11 +387,11 @@ class SyncService {
       final account = await _googleAuth.signIn();
       final store = _storeFactory(SyncSpace.googleDrive, null, account);
       await store!.check();
-      await _lock.synchronized(() async {
+      final changed = await _lock.synchronized(() async {
         await _settings.useGoogleDrive(account);
-        await _claimBases();
+        return _claimBases();
       });
-      status.value = status.value.copyWith(space: SyncSpace.googleDrive);
+      await _showSpace(SyncSpace.googleDrive, changed: changed);
     } finally {
       _authorizingGoogleDrive = false;
     }
