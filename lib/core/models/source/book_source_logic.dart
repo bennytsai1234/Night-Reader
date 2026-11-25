@@ -548,8 +548,9 @@ extension BookSourceLogic on BookSourceBase {
     BookSourceKind.unsupported => false,
   };
 
+  /// 發現頁列不列這個書源。同 Legado（`BookSourceDao.flowExplore`）只看
+  /// 「啟用發現」，不看「啟用」：停用的書源不進搜尋，發現照列。
   bool get canParticipateInDiscovery =>
-      enabled &&
       enabledExplore &&
       hasExploreUrl &&
       isOpenableSource &&
