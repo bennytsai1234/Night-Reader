@@ -113,6 +113,14 @@ class _ReaderPageState extends State<ReaderPage>
     remedy: _remedy,
     changeSource: _changeSource,
     showNotice: _showNotice,
+    retire: () {
+      _host.retire();
+      _progressSync.retire();
+    },
+    resume: () {
+      _host.resume();
+      _progressSync.resume();
+    },
   );
 
   /// 讀不到正文時的按鈕列、登入與網頁驗證（[ReaderSourceRemedy]）。

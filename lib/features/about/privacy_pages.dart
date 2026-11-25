@@ -54,7 +54,7 @@ class PrivacyNoticePage extends StatelessWidget {
           ),
           _NoticeSection(
             title: '解鎖',
-            body: '開了「解鎖才能打開」時，用手機本身的指紋、臉部辨識（iPhone 是 Face ID）或鎖屏密碼解鎖；辨識由手機系統做，夜讀只知道過了沒有，不存、也不送出任何辨識資料。「離開時蓋住畫面」與「解鎖才能打開」兩個設定只存在這台手機，不同步、不進備份。',
+            body: '「離開時」選了「蓋住並解鎖才能打開」或「蓋住，離開 5 分鐘後要解鎖」時，用手機本身的指紋、臉部辨識（iPhone 是 Face ID）或鎖屏密碼解鎖；辨識由手機系統做，夜讀只知道過了沒有，不存、也不送出任何辨識資料。「離開時」這個設定只存在這台手機，不同步、不進備份。',
           ),
           _NoticeSection(
             title: '崩潰日誌與 App 日誌',
@@ -135,7 +135,7 @@ class _PermissionsPageState extends State<PermissionsPage>
               ),
               _NoticeSection(
                 title: '指紋與 Face ID',
-                body: '開了「解鎖才能打開」時，夜讀叫出手機系統的指紋、臉部辨識或鎖屏密碼畫面。Android 不用另外允許；iPhone 第一次解鎖時系統會問能不能用 Face ID，不允許時改用手機密碼解鎖。',
+                body: '「離開時」選了會解鎖的選項時，夜讀叫出手機系統的指紋、臉部辨識或鎖屏密碼畫面。Android 不用另外允許；iPhone 第一次解鎖時系統會問能不能用 Face ID，不允許時改用手機密碼解鎖。',
               ),
               _NoticeSection(
                 title: 'WebView',

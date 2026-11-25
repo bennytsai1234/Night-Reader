@@ -12,11 +12,11 @@ import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/features/settings/full_sync_dialog.dart';
 import 'package:night_reader/features/settings/local_book_sync_dialog.dart';
+import 'package:night_reader/features/settings/restore_confirm_dialog.dart';
 import 'package:night_reader/features/settings/sync_space_page.dart';
 import 'package:night_reader/features/settings/sync_status_text.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:share_plus/share_plus.dart';
@@ -213,18 +213,16 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
 
     if (path == null) return;
 
-    final confirmed = await showAppConfirm(
-      context: context,
-      title: '還原這份備份？',
-      message: '備份裡的書架、書源與設定併進目前的資料，相同的項目以備份為準。',
-      confirmLabel: '開始還原',
-    );
-    if (!confirmed || !mounted) return;
+    final choice = await confirmRestore(context);
+    if (choice == null || !mounted) return;
 
     final file = File(path);
     setState(() => _isProcessing = true);
     try {
-      final result = await RestoreService().restoreFromZip(file);
+      final result = await RestoreService().restoreFromZip(
+        file,
+        restoreSettings: choice.restoreSettings,
+      );
       if (!mounted) return;
       final failed = result.failedFiles.join('、');
       final message = result.invalidArchive

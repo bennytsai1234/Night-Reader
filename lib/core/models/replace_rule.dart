@@ -172,6 +172,26 @@ class ReplaceRule {
     };
   }
 
+  /// [toJson] 寫成 `1`／`0` 的開關（同步照它算指紋，不能改）。
+  static const List<String> _switches = [
+    'scopeTitle',
+    'scopeContent',
+    'isEnabled',
+    'isRegex',
+  ];
+
+  /// 把 [toJson] 的結果換成 Legado 讀得懂的樣子：開關寫 `true`／`false`，其餘
+  /// 欄位與順序不變。Legado 用 Gson 讀，開關讀到 `1`／`0` 時整份放棄。備份、
+  /// 匯出、分享與複製都用它；夜讀讀兩種都認得（`readJsonBool`）。
+  static Map<String, dynamic> legadoJsonOf(Map<String, dynamic> json) => {
+    ...json,
+    for (final key in _switches)
+      if (json[key] is int) key: json[key] == 1,
+  };
+
+  /// 給 Legado 讀的樣子（[legadoJsonOf]）。
+  Map<String, dynamic> toLegadoJson() => legadoJsonOf(toJson());
+
   static bool _containsNonEmpty(String scopeText, String value) {
     final trimmed = value.trim();
     return trimmed.isNotEmpty && scopeText.contains(trimmed);

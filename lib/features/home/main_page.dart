@@ -357,7 +357,7 @@ class _MainPageState extends State<MainPage>
 
   /// 開 App 的準備工作：書架讀完、繁簡字典載入完、系統播放資訊的媒體工作
   /// 階段開好（[LaunchEntrance.prepared]、[SystemPlayback.ready]）；開著
-  /// 「解鎖才能打開」時還要等解鎖、鎖的畫面淡出播完（ADR 0083）。
+  /// 「離開時」選了會解鎖的選項時，還要等解鎖、鎖的畫面淡出播完（ADR 0083）。
   Future<void> _launchPrepared() => Future.wait([
     context.read<BookshelfProvider>().firstLoad,
     ChineseDisplay.loaded,

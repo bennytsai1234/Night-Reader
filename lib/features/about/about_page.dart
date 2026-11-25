@@ -42,13 +42,18 @@ enum _AppUpdateMode {
 }
 
 class AboutPage extends StatefulWidget {
-  const AboutPage({super.key});
+  const AboutPage({super.key, this.appLock});
+
+  /// 測試用；沒給時用全 App 共用的 [AppLock.instance]。
+  final AppLock? appLock;
 
   @override
   State<AboutPage> createState() => _AboutPageState();
 }
 
 class _AboutPageState extends State<AboutPage> {
+  AppLock get _lock => widget.appLock ?? AppLock.instance;
+
   // 版號與更新偏好是進頁後才讀到的，各自是一個訊號，只有用到的那一列跟著
   // 重建：原本讀到時 setState，整頁在進場動畫途中重建一次（ADR 0029）。
   // 版號 App 啟動時就讀好了，進頁第一格（連同骨架）就畫得出來；還沒讀到時
@@ -150,22 +155,24 @@ class _AboutPageState extends State<AboutPage> {
     if (picked != null) await _setUpdateMode(picked);
   }
 
-  Future<void> _pickLockMode(BuildContext rowContext) async {
-    final lock = AppLock.instance;
-    final picked = await showGlassMenu<AppLockMode>(
+  Future<void> _pickLeaveChoice(BuildContext rowContext) async {
+    final lock = _lock;
+    final picked = await showGlassMenu<AppLeaveChoice>(
       context: rowContext,
       anchor: globalRectOf(rowContext),
       entries: [
-        for (final mode in AppLockMode.values)
+        for (final choice in AppLeaveChoice.values)
           GlassMenuItem(
-            value: mode,
-            label: mode.label,
-            checked: mode == lock.mode,
+            value: choice,
+            label: choice.label,
+            checked: choice == lock.leaveChoice,
+            // 手機鎖不住時只剩蓋住與不蓋能選。
+            enabled: choice.mode == AppLockMode.off || lock.supported,
           ),
       ],
     );
     // 從不鎖改成鎖之前先辨識一次；沒過就維持原樣，系統的辨識框已經說了原因。
-    if (picked != null) await lock.setMode(picked);
+    if (picked != null) await lock.setLeaveChoice(picked);
   }
 
   bool _clearingWebData = false;
@@ -295,35 +302,23 @@ class _AboutPageState extends State<AboutPage> {
               ),
             ],
           ),
-          // 這台手機自己的兩個設定（ADR 0083）：不同步、不進備份。
+          // 這台手機自己的設定（ADR 0083）：不同步、不進備份。
           ValueListenableBuilder(
-            valueListenable: AppLock.instance.settingsVersion,
+            valueListenable: _lock.settingsVersion,
             builder: (context, _, _) {
-              final lock = AppLock.instance;
-              final locking = lock.mode != AppLockMode.off && lock.supported;
+              final lock = _lock;
               return GroupedSection(
                 children: [
-                  GroupedSwitchRow(
-                    leading: const GroupedIconTile(
-                      Icons.visibility_off_outlined,
-                      tint: AppTint.ink,
-                    ),
-                    title: '離開時蓋住畫面',
-                    value: lock.coverEffective,
-                    enabled: !locking,
-                    onChanged: lock.setCover,
-                  ),
                   Builder(
                     builder: (rowContext) => GroupedRow(
                       leading: const GroupedIconTile(
-                        Icons.lock_outline_rounded,
+                        Icons.visibility_off_outlined,
                         tint: AppTint.ink,
                       ),
-                      title: '解鎖才能打開',
-                      value: lock.mode.label,
+                      title: '離開時',
+                      value: lock.leaveChoice.label,
                       showChevron: false,
-                      enabled: lock.supported,
-                      onTap: () => _pickLockMode(rowContext),
+                      onTap: () => _pickLeaveChoice(rowContext),
                     ),
                   ),
                 ],

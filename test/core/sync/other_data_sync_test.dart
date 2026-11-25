@@ -101,6 +101,7 @@ void main() {
       PreferKey.readerFontSize: 22.0,
       PreferKey.readerLineChars: 24,
       PreferKey.lightStyle: 'tea',
+      PreferKey.replaceEnableDefault: false,
       PreferKey.readerBrightness: 0.3,
     });
     await phone('a', [SettingsSync(prefs: a)]).syncAll();
@@ -117,6 +118,7 @@ void main() {
     expect(b.getDouble(PreferKey.readerFontSize), 22.0);
     expect(b.getInt(PreferKey.readerLineChars), 24);
     expect(b.getString(PreferKey.lightStyle), 'tea');
+    expect(b.getBool(PreferKey.replaceEnableDefault), isFalse);
     expect(b.getDouble(PreferKey.readerBrightness), 0.9);
     expect(SettingsSync.applied.value, applied + 1);
 

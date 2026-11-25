@@ -10,6 +10,7 @@ import 'package:night_reader/features/reader/features/settings/reader_settings_c
 import 'package:night_reader/features/reader/features/settings/reader_settings_groups.dart';
 import 'package:night_reader/features/reader/features/settings/reader_settings_sheets.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
+import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
@@ -246,8 +247,11 @@ void main() {
     addTearDown(settings.dispose);
 
     await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: themeSettings,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: themeSettings),
+          ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ],
         child: MaterialApp(
           theme: buildAppTheme(AppStyle.paper, Brightness.light),
           home: Builder(

@@ -6,7 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/sync/settings_sync.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
+import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
@@ -33,8 +36,11 @@ void main() {
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => ThemeSettingsProvider(),
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => ThemeSettingsProvider()),
+          ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ],
         child: MaterialApp(
           theme: buildAppTheme(AppStyle.paper, Brightness.light),
           home: Builder(
@@ -217,5 +223,53 @@ void main() {
       tester.widget<NumberStepperRow>(rowFinder).displayText,
       '${capacity - 1} 字',
     );
+  });
+
+  testWidgets('新書預設套用替換規則跟著開關，設定照舊同步', (tester) async {
+    final prefs = GetIt.instance<SharedPreferences>();
+    await pumpHost(tester);
+    await tester.tap(find.text('開啟'));
+    await tester.pumpAndSettle();
+
+    Future<void> findRow() => tester.scrollUntilVisible(
+      find.text('新書預設套用替換規則'),
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byType(GroupedListView),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+
+    await findRow();
+    expect(
+      tester
+          .widget<GroupedSwitchRow>(
+            find.widgetWithText(GroupedSwitchRow, '新書預設套用替換規則'),
+          )
+          .value,
+      isTrue,
+    );
+    expect(prefs.getBool(PreferKey.replaceEnableDefault), isNull);
+
+    await tester.tap(find.text('新書預設套用替換規則'));
+    await tester.pumpAndSettle();
+
+    expect(prefs.getBool(PreferKey.replaceEnableDefault), isFalse);
+    expect(
+      Book(
+        bookUrl: 'https://s.example/book/1',
+        origin: 'https://s.example',
+        name: '新加入書架的書',
+        author: '作者',
+      ).getUseReplaceRule(),
+      isFalse,
+    );
+    expect(SettingsSync.keys, contains(PreferKey.replaceEnableDefault));
+
+    await tester.tap(find.text('新書預設套用替換規則'));
+    await tester.pumpAndSettle();
+    expect(prefs.getBool(PreferKey.replaceEnableDefault), isTrue);
   });
 }

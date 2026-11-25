@@ -42,6 +42,7 @@ final class AudioUrlResolver {
       baseUrl: chapter.getAbsoluteURL(),
       source: source,
       ruleData: book,
+      chapter: chapter,
     ).playbackRequest();
     return AudioRequest(url: request.url, headers: request.headers);
   }

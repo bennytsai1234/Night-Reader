@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +10,7 @@ import 'association_base.dart';
 
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/features/replace_rule/widgets/replace_rule_import_sheet.dart';
 import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/features/source_manager/widgets/import_preview_sheet.dart';
@@ -111,8 +110,14 @@ mixin AssociationDialogHelper on AssociationBase {
           await context.read<BookshelfProvider>().loadBooks();
           message = result.summary ?? '未找到可匯入的書架資料';
         case ImportContentKind.replaceRule:
-          final count = await _importReplaceRules(content);
-          message = count > 0 ? '成功匯入 $count 個替換規則' : '未匯入有效替換規則';
+          // 同書源：先開匯入預覽，這台已有的預設不勾。
+          if (!context.mounted) return;
+          await importReplaceRulesWithPreview(
+            context,
+            content,
+            dao: getIt<ReplaceRuleDao>(),
+          );
+          return;
         case ImportContentKind.rssSource || ImportContentKind.theme:
           return;
       }
@@ -125,27 +130,6 @@ mixin AssociationDialogHelper on AssociationBase {
         context,
       ).showSnackBar(SnackBar(content: UiText(failureMessage(action, error))));
     }
-  }
-
-  Future<int> _importReplaceRules(String text) async {
-    final decoded = jsonDecode(text);
-    // 單一規則的匯出是一個物件，辨識時也當成替換規則，這裡一併接受。
-    final items = decoded is Map
-        ? [decoded]
-        : decoded is List
-        ? decoded
-        : throw const FormatException('替換規則格式不正確');
-    final dao = getIt<ReplaceRuleDao>();
-    var count = 0;
-    for (final item in items) {
-      if (item is! Map) continue;
-      final rule = ReplaceRule.fromJson(Map<String, dynamic>.from(item));
-      // 空的或正則寫錯的規則不寫入，也不算進成功數。
-      if (!rule.isValid()) continue;
-      await dao.upsert(rule);
-      count += 1;
-    }
-    return count;
   }
 }
 // AI_PORT: GAP-INTENT-01 extracted from AssociationHandlerService

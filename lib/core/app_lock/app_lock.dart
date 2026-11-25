@@ -8,17 +8,42 @@ import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 「解鎖才能打開」的三種（ADR 0083）。
+/// 「離開時」解鎖那部分存下來的三種（ADR 0083）。
 enum AppLockMode {
-  off('不鎖'),
-  onLeave('離開就鎖'),
-  afterFiveMinutes('離開 5 分鐘後');
-
-  const AppLockMode(this.label);
-  final String label;
+  off,
+  onLeave,
+  afterFiveMinutes;
 
   static AppLockMode fromStorage(String? value) => AppLockMode.values
       .firstWhere((mode) => mode.name == value, orElse: () => AppLockMode.off);
+}
+
+/// 「離開時」的四個選項（ADR 0083）。蓋住畫面與解鎖照原本那兩個值存，
+/// 讀它們的程式不用知道這一列。
+enum AppLeaveChoice {
+  none('不蓋', cover: false, mode: AppLockMode.off),
+  coverOnly('蓋住畫面', cover: true, mode: AppLockMode.off),
+  lockOnLeave('蓋住並解鎖才能打開', cover: true, mode: AppLockMode.onLeave),
+  lockAfterFiveMinutes(
+    '蓋住，離開 5 分鐘後要解鎖',
+    cover: true,
+    mode: AppLockMode.afterFiveMinutes,
+  );
+
+  const AppLeaveChoice(this.label, {required this.cover, required this.mode});
+
+  final String label;
+  final bool cover;
+  final AppLockMode mode;
+
+  /// 舊的兩個值換算成顯示的選項：解鎖開著時一定蓋住，不管蓋住的值。
+  static AppLeaveChoice of({required bool cover, required AppLockMode mode}) =>
+      switch (mode) {
+        AppLockMode.off =>
+          cover ? AppLeaveChoice.coverOnly : AppLeaveChoice.none,
+        AppLockMode.onLeave => AppLeaveChoice.lockOnLeave,
+        AppLockMode.afterFiveMinutes => AppLeaveChoice.lockAfterFiveMinutes,
+      };
 }
 
 /// 鎖走到哪。
@@ -97,8 +122,7 @@ abstract interface class AppLockPlatform {
   Future<void> uncover();
 }
 
-/// 離開時蓋住畫面、解鎖才能打開（ADR 0083）。設定是這台手機自己的：不同步、
-/// 不進備份。
+/// 「離開時」的四種（ADR 0083）。設定是這台手機自己的：不同步、不進備份。
 ///
 /// 在 `runApp` 之前 [start]：返回鍵要比 App 自己的導覽先問到這裡，鎖住時才
 /// 攔得下來。
@@ -123,7 +147,7 @@ class AppLock with WidgetsBindingObserver {
     AppLockState.open,
   );
 
-  /// 設定改了時通知（「關於夜讀」的兩列聽它）。
+  /// 設定改了時通知（「關於夜讀」的「離開時」聽它）。
   final ValueNotifier<int> settingsVersion = ValueNotifier(0);
 
   bool _cover = false;
@@ -160,6 +184,8 @@ class AppLock with WidgetsBindingObserver {
 
   bool get cover => _cover;
   AppLockMode get mode => _mode;
+  AppLeaveChoice get leaveChoice =>
+      AppLeaveChoice.of(cover: _cover, mode: _mode);
 
   /// 「離開時蓋住畫面」實際上開著沒（解鎖開著時一定蓋）。
   bool get coverEffective => _cover || _locking;
@@ -205,6 +231,14 @@ class AppLock with WidgetsBindingObserver {
     _cover = value;
     await _prefs?.setBool(PreferKey.appCoverOnLeave, value);
     _settingsChanged();
+  }
+
+  /// 改「離開時」：照選項寫回蓋住與解鎖那兩個值。從不鎖改成會解鎖的選項
+  /// 之前先辨識一次，沒過就整個不改。
+  Future<bool> setLeaveChoice(AppLeaveChoice value) async {
+    if (!await setMode(value.mode)) return false;
+    await setCover(value.cover);
+    return true;
   }
 
   /// 改「解鎖才能打開」。從不鎖改成鎖之前先辨識一次，確定解得開；沒過就不改。

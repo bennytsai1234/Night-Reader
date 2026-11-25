@@ -196,6 +196,7 @@ class ReaderControllerHost {
 
   void _handleAppHidden() {
     autoPage?.stop();
+    if (_retired) return;
     final activeRuntime = runtime;
     if (activeRuntime != null) {
       unawaited(activeRuntime.flushProgress());
@@ -428,8 +429,26 @@ class ReaderControllerHost {
   }
 
   Future<ReaderLocation?> flushProgress() async {
+    if (_retired) return null;
     return runtime?.flushProgress();
   }
+
+  /// 這本書要換目錄了（改編碼）：舊閱讀器停止存正文與寫進度，關掉時也不再
+  /// 寫回。呼叫前先 [flushProgress] 存好最後一次。
+  void retire() {
+    if (_retired) return;
+    _retired = true;
+    runtime?.retire();
+  }
+
+  /// 換目錄失敗、閱讀器照舊時恢復。
+  void resume() {
+    if (!_retired) return;
+    _retired = false;
+    runtime?.resume();
+  }
+
+  bool _retired = false;
 
   final Completer<void> _opened = Completer<void>();
 

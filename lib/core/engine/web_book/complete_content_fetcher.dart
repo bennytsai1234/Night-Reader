@@ -169,11 +169,17 @@ final class CompleteContentFetcher {
     CancelToken? cancelToken,
   }) async {
     // 同 Legado `WebBook.getContentAwait`：章節網址那一頁照正文規則的
-    // `webJs`、`sourceRegex` 抓（網址開了 webView 才用得到），也從它取章名
-    // （`title`，見 [fetch]）；下一頁照一般的請求抓。
+    // `webJs`、`sourceRegex` 抓（網址開了 webView 才用得到），請求帶著這一章
+    // （網址裡的規則讀得到章名、存進這一章），也從它取章名（`title`，見
+    // [fetch]）；下一頁照一般的請求抓。
     final firstPage = url == chapter.url;
     final contentRule = source.ruleContent;
-    final analyzeUrl = AnalyzeUrl(url, source: source, ruleData: book);
+    final analyzeUrl = AnalyzeUrl(
+      url,
+      source: source,
+      ruleData: book,
+      chapter: firstPage ? chapter : null,
+    );
     var response = await analyzeUrl.getStrResponse(
       cancelToken: cancelToken,
       jsStr: firstPage ? contentRule?.webJs : null,
