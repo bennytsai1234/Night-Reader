@@ -16,6 +16,11 @@ import 'package:night_reader/core/database/dao/cache_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/cookie_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/models/reading/bookmark.dart';
+import 'package:night_reader/core/storage/book_toc_reverser.dart';
+import 'package:night_reader/features/reader/features/bookmark/reader_bookmarks.dart';
+import 'package:night_reader/features/reader/features/highlight/reader_highlights.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
@@ -253,6 +258,52 @@ void main() {
     expect(legacy.charOffset, 88);
     expect(legacy.excerpt, '松煙墨');
     expect(restored[1790000000000]!.excerpt, '雨聲');
+  });
+
+  // 夜讀 2026-09 以前的書籤也有 `content`，意思同 Legado（讀者寫的評論）。
+  test('a bookmark with a note from an old Night Reader backup becomes a '
+      'highlight with that note, ordered by when it was made', () async {
+    const time = 1790000000000;
+    // 這台早一秒畫的標註（編號照 `BookmarkDao.newId`：毫秒乘 1000 加隨機數）。
+    await HighlightDao(db).upsertAll([
+      Highlight(id: (time - 1000) * 1000 + 7, bookName: '舊書籤', quote: '早一秒'),
+    ]);
+    final zip = await writeZip('old-noted.zip', {
+      'manifest.json': jsonEncode({'schemaVersion': 2}),
+      'bookmark.json': jsonEncode([
+        {
+          'id': 3,
+          'time': time,
+          'bookName': '舊書籤',
+          'bookAuthor': '某人',
+          'chapterIndex': 1,
+          'chapterPos': 4,
+          'chapterName': '第二章',
+          'bookText': '那一句',
+          'content': '當時的想法',
+        },
+      ]),
+    });
+
+    await RestoreService().restoreFromZip(zip);
+
+    final noted = (await HighlightDao(
+      db,
+    ).getAll()).firstWhere((h) => h.note == '當時的想法');
+    expect(noted.id, time * 1000);
+    expect(noted.quote, '那一句');
+    // 清單照編號排：晚一秒建立的排在早一秒的前面。
+    final all = await HighlightDao(db).watchAll().first;
+    final order = [
+      for (final h in all)
+        if (h.bookName == '舊書籤') h.quote,
+    ];
+    expect(order, ['那一句', '早一秒']);
+    // 資料庫各項測試共用：清掉這項加的，後面的標註還原測試才只看到自己的。
+    await HighlightDao(db).deleteByIds([
+      for (final h in all)
+        if (h.bookName == '舊書籤') h.id,
+    ]);
   });
 
   test('highlights are restored with their color and style', () async {
@@ -615,15 +666,24 @@ void main() {
       );
     });
 
-    test('書籤的位置與原文照 Legado 的欄位還原', () async {
+    test('書籤的位置與原文照 Legado 的欄位還原；寫了附註的變成帶備忘的標註', () async {
       await RestoreService().restoreFromZip(await legadoZip('legado-mark.zip'));
       final bookmarks = (await BookmarkDao(
         db,
       ).getAll()).where((b) => b.bookName == '雪中悍刀行').toList();
-      expect(bookmarks.map((b) => b.excerpt), containsAll(['天下第二', '開頭']));
-      final first = bookmarks.firstWhere((b) => b.excerpt == '天下第二');
-      expect(first.chapterTitle, '第四章');
-      expect(first.charOffset, 20);
+      expect(bookmarks.map((b) => b.excerpt), ['開頭']);
+      expect(bookmarks.single.chapterTitle, '第六章');
+      // Legado 書籤的附註（`content`）在夜讀是標註的備忘（ADR 0044）。
+      final noted = (await HighlightDao(
+        db,
+      ).getAll()).where((h) => h.bookName == '雪中悍刀行').single;
+      expect(noted.id, 1700000000123 * 1000);
+      expect(noted.bookAuthor, '烽火戏诸侯');
+      expect(noted.chapterIndex, 3);
+      expect(noted.chapterTitle, '第四章');
+      expect(noted.charOffset, 20);
+      expect(noted.quote, '天下第二');
+      expect(noted.note, '這句要記住');
     });
 
     test('閱讀時長從毫秒換成秒，同一本書各台的時間加起來', () async {
@@ -631,6 +691,162 @@ void main() {
       final record = await ReadRecordDao(db).getByBookName('雪中悍刀行');
       expect(record?.readTime, 5400);
       expect(record?.lastRead, 1700000500000);
+    });
+  });
+
+  group('目錄反轉過的書', () {
+    // 舊到新的目錄；兩個「番外」同名，只能靠序號分。
+    const titles = ['第1章', '番外', '第3章', '番外', '第5章'];
+
+    List<BookChapter> tocOf(String bookUrl, {required bool reversed}) {
+      final toc = [
+        for (final (i, title) in titles.indexed)
+          BookChapter(
+            url: '$bookUrl/c/$i',
+            title: title,
+            bookUrl: bookUrl,
+            index: i,
+          ),
+      ];
+      return reversed ? reversedToc(toc) : toc;
+    }
+
+    Future<void> shelveReversed(String bookUrl, String name) async {
+      await BookDao(db).upsert(
+        Book(
+          bookUrl: bookUrl,
+          origin: 'https://here.example',
+          name: name,
+          author: '作者',
+          isInBookshelf: true,
+          readConfig: ReadConfig(reverseToc: true),
+        ),
+      );
+      await ChapterDao(db)
+          .replaceByBook(bookUrl, tocOf(bookUrl, reversed: true));
+    }
+
+    test('Legado 的書籤與標註記下 Legado 那本書的目錄方向，'
+        '這台反轉過也對回同一章', () async {
+      const here = 'https://here.example/b/fanwai';
+      await shelveReversed(here, '番外書');
+      final zip = await writeZip('legado-reversed.zip', {
+        'bookshelf.json': jsonEncode([
+          // Legado 用別的書源看過、沒放書架，目錄沒反轉。
+          {
+            'bookUrl': 'https://lg.example/b/fanwai',
+            'origin': 'https://lg.example',
+            'name': '番外書',
+            'author': '作者',
+            'type': 8 | 1024,
+            'readConfig': {'reverseToc': false},
+          },
+        ]),
+        'bookmark.json': jsonEncode([
+          {
+            'time': 1700000100000,
+            'bookName': '番外書',
+            'bookAuthor': '作者',
+            'chapterIndex': 3,
+            'chapterPos': 0,
+            'chapterName': '番外',
+            'bookText': '後面那個番外',
+            'content': '附註',
+          },
+          {
+            'time': 1700000200000,
+            'bookName': '番外書',
+            'bookAuthor': '作者',
+            'chapterIndex': 1,
+            'chapterPos': 0,
+            'chapterName': '番外',
+            'bookText': '前面那個番外',
+            'content': '',
+          },
+        ]),
+      });
+
+      await RestoreService().restoreFromZip(zip);
+
+      final stored = await ChapterDao(db).getByBook(here);
+      final highlight = (await HighlightDao(
+        db,
+      ).getAll()).singleWhere((h) => h.bookName == '番外書');
+      expect(highlight.tocReversed, isFalse);
+      expect(
+        stored[ReaderHighlights.chapterIndexIn(
+              highlight,
+              stored,
+              reversed: true,
+            )]
+            .url,
+        '$here/c/3',
+      );
+      final bookmark = (await BookmarkDao(
+        db,
+      ).getAll()).singleWhere((b) => b.bookName == '番外書');
+      expect(bookmark.tocReversed, isFalse);
+      expect(
+        stored[ReaderBookmarks.chapterIndexIn(bookmark, stored, reversed: true)]
+            .url,
+        '$here/c/1',
+      );
+      await HighlightDao(db).deleteByIds([highlight.id]);
+      await BookmarkDao(db).deleteByIds([bookmark.id]);
+    });
+
+    test('備份裡這本書沒反轉時，存著的目錄跟著翻回來，進度對上同一章', () async {
+      const url = 'https://here.example/b/flip';
+      await shelveReversed(url, '翻回來');
+      // 這台在反轉的目錄上加的書籤，還沒記方向。
+      await BookmarkDao(db).upsertAll([
+        Bookmark(
+          id: 1700000300000123,
+          bookName: '翻回來',
+          bookAuthor: '作者',
+          chapterIndex: 3,
+          chapterTitle: '番外',
+        ),
+      ]);
+      final zip = await writeZip('reversed-off.zip', {
+        'manifest.json': jsonEncode({'schemaVersion': db.schemaVersion}),
+        'bookshelf.json': jsonEncode([
+          Book(
+            bookUrl: url,
+            origin: 'https://here.example',
+            name: '翻回來',
+            author: '作者',
+            isInBookshelf: true,
+            chapterIndex: 3,
+            durChapterTitle: '番外',
+            readConfig: ReadConfig(reverseToc: false),
+          ).toJson(),
+        ]),
+      });
+
+      await RestoreService().restoreFromZip(zip);
+
+      final book = (await BookDao(db).getByUrl(url))!;
+      expect(book.getReverseToc(), isFalse);
+      final stored = await ChapterDao(db).getByBook(url);
+      expect([for (final c in stored) c.title], titles);
+      expect([for (final c in stored) c.index], [0, 1, 2, 3, 4]);
+      expect(stored[book.chapterIndex].url, '$url/c/3');
+      // 這台的書籤記下翻之前的方向，還是對回原本那一章。
+      final bookmark = (await BookmarkDao(
+        db,
+      ).getAll()).singleWhere((b) => b.bookName == '翻回來');
+      expect(bookmark.tocReversed, isTrue);
+      expect(
+        stored[ReaderBookmarks.chapterIndexIn(
+              bookmark,
+              stored,
+              reversed: false,
+            )]
+            .url,
+        '$url/c/1',
+      );
+      await BookmarkDao(db).deleteByIds([bookmark.id]);
     });
   });
 

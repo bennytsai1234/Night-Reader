@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
+import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
@@ -17,6 +18,9 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   PathProviderPlatform.instance = TestPathProvider(root.path);
   // 介面字的轉換快取是全 App 共用的靜態表，每項測試從空的開始。
   setUp(UiLanguageText.clearCache);
+  // 讀本地書之前會先收上次沒做完的原檔更新，只收一次、要讀真的檔案系統：
+  // 每項測試當成已經收過，要測收尾的直接呼叫它。
+  setUp(LocalBookService.markRecoveredForTesting);
   tearDownAll(() async {
     try {
       await root.delete(recursive: true);
