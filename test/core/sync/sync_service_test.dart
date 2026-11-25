@@ -985,6 +985,23 @@ void main() {
     expect(a.sync.status.value.lastSyncAt, isNull);
   });
 
+  test('升級前存的時間，還原備份把設定換成另一個空間：還沒同步前讀回來也不算', () async {
+    await a.sync.useWebDav((
+      url: 'https://one.example',
+      user: '',
+      password: '',
+    ));
+    await a.prefs.setInt(
+      SyncSettings.lastSyncKey,
+      DateTime(2026, 11, 1).millisecondsSinceEpoch,
+    );
+    await a.prefs.remove(SyncSettings.lastSyncSpaceKey);
+
+    await a.prefs.setString('sync.webdav.url', 'https://restored.example');
+    await a.sync.load();
+    expect(a.sync.status.value.lastSyncAt, isNull);
+  });
+
   test('還原備份把設定換成另一個空間：讀回來不算上一個空間的時間', () async {
     await a.sync.useWebDav((
       url: 'https://one.example',
