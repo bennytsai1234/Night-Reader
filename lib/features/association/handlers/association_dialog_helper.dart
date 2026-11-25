@@ -156,12 +156,16 @@ mixin AssociationDialogHelper on AssociationBase {
     };
     final confirmed = await showAppAlert<bool>(
       context: context,
-      title: '外部匯入',
-      message: '偵測到外部內容：\n$label\n\n${kind.description}',
+      title: kind.title,
+      message: '$label\n${kind.consequence}',
       actions: [
         if (action != null)
           AppAlertAction(label: action, value: true, isDefault: true),
-        const AppAlertAction(label: '取消', value: false),
+        AppAlertAction(
+          label: action == null ? '關閉' : '取消',
+          value: false,
+          isDefault: action == null,
+        ),
       ],
     );
     if (confirmed != true || action == null || !context.mounted) return;
