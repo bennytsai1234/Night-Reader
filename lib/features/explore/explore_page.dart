@@ -21,6 +21,7 @@ import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
+import 'package:night_reader/features/source_login/source_login_page.dart';
 
 import 'explore_provider.dart';
 import 'explore_show_page.dart';
@@ -49,7 +50,7 @@ class _ExplorePageContent extends StatefulWidget {
   State<_ExplorePageContent> createState() => _ExplorePageContentState();
 }
 
-enum _SourceAction { edit, top, search, refresh, delete }
+enum _SourceAction { edit, top, login, search, refresh, delete }
 
 /// 分組選單裡「全部」的值；分組名稱都是字串，不會和它撞在一起。
 const Object _allGroups = Object();
@@ -464,29 +465,36 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
           ),
         ),
       ),
-      entries: const [
-        GlassMenuItem(
+      entries: [
+        const GlassMenuItem(
           value: _SourceAction.edit,
           label: '編輯',
           icon: Icons.edit_outlined,
         ),
-        GlassMenuItem(
+        const GlassMenuItem(
           value: _SourceAction.top,
           label: '置頂',
           icon: Icons.vertical_align_top_rounded,
         ),
+        // 有登入網址的書源才能登入；沒有的一樣列出、灰掉（ADR 0059）。
         GlassMenuItem(
+          value: _SourceAction.login,
+          label: '登入',
+          icon: Icons.login_rounded,
+          enabled: source.hasLogin,
+        ),
+        const GlassMenuItem(
           value: _SourceAction.search,
           label: '搜尋',
           icon: Icons.search_rounded,
         ),
-        GlassMenuItem(
+        const GlassMenuItem(
           value: _SourceAction.refresh,
           label: '重新整理分類',
           icon: Icons.refresh_rounded,
         ),
-        GlassMenuDivider(),
-        GlassMenuItem(
+        const GlassMenuDivider(),
+        const GlassMenuItem(
           value: _SourceAction.delete,
           label: '刪除',
           icon: Icons.delete_outline_rounded,
@@ -510,6 +518,11 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
           return;
         case _SourceAction.top:
           await provider.topSource(source);
+          return;
+        case _SourceAction.login:
+          final full = await provider.getFullSource(source.bookSourceUrl);
+          if (full == null || !mounted) return;
+          await openSourceLogin(context, full);
           return;
         case _SourceAction.search:
           final full = await provider.getFullSource(source.bookSourceUrl);

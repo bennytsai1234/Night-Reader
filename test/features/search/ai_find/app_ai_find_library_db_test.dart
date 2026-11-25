@@ -102,7 +102,7 @@ void main() {
     );
     final library = AppAiFindLibrary(
       scope: SearchScope(),
-      searchLoader: (source, key, {cancelToken}) async => [
+      searchLoader: (source, key, {cancelToken, page = 1}) async => [
         found(
           source.bookSourceUrl,
           '海賊王之劍豪',
@@ -255,7 +255,7 @@ void main() {
     final library = AppAiFindLibrary(
       scope: SearchScope(),
       searchLimit: const Duration(milliseconds: 200),
-      searchLoader: (source, key, {cancelToken}) =>
+      searchLoader: (source, key, {cancelToken, page = 1}) =>
           source.bookSourceUrl == 'https://stuck.test'
           ? stuck.future
           : Future.value([found(source.bookSourceUrl, '海賊王之劍豪')]),

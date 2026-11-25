@@ -254,6 +254,7 @@ void main() {
       BookSource source,
       String key, {
       CancelToken? cancelToken,
+      int page = 1,
     }) async {
       asked.add(source.bookSourceName);
       return [
@@ -376,5 +377,143 @@ void main() {
         expect(next.kindCounts[BookSourceKind.comic], 1);
       },
     );
+  });
+
+  // 同 Legado `SearchModel`：結果捲到底時接著搜下一頁（`{{page}}` 加一），
+  // 搜不到新書的書源就不再往下搜。
+  group('next page', () {
+    final asked = <String>[];
+    Completer<void>? gate;
+
+    /// 預設甲站一頁一本、第 3 頁沒了；乙站不理頁碼，每頁都回同一本。
+    List<String> defaultPages(String site, int page) =>
+        site == '甲站' ? (page < 3 ? ['甲$page'] : []) : ['乙1'];
+    var pageBooks_ = defaultPages;
+
+    Future<List<SearchBook>> loader(
+      BookSource source,
+      String key, {
+      CancelToken? cancelToken,
+      int page = 1,
+    }) async {
+      asked.add('${source.bookSourceName}$page');
+      if (page > 1) await gate?.future;
+      return [
+        for (final name in pageBooks_(source.bookSourceName, page))
+          SearchBook(
+            bookUrl: '${source.bookSourceUrl}/$name',
+            name: name,
+            author: '作者',
+            origin: source.bookSourceUrl,
+            originName: source.bookSourceName,
+          ),
+      ];
+    }
+
+    Future<SearchProvider> provider({
+      List<String> Function(String site, int page)? pageBooks,
+    }) async {
+      asked.clear();
+      gate = null;
+      pageBooks_ = pageBooks ?? defaultPages;
+      await GetIt.instance<BookSourceDao>().upsertAll([
+        BookSource(bookSourceUrl: 'https://a.example', bookSourceName: '甲站'),
+        BookSource(bookSourceUrl: 'https://b.example', bookSourceName: '乙站'),
+      ]);
+      final provider = SearchProvider(
+        entrance: Future<void>.value(),
+        searchLoader: loader,
+      );
+      addTearDown(() async {
+        provider.dispose();
+        await pumpEventQueue();
+      });
+      await provider.ready;
+      return provider;
+    }
+
+    List<String> names(SearchProvider provider) =>
+        provider.results.map((b) => b.name).toList()..sort();
+
+    test('loads the next page from the sources that found new books', () async {
+      final search = await provider();
+      await search.search('夜');
+      expect(names(search), ['乙1', '甲1']);
+      expect(search.hasMorePages, isTrue);
+      // 不論怎麼捲到底（滾輪、觸控板沒有拖曳），接著搜的書都接在尾端。
+      expect(search.resultOrderHeld, isFalse);
+
+      asked.clear();
+      await search.loadMorePages();
+      expect(asked..sort(), ['乙站2', '甲站2']);
+      expect(search.resultOrderHeld, isTrue);
+      expect(names(search), ['乙1', '甲1', '甲2']);
+
+      // 乙站第 2 頁沒有新書，不再搜；甲站第 3 頁沒了，之後就沒有下一頁。
+      asked.clear();
+      await search.loadMorePages();
+      expect(asked, ['甲站3']);
+      expect(search.hasMorePages, isFalse);
+
+      asked.clear();
+      await search.loadMorePages();
+      expect(asked, isEmpty);
+    });
+
+    // 兩站第 1 頁搜到同一本（網址不同）、合成一張卡；乙站不理頁碼，之後每頁
+    // 都回同一本，不能被當成新書一直搜下去。
+    test('a source repeating a merged book stops paging', () async {
+      final search = await provider(
+        pageBooks: (site, page) => switch ((site, page)) {
+          ('甲站', 1) => ['同'],
+          ('甲站', _) => [],
+          _ => ['同'],
+        },
+      );
+      await search.search('夜');
+      expect(names(search), ['同']);
+
+      await search.loadMorePages();
+      expect(search.hasMorePages, isFalse);
+      asked.clear();
+      await search.loadMorePages();
+      expect(asked, isEmpty);
+    });
+
+    // 精準搜尋濾掉第 1 頁的書，仍要接著搜第 2 頁：有沒有下一頁照過濾前的書。
+    test('precision search still pages past a filtered first page', () async {
+      final search = await provider(
+        pageBooks: (site, page) => switch ((site, page)) {
+          ('甲站', 1) => ['無關'],
+          ('甲站', 2) => ['夜行'],
+          _ => [],
+        },
+      );
+      await search.togglePrecisionSearch();
+      await search.search('夜');
+      expect(names(search), isEmpty);
+      expect(search.hasMorePages, isTrue);
+
+      await search.loadMorePages();
+      expect(names(search), ['夜行']);
+    });
+
+    // 同 Legado `isManualStopSearch`：讀者按了結束，捲到底不再自己搜下去。
+    test('pressing stop while loading more stops loading pages', () async {
+      final search = await provider();
+      await search.search('夜');
+      gate = Completer<void>();
+      final more = search.loadMorePages();
+      await pumpEventQueue();
+      expect(search.isSearching, isTrue);
+      search.stopSearch();
+      gate!.complete();
+      await more;
+      expect(search.hasMorePages, isFalse);
+
+      asked.clear();
+      await search.loadMorePages();
+      expect(asked, isEmpty);
+    });
   });
 }
