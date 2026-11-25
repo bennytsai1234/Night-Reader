@@ -10,7 +10,7 @@ import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 
-import 'source_debug_page.dart';
+import 'widgets/source_manager_dialogs.dart';
 import 'views/source_edit_basic.dart';
 import 'views/source_edit_search.dart';
 import 'views/source_edit_explore.dart';
@@ -513,13 +513,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
   void _openDebug() {
     _syncSource();
     if (!_validateRequiredFields()) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            SourceDebugPage(source: _editingSource, debugKey: '我的世界'),
-      ),
-    );
+    unawaited(SourceManagerDialogs.showDebugInput(context, _editingSource));
   }
 
   @override
