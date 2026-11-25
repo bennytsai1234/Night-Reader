@@ -320,6 +320,21 @@ GPT 那份讀書源的報告（#529）落在書源 0、1、2 的那幾條，加�
 | 27 | 付費、分卷旗標只認 true／yes／1／是 | 早就修好（#542，`2c1ff9cf`：照 Legado `isTrue`，鎖章抽樣共用） |
 | 28 | 目錄 `formatJs` 拿不到 `index`、`gInt` | 早就修好（#556，`dc22f0d4`；同這份書源 2 第 11 筆，倒序目錄也照顯示順序編） |
 | 30 | 詳情頁轉址後重用頁面當目錄，章節連結照轉址前的網址補 | 不修：Legado 一樣（`model/webBook/WebBook.kt:236-243` 重用 `tocHtml` 時 `baseUrl`、`redirectUrl` 都是 `book.tocUrl`） |
+| 1 | `importPackage(java.lang)` 蓋掉 JS 的 String，`String(x)` 無限遞迴 | 已修（#609，同 Rhino 只補全域沒有的名字） |
+| 2 | `new java.lang.String(位元組, 編碼)` 一律用 UTF-8 解 | 已修（#609；`bytesToStr` 也收有正負的位元組） |
+| 4 | `java.queryTTF` 交回的物件沒有查輪廓與字碼的方法 | 已修（#609） |
+| 5 | 文字節點的 `outerHtml` 沒跳脫，字面的 `<b>` 被當成標籤刪掉 | 已修（#609） |
+| 6 | `Document.location()` 交出 `<base href>` 的網址 | 已修（#609；沒給頁面網址時是空的） |
+| 7 | 空文件的 `body()`、`head()` 是 null | 已修（#609；`title()` 也補得上） |
+| 16 | `java.setContent(Jsoup 物件)` 變成空物件 | 已修（#609；CSS、XPath、正則與 `##` 取代收到整份網頁都照它的 HTML） |
+| 17 | `tag.a[0,1]` 這種多個索引倒著取 | 已修（#608） |
+| 18 | `:has(…)` 自己就符合也算 | 已修（#608；以元素為界、逗號分組每組都看） |
+| 19 | `[屬性~=…]` 純文字當 CSS 單字比對、正則在第一個 `]` 截斷 | 已修（#608；加引號的也照 Jsoup 當正則） |
+| 20 | `[屬性~=…]` 沒有這個屬性也算對到 | 已修（#608） |
+| 21 | `[屬性=值]` 分大小寫、看頭尾空白 | 已修（#608；配上別的屬性條件時原本會卡住，一起修） |
+| 22 | `text.字` 每個文字節點各自找 | 已修（#608） |
+| 23 | `@abs:href` 拿不到 | 已修（#608：完整網址照原樣、相對的照 `<base href>`、沒有基準是空的；同這份「拿不準」原本的一筆） |
+| 24 | `id.名稱` 只取第一個 | 已修（#608） |
 | 8 | XPath 解析前把空屬性 `id=""` 後面的引號吃掉，class 跟著壞 | 已修（#607） |
 | 10 | JSON 詳情初始化選到陣列時只留第一筆 | 已修（#607：照 Jayway，確定路徑交出原值、不確定路徑交出清單） |
 | 11 | 組合規則第一個分隔符後面括號裡的同一個符號也被切開 | 已修（#607；同這份「拿不準」原本的一筆） |
@@ -337,6 +352,5 @@ GPT 那份讀書源的報告（#529）落在書源 0、1、2 的那幾條，加�
 - **`java.toNumChapter` 換的範圍和 Legado 不同**（書源 0）：Legado 只換「第…章」中間那一段（`AppPattern.titleNumPattern`：`(第)(.+?)(章)`，Legado `help/JsExtensions.kt:916-924`），全形數字也換；夜讀換整個章名裡第一段中文數字（`lib/core/engine/js/extensions/js_string_extensions.dart:167-174`），「一夜之間 第十章」會變成「1夜之間 第十章」，「第十回」也會換。卡在：Legado 遇到「第一卷 第十章」會換成「第-1章」，夜讀反而對；哪一種是讀者要的說不準。
 - **`java.queryTTF` 抓網址字型時不帶書源的標頭**（書源 0）：Legado 用書源的 `AnalyzeUrl` 抓（書源標頭、登入標頭都帶），夜讀用 `plainBytes` 只照 Cookie 罐開關（`lib/core/engine/js/extensions/js_blocking_tasks.dart:220-232`）。字型網址要 `Referer` 的網站會抓不到。卡在：沒找到實際要標頭才給字型的網站。
 - **JSON 路徑對到一個物件時交出的文字不是 JSON**（書源 1）：夜讀 `toString()` 出來是 Dart 的 `{a: 1}`（`lib/core/engine/parsers/analyze_by_json_path.dart:73-74`），接著用 `@js:JSON.parse(result)` 的規則會失敗。卡在：Legado 用 Jayway JsonPath 讀出的物件是哪一種類別、`toString()` 是不是 JSON 沒查到，說不準 Legado 那邊是不是一樣失敗。
-- **CSS 規則的 `@abs:href`**（書源 1）：Legado 交給 Jsoup 的 `attr("abs:href")`，夜讀當成名叫 `abs:href` 的屬性、拿不到（`lib/core/engine/parsers/css/analyze_by_css_helper.dart:81-87`），網址規則因此退回目前頁的網址。卡在：Legado 解析網頁時沒給頁面網址，`abs:` 只對本來就是完整網址的連結有效，差別只在這種情況。
 - **搜尋結果直接是詳情頁時，點進去重抓的可能是另一頁**（書源 2）：搜尋網址符合 `bookUrlPattern`、或書單是空的改照詳情頁解析時，Legado 把這一頁留給詳情頁用（`searchBook.infoHtml = body`，Legado `model/webBook/BookList.kt:76`、`106`，`SearchBook.toBook` 帶過去，`data/entities/SearchBook.kt:136`），沒轉址時書的網址還帶著網址選項（`BookList.kt:168`：`getAbsoluteURL(analyzeUrl.url, analyzeUrl.ruleUrl)`）。夜讀書的網址是回應的網址（`lib/core/engine/web_book/book_list_parser.dart:187`，來自 `web_book_service.dart:61`），`toSearchBook`、`toBook` 都不帶這一頁（`lib/core/models/book/book_extensions.dart:85-102`、`lib/core/models/search/search_book.dart:247-263`），點進詳情用 GET 重抓這個網址：POST 搜尋、沒轉址就回詳情頁的網站，抓到的是沒有搜尋字的另一頁。卡在：沒找到這樣的網站；GET 搜尋只是多抓一次。
 - **Cookie 的值有空白、中文、逗號或雙引號時被丟掉**（書源 2）：請求帶的 Cookie（書源標頭、登入、`cookie.setCookie` 存的）一段段用 Dart 的 `Cookie.fromSetCookieValue` 讀（`lib/core/network/interceptors/lenient_cookie_manager.dart:137-150`），讀不了的丟掉（`185-213` 的 `ignoreInvalidCookies`），送出的 Cookie 標頭整個換成讀得了的那些（`50`）；網站回的 Set-Cookie 讀不了的也不存（`152-168`）。實測 `a=x y`、`a=中文`、`a={"k":1}`、`a=b,c` 都丟出 FormatException，最後一段是空值的 `token=` 也讀不了。Legado 請求這一端照字串切開合併、不檢查字元，只略過空值（`help/http/CookieStore.kt:87-104`）；回應那一端用 OkHttp 的 `Cookie.parseAll`（`help/http/CookieManager.kt:43`），收不收這些字元這份原始碼查不到。卡在：沒找到 Cookie 值帶這些字元的網站。
