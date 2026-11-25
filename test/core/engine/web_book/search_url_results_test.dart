@@ -29,6 +29,7 @@ void main() {
 
   late HttpServer server;
   late String baseUrl;
+  var postRequests = 0;
 
   setUpAll(() async {
     await NetworkService().init();
@@ -43,9 +44,18 @@ void main() {
             '<div class="item"><a href="/book/2">乙書</a></div>',
           );
         case '/post':
-          // POST 搜尋，網站直接給唯一一本的詳情頁。
-          await request.drain<void>();
-          request.response.write('<h1>詳情書名</h1>');
+          // POST 搜尋，網站直接給唯一一本的詳情頁；GET 同一條網址是別的
+          // 內容，重抓會拿到另一頁。
+          postRequests++;
+          if (request.method == 'POST') {
+            await request.drain<void>();
+            request.response.write(
+              '<h1 class="title">詳情書名</h1>'
+              '<div class="intro">搜尋那一頁的簡介</div>',
+            );
+          } else {
+            request.response.write('<h1 class="title">重抓的另一頁</h1>');
+          }
         case '/jump':
           request.response.statusCode = HttpStatus.found;
           request.response.headers.set('location', '/book/9');
@@ -100,4 +110,27 @@ void main() {
     expect(books.map((b) => b.name), ['轉址的書']);
     expect(books.single.bookUrl, '$baseUrl/book/9');
   }, skip: skip);
+
+  test('搜尋直接回詳情頁時，打開書用搜尋那一頁，不再連網', () async {
+    // 同一條網址 GET 拿到的是另一頁：重抓會打開錯的書（同 Legado 把
+    // 搜尋回的詳情頁留在 SearchBook.infoHtml）。
+    final before = postRequests;
+    final detailSource = BookSource.fromJson({
+      'bookSourceName': '詳情',
+      'bookSourceUrl': baseUrl,
+      'searchUrl': '/post,{"method":"POST","body":"k={{key}}"}',
+      'ruleSearch': {'bookList': 'class.item', 'name': 'tag.a@text'},
+      'ruleBookInfo': {'name': 'tag.h1@text', 'intro': 'class.intro@text'},
+    });
+    final found = await WebBook.searchBookAwait(detailSource, '書');
+    expect(found.single.infoHtml, contains('搜尋那一頁的簡介'));
+
+    final info = await WebBook.getBookInfoAwait(
+      detailSource,
+      found.single.toBook(),
+    );
+    expect(info.name, '詳情書名');
+    expect(info.intro, '搜尋那一頁的簡介');
+    expect(postRequests, before + 1);
+  });
 }

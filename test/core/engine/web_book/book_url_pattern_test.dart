@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 
 import '../../../test_helper.dart';
@@ -142,5 +144,73 @@ void main() {
       ),
       completion(isEmpty),
     );
+  });
+
+  // 搜尋直接回詳情頁時，Legado 把這一頁留在 SearchBook.infoHtml，打開書時
+  // 直接解析、不再連網（BookList.kt:76、:106、SearchBook.kt:136）。搜尋網址
+  // 和書的網址不一定能拿到同一頁（POST、轉址），重抓會是另一頁。
+
+  test('a detail page gets its HTML carried to the book', () async {
+    const body =
+        '<html><body><h1 class="title">詳情書名</h1>'
+        '<div class="intro">這一頁的簡介</div></body></html>';
+    final books = await BookListParser.parse(
+      source: source(detail),
+      body: body,
+      baseUrl: detailUrl,
+      isSearch: true,
+    );
+    final found = books.single;
+    expect(found.infoHtml, body);
+
+    final book = found.toBook();
+    expect(book.infoHtml, body);
+    expect(book.toSearchBook().infoHtml, body);
+  });
+
+  test(
+    'an empty list parsed as a detail page gets its HTML carried too',
+    () async {
+      const body = '<html><body><h1 class="title">詳情書名</h1></body></html>';
+      final books = await BookListParser.parse(
+        source: source(''),
+        body: body,
+        baseUrl: 'https://s.example/search?q=a',
+        isSearch: true,
+      );
+      expect(books.single.infoHtml, body);
+    },
+  );
+
+  test(
+    'a list item pointing at the page itself gets its HTML carried',
+    () async {
+      // BookList.kt:134：清單抓到的書網址就是這一頁時，之後打開書也是這一頁。
+      const body =
+          '<html><body><div class="item"><a class="name">甲書</a></div>'
+          '</body></html>';
+      final books = await BookListParser.parse(
+        source: source(''),
+        body: body,
+        baseUrl: 'https://s.example/book/1',
+        isSearch: true,
+      );
+      expect(books.single.bookUrl, 'https://s.example/book/1');
+      expect(books.single.infoHtml, body);
+    },
+  );
+
+  test('tocHtml goes through SearchBook and back', () {
+    final searchBook = SearchBook(
+      bookUrl: 'https://s.example/book/1',
+      name: '甲書',
+      origin: 'https://s.example',
+      infoHtml: '<html>詳情</html>',
+      tocHtml: '<html>目錄</html>',
+    );
+    final book = searchBook.toBook();
+    expect(book.infoHtml, '<html>詳情</html>');
+    expect(book.tocHtml, '<html>目錄</html>');
+    expect(book.toSearchBook().tocHtml, '<html>目錄</html>');
   });
 }

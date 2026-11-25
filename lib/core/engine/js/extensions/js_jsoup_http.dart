@@ -104,9 +104,11 @@ BlockingTask jsoupExecute(Map<String, Object?> request) => () async {
           : '${wire[existing]}, ${header[1]}';
     }
     final cookieSet = <String>{
-      for (final e in cookies.entries) '${e.key}=${e.value}',
+      for (final e in cookies.entries)
+        if (cookiePairFitsHeader('${e.key}', '${e.value}'))
+          '${e.key}=${e.value}',
       for (final c in await jar.loadForRequest(requestUri))
-        '${c.name}=${c.value}',
+        if (cookieFitsHeader(c)) '${c.name}=${cookieValueForRequest(c)}',
     };
     if (cookieSet.isNotEmpty) {
       // Jsoup 另送一個 Cookie 標頭；這裡併進書源自己給的那個。

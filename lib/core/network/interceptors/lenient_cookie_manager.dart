@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cookie_jar/cookie_jar.dart';
@@ -37,7 +38,10 @@ class LenientCookieManager extends Interceptor {
       }
       return b.path!.length.compareTo(a.path!.length);
     });
-    return cookies.map((cookie) => '${cookie.name}=${cookie.value}').join('; ');
+    return cookies
+        .where(cookieFitsHeader)
+        .map((cookie) => '${cookie.name}=${cookieValueForRequest(cookie)}')
+        .join('; ');
   }
 
   @override
@@ -136,15 +140,24 @@ class LenientCookieManager extends Interceptor {
   /// `sid=新; sid=舊`。
   Future<String> loadCookies(RequestOptions options) async {
     final savedCookies = await cookieJar.loadForRequest(options.uri);
-    final given = _cookieHeaderValues(options.headers)
-        .expand((value) => value.split(';'))
-        .where((e) => e.trim().isNotEmpty)
-        .map((c) => _fromSetCookieValue(c))
-        .whereType<Cookie>()
-        .toList();
-    final givenNames = {for (final cookie in given) cookie.name};
+    // 同 Legado `CookieStore.cookieToMap`：照字串切 `;` 與第一個 `=`，只略過
+    // 空值；空白、逗號、雙引號（`a={"k":1}`）照原樣，不經 dart:io Cookie 的
+    // 字元檢查。中文這種值留著，但 dart:io 的標頭送不出去，[getCookies] 會
+    // 略過那一條。
+    final given = <String, String>{};
+    for (final header in _cookieHeaderValues(options.headers)) {
+      for (final pair in header.split(';')) {
+        final index = pair.indexOf('=');
+        if (index <= 0) continue;
+        final name = pair.substring(0, index).trim();
+        final value = pair.substring(index + 1).trim();
+        if (name.isEmpty || value.isEmpty) continue;
+        given[name] = value;
+      }
+    }
+    final givenNames = given.keys.toSet();
     return getCookies([
-      ...given,
+      for (final entry in given.entries) _LenientCookie(entry.key, entry.value),
       ...savedCookies.where((cookie) => !givenNames.contains(cookie.name)),
     ]);
   }
@@ -182,6 +195,9 @@ class LenientCookieManager extends Interceptor {
   }
 }
 
+/// Set-Cookie 的一段。合法的值照 `dart:io` 嚴格解析；值有空白、中文、逗號、
+/// 雙引號這類 RFC 6265 不收的字元時改用寬鬆解析，值保留原文
+/// （[_LenientCookie]）。
 Cookie? parseSetCookieValueLenient(
   String value, {
   bool ignoreInvalidCookies = false,
@@ -190,67 +206,209 @@ Cookie? parseSetCookieValueLenient(
     return Cookie.fromSetCookieValue(value);
   } catch (error) {
     if (error is! HttpException && error is! FormatException) rethrow;
-    final sanitized = sanitizeSetCookieValue(value);
-    if (sanitized != value && sanitized.isNotEmpty) {
-      try {
-        return Cookie.fromSetCookieValue(sanitized);
-      } catch (sanitizedError) {
-        if (sanitizedError is! HttpException &&
-            sanitizedError is! FormatException) {
-          rethrow;
-        }
-        if (ignoreInvalidCookies) {
-          return null;
-        }
-        rethrow;
-      }
-    }
-    if (ignoreInvalidCookies) {
-      return null;
-    }
+    final cookie = _parseLenientSetCookie(value);
+    if (cookie != null) return cookie;
+    if (ignoreInvalidCookies) return null;
     rethrow;
   }
 }
 
-String sanitizeSetCookieValue(String value) {
+Cookie? _parseLenientSetCookie(String value) {
   final segments = value.split(';');
-  if (segments.length < 2) {
-    return value;
-  }
+  final pair = segments.first;
+  final index = pair.indexOf('=');
+  if (index <= 0) return null;
+  final name = pair.substring(0, index).trim();
+  if (!_isCookieName(name)) return null;
+  final cookie = _LenientCookie(name, pair.substring(index + 1).trim());
 
-  final kept = <String>[];
-  for (var i = 0; i < segments.length; i++) {
-    final segment = segments[i].trim();
-    if (segment.isEmpty) {
-      continue;
+  for (final segment in segments.skip(1)) {
+    final attribute = segment.trim();
+    if (attribute.isEmpty) continue;
+    final separator = attribute.indexOf('=');
+    final attributeName =
+        (separator < 0 ? attribute : attribute.substring(0, separator))
+            .trim()
+            .toLowerCase();
+    final attributeValue = separator < 0
+        ? ''
+        : attribute.substring(separator + 1).trim();
+    switch (attributeName) {
+      case 'expires':
+        try {
+          cookie.expires = HttpDate.parse(attributeValue);
+        } on HttpException {
+          // `expires=session` 這類不是日期的當沒有過期時間（同 Legado 只
+          // 照 OkHttp 讀得到的部分）。
+        } on FormatException {
+          // 同上。
+        }
+      case 'max-age':
+        final maxAge = int.tryParse(attributeValue);
+        if (maxAge != null) cookie.maxAge = maxAge;
+      case 'domain':
+        if (attributeValue.isNotEmpty) cookie.domain = attributeValue;
+      case 'path':
+        if (attributeValue.isNotEmpty) cookie.path = attributeValue;
+      case 'secure':
+        cookie.secure = true;
+      case 'httponly':
+        cookie.httpOnly = true;
+      case 'samesite':
+        cookie.sameSite = switch (attributeValue.toLowerCase()) {
+          'lax' => SameSite.lax,
+          'strict' => SameSite.strict,
+          'none' when cookie.secure => SameSite.none,
+          _ => null,
+        };
     }
-    if (i > 0 && _isSessionSentinelDirective(segment)) {
-      continue;
-    }
-    kept.add(segment);
   }
-
-  if (kept.isEmpty) {
-    return value;
-  }
-  return kept.join('; ');
+  return cookie;
 }
 
-bool _isSessionSentinelDirective(String segment) {
-  final separatorIndex = segment.indexOf('=');
-  if (separatorIndex <= 0) {
-    return false;
-  }
+/// `dart:io` 的 [Cookie] 只收 RFC 6265 的字元，值有空白、中文、逗號或雙引號
+/// 時建不起來；網站與書源規則常寫這種 Cookie（例如 JSON 值），Legado 照字串
+/// 存、原樣送回。自己實作一份，值保留原文；寫進 Cookie 檔時把 `dart:io`
+/// 存不下的字元編碼，讀回來交給 [cookieValueForRequest] 解回原文。
+final class _LenientCookie implements Cookie {
+  _LenientCookie(this._name, this._value);
 
-  final name = segment.substring(0, separatorIndex).trim().toLowerCase();
-  if (name != 'expires' && name != 'max-age') {
-    return false;
-  }
+  String _name;
+  String _value;
 
-  final rawValue = segment.substring(separatorIndex + 1).trim();
-  final normalizedValue = rawValue
-      .replaceAll(RegExp("^[\"']+|[\"']+\$"), '')
-      .trim()
-      .toLowerCase();
-  return normalizedValue == 'session';
+  @override
+  String get name => _name;
+
+  @override
+  set name(String value) => _name = value;
+
+  @override
+  String get value => _value;
+
+  @override
+  set value(String value) => _value = value;
+
+  @override
+  DateTime? expires;
+
+  @override
+  int? maxAge;
+
+  @override
+  String? domain;
+
+  @override
+  String? path;
+
+  @override
+  bool secure = false;
+
+  @override
+  bool httpOnly = false;
+
+  @override
+  SameSite? sameSite;
+
+  @override
+  String toString() {
+    final out = StringBuffer()
+      ..write(_name)
+      ..write('=')
+      ..write(_storedCookieValue(_value));
+    void parameter(String name, [Object? value]) {
+      out.write('; $name');
+      if (value != null) out.write('=$value');
+    }
+
+    final expires = this.expires;
+    if (expires != null) {
+      out.write('; Expires=');
+      out.write(HttpDate.format(expires));
+    }
+    if (maxAge != null) parameter('Max-Age', maxAge);
+    if (domain != null) parameter('Domain', domain!.trim());
+    if (path != null) parameter('Path', path!.trim());
+    if (secure) parameter('Secure');
+    if (httpOnly) parameter('HttpOnly');
+    if (sameSite != null) parameter('SameSite', sameSite!.name);
+    return out.toString();
+  }
+}
+
+/// Cookie 檔裡代表原文的開頭：`dart:io` 存不下的值以 base64url 接在後面。
+/// 合法值照原樣寫；本身就長這樣的值再多編一次，讀回時用「再編一次一樣」
+/// 確認，不會把網站原本的值解錯。
+const _encodedValuePrefix = 'nr~';
+
+String _storedCookieValue(String value) {
+  if (!value.startsWith(_encodedValuePrefix) && _cookieValueFits(value)) {
+    return value;
+  }
+  return '$_encodedValuePrefix${base64Url.encode(utf8.encode(value))}';
+}
+
+bool _cookieValueFits(String value) {
+  var start = 0;
+  var end = value.length;
+  if (end >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    start++;
+    end--;
+  }
+  for (var i = start; i < end; i++) {
+    final unit = value.codeUnitAt(i);
+    if (unit < 0x21 ||
+        unit > 0x7E ||
+        unit == 0x22 ||
+        unit == 0x2C ||
+        unit == 0x3B ||
+        unit == 0x5C) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/// Cookie 罐裡的 [cookie] 要送出的值：App 自己編碼存下的解回原文，網站原本
+/// 就長得像編碼的值照原樣送。
+String cookieValueForRequest(Cookie cookie) {
+  if (cookie is _LenientCookie) return cookie.value;
+  final value = cookie.value;
+  if (!value.startsWith(_encodedValuePrefix)) return value;
+  try {
+    final decoded = utf8.decode(
+      base64Url.decode(value.substring(_encodedValuePrefix.length)),
+    );
+    if (_storedCookieValue(decoded) == value) return decoded;
+  } on FormatException {
+    // 不是 App 編碼的值：照原樣送。
+  }
+  return value;
+}
+
+/// Cookie 的 `名稱=值` 能不能放進 HTTP 標頭：`dart:io` 的標頭只收 ASCII
+/// 與 tab，中文這類值放進去整條請求會失敗（Legado 的 OkHttp 也一樣擋）。
+/// 這種 Cookie 留在罐子裡給規則讀，不進標頭。
+bool cookieFitsHeader(Cookie cookie) =>
+    cookiePairFitsHeader(cookie.name, cookieValueForRequest(cookie));
+
+/// 還沒進 Cookie 罐、書源規則自己給的一條 Cookie（[cookieFitsHeader]）。
+bool cookiePairFitsHeader(String name, String value) =>
+    _fitsHeaderValue('$name=$value');
+
+bool _fitsHeaderValue(String value) {
+  for (final unit in value.codeUnits) {
+    if (unit != 0x09 && (unit < 0x20 || unit > 0x7E)) return false;
+  }
+  return true;
+}
+
+bool _isCookieName(String name) {
+  if (name.isEmpty) return false;
+  const separators = r'''()<>@,;:\"/[]?={}''';
+  for (final unit in name.codeUnits) {
+    if (unit <= 0x20 || unit >= 0x7F || separators.codeUnits.contains(unit)) {
+      return false;
+    }
+  }
+  return true;
 }

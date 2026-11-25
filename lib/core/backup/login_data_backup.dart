@@ -196,7 +196,7 @@ abstract final class LoginDataBackup {
           );
     final expires = source.expires;
     try {
-      return io.Cookie(source.name, source.value)
+      return _recreateCookie(source)
         ..domain = source.domain
         ..path = source.path ?? path
         ..secure = source.secure
@@ -209,6 +209,16 @@ abstract final class LoginDataBackup {
     } on FormatException {
       // 存得進 Cookie 檔的名稱與值，重建時理應照樣通過；萬一不行就不帶。
       return null;
+    }
+  }
+
+  static io.Cookie _recreateCookie(io.Cookie source) {
+    try {
+      return io.Cookie(source.name, source.value);
+    } on FormatException {
+      // 寬鬆 Cookie 的值有 dart:io 不收的字元；Cookie 檔裡的是編碼過的
+      // 原文（`LenientCookie.toString`），照那份重建，送出前會解回原文。
+      return io.Cookie.fromSetCookieValue(source.toString());
     }
   }
 

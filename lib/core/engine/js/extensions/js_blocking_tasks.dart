@@ -48,7 +48,7 @@ BlockingTask cookieRead(String url) => () async {
   final store = CookieStore();
   final merged = store.cookieToMap(stored);
   for (final cookie in await NetworkService().cookieJar.loadForRequest(uri)) {
-    merged.putIfAbsent(cookie.name, () => cookie.value);
+    merged.putIfAbsent(cookie.name, () => cookieValueForRequest(cookie));
   }
   return store.mapToCookie(merged);
 };

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/js/extensions/js_blocking_tasks.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/network/cookie_store.dart';
 import 'package:night_reader/core/network/http_client.dart';
 import 'package:night_reader/core/network/network_service.dart';
 
@@ -94,6 +95,18 @@ void main() {
       headers: {'Cookie': 'last=NEW'},
     )();
     expect((response as Map)['body'], 'cookie=last=NEW');
+  });
+
+  test('書源存的 Cookie 值有空白、逗號、雙引號，照原樣送出', () async {
+    // 書源規則的 cookie.setCookie 常寫這種值；以前逐段交給 dart:io Cookie
+    // 解析，整條丟掉，網站每次來都像第一次。中文留得到 Cookie 罐，但
+    // dart:io 的標頭收不了，不送出去，免得整條請求失敗。
+    await CookieStore().setCookie(baseUrl, 'a=x y; b=中文; c={"k":1}');
+    addTearDown(() => CookieStore().removeCookie(baseUrl));
+    final echoed = await get('/echo', source(jar: false));
+    expect(echoed, contains('a=x y'));
+    expect(echoed, contains('c={"k":1}'));
+    expect(echoed, isNot(contains('中文')));
   });
 
   test('規則抓快取檔（java.cacheFile、importScript）也照書源的 Cookie 罐開關存', () async {
