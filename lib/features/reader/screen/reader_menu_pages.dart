@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/exception/user_error.dart';
+import 'package:night_reader/core/local_book/local_book_formats.dart';
+import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
@@ -102,6 +104,13 @@ final class ReaderMenuPages {
           value: _ReaderMoreAction.reSegment,
           selected: _host.book.getReSegment(),
         ),
+        // 只有本地 TXT 有編碼可改；EPUB 與網路書沒有這一項。
+        if (_isLocalTxt)
+          const AppSheetAction(
+            label: '設定編碼',
+            icon: Icons.text_fields_rounded,
+            value: _ReaderMoreAction.charset,
+          ),
         AppSheetAction(
           label: '登入',
           icon: Icons.login_rounded,
@@ -134,6 +143,9 @@ final class ReaderMenuPages {
       case _ReaderMoreAction.reSegment:
         _host.menu.dismissControls();
         await _toggleReSegment();
+      case _ReaderMoreAction.charset:
+        _host.menu.dismissControls();
+        await _changeCharset();
       case _ReaderMoreAction.login:
         if (loginSource != null) {
           await _remedy.login(loginSource, ticket: _departMenu());
@@ -154,6 +166,9 @@ final class ReaderMenuPages {
         );
     }
   }
+
+  bool get _isLocalTxt =>
+      _book.isLocal && localBookExtensionFromPath(_book.bookUrl) == 'txt';
 
   /// 下方選單的「進階」：自動翻頁、繁簡、點擊區域、音量鍵這些不常邊讀邊
   /// 調的設定只在「閱讀偏好」一個地方（ADR 0030），不另開一個內容相同的
@@ -255,6 +270,85 @@ final class ReaderMenuPages {
       return;
     }
     if (_mounted()) _showNotice(enabled ? '已打開重新分段' : '已關閉重新分段');
+  }
+
+  /// 「更多」的「設定編碼」（L6，只有本地 TXT）：照選的編碼重新解碼、重新
+  /// 分章，閱讀進度與書籤留在同一章，再用新的章節重開這本書。
+  Future<void> _changeCharset() async {
+    final picked = await showAppActionSheet<String>(
+      context: _context(),
+      title: '設定編碼',
+      actions: [
+        for (final choice in _charsetChoices)
+          AppSheetAction(
+            label: choice,
+            value: choice,
+            selected: _isCharsetSelected(choice, _book.charset),
+          ),
+      ],
+    );
+    if (!_mounted() || picked == null) return;
+    final Book? updated;
+    try {
+      // 先寫回畫面這一刻的進度，換編碼後才對得到同一個位置。
+      await _host.flushProgress();
+      if (!_mounted()) return;
+      updated = await LocalBookService().changeCharset(
+        _book,
+        picked,
+        bookDao: _host.dependencies.bookDao,
+        chapterDao: _host.dependencies.chapterDao,
+        bookmarkDao: _host.dependencies.bookmarkDao,
+        highlightDao: _host.dependencies.highlightDao,
+      );
+    } catch (error, stackTrace) {
+      AppLog.e('設定編碼失敗', error: error, stackTrace: stackTrace);
+      if (_mounted()) _showNotice(failureMessage('設定編碼', error));
+      return;
+    }
+    if (!_mounted()) return;
+    if (updated == null) {
+      _showNotice('設定編碼失敗');
+      return;
+    }
+    unawaited(
+      Navigator.of(_context()).pushReplacement(
+        BookOpenRoute(
+          book: updated,
+          openTarget: ReaderOpenTarget.resume(updated),
+        ),
+      ),
+    );
+  }
+
+  /// 選編碼的清單照 Legado（`AppConst.charsets`），只去掉夜讀解不了的
+  /// Unicode 與 ASCII。
+  static const List<String> _charsetChoices = [
+    'UTF-8',
+    'GB2312',
+    'GB18030',
+    'GBK',
+    'Big5',
+    'UTF-16',
+    'UTF-16LE',
+  ];
+
+  /// 目前這本書的編碼是不是 [choice]。只寫 UTF-16 時實際會照 BOM 存成
+  /// 大端或小端，選單上仍畫在 UTF-16 那一項。
+  static bool _isCharsetSelected(String choice, String? current) {
+    String normalized(String value) =>
+        value.trim().toUpperCase().replaceAll('_', '-');
+    final now = normalized(current ?? 'UTF-8');
+    final label = normalized(choice);
+    if (label == 'UTF-8') return now == 'UTF-8' || now == 'UTF8';
+    if (label == 'UTF-16') {
+      return now == 'UTF-16' ||
+          now == 'UTF16' ||
+          now == 'UNICODE' ||
+          now == 'UTF-16BE' ||
+          now == 'UTF16BE';
+    }
+    return now == label;
   }
 
   void menusHidden() => _menuDeparture.menusHidden();
@@ -420,6 +514,7 @@ enum _ReaderMoreAction {
   borrowChapter,
   refetchChapter,
   reSegment,
+  charset,
   login,
   bookDetail,
   globalSettings,

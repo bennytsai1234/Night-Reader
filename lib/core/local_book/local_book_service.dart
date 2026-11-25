@@ -2,10 +2,14 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/constant/book_type.dart';
+import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/local_book/local_book_fingerprint.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
@@ -16,6 +20,8 @@ import 'package:path/path.dart' as p;
 
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/models/reading/bookmark.dart';
+import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/core/local_book/epub_parser.dart';
 import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/local_book/txt_parser.dart';
@@ -498,10 +504,7 @@ class LocalBookService {
     File file,
     String? pickedName,
   ) async {
-    final result = await compute((File f) async {
-      final parser = TxtParser(f);
-      return await parser.splitChapters();
-    }, file);
+    final result = await _splitTxt(file);
     final book = _localBook(file.path, pickedName)..charset = result.charset;
     final chapters = _chapters(book, [
       for (final (i, chapter) in result.chapters.indexed)
@@ -515,6 +518,227 @@ class LocalBookService {
       chapters[i].isVolume = chapter['isVolume'] == true;
     }
     return LocalBookImportResult(book: book, chapters: chapters);
+  }
+
+  /// 在背景 isolate 解碼 [file] 並分章；[charset] 是讀者手動指定的編碼，
+  /// 沒給時照偵測。
+  Future<({List<Map<String, dynamic>> chapters, String charset})> _splitTxt(
+    File file, {
+    String? charset,
+  }) {
+    return compute((({File file, String? charset}) args) async {
+      final parser = TxtParser(args.file);
+      return await parser.splitChapters(charset: args.charset);
+    }, (file: file, charset: charset));
+  }
+
+  /// 讀者在「更多」手動把這本 TXT 的編碼換成 [charset]：照新編碼重新解碼、
+  /// 重新分章，目錄整份換掉。閱讀進度、書籤與標註照原本在檔案裡的位元組位置
+  /// 對到新的目錄與章內位置，留在同一章；正文換了，錨點（閱讀位置綁定的
+  /// 舊原文）不再適用，一起清掉。
+  ///
+  /// 原檔不存在、不是 TXT、書不在資料庫裡或分不出章時回傳 null，資料庫與
+  /// 原檔都不動。解不開時往外丟錯，呼叫端提示。
+  Future<Book?> changeCharset(
+    Book book,
+    String charset, {
+    required BookDao bookDao,
+    required ChapterDao chapterDao,
+    BookmarkDao? bookmarkDao,
+    HighlightDao? highlightDao,
+  }) async {
+    final path = filePathOf(book);
+    if (localBookExtensionFromPath(path) != 'txt') return null;
+    final file = File(path);
+    if (!await file.exists()) return null;
+    final current = await bookDao.getByUrl(book.bookUrl);
+    if (current == null) return null;
+
+    final bytes = await file.readAsBytes();
+    final charsetName = EncodingDetect.resolveCharset(bytes, charset);
+    final parsed = await _splitTxt(file, charset: charsetName);
+    if (parsed.chapters.isEmpty) return null;
+
+    final chapters = _chapters(current, [
+      for (final (i, chapter) in parsed.chapters.indexed)
+        (
+          title: chapter['title'] as String? ?? '第 $i 章',
+          start: chapter['start'] as int,
+          end: chapter['end'] as int,
+        ),
+    ]);
+    for (final (i, chapter) in parsed.chapters.indexed) {
+      chapters[i].isVolume = chapter['isVolume'] == true;
+    }
+
+    final oldChapters = await chapterDao.getByBook(current.bookUrl);
+    final oldCharset = current.charset ?? EncodingDetect.getEncode(bytes);
+    final oldLengths = <int, int>{};
+    final oldBookmarks =
+        await bookmarkDao?.watchByBook(current.name, current.author).first ??
+        const <Bookmark>[];
+    final oldHighlights =
+        await highlightDao?.watchByBook(current.name, current.author).first ??
+        const <Highlight>[];
+
+    ({int index, int charOffset}) mapPosition(int oldIndex, int oldOffset) {
+      if (oldChapters.isEmpty) {
+        return (index: oldIndex.clamp(0, chapters.length - 1), charOffset: 0);
+      }
+      return _positionAfterDecode(
+        bytes: bytes,
+        oldCharset: oldCharset,
+        newCharset: charsetName,
+        oldChapters: oldChapters,
+        newChapters: chapters,
+        oldIndex: oldIndex,
+        oldOffset: oldOffset,
+        oldLengths: oldLengths,
+      );
+    }
+
+    final progress = mapPosition(current.chapterIndex, current.charOffset);
+    // 書籤與標註跟著書名加作者，同名的另一本可能共用；只搬章名在這本書舊
+    // 目錄裡的那些，別的書留下的位置不動。
+    final oldTitles = {for (final chapter in oldChapters) chapter.title};
+    final movedBookmarks = <Bookmark>[];
+    for (final item in oldBookmarks) {
+      if (item.chapterIndex < 0 ||
+          item.chapterIndex >= oldChapters.length ||
+          !oldTitles.contains(item.chapterTitle)) {
+        continue;
+      }
+      final mapped = mapPosition(item.chapterIndex, item.charOffset);
+      movedBookmarks.add(
+        Bookmark(
+          id: item.id,
+          bookName: item.bookName,
+          bookAuthor: item.bookAuthor,
+          chapterIndex: mapped.index,
+          chapterTitle: chapters[mapped.index].title,
+          charOffset: mapped.charOffset,
+          excerpt: item.excerpt,
+        ),
+      );
+    }
+    final movedHighlights = <Highlight>[];
+    for (final item in oldHighlights) {
+      if (item.chapterIndex < 0 ||
+          item.chapterIndex >= oldChapters.length ||
+          !oldTitles.contains(item.chapterTitle)) {
+        continue;
+      }
+      final mapped = mapPosition(item.chapterIndex, item.charOffset);
+      movedHighlights.add(
+        Highlight(
+          id: item.id,
+          bookName: item.bookName,
+          bookAuthor: item.bookAuthor,
+          chapterIndex: mapped.index,
+          chapterTitle: chapters[mapped.index].title,
+          charOffset: mapped.charOffset,
+          quote: item.quote,
+          color: item.color,
+          style: item.style,
+          note: item.note,
+        ),
+      );
+    }
+
+    await bookDao.transaction(() async {
+      await bookDao.writeFields(
+        current,
+        BooksCompanion(
+          charset: Value(charsetName),
+          chapterIndex: Value(progress.index),
+          durChapterTitle: Value(chapters[progress.index].title),
+          charOffset: Value(progress.charOffset),
+          visualOffsetPx: const Value(0.0),
+          readerAnchorJson: const Value(null),
+          durChapterTime: Value(DateTime.now().millisecondsSinceEpoch),
+        ),
+      );
+      await chapterDao.replaceByBook(current.bookUrl, chapters);
+      if (movedBookmarks.isNotEmpty) {
+        await bookmarkDao!.upsertAll(movedBookmarks);
+      }
+      if (movedHighlights.isNotEmpty) {
+        await highlightDao!.upsertAll(movedHighlights);
+      }
+    });
+    return bookDao.getByUrl(current.bookUrl);
+  }
+
+  /// 舊目錄第 [oldIndex] 章第 [oldOffset] 個字，換了編碼之後在新目錄的哪一章、
+  /// 第幾個字。
+  ///
+  /// 兩個目錄的章節範圍都是同一個原檔的位元組位移，不隨編碼改變：先照舊章
+  /// 的長度算出這個字在章內的比例，換成檔案裡的位元組位置，找新目錄裡蓋住
+  /// 這個位置的那一章，再照同一個比例換成那一章的章內字數。編碼錯了時新舊
+  /// 章名不一定一樣，所以不照章名對。
+  static ({int index, int charOffset}) _positionAfterDecode({
+    required Uint8List bytes,
+    required String oldCharset,
+    required String newCharset,
+    required List<BookChapter> oldChapters,
+    required List<BookChapter> newChapters,
+    required int oldIndex,
+    required int oldOffset,
+    required Map<int, int> oldLengths,
+  }) {
+    if (newChapters.isEmpty) return (index: 0, charOffset: 0);
+    final safeOldIndex = oldIndex.clamp(0, oldChapters.length - 1);
+    final oldChapter = oldChapters[safeOldIndex];
+    final oldStart = oldChapter.start;
+    final oldEnd = oldChapter.end;
+    if (oldStart == null || oldEnd == null || oldEnd <= oldStart) {
+      return (index: oldIndex.clamp(0, newChapters.length - 1), charOffset: 0);
+    }
+    final oldLength = oldLengths.putIfAbsent(
+      safeOldIndex,
+      () => _chapterCharLength(bytes, oldChapter, oldCharset),
+    );
+    final fraction = oldLength <= 0
+        ? 0.0
+        : (oldOffset / oldLength).clamp(0.0, 1.0);
+    final byte = oldStart + (fraction * (oldEnd - oldStart)).floor();
+
+    var newIndex = 0;
+    for (var i = 0; i < newChapters.length; i += 1) {
+      final start = newChapters[i].start;
+      if (start == null || start > byte) break;
+      newIndex = i;
+    }
+    final newLength = _chapterCharLength(
+      bytes,
+      newChapters[newIndex],
+      newCharset,
+    );
+    final newOffset = newLength <= 0
+        ? 0
+        : (fraction * newLength).round().clamp(0, newLength - 1);
+    return (index: newIndex, charOffset: newOffset);
+  }
+
+  /// [chapter] 的位元組範圍照 [charset] 解出來有幾個字；範圍不完整時是 0。
+  static int _chapterCharLength(
+    Uint8List bytes,
+    BookChapter chapter,
+    String charset,
+  ) {
+    final start = chapter.start;
+    final end = chapter.end;
+    if (start == null ||
+        end == null ||
+        start < 0 ||
+        end > bytes.length ||
+        end <= start) {
+      return 0;
+    }
+    return EncodingDetect.decodeWithCharset(
+      bytes.sublist(start, end),
+      charset,
+    ).length;
   }
 
   Future<LocalBookImportResult> _importEpub(

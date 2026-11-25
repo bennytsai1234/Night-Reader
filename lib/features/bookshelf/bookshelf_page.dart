@@ -46,6 +46,19 @@ import 'package:night_reader/core/chinese/chinese_display.dart';
 
 enum _BookshelfBatchAction { checkUpdate, delete }
 
+/// 一次加入好幾個本地書的結果，寫給讀者看：全成功、部分失敗或全失敗。
+/// [failed] 是失敗的檔名（不含副檔名）。
+@visibleForTesting
+String localBookImportMessage({
+  required int added,
+  required List<String> failed,
+}) {
+  if (failed.isEmpty) return added == 1 ? '匯入成功' : '已加入 $added 本';
+  final names = failed.join('、');
+  if (added == 0) return '匯入失敗：$names';
+  return '已加入 $added 本，${failed.length} 本失敗：$names';
+}
+
 /// 頁首兩個選單的非排序項目；排序項目直接用 [BookshelfSortMode]。
 /// 左邊「整理」管書架怎麼看、怎麼排，右邊「加入」把書帶進書架。
 /// 「整理」的篩選選項：選了哪一類（null 是全部）。
@@ -656,16 +669,21 @@ class _BookshelfPageState extends State<BookshelfPage>
     );
   }
 
-  Future<void> _importLocalBook(
+  Future<void> _importLocalBooks(
     BuildContext context,
     BookshelfProvider provider,
-    String path,
+    List<String> paths,
   ) async {
     try {
-      final ok = await provider.importLocalBookPath(path);
+      final result = await provider.importLocalBookPaths(paths);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: UiText(ok ? '匯入成功' : '匯入失敗')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: UiText(
+            localBookImportMessage(added: result.added, failed: result.failed),
+          ),
+        ),
+      );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
@@ -1202,9 +1220,9 @@ class _BookshelfPageState extends State<BookshelfPage>
   }
 
   Future<void> _pickLocalBook(BookshelfProvider provider) async {
-    final path = await AppFileSelectionService.instance.pickLocalBookPath();
-    if (path != null && mounted) {
-      await _importLocalBook(context, provider, path);
+    final paths = await AppFileSelectionService.instance.pickLocalBookPaths();
+    if (paths.isNotEmpty && mounted) {
+      await _importLocalBooks(context, provider, paths);
     }
   }
 

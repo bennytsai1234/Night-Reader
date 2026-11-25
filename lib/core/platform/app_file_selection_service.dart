@@ -12,7 +12,9 @@ typedef AppPickFiles = Future<FilePickerResult?> Function({
 /// Native pickers are filters rather than a trust boundary. Every selected
 /// path is therefore validated again before it can reach an import service.
 class AppFileSelectionService {
-  const AppFileSelectionService({this._picker});
+  // 參數叫 picker 不叫 _picker：元件測試要從外面換掉選檔器。
+  // ignore: prefer_initializing_formals
+  const AppFileSelectionService({AppPickFiles? picker}) : _picker = picker;
 
   static const AppFileSelectionService instance = AppFileSelectionService();
 
@@ -33,7 +35,8 @@ class AppFileSelectionService {
     allowedExtensions: ['json', 'txt', 'legado'],
   );
 
-  Future<String?> pickLocalBookPath() => _pickPath(_localBook);
+  /// 書架加入本地書：可以一次選好幾個檔（L1），取消時是空的清單。
+  Future<List<String>> pickLocalBookPaths() => _pickPaths(_localBook);
 
   Future<String?> pickBookshelfImportPath() => _pickPath(_bookshelfImport);
 
@@ -41,22 +44,35 @@ class AppFileSelectionService {
 
   Future<String?> pickBookSourceImportPath() => _pickPath(_bookSourceImport);
 
+  /// 一次選一個檔的匯入。選到的檔還是要照副檔名再驗一次：系統選檔器的
+  /// 篩選不是界線。
   Future<String?> _pickPath(_FileSelectionSpec spec) async {
+    final paths = await _pickPaths(spec, allowMultiple: false);
+    return paths.isEmpty ? null : paths.first;
+  }
+
+  Future<List<String>> _pickPaths(
+    _FileSelectionSpec spec, {
+    bool allowMultiple = true,
+  }) async {
     final picker = _picker ?? _pickFiles;
     final result = await picker(
       type: FileType.custom,
       allowedExtensions: List.unmodifiable(spec.allowedExtensions),
-      allowMultiple: false,
+      allowMultiple: allowMultiple,
     );
-    if (result == null || !result.isSinglePick) return null;
+    if (result == null) return const [];
+    return [
+      for (final file in result.files)
+        if (file.path case final path?
+            when path.isNotEmpty && _allowed(spec, path))
+          path,
+    ];
+  }
 
-    final path = result.files.single.path;
-    if (path == null || path.isEmpty) return null;
-
+  static bool _allowed(_FileSelectionSpec spec, String path) {
     final extension = p.extension(path).replaceFirst('.', '').toLowerCase();
-    if (!spec.allowedExtensions.contains(extension)) return null;
-
-    return path;
+    return spec.allowedExtensions.contains(extension);
   }
 
   static Future<FilePickerResult?> _pickFiles({
