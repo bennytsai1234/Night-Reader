@@ -154,6 +154,9 @@ class BookListParser {
           // 空 bookUrl fallback 為 baseUrl (對標 Android BookList 邏輯)
           if (bookUrl.isEmpty) bookUrl = baseUrl;
           searchBook.bookUrl = bookUrl;
+          // 清單抓到的書網址就是這一頁時，這一頁也是它的詳情頁（同 Legado
+          // BookList.kt:134）：留給打開書時解析，不再連網。
+          if (bookUrl == baseUrl) searchBook.infoHtml = body;
 
           // 去重：同一個 (name, author, bookUrl) 只保留首次出現
           final dedupKey = (name, searchBook.author ?? '', bookUrl);
@@ -215,6 +218,10 @@ class BookListParser {
 
     if (filter?.call(book.name, book.author) == false) return null;
     if (book.name.isNotEmpty) {
+      // 這一頁就是這本書的詳情頁：留在搜尋結果上，打開這本書時直接解析，
+      // 不再連網（同 Legado BookList.kt 的 `searchBook.infoHtml = body`）。
+      // 搜尋網址和書的網址不一定拿得到同一頁（POST、轉址）。
+      book.infoHtml = body;
       return book.toSearchBook();
     }
     return null;

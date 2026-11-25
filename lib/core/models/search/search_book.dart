@@ -150,6 +150,8 @@ class SearchBook implements RuleDataInterface {
       variable: variable,
       tocUrl: tocUrl,
       respondTime: respondTime,
+      infoHtml: infoHtml,
+      tocHtml: tocHtml,
     );
   }
 
@@ -200,6 +202,8 @@ class SearchBook implements RuleDataInterface {
     this.variable,
     this.tocUrl,
     this.respondTime = 0,
+    this.infoHtml,
+    this.tocHtml,
   });
 
   factory SearchBook.fromJson(Map<String, dynamic> json) {
@@ -245,7 +249,7 @@ class SearchBook implements RuleDataInterface {
   }
 
   Book toBook() {
-    return Book(
+    final book = Book(
       bookUrl: bookUrl,
       tocUrl: tocUrl ?? '',
       origin: origin,
@@ -261,6 +265,9 @@ class SearchBook implements RuleDataInterface {
       originOrder: originOrder,
       variable: variable,
     );
+    book.infoHtml = infoHtml;
+    book.tocHtml = tocHtml;
+    return book;
   }
 }
 

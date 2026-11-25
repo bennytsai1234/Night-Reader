@@ -137,6 +137,18 @@ void main() {
     );
   }, skip: skip);
 
+  test('a Cookie header the source writes with Chinese skips only that '
+      'pair', () async {
+    // 中文放不進 HTTP 標頭，原樣送整個請求會失敗；只略過那一條。
+    expect(
+      await run(
+        "org.jsoup.Jsoup.connect('$baseUrl/d')"
+        ".header('Cookie', 'a=1; n=中文; c=x y').execute().body()",
+      ),
+      'GET /d body= ct=null cookie=[a=1; c=x y] ua=$ua x=null',
+    );
+  }, skip: skip);
+
   test(
     'HTTP errors throw unless ignored (禁漫天堂 checks lines with HEAD)',
     () async {

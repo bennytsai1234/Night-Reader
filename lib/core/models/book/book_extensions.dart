@@ -102,6 +102,8 @@ extension BookExtensions on BookBase {
       type: type,
       variable: variable,
       wordCount: wordCount,
+      infoHtml: infoHtml,
+      tocHtml: tocHtml,
     );
   }
 

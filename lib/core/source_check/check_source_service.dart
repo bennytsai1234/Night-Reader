@@ -297,9 +297,9 @@ class SourceCheckConfig {
     checkContent: checkContent,
   );
 
-  /// 一個書源整個校驗的時限：每一段各自照 [timeoutDuration]，這個上限讓
-  /// 一個書源不會把每段的時限加總佔滿 worker。正文抽查的中段、後段算多
-  /// 一段。
+  /// 一個書源整個校驗的時限：每一段各自照 [timeoutDuration]，整份是時限乘
+  /// 上要跑的段數；時限調高時總時限跟著變長。正文抽查的中段、後段算多一
+  /// 段。
   Duration get sourceTimeoutDuration {
     final activeFlows = (checkSearch ? 1 : 0) + (checkDiscovery ? 1 : 0);
     final stageBudget =
@@ -308,8 +308,7 @@ class SourceCheckConfig {
         (checkCategory ? activeFlows : 0) +
         (checkContent ? activeFlows * 2 : 0);
     final multiplier = math.max(2, math.min(stageBudget, 6));
-    final seconds = math.min(timeoutSeconds * multiplier, 120);
-    return Duration(seconds: math.max(timeoutSeconds, seconds));
+    return Duration(seconds: timeoutSeconds * multiplier);
   }
 
   String get summary {

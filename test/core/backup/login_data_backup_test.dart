@@ -23,6 +23,7 @@ import 'package:night_reader/core/models/cache.dart';
 import 'package:night_reader/core/backup/backup_service.dart';
 import 'package:night_reader/core/utils/cache_manager.dart';
 import 'package:night_reader/core/network/cookie_store.dart';
+import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/backup/login_data_backup.dart';
 import 'package:night_reader/core/network/network_service.dart';
 import 'package:night_reader/core/backup/restore_service.dart';
@@ -195,6 +196,31 @@ void main() {
         {for (final cookie in sent) cookie.name: cookie.value},
         {'keep': '1', 'restored': '2'},
       );
+    });
+
+    test('寬鬆 Cookie 的值（空白、中文）也備份得到、還原後照原文送出', () async {
+      final jar = CookieJar();
+      await jar.saveFromResponse(Uri.parse('https://a.example/'), [
+        parseSetCookieValueLenient('a=x y; Path=/')!,
+        parseSetCookieValueLenient('b=中文; Path=/')!,
+      ]);
+
+      final exported = await LoginDataBackup.exportCookieJar(jar);
+      expect(exported, hasLength(2));
+
+      final restored = CookieJar();
+      await LoginDataBackup.restore(
+        LoginDataBackup.cookieJarFile,
+        exported,
+        cookieJar: restored,
+      );
+      final sent = {
+        for (final cookie in await restored.loadForRequest(
+          Uri.parse('https://a.example/'),
+        ))
+          cookie.name: cookieValueForRequest(cookie),
+      };
+      expect(sent, {'a': 'x y', 'b': '中文'});
     });
 
     test('存活秒數與到期時刻都有時，照先到的那個', () async {

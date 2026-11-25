@@ -12,6 +12,7 @@ import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/source/source_login_ui.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/network/cookie_store.dart';
+import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/network/network_service.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
 import 'package:night_reader/core/source/source_login_session.dart';
@@ -206,14 +207,18 @@ Future<String> _jarCookies(List<Uri> uris) async {
       // 先讀一次，Cookie 檔才把這個網站存著的 Cookie 載進記憶體。
       final cookies = await jar.loadForRequest(uri);
       if (jar is! DefaultCookieJar) {
-        entries.addAll([for (final c in cookies) '${c.name}=${c.value}']);
+        entries.addAll([
+          for (final c in cookies) '${c.name}=${cookieValueForRequest(c)}',
+        ]);
         continue;
       }
       void collect(Map<String, Map<String, SerializableCookie>>? byPath) {
         byPath?.forEach((path, byName) {
           for (final c in byName.values) {
             if (!c.isExpired()) {
-              entries.add('$path ${c.cookie.name}=${c.cookie.value}');
+              entries.add(
+                '$path ${c.cookie.name}=${cookieValueForRequest(c.cookie)}',
+              );
             }
           }
         });

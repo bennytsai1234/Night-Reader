@@ -104,9 +104,11 @@ BlockingTask jsoupExecute(Map<String, Object?> request) => () async {
           : '${wire[existing]}, ${header[1]}';
     }
     final cookieSet = <String>{
-      for (final e in cookies.entries) '${e.key}=${e.value}',
+      for (final e in cookies.entries)
+        if (cookiePairFitsHeader('${e.key}', '${e.value}'))
+          '${e.key}=${e.value}',
       for (final c in await jar.loadForRequest(requestUri))
-        '${c.name}=${c.value}',
+        if (cookieFitsHeader(c)) '${c.name}=${cookieValueForRequest(c)}',
     };
     if (cookieSet.isNotEmpty) {
       // Jsoup 另送一個 Cookie 標頭；這裡併進書源自己給的那個。
@@ -115,6 +117,24 @@ BlockingTask jsoupExecute(Map<String, Object?> request) => () async {
           .firstOrNull;
       final cookie = cookieSet.join('; ');
       wire[key ?? 'Cookie'] = key == null ? cookie : '${wire[key]}; $cookie';
+    }
+    // 書源自己寫的 Cookie 標頭也一樣：中文這類送不出去的那一條略過，不讓
+    // 整個請求失敗（[cookiePairFitsHeader]）。
+    final cookieKey = wire.keys
+        .where((k) => k.toLowerCase() == 'cookie')
+        .firstOrNull;
+    if (cookieKey != null) {
+      final kept = [
+        for (final raw in wire[cookieKey]!.split(';'))
+          if (raw.trim() case final pair
+              when pair.isNotEmpty && _cookiePairFits(pair))
+            pair,
+      ];
+      if (kept.isEmpty) {
+        wire.remove(cookieKey);
+      } else {
+        wire[cookieKey] = kept.join('; ');
+      }
     }
     final payload = hasBody
         ? Charsets.encode(
@@ -391,4 +411,15 @@ String _decode(Uint8List bytes, String charset) {
     } catch (_) {}
   }
   return EncodingDetect.decodeWithCharset(bytes, charset);
+}
+
+/// `名稱=值` 這一條放得進 HTTP 標頭（[cookiePairFitsHeader]）。
+bool _cookiePairFits(String pair) {
+  final index = pair.indexOf('=');
+  return index < 0
+      ? cookiePairFitsHeader(pair, '')
+      : cookiePairFitsHeader(
+          pair.substring(0, index),
+          pair.substring(index + 1),
+        );
 }

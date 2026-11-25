@@ -178,7 +178,9 @@ class CloudflareInterceptor extends Interceptor {
       }
     }
     for (final cookie in cookies) {
-      merged[cookie.name] = cookie.value;
+      final value = cookieValueForRequest(cookie);
+      if (!cookiePairFitsHeader(cookie.name, value)) continue;
+      merged[cookie.name] = value;
     }
     return merged.entries.map((e) => '${e.key}=${e.value}').join('; ');
   }

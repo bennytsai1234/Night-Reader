@@ -27,6 +27,8 @@ class HttpClient {
   Future<String> getCookie(String url) async {
     final uri = Uri.parse(NetworkUtils.toRequestUrl(url));
     final cookies = await NetworkService().cookieJar.loadForRequest(uri);
-    return cookies.map((c) => '${c.name}=${c.value}').join('; ');
+    return cookies
+        .map((c) => '${c.name}=${cookieValueForRequest(c)}')
+        .join('; ');
   }
 }

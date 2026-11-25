@@ -4,6 +4,7 @@ import 'dart:convert';
 import '../models/source/base_source.dart';
 import '../models/source/book_source.dart';
 import '../network/cookie_store.dart';
+import '../network/interceptors/lenient_cookie_manager.dart';
 import '../network/network_service.dart';
 import '../network/secret_text.dart';
 import '../network/source_proxy.dart';
@@ -56,7 +57,7 @@ Future<Set<String>> aiRepairSecretsOf(BookSource source) async {
     final uri = Uri.tryParse(source.getKey());
     if (uri == null || !uri.hasScheme) return;
     final saved = await NetworkService().cookieJar.loadForRequest(uri);
-    addAll([for (final cookie in saved) cookie.value]);
+    addAll([for (final cookie in saved) cookieValueForRequest(cookie)]);
   });
   await read('書源變數', () async {
     final variable = await source.getVariable();

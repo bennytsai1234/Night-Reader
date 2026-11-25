@@ -17,4 +17,19 @@ void main() {
     );
     expect(config.sourceTimeoutDuration, const Duration(seconds: 100));
   });
+
+  test('調高每段時限時，整個書源的時限跟著變長，不再卡在 120 秒', () {
+    // 每段各自等 20 秒，整個書源是段數乘上每段時限；以前另外卡 120 秒，
+    // 把時限從 21 調到 120 秒，總時限一直是 120 秒，調高沒有用。
+    const config = SourceCheckConfig(
+      keyword: '我的',
+      timeoutSeconds: 21,
+      checkSearch: true,
+      checkDiscovery: true,
+      checkInfo: true,
+      checkCategory: true,
+      checkContent: true,
+    );
+    expect(config.sourceTimeoutDuration, const Duration(seconds: 126));
+  });
 }
