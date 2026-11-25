@@ -59,25 +59,25 @@ void main() {
       expect(EncodingDetect.getEncode(Big5.encode(traditional * 20)), 'Big5');
     });
 
-    test('GBK 的 TXT 照舊認成 GBK', () {
+    test('GBK 的 TXT 認成 GB18030（GBK 的延伸，同 Legado 的辨識器名稱）', () {
       expect(
         EncodingDetect.getEncode(
           Uint8List.fromList(gbk.encode(simplified * 20)),
         ),
-        'GBK',
+        'GB18030',
       );
     });
 
-    test('10 個字以內分不出 GBK 與 Big5，照改之前當 GBK', () {
+    test('10 個字以內分不出 GBK 與 Big5，照改之前當 GB18030', () {
       expect(
         EncodingDetect.getEncode(Uint8List.fromList(gbk.encode('你好世界'))),
-        'GBK',
+        'GB18030',
       );
       expect(
         EncodingDetect.getEncode(
           Uint8List.fromList(gbk.encode('<html><body>你好世界</body></html>')),
         ),
-        'GBK',
+        'GB18030',
       );
     });
 
@@ -97,5 +97,51 @@ void main() {
         'UTF-8',
       );
     });
+  });
+
+  // 網站明寫 GB18030 時，GBK 沒有的字（emoji、擴充區漢字、¥ 這類）是四位元組
+  // （WHATWG gb18030；位元組照 Python 的 gb18030 編碼器算）。
+  group('GB18030', () {
+    const text = '中a€😀𠀀¥é　';
+    const bytes = [
+      0xD6, 0xD0, 0x61, 0xA2, 0xE3, 0x94, 0x39, 0xFC, 0x36, //
+      0x95, 0x32, 0x82, 0x36, 0x81, 0x30, 0x84, 0x36, 0xA8, 0xA6, 0xA1, 0xA1,
+    ];
+
+    test('四位元組的字解得出來', () {
+      expect(EncodingDetect.decodeWithCharset(bytes, 'GB18030'), text);
+      expect(EncodingDetect.decodeWithCharset(bytes, 'gb18030'), text);
+    });
+
+    test('編得出四位元組，和解碼互為反向', () {
+      expect(EncodingDetect.encodeWithCharset(text, 'GB18030'), bytes);
+    });
+
+    test('只有雙位元組時和 GBK 一樣，壞掉的位元組照樣只換一個替代字元', () {
+      expect(
+        EncodingDetect.decodeWithCharset([
+          0xD6,
+          0xD0,
+          0xD0,
+          0x3C,
+          0x61,
+        ], 'GB18030'),
+        EncodingDetect.decodeWithCharset([0xD6, 0xD0, 0xD0, 0x3C, 0x61], 'GBK'),
+      );
+    });
+  });
+
+  test('GB18030 的「ḿ」與半個 emoji 照 Java', () {
+    expect(
+      EncodingDetect.decodeWithCharset([0x81, 0x35, 0xF4, 0x37], 'GB18030'),
+      'ḿ',
+    );
+    expect(EncodingDetect.encodeWithCharset('ḿ', 'GB18030'), [
+      0x81,
+      0x35,
+      0xF4,
+      0x37,
+    ]);
+    expect(EncodingDetect.encodeWithCharset('\uD83D', 'GB18030'), [0x3F]);
   });
 }

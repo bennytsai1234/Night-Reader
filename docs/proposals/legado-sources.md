@@ -82,7 +82,7 @@
 | `importScript`、`cacheFile` | 一樣 | 網址抓回來存著，原樣交給書源 `eval`。 |
 | Cookie：`java.getCookie` 與 `cookie.*` | 一樣 | 函式都有；存放照網域的二級網域，同 Legado。 |
 | 檔案：`downloadFile`、`getFile`、`readFile`、`readTxtFile`、`deleteFile` | 一樣 | 在快取資料夾裡。 |
-| 壓縮檔：`unzipFile`、`un7zFile`、`unrarFile`、`unArchiveFile`、`getTxtInFolder`、`get{Zip,Rar,7z}{String,ByteArray}Content` | 結果不對（rar、7z） | zip 照做；rar 與 7z 的六個函式直接丟錯誤，見 R9。 |
+| 壓縮檔：`unzipFile`、`un7zFile`、`unrarFile`、`unArchiveFile`、`getTxtInFolder`、`get{Zip,Rar,7z}{String,ByteArray}Content` | 刻意不同（rar、7z，ADR 0051） | zip 照做；rar 與 7z 的六個函式直接丟錯誤，見 R9。 |
 | 編碼：`strToBytes`、`bytesToStr`、`base64*`、`hex*`、`encodeURI`、`htmlFormat` | 一樣 | 含 Android `Base64` 的旗標。 |
 | 時間：`timeFormat`、`timeFormatUTC` | 一樣 | |
 | 繁簡：`t2s`、`s2t` | 一樣 | |
@@ -94,7 +94,7 @@
 | `source.*`（變數、登入資訊、登入標頭、`getHeaderMap`、`put`／`get`） | 一樣 | 登入標頭的 Cookie 怎麼存見 R8 附帶。 |
 | `cache.*`（`put`、`get`、`delete`、`putMemory`、`getFromMemory`、`putFile`、`getFile`） | 一樣 | |
 | `book`／`chapter` 的變數（`putVariable`、`getVariable`、超過一萬字存檔案） | 一樣 | 讀到的值相同；夜讀超過 5000 字另外寫一份檔案、但從來不讀它，見「有更好的做法」。 |
-| `java.getString`、`getStringList`、`getElement(s)`、`setContent`、`put`、`get`、`reGetBook`、`refreshTocUrl` | 結果不對（`reGetBook`） | `reGetBook` 直接丟錯誤，見 R9；其餘一樣。 |
+| `java.getString`、`getStringList`、`getElement(s)`、`setContent`、`put`、`get`、`reGetBook`、`refreshTocUrl` | 刻意不同（`reGetBook`，ADR 0051） | `reGetBook` 直接丟錯誤，見 R9；其餘一樣。 |
 | `java.get("bookName")`、`java.get("title")` | 結果不對 | `bookName` 拿不到，見 R5。 |
 | Rhino 的 `Packages`、`importClass`、`JavaImporter` 與 Java 類別 | 一樣 | 書源常用的類別有對應（`N:lib/core/engine/js/extensions/js_java_classes.dart`）；直接開 Socket 不支援。 |
 | 程式庫共用的作用域 | 一樣 | 見「程式庫」。 |
@@ -139,7 +139,7 @@
 | 付費章節（`isVip`、`isPay`） | 結果不對 | 同 R12，付費章節認不出來。 |
 | 章節的更新時間 | 一樣 | 存在章節的 `tag`（`L:model/webBook/BookChapterList.kt:224`、`N:lib/core/engine/web_book/chapter_list_parser.dart:104`）。 |
 | `formatJs` | 結果不對 | 少了 `index`、`gInt`，而且在最後一次倒序之前跑，見 R11。 |
-| `preUpdateJs` | 結果不對（`reGetBook`） | 見 R9；Legado 只在書架上的書與閱讀時跑，夜讀每次抓目錄都跑，結果應相同。 |
+| `preUpdateJs` | 刻意不同（`reGetBook`，ADR 0051） | 見 R9；Legado 只在書架上的書與閱讀時跑，夜讀每次抓目錄都跑，結果應相同。 |
 | 同網址章節去重 | 一樣 | 照網址。 |
 | 目錄抓不到時的錯誤 | 一樣 | 空目錄當失敗：Legado 在解析時丟（`L:model/webBook/BookChapterList.kt:117`），夜讀由閱讀與檢查新章節各自擋（`N:lib/features/reader/chapter/reader_chapter_repository.dart:156`、`N:lib/core/storage/book_toc_replacer.dart:25`）；夜讀另外認出登入牆（ADR 0038）。 |
 | 最新章節與新章節數 | 一樣 | 目錄更新後照新舊章數算（`L:model/webBook/BookChapterList.kt:157`、`N:lib/core/download/book_update_service.dart:171`）；Legado 每次抓目錄都記，夜讀在檢查新章節時記。 |
@@ -276,14 +276,14 @@
 - 夜讀：`N:lib/core/engine/analyze_url.dart:193-207` 註解寫「夜讀不走代理」，拿掉不用；沒有 ADR 記這個決定。
 - 備註：多數寫代理的書源是作者自己的環境（例如 `127.0.0.1`），換一台手機本來就連不上；要補的話照 Legado 只在書源寫了時才走。
 
-### R3 規則結尾 `##正則##取代###`（只取第一個）回整段文字，不是只回比對到的那段（抓錯或抓不全）
+### R3 規則結尾 `##正則##取代###`（只取第一個）回整段文字，不是只回比對到的那段（抓錯或抓不全）（已修，#553、#607）
 
 - 讀者會碰到：書源用 `###` 從一段字裡「挑出」某一塊，例如作者欄 `.info@text##作者：(\S+)##$1###`、更新時間 `##\d{4}-\d{2}-\d{2}##$0###`。Legado 只留比對到、換過的那一段；夜讀把整段字留著、只換掉第一處，書籍詳情的作者、分類、最新章節、字數就多了前後的字（「類別：玄幻 張三」）。比對不到時 Legado 是空的、夜讀是原文，該空著的欄位出現一整段網頁文字。
 - Legado：`L:model/analyzeRule/AnalyzeRule.kt:441-452`：`matcher.find()` 找到就回 `matcher.group(0)!!.replaceFirst(regex, replacement)`（只有比對到的那段），找不到回 `""`；正則寫錯時回取代式本身。另外不加 `###` 的正則寫錯時照字面取代（`result.replace(replaceRegex, replacement)`，同一段 455-459）。
 - 夜讀：`N:lib/core/engine/analyze_rule/analyze_rule_regex_helper.dart:93-112`：規則本身不是空的時回 `result.replaceFirstMapped(...)`（整段字），找不到回原文；正則寫錯一律不取代（同檔 140-151）。測試把這個行為寫死了：`N:test/core/engine/template_replace_rule_test.dart:41` 期待 `{{'甲乙乙'}}##乙##丁###` 是「甲丁乙」，Legado 是「丁」。
-- 補充（少數寫法）：取代式最後一個字是 `#` 時（`##a##b#`），夜讀當成「只換第一個」並把 `#` 拿掉，Legado 照字面當取代式的一部分（`N:lib/core/engine/analyze_rule/analyze_rule_support.dart:52-63`）。
+- 補充（少數寫法，還沒修）：取代式最後一個字是 `#` 時（`##a##b#`），夜讀當成「只換第一個」並把 `#` 拿掉，Legado 照字面當取代式的一部分（`N:lib/core/engine/analyze_rule/analyze_rule_support.dart:52-63`）。
 
-### R4 JSONPath 取到一整個陣列時變成 `[甲, 乙]`（少數寫法才碰到）
+### R4 JSONPath 取到一整個陣列時變成 `[甲, 乙]`（少數寫法才碰到）（已修，#553）
 
 - 讀者會碰到：JSON 網站的正文或簡介是一個字串陣列（`{"content":["第一段","第二段"]}`），書源寫 `$.content`。Legado 一段一行；夜讀的正文是一行「[第一段, 第二段]」，帶著中括號與逗號。分類這類用清單讀的欄位不受影響。
 - Legado：`L:model/analyzeRule/AnalyzeByJSonPath.kt:44-49`，`ctx.read` 拿到清單就 `joinToString("\n")`。
@@ -317,12 +317,13 @@
 - 夜讀：`N:lib/core/engine/analyze_url.dart:731-741`，`CookieStore().getCookie(url)` 照這次請求的網址；登入標頭的 Cookie 存在書源網址底下（`N:lib/core/models/source/base_source.dart:158-160`），兩邊對不上。
 - 附帶：登入標頭的 Cookie Legado 是併進舊的（`replaceCookie`），夜讀是整個蓋掉（`setCookie`），同一個網站先前存的其他 Cookie 會不見。
 
-### R9 規則 JS 的 `java.reGetBook()` 與 rar、7z 壓縮檔函式直接丟錯誤（少數寫法才碰到）
+### R9 規則 JS 的 `java.reGetBook()` 與 rar、7z 壓縮檔函式直接丟錯誤（少數寫法才碰到）（不修，ADR 0051）
 
 - 讀者會碰到：書源在目錄的預整理 JS（`preUpdateJs`）裡呼叫 `java.reGetBook()`（書的網址會變的網站，靠它重新搜一次同名書、換上新網址）時，Legado 換好網址照常抓目錄，夜讀目錄更新失敗。書源用 `java.unrarFile`、`java.un7zFile` 或 `java.get{Rar,7z}{String,ByteArray}Content` 讀網站給的壓縮檔時，夜讀丟錯誤、抓不到。
 - Legado：`L:model/analyzeRule/AnalyzeRule.kt:845-864`（`reGetBook` 用精準搜尋找回同名同作者的書，換上 `bookUrl` 與變數）；`L:help/JsExtensions.kt:628-645, 700-729`（rar、7z）。
 - 夜讀：`N:lib/core/engine/js/extensions/js_java_object.dart:805-806`（`reGetBook`）、`855-860`（rar、7z）。
 - 備註：rar、7z 多半出現在類型 3（文件）的書源，那一類夜讀本來就不支援（ADR 0051）；文字書源用到的少。
+- 不修（2026-11-25 定，寫進 ADR 0051）：`reGetBook` 會換掉書的網址，夜讀的書以網址為身分，閱讀進度、目錄、下載、書籤、標註、同步都掛在上面，只讓函式不報錯、不搬資料會存成兩本或目錄掛錯，用到的書源很少；rar、7z 要另加原生套件（夜讀的壓縮檔套件只讀 zip、tar、gz、bz2、xz），用到的多半是夜讀不支援的文件類書源。
 
 ### R10 詳情頁沒給目錄網址時，夜讀自己找「目錄」連結換過去（抓錯或抓不全）（已修，#546）
 
@@ -330,7 +331,7 @@
 - Legado：`L:model/webBook/BookInfo.kt:150-154`，目錄網址空時等於詳情頁網址，並把詳情頁直接當目錄頁用（`tocHtml = body`）。
 - 夜讀：`N:lib/core/engine/web_book/book_info_parser.dart:111-116, 148-186`，目錄網址空或等於詳情網址時，在頁面裡找文字是「章节目录／章節目錄／目录／目錄」的連結，找到就換成它；從第一版就這樣，沒有 ADR。
 
-### R11 目錄的 `formatJs` 拿不到 `index`、`gInt`，而且序號是倒過來算的（抓錯或抓不全）
+### R11 目錄的 `formatJs` 拿不到 `index`、`gInt`，而且序號是倒過來算的（抓錯或抓不全）（已修，#556）
 
 - 讀者會碰到：書源用 `formatJs` 替章名補序號（例如 `'第' + index + '章 ' + title`）或用 `gInt` 累計時，Legado 章名照順序編號；夜讀的 JS 找不到 `index`、`gInt` 出錯，章名維持原樣。就算改成能讀到序號，夜讀是在最後一次倒序之前跑，第一章拿到的是最後一個號碼。
 - Legado：`L:model/webBook/BookChapterList.kt:124-148`：先依閱讀設定倒序、編好章節序號，再跑 `formatJs`，綁 `gInt`（整份目錄共用，初值 0）、`index`（從 1 起）、`chapter`、`title`。
@@ -373,14 +374,14 @@
 - Legado：`L:model/webBook/SearchModel.kt:53-75`（同一次搜尋再呼叫時 `searchPage++`，有結果的書源記 `hasMore`），`L:ui/book/search/SearchActivity.kt:345-355`（捲到底、沒在搜、還有下一頁時再搜）。
 - 夜讀：`N:lib/features/search/search_model.dart:476` 送出時不帶頁碼，用 `N:lib/core/source/book_source_service.dart:183` 的預設 `page = 1`；搜尋頁沒有載入更多。發現頁有（`N:lib/features/explore/explore_show_provider.dart:156-159`）。
 
-### R18 正文規則的 `webJs`、`sourceRegex` 沒傳進抓正文的請求（抓錯或抓不全）
+### R18 正文規則的 `webJs`、`sourceRegex` 沒傳進抓正文的請求（抓錯或抓不全）（已修，#556）
 
 - 讀者會碰到：章節網址開了 `webView`、正文規則寫了 `webJs`（等網頁跑完後取出正文或解密）或 `sourceRegex`（等網頁去抓正文的 API）的書源。Legado 用網頁抓這一頁時跑那段 JS、或等那個資源；夜讀只用網址選項裡的 `webJs`，正文規則的兩條都沒用，拿到的是網頁原本的 HTML，正文是亂的、空的或只有載入中的字。
 - Legado：`L:model/webBook/WebBook.kt:334-337`，`getStrResponseAwait(jsStr = 正文規則.webJs, sourceRegex = 正文規則.sourceRegex)`；網址選項的 `webJs` 優先（`L:model/analyzeRule/AnalyzeUrl.kt:427, 437`）。
 - 夜讀：`N:lib/core/engine/web_book/complete_content_fetcher.dart:156-157`，`AnalyzeUrl(...).getStrResponse(cancelToken:)` 沒給 `jsStr`、`sourceRegex`；`getStrResponse` 本身收這兩個參數（`N:lib/core/engine/analyze_url.dart:599-626`）。整個 `lib/` 沒有地方讀正文規則的這兩個欄位。
-- 附帶（少數寫法）：Legado 抓正文的請求帶著這一章（`L:model/webBook/WebBook.kt:331`），章節網址裡的 `java.get("title")` 拿到章名、`java.put` 存進這一章（`L:model/analyzeRule/AnalyzeUrl.kt:373-394`）；夜讀的 `AnalyzeUrl` 沒有章節（`N:lib/core/engine/analyze_url.dart:86-95`），拿到空的、存進書。
+- 附帶（少數寫法，還沒修）：Legado 抓正文的請求帶著這一章（`L:model/webBook/WebBook.kt:331`），章節網址裡的 `java.get("title")` 拿到章名、`java.put` 存進這一章（`L:model/analyzeRule/AnalyzeUrl.kt:373-394`）；夜讀的 `AnalyzeUrl` 沒有章節（`N:lib/core/engine/analyze_url.dart:86-95`），拿到空的、存進書。
 
-### R19 正文頁的章名規則（`title`）沒有用（少數寫法才碰到）
+### R19 正文頁的章名規則（`title`）沒有用（少數寫法才碰到）（已修，#556）
 
 - 讀者會碰到：目錄頁只給「第 12 章」或沒有章名、正文頁才有完整章名的網站，書源在正文規則寫了 `title`。Legado 抓正文時把章名換成正文頁上的、存回目錄；夜讀目錄與正文上方一直是目錄頁的那個。
 - Legado：`L:model/webBook/BookContent.kt:66-77`，`title` 規則有結果就寫進章節並 `bookChapterDao.update`。
