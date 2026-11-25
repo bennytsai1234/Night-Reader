@@ -461,6 +461,35 @@ void main() {
     );
   }, skip: quickJsUnavailableReason());
 
+  // 同 Legado，java.ajax 只收網址一個參數；AI 把標頭當第二個參數傳時，
+  // 那個參數沒有送出，要讓它在結果裡看到，不以為網站不認標頭。
+  test(
+    'js says when java.ajax got a second argument it does not send',
+    () async {
+      final result = await runRepairJs(
+        source(),
+        code:
+            'var h = {"headers": {"a": "1"}}; '
+            'java.ajax("$site/book/1/1.html", h).length > 0',
+        pages: const {},
+        timeout: const Duration(seconds: 30),
+        database: Future.value(databaseIsolate),
+      );
+      expect(result, contains(aiRepairAjaxSecondArgument), reason: result);
+
+      final single = await runRepairJs(
+        source(),
+        code:
+            'java.ajax("$site/book/1/1.html,{\\"method\\":\\"GET\\"}").length',
+        pages: const {},
+        timeout: const Duration(seconds: 30),
+        database: Future.value(databaseIsolate),
+      );
+      expect(single, isNot(contains(aiRepairAjaxSecondArgument)));
+    },
+    skip: quickJsUnavailableReason(),
+  );
+
   test('js runs in the rule JS world and can read fetched pages', () async {
     final result = await runRepairJs(
       source(),
