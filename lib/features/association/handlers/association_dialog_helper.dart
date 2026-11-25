@@ -38,25 +38,20 @@ mixin AssociationDialogHelper on AssociationBase {
   /// （含進度框被拿掉）就停掉正在抓的請求，什麼都不提示。
   @override
   Future<void> addBookFromLink(BuildContext context, String url) async {
-    final navigator = Navigator.of(context, rootNavigator: true);
     final cancel = CancelToken();
-    Route<void>? progress;
-    final dialog = showStatefulAppAlert<void>(
+    final dialog = showClosableAppAlert<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context, _, _) {
-        progress ??= ModalRoute.of(context);
-        return _CancelOnDispose(
-          cancelToken: cancel,
-          child: const AppAlert<bool>(
-            title: '加入書架',
-            content: SyncProgressView(value: null, label: '正在找書…'),
-            actions: [AppAlertAction(label: '取消', value: true)],
-          ),
-        );
-      },
+      builder: (context, _) => _CancelOnDispose(
+        cancelToken: cancel,
+        child: const AppAlert<bool>(
+          title: '加入書架',
+          content: SyncProgressView(value: null, label: '正在找書…'),
+          actions: [AppAlertAction(label: '取消', value: true)],
+        ),
+      ),
     );
-    unawaited(dialog.whenComplete(cancel.cancel));
+    unawaited(dialog.closed.whenComplete(cancel.cancel));
 
     Book? book;
     Object? failure;
@@ -68,15 +63,8 @@ mixin AssociationDialogHelper on AssociationBase {
       failureStack = stackTrace;
     }
     if (cancel.isCancelled) return;
-    // 收掉自己這個進度框：又點了一條連結時，上面可能疊著另一個。還沒畫出
-    // 第一幀就找完時拿不到它，照最上面的收。
-    final route = progress;
-    if (route == null || route.isCurrent) {
-      navigator.pop();
-      await dialog;
-    } else if (route.isActive) {
-      navigator.removeRoute(route);
-    }
+    dialog.close();
+    await dialog.closed;
     if (!context.mounted) return;
     if (book == null) {
       ScaffoldMessenger.of(context).showSnackBar(

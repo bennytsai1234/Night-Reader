@@ -340,6 +340,27 @@ void main() {
         expect(details.cancelled, isFalse);
       });
 
+      testWidgets('進度框還沒畫出來就找完、上面又疊了別的畫面時，只收自己的', (tester) async {
+        final context = await pumpHost(tester);
+        service.handleUri(context, link('https://a.example/book/8'));
+        // 例如同時在匯入書架，那邊開了自己的進度框。
+        unawaited(
+          Navigator.of(
+            context,
+            rootNavigator: true,
+          ).push(MaterialPageRoute<void>(builder: (_) => const Text('上面的頁'))),
+        );
+        await tester.runAsync(() => details.fetched.future);
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pumpAndSettle();
+
+        expect(find.text('上面的頁'), findsOneWidget);
+        expect(find.text('取消', skipOffstage: false), findsNothing);
+        expect(opened.map((book) => book.bookUrl), [
+          'https://a.example/book/8',
+        ]);
+      });
+
       testWidgets('進度框被收掉（離開）時也停掉請求', (tester) async {
         final context = await pumpHost(tester);
         service.handleUri(context, link('https://a.example/hang/4'));

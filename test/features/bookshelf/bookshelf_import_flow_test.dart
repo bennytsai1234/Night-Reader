@@ -126,6 +126,53 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('匯入完時進度框上面疊著別的畫面：只收自己的進度框', (tester) async {
+    final service = _Gated();
+    late BuildContext host;
+    String? message;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            host = context;
+            return TextButton(
+              onPressed: () async => message = await importBookshelfFile(
+                context,
+                BookshelfFile.parse(
+                  jsonEncode([
+                    {'name': '一', 'author': ''},
+                  ]),
+                ),
+                service: service,
+              ),
+              child: const Text('匯入'),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('匯入'));
+    await tester.runAsync(() => service.started.future);
+    await tester.pump();
+    // 例如匯入途中點了加入書架的連結，找到書後開了書籍詳情。
+    unawaited(
+      Navigator.of(
+        host,
+        rootNavigator: true,
+      ).push(MaterialPageRoute<void>(builder: (_) => const Text('上面的頁'))),
+    );
+    await tester.pumpAndSettle();
+
+    service.gate.complete();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pumpAndSettle();
+
+    expect(find.text('上面的頁'), findsOneWidget);
+    expect(find.text('匯入書架', skipOffstage: false), findsNothing);
+    expect(message, '已匯入 1 本書');
+  });
+
   testWidgets('不用在書源裡找時不開進度框，頁面留著', (tester) async {
     String? message;
     await tester.pumpWidget(
@@ -150,6 +197,29 @@ void main() {
     expect(find.text('匯入'), findsOneWidget);
     expect(message, '未找到可匯入的書架資料');
   });
+}
+
+/// 開始找就停住，等 [gate] 完成才匯入完。
+class _Gated extends BookshelfExchangeService {
+  final started = Completer<void>();
+  final gate = Completer<void>();
+
+  @override
+  Future<BookshelfImportResult> importFile(
+    BookshelfFile? file, {
+    void Function(int done, int total)? onSearchProgress,
+    CancelToken? cancelToken,
+  }) async {
+    onSearchProgress?.call(0, 1);
+    started.complete();
+    await gate.future;
+    return const BookshelfImportResult(
+      books: 1,
+      chapters: 0,
+      sources: 0,
+      notFound: [],
+    );
+  }
 }
 
 /// 什麼都沒匯入，也沒在書源裡找。

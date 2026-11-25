@@ -18,15 +18,14 @@ Future<String> importBookshelfFile(
   BookshelfExchangeService? service,
 }) async {
   final exchange = service ?? BookshelfExchangeService();
-  final navigator = Navigator.of(context, rootNavigator: true);
   final cancel = CancelToken();
   final progress = ValueNotifier<(int, int)>((0, 0));
-  Future<void>? dialog;
+  AppAlertHandle<void>? dialog;
   void showProgress() {
-    dialog = showStatefulAppAlert<void>(
+    dialog = showClosableAppAlert<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context, setState, _) => PopScope(
+      builder: (context, setState) => PopScope(
         canPop: false,
         child: AppAlert<bool>(
           title: '匯入書架',
@@ -64,10 +63,11 @@ Future<String> importBookshelfFile(
       cancelToken: cancel,
     );
   } finally {
-    // 只關自己開的進度框：沒開時 pop 會把頁面關掉。
+    // 只收自己開的進度框：上面可能疊著別的畫面（例如途中點了加入書架的
+    // 連結，開了書籍詳情）。
     if (dialog case final shown?) {
-      navigator.pop();
-      await shown;
+      shown.close();
+      await shown.closed;
     }
     progress.dispose();
   }
