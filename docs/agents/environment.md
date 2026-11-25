@@ -14,13 +14,13 @@
 - **測試字型每個字一樣寬**，量不出英數字補半格；用 `test/fixtures/fonts/mixed_width_test.ttf`（以 `FontLoader(AppTextStyles.punctuationFontFamily)` 載入，範例在 `test/features/reader/text_view/half_cell_layout_test.dart`）。
 - **介面字樣的字族清單第一個是標點字型**（`buildAppTheme`）：測試沒載入它時，後面的介面字型也不會用到，整串照測試預設字型排。要測介面字型的寬度時，標點字型（`assets/fonts/NightReaderPunct-Regular.ttf`）也一起載入，範例在 `test/features/audiobook/audiobook_page_test.dart`。
 - **`download_service_test` 的「`_dio` 尚未初始化」日誌**不是警告：測試沒準備網路層，只檢查排隊與範圍。
-- **CI 全套測試每個測試檔各自一個入口**：每個檔有自己的 isolate，靜態狀態不互相帶。2026-11-18 試過把一份裡的檔包進 3 個入口檔省編譯（每檔一個 `group`，自訂 binding 的檔單獨跑）：還有十幾個檔被前面的檔干擾（GetIt 重複註冊、快取住別的檔的 App 資料夾、前一個檔留下的背景工作），兩份各卡在 10 分鐘逾時；跑完的兩份測試步驟 106→89、151→65 秒，只量一次。只拿掉 `dart_test.yaml` 標 skip 的整檔（38 個）時，四份測試步驟總和 556→547 秒，等於沒變。要再試，先讓每個測試檔在 `tearDownAll` 收乾淨自己動過的全域狀態。
+- **CI 全套測試每個測試檔各自一個入口**：每個檔有自己的 isolate，靜態狀態不互相帶。把一份裡的檔包進幾個入口檔省編譯的做法試過不可行：GetIt 重複註冊、快取住別的檔的 App 資料夾、前一個檔留下的背景工作會互相干擾，跑到逾時；只拿掉 `dart_test.yaml` 標 skip 的整檔也省不到多少時間。要再試，先讓每個測試檔在 `tearDownAll` 收乾淨自己動過的全域狀態。
 
 ## 工具
 
 - **Codex 審查的暫存** `%TEMP%\night-reader-codex-out` 是共用的，收尾只刪自己那一輪（`<tag>-*`）的檔案。公司網路的 McAfee 有時擋掉 Codex 最後一次連線，`codex exec` 回非零但報告通常已經寫好；先看報告檔再決定要不要重跑。
 - **Windows 上用 Python 寫檔**要給 `newline='\n'`，不然會寫成 CRLF。
-- **改含中文的檔案用編輯工具（Edit）**：在 Bash 用 heredoc 把含中文的比對字串交給 Python 時，常常比對不到、檔案沒改（2026-11-13 好幾次）；英文與程式碼的比對不受影響。
+- **改含中文的檔案用編輯工具（Edit）**：在 Bash 用 heredoc 把含中文的比對字串交給 Python 時，常常比對不到、檔案沒改；英文與程式碼的比對不受影響。
 - **家裡這台沒有 `jq`**：查 PR 與 Actions 狀態用 `gh` 內建的 `--jq`（例如 `gh run list --json name,conclusion --jq '.[]'`）；腳本裡接 `| jq` 會靜靜地失敗，監看迴圈永遠等不到結束。
 - **重新產生 `NightReaderPunct`**：思源黑體繁中版從 `https://github.com/notofonts/noto-cjk/raw/Sans2.004/Sans/OTF/TraditionalChinese/NotoSansCJKtc-{Regular,Bold}.otf` 下載，fontTools 用 pip 在 repo 外的 venv 安裝；`assets/fonts/generate_punct_font.py` 產出與 repo 內字型只差 `head` 的時間戳。
 
@@ -28,6 +28,6 @@
 
 - **Legado 原始碼**：對照 Legado 的做法時讀使用者的 fork：家裡在 `C:\Users\benny\Desktop\Folder\projects\legado`，公司在 `C:\Users\045650\Project\legado`，家裡的 Linux 筆電在 `/home/benny/projects/legado`（`git clone --depth 1 https://github.com/bennytsai1234/legado.git`）。`gedoor/legado` 已經清空。
 - **Mihon 原始碼**：對照漫畫閱讀器（條漫捲動、縮放、換章分隔）時讀，家裡在 `C:\Users\benny\Desktop\Folder\projects\mihon`，公司在 `C:\Users\045650\Project\mihon`，家裡的 Linux 筆電還沒有，要用時照下面的指令放在 `/home/benny/projects/mihon`（`git clone --depth 1 https://github.com/mihonapp/mihon.git`，Apache 2.0）；條漫閱讀器在 `app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/webtoon/`，預設值在 `ui/reader/setting/ReaderPreferences.kt`。
-- **改正文的段落處理（段落修復、排版整理）時比對真網站的正文**：`test/live/chapter_text_live_test.dart` 抓幾章存成檔，`test/live/paragraph_repair_corpus_live_test.dart` 列出每一處合併，用法寫在檔頭。書源用主資料夾 `.local/ai-repair/export_589_sources.json`（使用者手機上的書源）；2026-11-18 抓回的 97 章在主資料夾 `.local/paragraph-repair/`，改規則時先拿它重跑比對、再視需要抓新的。
+- **改正文的段落處理（段落修復、排版整理）時比對真網站的正文**：`test/live/chapter_text_live_test.dart` 抓幾章存成檔，`test/live/paragraph_repair_corpus_live_test.dart` 列出每一處合併，用法寫在檔頭。書源用主資料夾 `.local/ai-repair/export_589_sources.json`（使用者手機上的書源）；抓回的章在主資料夾 `.local/paragraph-repair/`，改規則時先拿它重跑比對、再視需要抓新的。
 - **用真的網站校驗書源**：`test/live/source_check_live_test.dart`，用法寫在檔頭。調 AI 修書源（提示詞、流程）時的整批實跑、評估表與逐輪頁面照 `docs/agents/ai-repair-runs.md`。源倉庫（yckceo.com）的書源可以照清單頁收集 id，再從 `https://www.yckceo.com/yuedu/shuyuan/json/id/<id>.json` 下載。清單頁 `https://www.yckceo.com/yuedu/shuyuan/index.html` 接 `?tu=1`（圖源）、`?shengyin=1`（有聲）、`?keys=<關鍵字>`、`&page=<n>` 篩選，一頁 100 個；「圖源」裡混著小說與聚合源，類型以下載的 JSON 為準。
-- **整批校驗的逾時與 `DioException [unknown]` 不代表書源壞了**：家裡這台連部分網站時 TLS 憑證不受信任（curl 也一樣）、DNS 時好時壞，每次跑的結果都不同（2026-11-10，401 個裡 155 個逾時）。要判斷書源本身時，挑出來重跑，並用 curl 打同一個網址對照；書源匯入時的分類（`prepareIncoming`）`test/live/` 不會跑，要看匯入後的類型另外呼叫。
+- **整批校驗的逾時與 `DioException [unknown]` 不代表書源壞了**：家裡這台連部分網站時 TLS 憑證不受信任（curl 也一樣）、DNS 時好時壞，每次跑的結果都不同（同一批會有一部分逾時）。要判斷書源本身時，挑出來重跑，並用 curl 打同一個網址對照；書源匯入時的分類（`prepareIncoming`）`test/live/` 不會跑，要看匯入後的類型另外呼叫。
