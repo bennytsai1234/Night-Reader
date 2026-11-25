@@ -81,12 +81,51 @@ extension AnalyzeByCssHelper on AnalyzeByCssBase {
       default:
         // 同 Legado：同一個值只留一個（分類「玄幻,玄幻」、插圖重複）。
         for (final el in elements) {
-          final attr = el.attributes[attrName]?.trim();
+          final attr = _attr(el, attrName);
           if (attr != null && attr.isNotEmpty && !textS.contains(attr)) {
             textS.add(attr);
           }
         }
     }
     return textS;
+  }
+
+  /// Jsoup 的 `attr`：`abs:` 開頭的是那個屬性的完整網址。Legado 解析網頁時
+  /// 沒給頁面網址（`Jsoup.parse(html)`），只認網頁 `<base href>` 給的基準，
+  /// 本來就是完整網址的照原樣，其他的是空的。
+  static String? _attr(Element el, String name) {
+    if (!name.toLowerCase().startsWith('abs:')) {
+      return el.attributes[name]?.trim();
+    }
+    final value = el.attributes[name.substring(4)]?.trim();
+    if (value == null || value.isEmpty) return null;
+    final Uri uri;
+    try {
+      uri = Uri.parse(value);
+    } on FormatException {
+      return null;
+    }
+    if (uri.hasScheme) return value;
+    final base = _documentBase(el);
+    if (base == null) return null;
+    try {
+      return base.resolveUri(uri).toString();
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static Uri? _documentBase(Element el) {
+    Node top = el;
+    while (top.parentNode != null) {
+      top = top.parentNode!;
+    }
+    final href = switch (top) {
+      Document() => top.querySelector('base[href]')?.attributes['href'],
+      Element() => top.querySelector('base[href]')?.attributes['href'],
+      _ => null,
+    };
+    final base = href == null ? null : Uri.tryParse(href.trim());
+    return base != null && base.hasScheme ? base : null;
   }
 }

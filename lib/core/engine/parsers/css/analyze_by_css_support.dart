@@ -163,10 +163,11 @@ List<Element> _querySelectorGroupCompat(Element root, String selector) {
     candidates = root.querySelectorAll('*');
   } else {
     try {
-      candidates = root.querySelectorAll(baseSelector);
-      if (candidates.isEmpty && _hasExactAttributeSelector(baseSelector)) {
-        candidates = _fallbackCandidatesForBaseSelector(root, baseSelector);
-      }
+      // 屬性相等照 Jsoup 不分大小寫，瀏覽器的選擇器分大小寫，選出的候選
+      // 會少：有屬性相等時自己逐一比對。
+      candidates = _hasExactAttributeSelector(baseSelector)
+          ? _fallbackCandidatesForBaseSelector(root, baseSelector)
+          : root.querySelectorAll(baseSelector);
     } catch (_) {
       candidates = _fallbackCandidatesForBaseSelector(root, baseSelector);
     }
@@ -255,8 +256,9 @@ bool _matchesCompoundSelector(Element element, String compound) {
     return false;
   }
   for (final attributeRegex in parsed.attributeRegexes) {
-    final value = element.attributes[attributeRegex.name] ?? '';
-    if (!attributeRegex.pattern.hasMatch(value)) {
+    // Jsoup `AttributeWithValueMatching`：沒有這個屬性就不算。
+    final value = element.attributes[attributeRegex.name];
+    if (value == null || !attributeRegex.pattern.hasMatch(value)) {
       return false;
     }
   }
@@ -315,7 +317,11 @@ bool _matchesCompoundSelector(Element element, String compound) {
       if (!matched) return false;
       continue;
     }
-    if (querySelectorAllCompat(element, trimmed).isEmpty) {
+    // Jsoup `StructuralEvaluator.Has`：只看底下的元素，不算自己。
+    if (!querySelectorAllCompat(
+      element,
+      trimmed,
+    ).any((match) => !identical(match, element))) {
       return false;
     }
   }
@@ -404,7 +410,11 @@ bool? _matchesSimpleBaseSelectorDirectly(Element element, String selector) {
     }
   }
   for (final attribute in extracted.attributeSelectors) {
-    if ((element.attributes[attribute.name] ?? '') != attribute.value) {
+    // Jsoup `AttributeWithValue`：有這個屬性，值去掉頭尾空白後不分大小寫
+    // 相等。
+    final value = element.attributes[attribute.name];
+    if (value == null ||
+        value.trim().toLowerCase() != attribute.value.trim().toLowerCase()) {
       return false;
     }
   }
@@ -785,24 +795,24 @@ bool _hasRegexAttributeSelector(String selector) {
 ({String baseSelector, List<_AttributeRegexSelector> attributeRegexes})
 _extractRegexAttributeSelectors(String selector) {
   final attributeRegexes = <_AttributeRegexSelector>[];
-  final normalized = selector.replaceAllMapped(
-    RegExp(r'\[\s*([^\s~=\]]+)\s*~=\s*([^\]]+)\]'),
-    (match) {
-      final name = match.group(1)!.trim();
-      final rawPattern = match.group(2)!.trim();
-      if (!_looksLikeRegexAttributeValue(rawPattern)) {
-        return match.group(0)!;
-      }
-      final pattern = _buildRegexAttributePattern(rawPattern);
-      if (pattern == null) {
-        return match.group(0)!;
-      }
-      attributeRegexes.add(
-        _AttributeRegexSelector(name: name, pattern: pattern),
-      );
-      return '';
-    },
-  );
+  // Jsoup `QueryParser.byAttribute`：`[屬性~=正則]` 的值不管長什麼樣都是正則，
+  // 方括號照配對找結尾（正則裡的 `[0-9]` 不算結尾）。加了引號的照 CSS 讀。
+  final normalized = _replaceAttributeBrackets(selector, (inner) {
+    final match = RegExp(r'^\s*([^\s~=\]]+)\s*~=\s*([\s\S]+)$')
+        .firstMatch(inner);
+    if (match == null) return null;
+    final name = match.group(1)!.trim().toLowerCase();
+    final rawPattern = match.group(2)!.trim();
+    if (rawPattern.isEmpty ||
+        (rawPattern.startsWith('"') && rawPattern.endsWith('"')) ||
+        (rawPattern.startsWith("'") && rawPattern.endsWith("'"))) {
+      return null;
+    }
+    final pattern = _buildRegexAttributePattern(rawPattern);
+    if (pattern == null) return null;
+    attributeRegexes.add(_AttributeRegexSelector(name: name, pattern: pattern));
+    return '';
+  });
   return (
     baseSelector: normalized.replaceAll(RegExp(r'\s+'), ' ').trim(),
     attributeRegexes: attributeRegexes,
@@ -815,7 +825,7 @@ _extractExactAttributeSelectors(String selector) {
   final normalized = selector.replaceAllMapped(
     RegExp(r'\[\s*([^\s~\^\$\*\|=\]]+)\s*=\s*([^\]]+)\]'),
     (match) {
-      final name = match.group(1)!.trim();
+      final name = match.group(1)!.trim().toLowerCase();
       final rawValue = match.group(2)!.trim();
       if (rawValue.isEmpty || _looksLikeRegexAttributeValue(rawValue)) {
         return match.group(0)!;
@@ -829,6 +839,53 @@ _extractExactAttributeSelectors(String selector) {
     baseSelector: normalized.replaceAll(RegExp(r'\s+'), ' ').trim(),
     attributeSelectors: attributeSelectors,
   );
+}
+
+/// 選擇器裡每一段最外層的 `[…]`（方括號照配對、引號裡的不算，同 Jsoup
+/// `TokenQueue.chompBalanced`）交給 [replace]；它回 null 時照原樣留著。
+String _replaceAttributeBrackets(
+  String selector,
+  String? Function(String inner) replace,
+) {
+  final out = StringBuffer();
+  var i = 0;
+  while (i < selector.length) {
+    if (selector[i] != '[') {
+      out.write(selector[i]);
+      i++;
+      continue;
+    }
+    var depth = 0;
+    String? quote;
+    var end = -1;
+    for (var j = i; j < selector.length; j++) {
+      final c = selector[j];
+      if (c == r'\') {
+        j++;
+      } else if (quote != null) {
+        if (c == quote) quote = null;
+      } else if (c == '"' || c == "'") {
+        quote = c;
+      } else if (c == '[') {
+        depth++;
+      } else if (c == ']') {
+        depth--;
+        if (depth == 0) {
+          end = j;
+          break;
+        }
+      }
+    }
+    if (end < 0) {
+      out.write(selector.substring(i));
+      break;
+    }
+    out.write(
+      replace(selector.substring(i + 1, end)) ?? selector.substring(i, end + 1),
+    );
+    i = end + 1;
+  }
+  return out.toString();
 }
 
 bool _hasUnsupportedAttributeSyntax(String selector) {
@@ -1146,22 +1203,25 @@ class ElementsSingle {
               : temp.localName == rules[1],
         );
       } else if (rules[0] == 'id' && rules.length > 1) {
-        final el = temp.querySelector('#${rules[1]}');
-        elements = temp.id == rules[1] ? [temp] : (el != null ? [el] : []);
-      } else if (rules[0] == 'text' && rules.length > 1) {
-        final descendants = temp.querySelectorAll('*').where((el) {
-          return el.nodes.any(
-            (n) => n.nodeType == Node.TEXT_NODE && n.text!.contains(rules[1]),
-          );
-        }).toList();
-        final selfMatches = temp.nodes.any(
-          (n) =>
-              n.nodeType == Node.TEXT_NODE && (n.text ?? '').contains(rules[1]),
-        );
+        // 同 Legado `Collector.collect(Evaluator.Id(…), temp)`：自己與底下每個
+        // 同 ID 的都算（網站重複用同一個 ID 時不只第一個）。
         elements = _withSelfIf(
           temp,
-          descendants: descendants,
-          selfMatches: selfMatches,
+          descendants: temp
+              .querySelectorAll('*')
+              .where((el) => el.id == rules[1]),
+          selfMatches: temp.id == rules[1],
+        );
+      } else if (rules[0] == 'text' && rules.length > 1) {
+        // 同 Legado `getElementsContainingOwnText`：在自己的文字（ownText，
+        // 幾段文字接起來、整理過空白）裡不分大小寫找。
+        final needle = rules[1].toLowerCase();
+        bool ownTextHas(Element el) =>
+            jsoupOwnText(el).toLowerCase().contains(needle);
+        elements = _withSelfIf(
+          temp,
+          descendants: temp.querySelectorAll('*').where(ownTextHas),
+          selfMatches: ownTextHas(temp),
         );
       } else {
         try {
@@ -1275,6 +1335,9 @@ class ElementsSingle {
       beforeRule = bracketMatch.group(1)!.trim();
       split = bracketMatch.group(2) == '!' ? '!' : '.';
       final segments = bracketMatch.group(3)!.split(',');
+      // Legado 從後往前讀索引、再從後往前取，結果照規則寫的順序；這裡從前往
+      // 後讀，存成倒序，取的時候（同樣從後往前）才是規則寫的順序。
+      final parsed = <dynamic>[];
       for (final rawSegment in segments) {
         final segment = rawSegment.trim();
         if (segment.isEmpty) {
@@ -1286,7 +1349,7 @@ class ElementsSingle {
               index < parts.length && parts[index].isNotEmpty
               ? int.tryParse(parts[index])
               : null;
-          indexes.add(
+          parsed.add(
             Triple(
               parsePart(0),
               parsePart(1),
@@ -1296,10 +1359,11 @@ class ElementsSingle {
         } else {
           final value = int.tryParse(segment);
           if (value != null) {
-            indexes.add(value);
+            parsed.add(value);
           }
         }
       }
+      indexes.addAll(parsed.reversed);
       return;
     }
 
