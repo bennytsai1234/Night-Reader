@@ -1109,13 +1109,12 @@ class _BookDetailPageState extends State<BookDetailPage> {
           p.book.getShownIntro(),
           p.book.customCoverUrl ?? p.book.coverUrl ?? '',
           p.book.kind ?? '',
-          p.book.customTag ?? '',
           p.book.originName,
           p.book.tocUrl,
         ],
         builder: (ctx, fields) => StatefulBuilder(
           builder: (ctx, setSheetState) {
-            final [n, a, i, c, k, tag, sourceName, toc] = fields;
+            final [n, a, i, c, k, sourceName, toc] = fields;
             GroupedTextFieldRow field(
               String label,
               TextEditingController controller,
@@ -1134,7 +1133,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
                 i.text,
                 c.text,
                 kind: k.text,
-                customTag: tag.text,
                 originName: sourceName.text,
                 tocUrl: toc.text,
               );
@@ -1173,7 +1171,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
                         field('書名', n),
                         field('作者', a),
                         field('分類', k),
-                        field('自訂標籤', tag),
                       ],
                     ),
                     GroupedSection(

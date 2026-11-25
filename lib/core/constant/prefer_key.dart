@@ -126,10 +126,10 @@ class PreferKey {
   /// 全部」才接著下載。
   static const String downloadsPausedAll = 'downloads_paused_all';
 
-  /// 「離開時蓋住畫面」（bool，ADR 0083）。這台手機自己的：不同步、不進備份。
+  /// 「離開時」蓋住畫面那格（bool，ADR 0083）。這台手機自己的：不同步、不進備份。
   static const String appCoverOnLeave = 'app_cover_on_leave';
 
-  /// 「解鎖才能打開」（`AppLockMode.name`，ADR 0083）。這台手機自己的：不同步、
+  /// 「離開時」解鎖那格（`AppLockMode.name`，ADR 0083）。這台手機自己的：不同步、
   /// 不進備份；另一台不一定有指紋。
   static const String appLockMode = 'app_lock_mode';
 
