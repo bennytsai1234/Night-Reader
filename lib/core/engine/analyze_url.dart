@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/network/source_proxy.dart';
 import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/js/encode/charsets.dart';
@@ -70,6 +71,10 @@ class AnalyzeUrl {
   String? webJs;
   int webViewDelayTime = 0;
 
+  /// 書源標頭裡的代理（Legado `AnalyzeUrl.proxy`），請求照它連
+  /// （[SourceProxyAdapter]）。
+  String? proxy;
+
   /// 網址選項 `serverID`（Legado 用來指定自訂的伺服器）。
   int? serverID;
 
@@ -105,13 +110,13 @@ class AnalyzeUrl {
       // 給了 [headers]（`java.connect` 的標頭，Legado `headerMapF`）就用它
       // 取代這兩份；網址選項的標頭照樣再蓋過去。
       if (headers != null) {
-        headerMap
-          ..addAll(headers)
-          ..remove('proxy');
+        headerMap.addAll(headers);
       } else {
         _initSourceHeaders();
         if (loginHeaders) _initLoginHeaders();
       }
+      // 同 Legado：標頭裡的 `proxy` 是代理，拿出來給請求用，不當標頭送出。
+      proxy = headerMap.remove('proxy');
       initUrl();
     } finally {
       _releaseJsRule();
@@ -119,7 +124,7 @@ class AnalyzeUrl {
   }
 
   /// 書源的標頭，和送出請求時同一套（Legado `getHeaderMap`）：標頭是 JS 時
-  /// 先跑、照 Gson 寬鬆讀、不送 `proxy`；[loginHeaders] 時加上登入標頭。給
+  /// 先跑、照 Gson 寬鬆讀、不含代理（`proxy`）；[loginHeaders] 時加上登入標頭。給
   /// 規則 JS 的 `source.getHeaderMap()` 與用網頁抓（`java.webView`）用。
   static Map<String, String> sourceHeaders(
     BaseSource source, {
@@ -214,8 +219,7 @@ class AnalyzeUrl {
     headerMap.addAll(BaseSource.decodeLoginHeader(raw));
   }
 
-  /// 將 BookSource.header（JSON 格式）解析並注入 headerMap。標頭裡的
-  /// `proxy` 是 Legado 的代理設定，夜讀不走代理，不當標頭送出。
+  /// 將 BookSource.header（JSON 格式）解析並注入 headerMap。
   void _initSourceHeaders() {
     final headerStr = source?.header;
     if (headerStr == null || headerStr.isEmpty) return;
@@ -225,7 +229,6 @@ class AnalyzeUrl {
       if (headers != null) {
         headers.forEach((k, v) => headerMap[k.toString()] = v.toString());
       }
-      headerMap.remove('proxy');
     } catch (e) {
       AppLog.e('AnalyzeUrl source header parse error: $e', error: e);
     }
@@ -808,7 +811,10 @@ class AnalyzeUrl {
       // 自己跟時，換了網址的開頭就把 Cookie 丟掉。
       followRedirects: false,
       // 書源沒開 Cookie 罐時網站回的 Cookie 不存（同 Legado `setCookie`）。
-      extra: LenientCookieManager.sourceExtra(source?.enabledCookieJar == true),
+      extra: {
+        ...LenientCookieManager.sourceExtra(source?.enabledCookieJar == true),
+        SourceProxyAdapter.extraKey: ?proxy,
+      },
     );
     const maxAttempts = 3;
     for (var attempt = 1; ; attempt++) {
