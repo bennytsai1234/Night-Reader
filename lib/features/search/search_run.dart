@@ -76,13 +76,22 @@ enum _Phase {
   /// 接著搜暫停的搜尋剩下的書源：進度接著前面搜完的數。
   continuing,
 
+  /// 結果捲到底，接著搜下一頁（[SearchRun.loadMore]）：失敗不列進「重試
+  /// 失敗」，「共 N 個」照整次搜尋的書源數。
+  loadingMore,
+
   /// 暫停放到背景的搜尋：不再送書源，等背景那件存好結果記成已暫停
   /// （[SearchRun.markPaused]）。畫面上照舊是搜尋中，背景那件寫「正在暫停…」。
   halted;
 
   bool get inProgress => switch (this) {
     idle || restored => false,
-    saving || searching || retrying || continuing || halted => true,
+    saving ||
+    searching ||
+    retrying ||
+    continuing ||
+    loadingMore ||
+    halted => true,
   };
 }
 
@@ -147,7 +156,8 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   SearchModel _newModel() => SearchModel(callback: this, loader: _loader)
     ..onSourcesChosen = _rememberSources
     ..onScopeNarrowed = _narrowScope
-    ..onSourceSearched = _recordSearched;
+    ..onSourceSearched = _recordSearched
+    ..onSourceMerged = _recordPage;
 
   final SearchBookLoader? _loader;
   final ReadingFetches _readingFetches;
@@ -196,8 +206,25 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   /// 讀回的結果還沒合併成卡。
   bool get isRestoring => _phase == _Phase.restored;
 
+  /// 正在接著搜下一頁：不能放到背景（背景那件只記第 1 頁）。
+  bool get isLoadingMore => _phase == _Phase.loadingMore;
+
   /// 放到背景之後記下每個書源的那一位。
   SearchRecorder? recorder;
+
+  /// 各書源（網址）搜到第幾頁；上一頁搜到新書的書源（[_withMore]）捲到底時
+  /// 接著搜下一頁，同 Legado `SearchModel`。
+  final Map<String, int> _pages = {};
+  final Map<String, BookSource> _withMore = {};
+
+  /// 讀者按了結束：捲到底不再自己搜下一頁，新的一次搜尋才重來（同 Legado
+  /// `isManualStopSearch`）。
+  bool _stoppedByReader = false;
+
+  /// 捲到底時還有下一頁可以搜：有書源上一頁搜到新書，沒按過結束，沒放到
+  /// 背景。
+  bool get hasMorePages =>
+      _withMore.isNotEmpty && !_stoppedByReader && !_background;
 
   /// 放到背景了：不跟著頁面暫停，送每個書源前先等閱讀時的抓章。
   bool get background => _background;
@@ -230,6 +257,9 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     _sourceUrls = const [];
     _doneBefore = 0;
     _failuresBefore = const [];
+    _pages.clear();
+    _withMore.clear();
+    _stoppedByReader = false;
     _phase = _Phase.saving;
     completed = 0;
     total = 0;
@@ -332,6 +362,46 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     );
   }
 
+  /// 結果捲到底：上一頁搜到新書的書源接著搜下一頁，搜到的書接在結果裡。
+  /// 搜尋中、沒有下一頁（[hasMorePages]）時不做。
+  Future<void> loadMore() async {
+    if (_disposed || isSearching || key.isEmpty || !hasMorePages) return;
+    final sources = _withMore.values.toList();
+    final pages = {
+      for (final source in sources)
+        source.bookSourceUrl: (_pages[source.bookSourceUrl] ?? 1) + 1,
+    };
+    _failuresBefore = List.of(failures);
+    _doneBefore = 0;
+    _phase = _Phase.loadingMore;
+    _startAttempt();
+    notifyListeners();
+    await _track(
+      _model.searchSources(
+        key: key,
+        sources: sources,
+        precisionSearch: conditions!.precision,
+        initialResults: List<SearchBook>.from(results),
+        pages: pages,
+      ),
+    );
+  }
+
+  /// 一個書源這一頁搜完：記下搜到第幾頁，沒搜到新書的不再往下一頁搜。
+  void _recordPage(BookSource source, bool foundNew) {
+    final url = source.bookSourceUrl;
+    if (_phase == _Phase.loadingMore) {
+      _pages[url] = (_pages[url] ?? 1) + 1;
+    } else {
+      _pages[url] = 1;
+    }
+    if (foundNew) {
+      _withMore[url] = source;
+    } else {
+      _withMore.remove(url);
+    }
+  }
+
   /// 接著搜暫停的搜尋：只搜 [remaining]，前面搜完的結果帶著、進度接著數。
   /// 這次要搜、這段時間刪掉或停用的書源算搜完。還沒選好書源就暫停的
   /// （[remaining] 是 null）照條件重新搜。
@@ -391,6 +461,7 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   /// 使用者按「結束」：已經收到的結果照常併入，再停下。
   void stop() {
     _model.stopSearch();
+    if (isSearching) _stoppedByReader = true;
     _endAttemptIfSaving();
     if (isSearching) _phase = _Phase.idle;
     waitingSources = const [];
@@ -451,7 +522,9 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
 
   void _recordSearched(BookSource source, List<SearchBook> books) {
     final url = source.bookSourceUrl;
-    _searched[url] = books;
+    _searched[url] = _phase == _Phase.loadingMore
+        ? [...?_searched[url], ...books]
+        : books;
     _failedNotes.remove(url);
     recorder?.sourceDone(url, books, null);
   }
@@ -482,6 +555,11 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
 
   @override
   void onSearchFailure(SearchFailure failure) {
+    // 下一頁搜不到只是不再往下搜（同 Legado 只記日誌），第 1 頁的失敗照舊。
+    if (_phase == _Phase.loadingMore) {
+      _withMore.remove(failure.source.bookSourceUrl);
+      return;
+    }
     failures.add(failure);
     final url = failure.source.bookSourceUrl;
     final note = (
@@ -510,8 +588,12 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     this.waitingSources = waitingSources;
     this.completed = _doneBefore + completed;
     this.total = _doneBefore + total;
-    this.failed = _failuresBefore.length + failed;
-    if (_phase != _Phase.retrying) searchedSourceCount = this.total;
+    this.failed = _phase == _Phase.loadingMore
+        ? failures.length
+        : _failuresBefore.length + failed;
+    if (_phase != _Phase.retrying && _phase != _Phase.loadingMore) {
+      searchedSourceCount = this.total;
+    }
     _progress.publish();
   }
 

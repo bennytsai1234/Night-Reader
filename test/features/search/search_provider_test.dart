@@ -254,6 +254,7 @@ void main() {
       BookSource source,
       String key, {
       CancelToken? cancelToken,
+      int page = 1,
     }) async {
       asked.add(source.bookSourceName);
       return [
@@ -376,5 +377,98 @@ void main() {
         expect(next.kindCounts[BookSourceKind.comic], 1);
       },
     );
+  });
+
+  // 同 Legado `SearchModel`：結果捲到底時接著搜下一頁（`{{page}}` 加一），
+  // 搜不到新書的書源就不再往下搜。
+  group('next page', () {
+    final asked = <String>[];
+    Completer<void>? gate;
+
+    /// 甲站一頁一本、第 3 頁沒了；乙站不理頁碼，每頁都回同一本。
+    Future<List<SearchBook>> loader(
+      BookSource source,
+      String key, {
+      CancelToken? cancelToken,
+      int page = 1,
+    }) async {
+      asked.add('${source.bookSourceName}$page');
+      if (page > 1) await gate?.future;
+      final name = source.bookSourceName == '甲站'
+          ? (page < 3 ? '甲$page' : null)
+          : '乙1';
+      if (name == null) return const [];
+      return [
+        SearchBook(
+          bookUrl: '${source.bookSourceUrl}/$name',
+          name: name,
+          author: '作者',
+          origin: source.bookSourceUrl,
+          originName: source.bookSourceName,
+        ),
+      ];
+    }
+
+    Future<SearchProvider> provider() async {
+      asked.clear();
+      gate = null;
+      await GetIt.instance<BookSourceDao>().upsertAll([
+        BookSource(bookSourceUrl: 'https://a.example', bookSourceName: '甲站'),
+        BookSource(bookSourceUrl: 'https://b.example', bookSourceName: '乙站'),
+      ]);
+      final provider = SearchProvider(
+        entrance: Future<void>.value(),
+        searchLoader: loader,
+      );
+      addTearDown(() async {
+        provider.dispose();
+        await pumpEventQueue();
+      });
+      await provider.ready;
+      return provider;
+    }
+
+    List<String> names(SearchProvider provider) =>
+        provider.results.map((b) => b.name).toList()..sort();
+
+    test('loads the next page from the sources that found new books', () async {
+      final search = await provider();
+      await search.search('夜');
+      expect(names(search), ['乙1', '甲1']);
+      expect(search.hasMorePages, isTrue);
+
+      asked.clear();
+      await search.loadMorePages();
+      expect(asked..sort(), ['乙站2', '甲站2']);
+      expect(names(search), ['乙1', '甲1', '甲2']);
+
+      // 乙站第 2 頁沒有新書，不再搜；甲站第 3 頁沒了，之後就沒有下一頁。
+      asked.clear();
+      await search.loadMorePages();
+      expect(asked, ['甲站3']);
+      expect(search.hasMorePages, isFalse);
+
+      asked.clear();
+      await search.loadMorePages();
+      expect(asked, isEmpty);
+    });
+
+    // 同 Legado `isManualStopSearch`：讀者按了結束，捲到底不再自己搜下去。
+    test('pressing stop while loading more stops loading pages', () async {
+      final search = await provider();
+      await search.search('夜');
+      gate = Completer<void>();
+      final more = search.loadMorePages();
+      await pumpEventQueue();
+      expect(search.isSearching, isTrue);
+      search.stopSearch();
+      gate!.complete();
+      await more;
+      expect(search.hasMorePages, isFalse);
+
+      asked.clear();
+      await search.loadMorePages();
+      expect(asked, isEmpty);
+    });
   });
 }

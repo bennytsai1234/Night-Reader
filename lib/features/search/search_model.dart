@@ -188,6 +188,7 @@ typedef SearchBookLoader = Future<List<SearchBook>> Function(
   BookSource source,
   String key, {
   CancelToken? cancelToken,
+  int page,
 });
 
 /// SearchModel - 多書源並行搜尋引擎
@@ -249,6 +250,10 @@ class SearchModel {
   /// 和併進結果在同一處，記下的與畫面上的不會對不上。
   void Function(BookSource source, List<SearchBook> books)? onSourceSearched;
 
+  /// 一個書源搜完、結果併好時呼叫：[foundNew] 是這次有沒有搜到結果裡還沒
+  /// 有的書（同源去重後），決定它還要不要往下一頁搜。
+  void Function(BookSource source, bool foundNew)? onSourceMerged;
+
   /// 每個書源送出前等它：放到背景的搜尋先等閱讀時的抓章（ADR 0070）。
   Future<void> Function()? beforeSource;
 
@@ -284,17 +289,22 @@ class SearchModel {
 
   /// 搜 [sources]；[initialResults] 是先放進結果的書：合併卡（重試失敗書源）
   /// 或逐源原始結果（接著搜暫停的搜尋）都可以。
+  ///
+  /// [pages] 是各書源（網址）這次搜第幾頁，沒列的搜第 1 頁（接著搜下一頁，
+  /// 同 Legado `SearchModel.searchPage`）。
   Future<void> searchSources({
     required String key,
     required List<BookSource> sources,
     required bool precisionSearch,
     List<SearchBook> initialResults = const [],
+    Map<String, int> pages = const {},
   }) async {
     await _searchSources(
       key: key,
       sources: sources,
       precisionSearch: precisionSearch,
       initialResults: initialResults,
+      pages: pages,
     );
   }
 
@@ -303,6 +313,7 @@ class SearchModel {
     required List<BookSource> sources,
     required bool precisionSearch,
     List<SearchBook> initialResults = const [],
+    Map<String, int> pages = const {},
   }) async {
     cancelSearch();
 
@@ -367,6 +378,7 @@ class SearchModel {
           await _searchSingleSource(
             source,
             key,
+            pages[source.bookSourceUrl] ?? 1,
             precisionSearch,
             generation,
             cancelToken,
@@ -408,6 +420,7 @@ class SearchModel {
   Future<void> _searchSingleSource(
     BookSource source,
     String key,
+    int page,
     bool precisionSearch,
     int generation,
     CancelToken cancelToken,
@@ -421,7 +434,7 @@ class SearchModel {
 
     try {
       final stopwatch = Stopwatch()..start();
-      final books = await _searchKeyVariants(source, key, cancelToken);
+      final books = await _searchKeyVariants(source, key, page, cancelToken);
       final elapsed = stopwatch.elapsedMilliseconds;
       respondTimes[source.bookSourceUrl] = _smoothedRespondTime(
         source.respondTime,
@@ -445,12 +458,14 @@ class SearchModel {
         if (stale()) return;
       }
       onSourceSearched?.call(source, filteredBooks);
+      var foundNew = false;
       if (filteredBooks.isNotEmpty) {
         // 合併結果：書源常常幾個一起回來，合併與通知頁面集中在一段時間內
         // 做一次（見 [_publishDelay]）。
-        _appendRawBooks(filteredBooks);
+        foundNew = _appendRawBooks(filteredBooks);
         _schedulePublish(key, precisionSearch);
       }
+      onSourceMerged?.call(source, foundNew);
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel || stale()) return;
       _failedCount++;
@@ -479,12 +494,13 @@ class SearchModel {
   Future<List<SearchBook>> _searchKeyVariants(
     BookSource source,
     String key,
+    int page,
     CancelToken cancelToken,
   ) async {
     (Object, StackTrace)? firstError;
     final found = await Future.wait([
       for (final variant in searchKeyVariants(key))
-        _searchSource(source, variant, cancelToken: cancelToken)
+        _searchSource(source, variant, cancelToken: cancelToken, page: page)
             .timeout(const Duration(seconds: sourceWaitSeconds))
             .then<List<SearchBook>?>(
               (books) => books,
@@ -514,11 +530,17 @@ class SearchModel {
     _searchBooks = _rebuild(searchKey, precision);
   }
 
-  void _appendRawBooks(List<SearchBook> newBooks) {
+  /// 傳回有沒有加進新的書。
+  bool _appendRawBooks(List<SearchBook> newBooks) {
+    var added = false;
     for (final book in newBooks) {
       // 同源去重：沿用既有 bookUrl / 同名同作者判定，群組內同源只算一個 origin。
-      if (_rawIndex.add(book)) _groups.add(book);
+      if (_rawIndex.add(book)) {
+        _groups.add(book);
+        added = true;
+      }
     }
+    return added;
   }
 
   /// 每次重建要把所有結果重新排序，頁面也跟著整份重排；上百個書源陸續

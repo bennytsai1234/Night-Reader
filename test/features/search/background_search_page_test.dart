@@ -84,6 +84,7 @@ void main() {
       BookSource source,
       String key, {
       CancelToken? cancelToken,
+      int page = 1,
     }) {
       sent.add(source.bookSourceName);
       final completer = Completer<List<SearchBook>>();
@@ -184,6 +185,7 @@ void main() {
         BookSource source,
         String key, {
         CancelToken? cancelToken,
+        int page = 1,
       }) {
         final completer = Completer<List<SearchBook>>();
         pending[source.bookSourceName] = completer;
