@@ -243,6 +243,7 @@ class _ComicStripViewState extends State<ComicStripView>
   /// 跳章後換一個捲動位置（條漫整個換了內容），舊的等這一幀畫完再丟。
   void _resetScroll(double fraction) {
     _generation = _model.generation;
+    _restoring = null;
     _pendingFraction = fraction > 0 ? fraction : null;
     final old = _scrollController;
     _scrollController = _ComicScrollController()..addListener(_onScroll);
@@ -360,10 +361,18 @@ class _ComicStripViewState extends State<ComicStripView>
     final fraction = _pendingFraction;
     if (fraction == null || !_scroll.hasClients) return;
     final after = _model.after;
-    if (after.isEmpty || after.first is! ComicPageItem) return;
+    if (after.isEmpty) return;
+    final first = after.first;
+    if (first is! ComicPageItem) return;
     _pendingFraction = null;
+    // 圖的高度還是骨架的比例時，圖到了再照新高度接回同一成（[_resize]）。
+    _restoring = (item: first, fraction: fraction);
     _scroll.jumpTo(fraction * (_afterTops[1] - _afterTops[0]));
   }
+
+  /// 開書接回的那一張與那一成：那張的高度在讀者動手之前變了，照新高度接回
+  /// 同一成，不照「上面的圖變高、補整張的差」算。讀者一碰畫面就不算了。
+  ({ComicPageItem item, double fraction})? _restoring;
 
   /// 捲動位置 [pixels]（畫面頂端）落在哪一塊，以及在那塊裡的距離。用整數
   /// 位置 g：g >= 0 是往下第 g 塊，g < 0 是往上第 -g-1 塊。
@@ -493,7 +502,8 @@ class _ComicStripViewState extends State<ComicStripView>
 
   /// 圖到了、或載入失敗改成八成螢幕高：高度變了。畫面頂端看到的內容不動：
   /// 變的那一塊在畫面頂端上面（往下那一側），或在畫面頂端下面（往上那一
-  /// 側），捲動位置跟著補回去。
+  /// 側），捲動位置跟著補回去。開書接回的那一張（[_restoring]）照新高度停
+  /// 在同一成。
   void _resize(ComicPageItem item, void Function() change) {
     final g = _indexOf(item);
     final before = _extentOf(item);
@@ -507,10 +517,31 @@ class _ComicStripViewState extends State<ComicStripView>
     final position = _scroll.comicPosition;
     final pixels = position.pixels;
     double? correction;
+    if (_restoring case (item: final restored, :final fraction)
+        when restored == item && g >= 0) {
+      setState(() {});
+      position.shiftBy(_topOf(g) + fraction * after - pixels);
+      return;
+    }
     if (g >= 0 && _topOf(g) < pixels - 0.5) correction = delta;
     if (g < 0 && _topOf(g) + before > pixels + 0.5) correction = -delta;
     setState(() {});
     if (correction != null) position.shiftBy(correction);
+  }
+
+  /// 捲動位置換到 [location]（照現在的高度表），畫面還沒照新尺寸排之前呼叫。
+  void _keepLocation(ComicLocation location) {
+    for (var g = -_model.before.length; g < _model.after.length; g++) {
+      final item = _itemOf(g);
+      if (item is ComicPageItem &&
+          item.chapterIndex == location.chapterIndex &&
+          item.pageIndex == location.pageIndex) {
+        _scroll.position.correctPixels(
+          _topOf(g) + location.fraction * _extentOf(item),
+        );
+        return;
+      }
+    }
   }
 
   int? _indexOf(ComicPageItem item) {
@@ -539,6 +570,7 @@ class _ComicStripViewState extends State<ComicStripView>
   // ─── 手勢 ───────────────────────────────────────────────────────────
 
   void _onPointerDown(PointerDownEvent event) {
+    _restoring = null;
     // 慣性滑動中按下去只停下來，不算點擊（同 Mihon）。
     _tapStoppedScroll = false;
     if (_scroll.hasClients && _scroll.position.isScrollingNotifier.value) {
@@ -767,15 +799,25 @@ class _ComicStripViewState extends State<ComicStripView>
     return LayoutBuilder(
       builder: (context, constraints) {
         final screen = constraints.biggest;
+        ComicLocation? keep;
         if (screen != _screen) {
+          // 轉螢幕、改視窗寬度：圖照新寬度變高，捲動位置照新的高度換算成
+          // 同一張的同一成，不留著原本的像素距離。
+          if (!_screen.isEmpty && _measured && _scroll.hasClients) {
+            keep = _locationAt(_scroll.position.pixels);
+          }
           _screen = screen;
           _tx = _clampTx(_tx, _scale);
-          // 寬度變了，解碼寬度與範圍跟著換。
+          // 寬度變了，解碼寬度與範圍跟著換。第一次排好時接回開書的那一成：
+          // 圖片清單可能在畫面建好之前就讀好了，之後不一定再有通知。
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _onScroll();
+            if (!mounted) return;
+            _applyPendingFraction();
+            _onScroll();
           });
         }
         _measure();
+        if (keep != null) _keepLocation(keep);
         return Listener(
           onPointerDown: _onPointerDown,
           child: GestureDetector(
