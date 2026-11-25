@@ -6,6 +6,8 @@ import '../diagnostics/app_log_service.dart';
 
 import 'package:fast_gbk/fast_gbk.dart';
 
+import 'gb18030.dart';
+
 import 'big5.dart';
 
 /// EncodingDetect - 簡易編碼偵測工具
@@ -31,9 +33,8 @@ class EncodingDetect {
       if (normalized == 'UTF-16BE' || normalized == 'UTF16BE') {
         return _decodeUtf16(data, Endian.big);
       }
-      if (normalized == 'GBK' ||
-          normalized == 'GB2312' ||
-          normalized == 'GB18030') {
+      if (normalized == 'GB18030') return Gb18030.decode(data);
+      if (normalized == 'GBK' || normalized == 'GB2312') {
         return decodeGbk(data);
       }
       if (Big5.names.contains(normalized)) return Big5.decode(data);
@@ -87,9 +88,8 @@ class EncodingDetect {
     if (normalized == 'UTF-16BE' || normalized == 'UTF16BE') {
       return _encodeUtf16(text, Endian.big);
     }
-    if (normalized == 'GBK' ||
-        normalized == 'GB2312' ||
-        normalized == 'GB18030') {
+    if (normalized == 'GB18030') return Gb18030.encode(text);
+    if (normalized == 'GBK' || normalized == 'GB2312') {
       return Uint8List.fromList(gbk.encode(text));
     }
     if (Big5.names.contains(normalized)) return Big5.encode(text);
@@ -140,8 +140,8 @@ class EncodingDetect {
 
   /// 偵測位元組陣列的編碼。有 BOM 照 BOM；沒有時照 Legado 用的 ICU
   /// `CharsetDetector` 裡的五個辨識器（[_IcuGuess]），在 UTF-8、沒有 BOM 的
-  /// UTF-16、GB18030 與 Big5 之間挑信心最高的。GB18030 回傳 `GBK`（同一套
-  /// 解法）。
+  /// UTF-16、GB18030 與 Big5 之間挑信心最高的。名稱照辨識器（同 Legado），
+  /// GB18030 的四位元組字（emoji、少見漢字）才解得出來。
   static String getEncode(Uint8List bytes) {
     if (bytes.isEmpty) return 'UTF-8';
 
@@ -234,10 +234,10 @@ class _IcuGuess {
       ('UTF-16BE', _utf16(bigEndian: true)),
       ('UTF-16LE', _utf16(bigEndian: false)),
       // 同分時排在後面的贏。ICU 是 Big5 在後；夜讀讓 GBK 贏：10 個字以內的
-      // 短文字兩邊都是 10 分、分不出來，照改用 ICU 之前的判斷當 GBK（Legado
+      // 短文字兩邊都是 10 分、分不出來，照改用 ICU 之前的判斷當 GB18030（Legado
       // 在這種情況也常判錯）。
       ('Big5', _mbcs(_big5Next, _big5Common)),
-      ('GBK', _mbcs(_gb18030Next, _gb18030Common)),
+      ('GB18030', _mbcs(_gb18030Next, _gb18030Common)),
     ];
     var best = 'UTF-8';
     var confidence = 0;

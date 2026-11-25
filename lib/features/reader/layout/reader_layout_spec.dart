@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import 'reader_layout_constants.dart';
@@ -287,7 +289,22 @@ class ReaderLayoutSpec {
             .clamp(1.0, double.infinity)
             .toDouble();
     final normalizedLineHeight = normalizeReaderLineHeight(style.lineHeight);
-    final effectiveStyle = normalizedLineHeight == style.lineHeight
+    final effectiveCell =
+        cellWidth != null && cellWidth.isFinite && cellWidth > 0
+        ? cellWidth
+        : null;
+    // 首行縮排至少留一格給字：每行字數很少（最少 1 字）或畫面很窄時，縮排
+    // 等於或寬過一行就排不出來或第一行超出邊界，縮到一行少一格。量字、畫字
+    // 與選字都照這裡的縮排。
+    final cells = effectiveCell == null
+        ? null
+        : ReaderTextLayoutFrame._cellCount(contentWidth, effectiveCell);
+    final textIndent = cells == null
+        ? style.textIndent
+        : math.min(style.textIndent, math.max(0, cells - 1));
+    final effectiveStyle =
+        normalizedLineHeight == style.lineHeight &&
+            textIndent == style.textIndent
         ? style
         : ReaderLayoutStyle(
             fontSize: style.fontSize,
@@ -303,14 +320,10 @@ class ReaderLayoutSpec {
             titleBold: style.titleBold,
             titleCenter: style.titleCenter,
             fontFamily: style.fontFamily,
-            textIndent: style.textIndent,
+            textIndent: textIndent,
             titleFontSize: style.titleFontSize,
             titleSpacing: style.titleSpacing,
           );
-    final effectiveCell =
-        cellWidth != null && cellWidth.isFinite && cellWidth > 0
-        ? cellWidth
-        : null;
     return ReaderLayoutSpec(
       viewportSize: viewportSize,
       contentWidth: contentWidth,

@@ -142,7 +142,7 @@ void main() {
           fallbackMoves += 1;
           return true;
         }
-        ..moveToNextPage = () async {
+        ..moveToNextPage = ({isWanted}) async {
           fallbackMoves += 1;
           return true;
         };
@@ -163,7 +163,7 @@ void main() {
     viewport
       ..continuousScrollBy = ((_) => pending.future)
       ..scrollBy = ((_) async => false)
-      ..moveToNextPage = (() async => false);
+      ..moveToNextPage = (({isWanted}) async => false);
     // 另開一個，拆掉它不影響 tearDown 拆共用的那個。
     final closing = ReaderAutoPageController(
       runtime: runtime,
@@ -192,7 +192,7 @@ void main() {
     viewport
       ..continuousScrollBy = ((_) => pending.future)
       ..scrollBy = ((_) async => false)
-      ..moveToNextPage = (() async => false);
+      ..moveToNextPage = (({isWanted}) async => false);
     autoPage.start();
     tick();
     autoPage
@@ -231,7 +231,7 @@ void main() {
     viewport
       ..continuousScrollBy = ((_) => pending.future)
       ..scrollBy = ((_) async => false)
-      ..moveToNextPage = (() async => false);
+      ..moveToNextPage = (({isWanted}) async => false);
     autoPage.start();
     tick();
     autoPage.setPaused(true);
@@ -258,7 +258,7 @@ void main() {
         return true;
       }
       ..scrollBy = ((_) async => false)
-      ..moveToNextPage = (() async => false);
+      ..moveToNextPage = (({isWanted}) async => false);
 
     restoring = Completer<bool>();
     final jump = runtime.jumpToLocation(

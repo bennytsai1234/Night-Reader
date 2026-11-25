@@ -11,6 +11,7 @@ import 'comic_test_pages.dart';
 /// 每張圖都要等測試放行（[release]）才回，記著要了哪幾張、照什麼順序。
 class _GatedSource implements ComicPageSource {
   final List<String> requested = [];
+  final List<String> refreshed = [];
   final Map<String, Completer<Uint8List>> _pending = {};
   final Set<String> failing = {};
   final Uint8List _png = stripedPng(20, 40, 0x336699, 0x112233);
@@ -19,7 +20,12 @@ class _GatedSource implements ComicPageSource {
   Future<List<ComicPage>> pagesOf(int chapterIndex) async => const [];
 
   @override
-  Future<Uint8List> bytesOf(int chapterIndex, ComicPage page) {
+  Future<Uint8List> bytesOf(
+    int chapterIndex,
+    ComicPage page, {
+    bool refresh = false,
+  }) {
+    if (refresh) refreshed.add(page.name);
     requested.add(page.name);
     return (_pending[page.name] = Completer<Uint8List>()).future;
   }
@@ -158,6 +164,7 @@ void main() {
     source.failing.clear();
     images.retry(_key('a'));
     expect(source.requested, ['a', 'a', 'a']);
+    expect(source.refreshed, ['a'], reason: '按了「重試」的那一次重新抓');
     source.release('a');
     await _settle(tester);
     expect(images.error(_key('a')), isNull);

@@ -12,8 +12,14 @@ abstract interface class ComicPageSource {
   Future<List<ComicPage>> pagesOf(int chapterIndex);
 
   /// 讀出第 [chapterIndex] 話的 [page]。讀不到時丟出例外：那一張顯示載入
-  /// 失敗，其他張照常。
-  Future<Uint8List> bytesOf(int chapterIndex, ComicPage page);
+  /// 失敗，其他張照常。[refresh] 是使用者按了那一張的「重試」：照書源抓的
+  /// 圖不用之前抓下來暫存的那份（可能是壞的），重新抓（同 Mihon 的
+  /// `retryPage`）；下載好的與本地的圖照舊讀。
+  Future<Uint8List> bytesOf(
+    int chapterIndex,
+    ComicPage page, {
+    bool refresh = false,
+  });
 
   /// 載入失敗時「用網頁開啟」打開的網址；本地的圖沒有網址，是 null。
   String? webUrlOf(int chapterIndex, ComicPage page);
@@ -57,7 +63,11 @@ class ComicChapterFilesSource implements ComicPageSource {
   }
 
   @override
-  Future<Uint8List> bytesOf(int chapterIndex, ComicPage page) async {
+  Future<Uint8List> bytesOf(
+    int chapterIndex,
+    ComicPage page, {
+    bool refresh = false,
+  }) async {
     final bytes = await (await _open(chapterIndex)).read(page.name);
     if (bytes == null) throw StateError('這張圖不見了：${page.name}');
     return bytes;

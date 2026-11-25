@@ -1,5 +1,10 @@
 typedef ReaderViewportDeltaCommand = Future<bool> Function(double delta);
-typedef ReaderViewportPageCommand = Future<bool> Function();
+
+/// 翻一頁。[isWanted] 是下命令的一方還要不要這一下（自動翻頁暫停、停了
+/// 就不要）：翻頁要等正文排好時，等的期間不成立就不翻。
+typedef ReaderViewportPageCommand = Future<bool> Function({
+  bool Function()? isWanted,
+});
 typedef ReaderViewportSettleCommand = Future<void> Function();
 
 /// 回傳是否真的取消了什麼。

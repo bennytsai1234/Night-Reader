@@ -52,6 +52,19 @@ void main() {
       );
     });
 
+    // Java 的 GB18030：GBK 沒有的字是四位元組。
+    test('選項指定 GB18030 時 GBK 沒有的字以四位元組編碼', () {
+      final analyzeUrl = AnalyzeUrl(
+        'https://example.com/s?q={{key}},{"charset":"gb18030"}',
+        key: '中😀',
+      );
+
+      expect(
+        analyzeUrl.requestUrl,
+        'https://example.com/s?q=%D6%D0%94%39%FC%36',
+      );
+    });
+
     test('已經編碼過的查詢參數照原樣送出', () {
       expect(
         AnalyzeUrl('https://example.com/s?q=%E8%A5%BF&a=1|2').requestUrl,

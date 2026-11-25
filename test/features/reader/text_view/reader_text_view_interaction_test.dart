@@ -1290,6 +1290,54 @@ void main() {
     await _pumpReveal(tester);
   });
 
+  // 自動翻頁捲到排好的正文盡頭、下一章還在抓：翻頁在等下一章。這時打開
+  // 選單暫停，等的那一下不能在下一章到了之後自己翻過去。
+  testWidgets('auto-scroll paused while its page turn waits for the next '
+      'chapter does not turn when the chapter arrives', (tester) async {
+    final next = Completer<String?>();
+    await pumpReader(
+      tester,
+      customRuntime: _makeRuntime(
+        chapterCount: 2,
+        contentLoader: (index, chapter) =>
+            index == 1 ? next.future : Future.value(chapter.content),
+      ),
+    );
+    await settle(tester);
+    final position = scrollPosition(tester);
+    // 捲到第一章排好的盡頭：盡頭跟著排版往後長，捲到不再長為止。
+    for (var i = 0; i < 20; i++) {
+      final end = position.maxScrollExtent;
+      position.jumpTo(end);
+      await settle(tester);
+      if (position.maxScrollExtent == end) break;
+    }
+    ReaderFrameCallback? tick;
+    final auto = ReaderAutoPageController(
+      runtime: runtime,
+      viewportController: viewport,
+      viewportExtent: () => _viewport.height,
+      frameSource: (callback) {
+        tick = callback;
+        return () => tick = null;
+      },
+    );
+    addTearDown(auto.dispose);
+    auto.start();
+    tick!(Duration.zero);
+    tick!(const Duration(milliseconds: 16));
+    await tester.pump();
+    final paused = position.pixels;
+
+    auto.setPaused(true);
+    next.complete(_chapter(1).content);
+    await settle(tester);
+
+    expect(auto.isRunning, isTrue, reason: '只是暫停，還在自動翻頁');
+    expect(position.pixels, closeTo(paused, 0.5), reason: '暫停中不自己翻');
+    auto.stop();
+  });
+
   // 轉螢幕、分割畫面這類改了正文寬度的重排：紙蓋著、正文在排版中，自動
   // 捲動等它排好，不當成到了書尾而停下。
   testWidgets('auto-scroll keeps going through a re-layout', (tester) async {
