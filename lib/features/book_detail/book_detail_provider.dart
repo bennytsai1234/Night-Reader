@@ -441,6 +441,18 @@ class BookDetailProvider extends ChangeNotifier {
     }
     // 只重讀書源，書籍資訊與目錄沒有重抓：抓書源的結果照舊。
     await _loadSource();
+    if (_disposed) return;
+    // 書源改了類型，書跟著換類別（ADR 0053）：書架上的書資料庫已經換了，
+    // 還沒加入書架的照同一條規則換；開書、閱讀還是收聽都照新的類別。
+    final source = _currentSource;
+    final kind = source == null
+        ? null
+        : BookSourceDao.kindsToFollow([source])[source.bookSourceUrl];
+    if (kind != null && kind != _book.bookKind) {
+      _book.type = kind.bookType;
+      await _refreshCacheStatus(notify: false);
+      if (_disposed) return;
+    }
     notifyListeners();
   }
 
