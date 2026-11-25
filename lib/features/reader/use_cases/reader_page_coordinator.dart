@@ -436,6 +436,40 @@ class ReaderPageCoordinator {
     }
   }
 
+  /// 閱讀選單「更多」的「書籤」：在畫面頂端那一句的開頭留一個書籤，和選字
+  /// 選單的「書籤」存的是同一筆（章、章內位置、錨點與摘錄都照同一套算）。
+  Future<void> addBookmarkAtTop() async {
+    final runtime = _host.runtime;
+    if (runtime == null) {
+      _showNotice('無法加入書籤');
+      return;
+    }
+    final top =
+        runtime.captureVisibleLocation() ?? runtime.state.visibleLocation;
+    final content = runtime.repository.cachedContent(top.chapterIndex);
+    final paragraph = content?.paragraphAt(top.charOffset);
+    if (content == null || paragraph == null) {
+      _showNotice('無法加入書籤');
+      return;
+    }
+    var start = paragraph.offset;
+    if (start >= paragraph.end && paragraph.end > paragraph.start) {
+      start = paragraph.end - 1;
+    }
+    await addBookmark(
+      bookmarkInSentence(
+        displayText: content.displayText,
+        contentHash: content.contentHash,
+        chapterTitle: content.title,
+        chapterIndex: top.chapterIndex,
+        paragraphStart: paragraph.start,
+        paragraphEnd: paragraph.end,
+        start: start,
+        end: start,
+      ),
+    );
+  }
+
   /// 跳到書籤那一句，照目前的排版放在畫面上方讀起的位置（同跳章）。
   Future<void> jumpToBookmark(
     Bookmark bookmark, {

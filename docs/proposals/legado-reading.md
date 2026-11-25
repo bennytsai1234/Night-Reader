@@ -319,9 +319,9 @@
 - [ ] **R18　分組管理（不做）**：Legado 可以改分組名、刪分組（`legado:ui/replace/GroupManageDialog.kt`）。夜讀只能一條一條改分組欄。要補的話依附在 R17 之後。
 - [ ] **R15　這一章被哪些規則改過（不做）**：Legado 閱讀選單「有效替換」列出改到這一章的規則（開了繁簡轉換時另列一項），點了直接編輯（`legado:ui/book/read/EffectiveReplacesDialog.kt:46-63`、`legado:help/book/ContentProcessor.kt:146-167`）。夜讀的替換規則面板只寫這本書啟用了幾條；正文被某條規則改壞時，讀者得一條條關掉試。要補的話：替換規則面板加一列「本章套用了哪些」，點了開編輯。
 - [x] **R14　新書預設套不套替換規則（已做，#634）**：Legado 在「其他設定」有「替換淨化預設開啟」（`legado:help/config/AppConfig.kt:472`，預設開）。夜讀在「閱讀偏好」有「新書預設套用替換規則」開關，預設開、會同步；每本書的「本書套用替換規則」沒動過時照它（`lib/features/settings/settings_provider.dart:76-80`、`lib/core/sync/settings_sync.dart:49`）。
-- [x] **R22　匯入前預覽與勾選（已定）**：Legado 匯入規則先列出每一條、已有的同一條預設不勾，可以給這批統一加一個分組（`legado:ui/association/ImportReplaceRuleViewModel.kt:57-82`、`128-138`）。夜讀按下匯入就整包寫進去，同一條（同編號）直接蓋掉這台改過的（`lib/features/association/handlers/association_dialog_helper.dart:134-153`）。書源匯入已經有預覽（同檔 `102-106`），要補的話照書源那一套，已有的預設不勾。
-- [x] **R23　匯出規則（已定）**：Legado 可以把選到的規則匯出成 JSON 分享（`legado:ui/replace/ReplaceRuleActivity.kt:253`）。夜讀沒有匯出，規則只能跟著備份與同步走。要補的話：寫 Legado 讀得懂的格式，布林值寫 `true`／`false`（夜讀現在的 `ReplaceRule.toJson` 寫 `1`／`0`，`lib/core/models/replace_rule.dart:152-167`，Legado 用 Gson 讀布林值會失敗）。
-- [x] **R21　複製、貼上一條規則（已定）**：Legado 編輯頁可以把這條規則複製成 JSON、從剪貼簿貼一條進來（`legado:ui/replace/edit/ReplaceEditActivity.kt`、選單 `replace_edit.xml`）。夜讀要分享一條規則只能整份備份。要補的話併進 R23 一起做。
+- [x] **R22　匯入前預覽與勾選（已做，#633）**：Legado 匯入規則先列出每一條、已有的同一條預設不勾，可以給這批統一加一個分組（`legado:ui/association/ImportReplaceRuleViewModel.kt:57-82`、`128-138`）。夜讀按下匯入就整包寫進去，同一條（同編號）直接蓋掉這台改過的（`lib/features/association/handlers/association_dialog_helper.dart:134-153`）。書源匯入已經有預覽（同檔 `102-106`），要補的話照書源那一套，已有的預設不勾。
+- [x] **R23　匯出規則（已做，#633）**：Legado 可以把選到的規則匯出成 JSON 分享（`legado:ui/replace/ReplaceRuleActivity.kt:253`）。夜讀沒有匯出，規則只能跟著備份與同步走。要補的話：寫 Legado 讀得懂的格式，布林值寫 `true`／`false`（夜讀現在的 `ReplaceRule.toJson` 寫 `1`／`0`，`lib/core/models/replace_rule.dart:152-167`，Legado 用 Gson 讀布林值會失敗）。
+- [x] **R21　複製、貼上一條規則（已做，#633）**：Legado 編輯頁可以把這條規則複製成 JSON、從剪貼簿貼一條進來（`legado:ui/replace/edit/ReplaceEditActivity.kt`、選單 `replace_edit.xml`）。夜讀要分享一條規則只能整份備份。要補的話併進 R23 一起做。
 
 ### 目錄
 
@@ -332,8 +332,8 @@
 
 ### 書籤
 
-- [x] **B1　不選字也能加書籤（已定）**：Legado 閱讀選單「添加書籤」在這一頁的開頭留一個，同時跳出附註框（`legado:ui/book/read/ReadBookActivity.kt` 的 `menu_add_bookmark`）。夜讀只能選字後按「書籤」（`docs/design/reader.md`「書籤」），想在讀到的地方隨手留一個要先長按選字。要補的話放閱讀器「更多」，留在畫面頂端那一句的開頭。
-- [x] **B6　匯出書籤（已定）**：Legado 目錄頁的書籤分頁可以匯出 JSON 與 Markdown（`legado:ui/book/toc/TocViewModel.kt:83-120`）。夜讀「閱讀紀錄」與目錄面板只匯出標註（`lib/core/backup/highlight_export.dart`），書籤沒有。要補的話併進標註匯出的同一個 Markdown 檔。
+- [x] **B1　不選字也能加書籤（已做，#639）**：Legado 閱讀選單「添加書籤」在這一頁的開頭留一個，同時跳出附註框（`legado:ui/book/read/ReadBookActivity.kt` 的 `menu_add_bookmark`）。夜讀只能選字後按「書籤」（`docs/design/reader.md`「書籤」），想在讀到的地方隨手留一個要先長按選字。要補的話放閱讀器「更多」，留在畫面頂端那一句的開頭。
+- [x] **B6　匯出書籤（已做，#639）**：Legado 目錄頁的書籤分頁可以匯出 JSON 與 Markdown（`legado:ui/book/toc/TocViewModel.kt:83-120`）。夜讀「閱讀紀錄」與目錄面板只匯出標註（`lib/core/backup/highlight_export.dart`），書籤沒有。要補的話併進標註匯出的同一個 Markdown 檔。
 
 ### 朗讀
 
@@ -354,9 +354,9 @@
 
 ### 本地 TXT 與 EPUB
 
-- [x] **L1、L2　一次加入好幾本、整個資料夾（已定，只做多選）**：Legado 的「添加本地」是一個檔案清單頁，選一個資料夾列出裡面的書（含壓縮檔），可以多選一起加入書架，「智能掃描」連子資料夾一起找（`legado:ui/book/import/local/ImportBookActivity.kt:91-100`、`257-275`）。夜讀的選檔器一次只能選一個檔（`lib/core/platform/app_file_selection_service.dart:44-60`），整理好的一資料夾小說要一本一本加。要補的話：選檔器打開多選就夠，資料夾掃描可以不做。
+- [x] **L1、L2　一次加入好幾本、整個資料夾（已做，只做多選，#613）**：Legado 的「添加本地」是一個檔案清單頁，選一個資料夾列出裡面的書（含壓縮檔），可以多選一起加入書架，「智能掃描」連子資料夾一起找（`legado:ui/book/import/local/ImportBookActivity.kt:91-100`、`257-275`）。夜讀的選檔器一次只能選一個檔（`lib/core/platform/app_file_selection_service.dart:44-60`），整理好的一資料夾小說要一本一本加。要補的話：選檔器打開多選就夠，資料夾掃描可以不做。
 - [ ] **L4　壓縮檔裡的書（不做）**：Legado 匯入 ZIP、RAR、7z 時把裡面的 TXT、EPUB 都加進書架，解壓後的檔被刪掉還會從壓縮檔再解一次（`legado:model/localBook/LocalBook.kt:273-310`）。夜讀的 ZIP 一律當成一話的本地漫畫（ADR 0052、`lib/features/bookshelf/provider/bookshelf_import_mixin.dart:12-15`），裡面是 TXT 的 ZIP 匯入失敗。要補的話：ZIP 裡沒有圖、有 TXT 或 EPUB 時當文字書匯入，RAR、7z 不做；改 ADR 0052。
-- [x] **L6　手動改這本書的編碼（已定）**：Legado 閱讀選單「設置編碼」可以改這本 TXT 的編碼、重新讀目錄（`legado:ui/book/read/BaseReadBookActivity.kt:346-360`），清單是 UTF-8、GB2312、GB18030、GBK、Unicode、UTF-16、UTF-16LE、ASCII，也可以自己打。夜讀認錯編碼時沒有辦法改（認錯的例子見 L5）。要補的話：L5 修好後放閱讀器「更多」，只給本地 TXT。
+- [x] **L6　手動改這本書的編碼（已做，#613）**：Legado 閱讀選單「設置編碼」可以改這本 TXT 的編碼、重新讀目錄（`legado:ui/book/read/BaseReadBookActivity.kt:346-360`），清單是 UTF-8、GB2312、GB18030、GBK、Unicode、UTF-16、UTF-16LE、ASCII，也可以自己打。夜讀認錯編碼時沒有辦法改（認錯的例子見 L5）。要補的話：L5 修好後放閱讀器「更多」，只給本地 TXT。
 - [ ] **L8　替這本書換一條分章規則（不做）**：Legado 目錄選單與閱讀選單「TXT 目錄規則」列出所有規則，選一條就照它重新分章，也能新增、編輯、啟停、匯入匯出規則（`legado:ui/book/toc/TocActivity.kt:129-132`、`legado:ui/book/read/ReadBookActivity.kt:566-568`）。夜讀自動分錯時只能改原檔再匯入。要補的話：先做 L7 的內建規則與自動挑選，換規則只列內建的幾條，不做規則管理。
 - [ ] **L11　每本書關掉超長章節拆分（不做）**：Legado 目錄選單與書籍詳情的「分割長章節」（`legado:ui/book/toc/TocActivity.kt:133-138`，預設開）。夜讀一律拆。要補的話預設開，和現在一樣。
 - [ ] **L3　自訂從檔名拆書名與作者的方式（不做）**：Legado 匯入頁「導入文件名」寫一段 JS（`legado:model/localBook/LocalBook.kt:341-359`）。四種常見寫法修進 L3 之後用處很小，建議不做。
