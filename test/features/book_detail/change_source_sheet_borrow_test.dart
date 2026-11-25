@@ -13,10 +13,13 @@ import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/source_switch/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
+import 'package:night_reader/features/book_detail/widgets/book_toc_chapter_row.dart';
 import 'package:night_reader/features/book_detail/widgets/borrow_chapter_toc.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/book/locked_chapter_icon.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 
 /// 借的書源：書源管理裡只有它。
 class _SourceDao extends Fake implements BookSourceDao {
@@ -264,6 +267,29 @@ void main() {
       await tester.tap(find.text('第二章'));
       expect(picked, isEmpty);
       expect(locked, 1);
+    });
+
+    testWidgets('估計的那一章是付費章節：只畫鎖頭，章名照樣是強調色加粗', (tester) async {
+      await pump(tester, [
+        BookChapter(title: '第一章', url: '/1', index: 0),
+        BookChapter(title: '第二章', url: '/2', index: 1, isVip: true),
+      ], estimated: 1);
+
+      final row = find.ancestor(
+        of: find.text('第二章'),
+        matching: find.byType(BookTocChapterRow),
+      );
+      expect(find.text('目前'), findsNothing);
+      expect(
+        find.descendant(of: row, matching: find.byType(LockedChapterIcon)),
+        findsOneWidget,
+      );
+      final title = tester.widget<UiText>(
+        find.descendant(of: row, matching: find.byType(UiText)),
+      );
+      final scheme = Theme.of(tester.element(row)).colorScheme;
+      expect(title.style?.color, scheme.primary);
+      expect(title.style?.fontWeight, FontWeight.w600);
     });
   });
 }
