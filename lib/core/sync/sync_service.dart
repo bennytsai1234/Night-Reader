@@ -64,6 +64,7 @@ class SyncStatus {
     SyncSpace? space,
     SyncPhase? phase,
     DateTime? lastSyncAt,
+    bool clearLastSyncAt = false,
     String? error,
     bool clearError = false,
     ({String kind, int step, int total})? progress,
@@ -71,7 +72,7 @@ class SyncStatus {
   }) => SyncStatus(
     space: space ?? this.space,
     phase: phase ?? this.phase,
-    lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+    lastSyncAt: clearLastSyncAt ? null : lastSyncAt ?? this.lastSyncAt,
     error: clearError ? null : error ?? this.error,
     progress: clearProgress ? null : progress ?? this.progress,
   );
@@ -315,9 +316,11 @@ class SyncService {
 
   /// 讀出設定，更新 [status]。
   Future<void> load() async {
+    final lastSyncAt = await _settings.lastSyncAt();
     status.value = status.value.copyWith(
       space: await _settings.space(),
-      lastSyncAt: await _settings.lastSyncAt(),
+      lastSyncAt: lastSyncAt,
+      clearLastSyncAt: lastSyncAt == null,
     );
   }
 
@@ -358,7 +361,12 @@ class SyncService {
       await _settings.useWebDav(account);
       await _claimBases();
     });
-    status.value = status.value.copyWith(space: SyncSpace.webdav);
+    // 上次全面同步的時間與錯誤是上一個空間的（設定裡已經清掉）。
+    status.value = status.value.copyWith(
+      space: SyncSpace.webdav,
+      clearLastSyncAt: true,
+      clearError: true,
+    );
   }
 
   /// 改用這個 Google 帳號的雲端硬碟：跳出 Google 登入與授權，連得上才存起來；
@@ -374,7 +382,11 @@ class SyncService {
         await _settings.useGoogleDrive(account);
         await _claimBases();
       });
-      status.value = status.value.copyWith(space: SyncSpace.googleDrive);
+      status.value = status.value.copyWith(
+        space: SyncSpace.googleDrive,
+        clearLastSyncAt: true,
+        clearError: true,
+      );
     } finally {
       _authorizingGoogleDrive = false;
     }

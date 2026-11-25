@@ -912,6 +912,20 @@ void main() {
     expect(b.sync.status.value.lastSyncAt, isNull, reason: '沒有做完不算全面同步過');
   });
 
+  test('換到另一個同步空間：還沒在那裡全面同步過，不顯示上一個空間的時間', () async {
+    await a.sync.syncAll();
+    expect(a.sync.status.value.lastSyncAt, isNotNull);
+
+    await a.sync.useWebDav((
+      url: 'https://other.example',
+      user: '',
+      password: '',
+    ));
+    expect(a.sync.status.value.lastSyncAt, isNull);
+    await a.sync.load();
+    expect(a.sync.status.value.lastSyncAt, isNull, reason: '重進備份與同步頁也一樣');
+  });
+
   test('the status stays running through a round asked for mid-sync, and '
       'only reads finished when every round is done', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
