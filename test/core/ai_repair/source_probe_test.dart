@@ -7,6 +7,9 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
+import 'package:night_reader/core/ai_repair/repair_agent.dart';
+import 'package:night_reader/core/ai_repair/repair_pages.dart';
 import 'package:night_reader/core/ai_repair/repair_rule_tools.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/database/app_database.dart';
@@ -62,6 +65,37 @@ void main() {
         request.response
           ..statusCode = HttpStatus.movedPermanently
           ..headers.set(HttpHeaders.locationHeader, '/book/3/1.html');
+        await request.response.close();
+        return;
+      }
+      // 確認圖片能不能下載時只回格式與大小（2026-11-25 清單第 3 項）。
+      if (request.uri.path == '/img/cover.png') {
+        request.response
+          ..headers.contentType = ContentType('image', 'png')
+          ..add(<int>[
+            0x89,
+            0x50,
+            0x4E,
+            0x47,
+            0x0D,
+            0x0A,
+            0x1A,
+            0x0A,
+            ...List.filled(59, 0xAB),
+          ]);
+        await request.response.close();
+        return;
+      }
+      // 沒有 Content-Type，開頭是 JPEG 檔頭。
+      if (request.uri.path == '/img/photo.jpg') {
+        request.response.headers.removeAll(HttpHeaders.contentTypeHeader);
+        request.response.add(<int>[
+          0xFF,
+          0xD8,
+          0xFF,
+          0xE0,
+          ...List.filled(996, 0xAB),
+        ]);
         await request.response.close();
         return;
       }
@@ -399,6 +433,52 @@ void main() {
     expect(result, startsWith('解析成正文頁'));
     expect(result, isNot(contains(left.substring(0, 4))));
     expect(result, isNot(contains(right)));
+  });
+
+  // 確認圖片能不能下載時，回給 AI 的只有格式與大小（2026-11-25 清單第 3 項）：
+  // 位元組當文字解開是幾萬字亂碼，佔掉上下文，AI 也讀不出東西。
+  test(
+    'a picture only reports its format and size, and is not a page',
+    () async {
+      for (final (path, note) in [
+        ('/img/cover.png', '圖片 PNG，67 位元組'),
+        ('/img/photo.jpg', '圖片 JPEG，1,000 位元組'),
+      ]) {
+        final pages = RepairPages();
+        final page = await fetchPageForAi(
+          source(),
+          '$site$path',
+          keyword: '夜雨',
+          timeout: const Duration(seconds: 30),
+          database: Future.value(databaseIsolate),
+        );
+        final reply = aiRepairFetchReply(
+          '$site$path',
+          pages.add(page.lines, page.pages),
+        );
+
+        expect(reply, contains(note), reason: reply);
+        expect(reply, isNot(contains('\uFFFD')), reason: reply);
+        expect(reply.length, lessThan(400), reason: reply);
+        expect(page.pages.every((logged) => logged.body == null), isTrue);
+        expect(pages.length, 0, reason: '圖片不是一頁，讀頁、找字指不到它');
+      }
+    },
+  );
+
+  test('a probe that meets a picture says its format and size, not its '
+      'bytes', () async {
+    final report = await probeSource(
+      source(),
+      keyword: probeStart('content', keyword: '', url: '$site/img/cover.png')!,
+      timeout: const Duration(seconds: 30),
+      database: Future.value(databaseIsolate),
+    );
+
+    final reply = aiRepairProbeReply(withPageIds(RepairPages(), report));
+    expect(reply, contains('圖片 PNG，67 位元組'), reason: reply);
+    expect(reply, isNot(contains('\uFFFD')), reason: reply);
+    expect(report.pages.every((logged) => logged.body == null), isTrue);
   });
 
   // 請求紀錄的回應開頭截字前先遮秘密（#529 第 47 條）。

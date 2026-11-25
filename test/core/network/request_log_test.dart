@@ -452,4 +452,85 @@ void main() {
     expect(long.lines.single, endsWith('${'x' * 4000}…'));
     expect(long.lines.single, isNot(contains('x' * 4001)));
   });
+
+  // 確認圖片能不能下載時只回格式與大小：位元組當文字解開是幾萬字亂碼，佔掉
+  // 上下文，AI 也讀不出東西（ADR 0054；2026-11-25 清單第 3 項）。
+  group('a picture reply is its format and size, never its bytes as text', () {
+    Response<dynamic> reply(List<int> data, {String? type}) =>
+        Response<dynamic>(
+          requestOptions: RequestOptions(path: 'https://site.example/a.jpg'),
+          statusCode: 200,
+          data: data,
+          headers: type == null
+              ? null
+              : Headers.fromMap({
+                  Headers.contentTypeHeader: [type],
+                }),
+        );
+
+    Future<RequestLog> recorded(Response<dynamic> response) async {
+      final log = RequestLog(
+        responsePreview: 6000,
+        digestPages: true,
+        keepPages: true,
+      );
+      await log.run(() async => recordResponse(response));
+      return log;
+    }
+
+    test('Content-Type says image/*', () async {
+      final png = [
+        0x89,
+        0x50,
+        0x4E,
+        0x47,
+        0x0D,
+        0x0A,
+        0x1A,
+        0x0A,
+        ...List.filled(59, 0xAB),
+      ];
+      final log = await recorded(reply(png, type: 'image/png'));
+
+      expect(
+        log.lines.single,
+        '  ← https://site.example/a.jpg 200 image/png，圖片 PNG，67 位元組',
+      );
+      expect(log.pages.single.body, isNull, reason: '圖片的位元組不當成一頁留給讀頁、找字');
+    });
+
+    test('no Content-Type, the JPEG header is enough', () async {
+      final jpeg = [0xFF, 0xD8, 0xFF, 0xE0, ...List.filled(48209, 0xAB)];
+      final log = await recorded(reply(jpeg));
+
+      expect(
+        log.lines.single,
+        '  ← https://site.example/a.jpg 200，圖片 JPEG，48,213 位元組',
+      );
+    });
+
+    test('the other common picture headers are recognized', () async {
+      final pictures = <String, List<int>>{
+        'GIF': [...'GIF89a'.codeUnits, 1, 2],
+        'WebP': [...'RIFF'.codeUnits, 0, 0, 0, 0, ...'WEBP'.codeUnits, 9],
+        'AVIF': [0, 0, 0, 0x1C, ...'ftyp'.codeUnits, ...'avif'.codeUnits, 1],
+        'BMP': [0x42, 0x4D, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      };
+      for (final MapEntry(key: format, value: bytes) in pictures.entries) {
+        final log = await recorded(
+          reply(bytes, type: 'application/octet-stream'),
+        );
+        expect(log.lines.single, contains('圖片 $format，'), reason: format);
+      }
+    });
+
+    test('a page stays text', () async {
+      final log = await recorded(
+        reply('<p>正常</p>'.codeUnits, type: 'text/html'),
+      );
+
+      expect(log.lines.single, contains('9 位元組'));
+      expect(log.lines.single, isNot(contains('圖片')));
+    });
+  });
 }

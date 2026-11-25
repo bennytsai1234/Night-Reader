@@ -338,8 +338,9 @@ String? _sentBody(Object? body) {
 const int _sentBodyLength = 2000;
 
 /// 記下一個回應：哪個網址、狀態碼、內容類型、長度與開頭一段（同時送出的
-/// 請求回來的順序不一定，所以每行都帶網址）。沒有回應的失敗（連不上、
-/// 逾時）記下失敗的種類。只在 `withResponses` 的紀錄裡記。
+/// 請求回來的順序不一定，所以每行都帶網址）。圖片只寫格式與大小
+/// （[_imageNote]）。沒有回應的失敗（連不上、逾時）記下失敗的種類。只在
+/// `withResponses` 的紀錄裡記。
 void recordResponse(Response<dynamic>? response, {DioException? error}) {
   final log = currentRequestLog;
   if (log == null || !log.withResponses) return;
@@ -366,7 +367,7 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
       '${type == null ? '' : ' $type'}${cache == null ? '' : ' $cache'}'
       '${dropped == null ? '' : ' $dropped'}'
       '${_elapsedNote(response.requestOptions)}';
-  final empty = _recordBody(log, head, response.data);
+  final empty = _recordBody(log, head, response.data, contentType: type);
   if (status == 429 || (status != null && status >= 500) || empty) {
     log._transientResponses++;
   }
@@ -422,9 +423,20 @@ void recordRenderedPage(String? url, Object? body) {
 }
 
 /// 回應那一行：[head] 接上長度與內容開頭；[RequestLog.pages] 那份接上整頁。
-/// 傳回內容是不是空白。
-bool _recordBody(RequestLog log, String head, Object? data) {
+/// 傳回內容是不是空白。[contentType] 是 [Response.headers] 宣告的內容類型：
+/// 圖片只寫格式與大小（[_imageNote]），不把位元組解成文字，也不當成一頁留
+/// 給讀頁、找字。
+bool _recordBody(
+  RequestLog log,
+  String head,
+  Object? data, {
+  String? contentType,
+}) {
   final full = log._keepsPageNow;
+  if (_imageNote(data, contentType) case final image?) {
+    log._add('$head，$image');
+    return false;
+  }
   final decoded = _decode(
     data,
     full || log.digestPages ? _digestBytes : log.responsePreview! * 4,
@@ -469,6 +481,69 @@ bool _recordBody(RequestLog log, String head, Object? data) {
   );
   return collapsed.isEmpty;
 }
+
+/// 回應是圖片時給 AI 的一行，例如「圖片 JPEG，48,213 位元組」；不是圖片是
+/// null。看 [contentType] 是不是 `image/*`，或位元組開頭是常見圖片格式的
+/// 檔頭（[data] 不是位元組時只看 [contentType]）。圖片的位元組當文字解開是
+/// 幾萬字亂碼，佔掉上下文，AI 也讀不出東西（ADR 0054）。
+String? _imageNote(Object? data, String? contentType) {
+  if (data == null) return null;
+  final declared = _mediaType(contentType);
+  final format =
+      _imageMagic(data) ??
+      (declared.startsWith('image/')
+          ? _imageName(declared.substring(6))
+          : null);
+  if (format == null) return null;
+  final bytes = data is List<int> ? data.length : null;
+  return '圖片 $format${bytes == null ? '' : '，${_thousands(bytes)} 位元組'}';
+}
+
+/// 標頭的內容類型，去掉參數（`; charset=…`）並轉小寫；沒有是空字串。
+String _mediaType(String? contentType) =>
+    contentType?.split(';').first.trim().toLowerCase() ?? '';
+
+/// [data] 的開頭是常見圖片格式的檔頭時是格式的名稱：JPEG、PNG、GIF、WebP、
+/// AVIF 或 BMP；不是位元組、或不是這些格式是 null。
+String? _imageMagic(Object data) {
+  if (data is! List<int>) return null;
+  bool starts(int offset, List<int> magic) {
+    if (data.length < offset + magic.length) return false;
+    for (final (i, byte) in magic.indexed) {
+      if (data[offset + i] != byte) return false;
+    }
+    return true;
+  }
+
+  bool ascii(int offset, String text) => starts(offset, text.codeUnits);
+  if (starts(0, const [0xFF, 0xD8, 0xFF])) return 'JPEG';
+  if (ascii(0, '\x89PNG\r\n\x1a\n')) return 'PNG';
+  if (ascii(0, 'GIF87a') || ascii(0, 'GIF89a')) return 'GIF';
+  if (ascii(0, 'RIFF') && ascii(8, 'WEBP')) return 'WebP';
+  // BM 之後四個位元組是保留欄位，正常的 BMP 都是 0。
+  if (ascii(0, 'BM') && starts(6, const [0, 0, 0, 0])) return 'BMP';
+  if (ascii(4, 'ftyp') && (ascii(8, 'avif') || ascii(8, 'avis'))) {
+    return 'AVIF';
+  }
+  return null;
+}
+
+/// `image/<子類型>` 的子類型寫成給 AI 看的格式名稱；不認得的照大寫寫出來。
+String _imageName(String subtype) => switch (subtype) {
+  'jpeg' || 'jpg' || 'pjpeg' => 'JPEG',
+  'png' || 'x-png' => 'PNG',
+  'gif' => 'GIF',
+  'webp' => 'WebP',
+  'avif' => 'AVIF',
+  'bmp' || 'x-bmp' || 'x-ms-bmp' => 'BMP',
+  'svg+xml' => 'SVG',
+  '' || '*' => '不認得的格式',
+  _ => subtype.toUpperCase(),
+};
+
+/// 位元組數加上千分位：「48,213」。
+String _thousands(int count) =>
+    '$count'.replaceAllMapped(RegExp(r'\B(?=(\d{3})+$)'), (_) => ',');
 
 /// 回應內容的長度與文字；不認得的型別是 null，沒有內容時長度是 null。
 /// 位元組照網頁宣告的編碼解開（GBK 這類中文網站），沒宣告的照內容猜，最多
