@@ -430,8 +430,9 @@ class SourceSwitchService {
         dir: await BookIllustrationStorage.dirFor(migratedBook),
         cancelToken: cancelToken,
       );
-      if (pending > 0)
+      if (pending > 0) {
         await BookIllustrationStorage.markUnfetched(migratedBook);
+      }
     }
 
     return PreparedSourceSwitch(
