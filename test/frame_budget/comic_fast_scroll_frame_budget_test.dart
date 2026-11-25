@@ -23,6 +23,7 @@ import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import '../features/comic_reader/comic_test_pages.dart';
 import '../support/app_harness.dart';
 import '../support/navigation_budget.dart';
+import '../support/progress_writes.dart';
 import '../support/screenshot.dart';
 
 const _chapterCount = 12;
@@ -173,12 +174,13 @@ void main() {
     );
     var skeletonFrames = 0;
     var frames = 0;
-    await measureNavigation(
+    final writes = ProgressWrites();
+    final costs = await measureNavigation(
       tester,
       '連續高速甩動',
       action: () async {},
       settled: () => flings.done && !_scrolling(),
-      note: () => flings.done ? '慣性' : '甩動',
+      note: () => withWriteNote(flings.done ? '慣性' : '甩動', writes),
       onFrame: (frame) async {
         await flings.onFrame(frame);
         frames += 1;
@@ -187,6 +189,9 @@ void main() {
     );
     // ignore: avoid_print
     print('連續高速甩動：露出骨架 $skeletonFrames／$frames 幀');
+    // ignore: avoid_print
+    print(describeWriteFrames('連續高速甩動', costs));
+    await tester.runAsync(writes.cancel);
     await rest(tester);
     await tearDownApp(tester);
   });
