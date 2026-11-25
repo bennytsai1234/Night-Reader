@@ -111,7 +111,14 @@ class ReaderProgressSync {
     }
     if (stored == null) return null;
     final at = ReaderOpenTarget.resume(stored).location;
-    return _samePlace(at, runtime.state.visibleLocation) ? null : at;
+    final current = runtime.state.visibleLocation;
+    return at == current &&
+            at.contentHash == current.contentHash &&
+            at.contentLength == current.contentLength &&
+            at.anchorBefore == current.anchorBefore &&
+            at.anchorAfter == current.anchorAfter
+        ? null
+        : at;
   }
 
   /// 開書定位完成時呼叫。

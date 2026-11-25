@@ -219,7 +219,8 @@ class _ComicStripViewState extends State<ComicStripView>
       _images = _createImages();
       _windowItems = const {};
       _windowSignature = null;
-      _resetScroll(0);
+      _lastLocation = null;
+      _resetScroll(widget.initialFraction);
     }
   }
 

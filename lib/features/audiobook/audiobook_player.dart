@@ -809,7 +809,9 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   Future<void> saveProgress() => _saveProgress();
 
   Future<void> _saveProgress() async {
+    if (_phase == AudiobookPhase.opening) return;
     final book = _book;
+    final indexAtSave = _index;
     final chapter = this.chapter;
     if (book == null || chapter == null) return;
     final ms = position.value.inMilliseconds;
@@ -828,7 +830,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       await chapters.transaction(() async {
         // 手上的書照舊記播放器目錄的序號：換源照這份目錄估位置。
         final index =
-            await chapters.indexOfUrl(book.bookUrl, chapter.url) ?? _index;
+            await chapters.indexOfUrl(book.bookUrl, chapter.url) ?? indexAtSave;
         moved = await _books.updateProgress(
           book.bookUrl,
           index,

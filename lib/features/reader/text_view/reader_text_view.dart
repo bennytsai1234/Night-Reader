@@ -904,8 +904,16 @@ class _ReaderTextViewState extends State<ReaderTextView>
         return;
       }
       if (widget.runtime.pendingLocation != null) return;
+      final previous = _lastReportedLocation;
       final location = _captureAndReport();
-      if (location != null) _windowCenter = location.chapterIndex;
+      if (location != null) {
+        _windowCenter = location.chapterIndex;
+        if (location != previous) {
+          unawaited(
+            widget.runtime.saveProgress(location: location, immediate: false),
+          );
+        }
+      }
       _reconcileVisibleWindow();
       _publishProgress();
     });

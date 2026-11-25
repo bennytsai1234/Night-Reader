@@ -20,6 +20,7 @@ import 'package:night_reader/features/reader/session/reader_runtime.dart';
 class _BookDao extends Fake implements BookDao {
   Book? stored;
   int reads = 0;
+  int writes = 0;
 
   @override
   Future<Book?> getByUrl(String url) async {
@@ -35,7 +36,10 @@ class _BookDao extends Fake implements BookDao {
     int pos, {
     double visualOffsetPx = 0.0,
     String? readerAnchorJson,
-  }) async => null;
+  }) async {
+    writes++;
+    return null;
+  }
 }
 
 class _ChapterDao extends Fake implements ChapterDao {
@@ -217,6 +221,18 @@ void main() {
 
     expect(at?.chapterIndex, 2);
     expect(at?.charOffset, 5);
+  });
+
+  test('closing before positioning does not overwrite saved progress', () async {
+    bookDao.stored = book.copyWith(chapterIndex: 3, charOffset: 40);
+    expect(await runtime.flushProgress(), isNull);
+    expect(bookDao.writes, 0);
+  });
+
+  test('opening uses the latest saved visual offset at the same character', () async {
+    bookDao.stored = book.copyWith(visualOffsetPx: 24);
+    final at = await start().openLocation(runtime);
+    expect(at?.visualOffsetPx, 24);
   });
 
   test('opening a chapter picked from the table of contents does not wait '

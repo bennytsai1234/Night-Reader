@@ -107,6 +107,18 @@ void main() {
 
   // 文字閱讀器同樣的兩道（ReaderAutoPageController）：一幀最多推進 0.08 秒
   // 的量，退到背景就停。
+  testWidgets('replacing the comic model preserves the image fraction', (
+    tester,
+  ) async {
+    final first = _Harness(FakeComicSource(), chapter: 1, page: 1);
+    await first.pump(tester, initialFraction: 0.25);
+    final second = _Harness(FakeComicSource(), chapter: 1, page: 1);
+    await second.pump(tester, initialFraction: 0.5);
+    expect(second.last.chapterIndex, 1);
+    expect(second.last.pageIndex, 1);
+    expect(second.last.fraction, closeTo(0.5, 0.001));
+  });
+
   testWidgets('自動捲動遇到停很久的一幀不一口氣補上', (tester) async {
     final harness = _Harness(FakeComicSource(pagesPerChapter: 3));
     await harness.pump(tester);

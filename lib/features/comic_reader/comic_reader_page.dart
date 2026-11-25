@@ -21,6 +21,7 @@ import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/storage/book_storage_service.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
+import 'package:night_reader/features/reader/session/progress_write_queue.dart';
 import 'package:night_reader/features/reader/session/reader_session_facade.dart';
 import 'package:night_reader/features/reader/use_cases/coordinators/reader_page_exit_coordinator.dart';
 import 'package:night_reader/core/download/download_service.dart';
@@ -117,9 +118,21 @@ class _ComicReaderPageState extends State<ComicReaderPage>
   double _initialFraction = 0;
   Object? _loadError;
 
-  ComicLocation? _pendingSave;
-  Timer? _saveTimer;
+  late final _progressWrites = ProgressWriteQueue<ComicLocation>(
+    write: _save,
+    debounce: _saveDelay,
+  );
   ComicLocation? _location;
+
+  ComicLocation get _readingLocation {
+    final model = _model;
+    return _location ??
+        ComicLocation(
+          model?.anchorChapter ?? _book.chapterIndex,
+          model?.anchorPage ?? _book.charOffset,
+          fraction: _initialFraction,
+        );
+  }
   late final ComicProgressSync _sync = ComicProgressSync(
     book: _book,
     bookDao: getIt<BookDao>(),
@@ -303,13 +316,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     _location = location;
     _currentChapter.value = location.chapterIndex;
     _refreshProgress(location.chapterIndex, location.pageIndex);
-    _pendingSave = location;
-    _saveTimer?.cancel();
-    _saveTimer = Timer(_saveDelay, () {
-      final pending = _pendingSave;
-      _pendingSave = null;
-      if (pending != null) unawaited(_save(pending));
-    });
+    _progressWrites.schedule(location);
   }
 
   Future<void> _save(ComicLocation location) async {
@@ -345,12 +352,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     if (movedAt case final time?) _book.progressTime = time;
   }
 
-  Future<void> _flush() async {
-    _saveTimer?.cancel();
-    final pending = _pendingSave;
-    _pendingSave = null;
-    if (pending != null) await _save(pending);
-  }
+  Future<void> _flush() => _progressWrites.flush();
 
   /// 目錄裡的章名（存進度、換源、算缺幾話用）。
   String _titleOf(int index) =>
@@ -561,7 +563,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       assetRetirer: BookCoverStorageService().handoffSourceSwitchAssets,
     );
     await _flush();
-    final location = _progress.value;
+    final location = _readingLocation;
     final title = _titleOf(location.chapterIndex);
     final prepared = await service.prepareSwitch(
       _book.copyWith(
@@ -593,6 +595,9 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     final partial = await ComicChapterDownload.partialDirFor(_book, chapter);
     if (await partial.exists()) await partial.delete(recursive: true);
     if (!mounted) return;
+    await _flush();
+    if (!mounted) return;
+    final here = _readingLocation;
     final model = _model;
     if (model == null) return;
     final source =
@@ -605,7 +610,8 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     final fresh = ComicStripModel(
       source: source,
       chapterCount: _chapters.length,
-      chapterIndex: index,
+      chapterIndex: here.chapterIndex,
+      pageIndex: here.pageIndex,
       isReadable: (i) => !_chapters[i].isSkippedWhenReading,
     )..addListener(_onModel);
     model
@@ -613,7 +619,8 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       ..dispose();
     setState(() {
       _model = fresh;
-      _initialFraction = 0;
+      _initialFraction = fresh.anchorMoved ? 0 : here.fraction;
+      _location = null;
     });
     fresh.start();
   }
@@ -644,7 +651,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
   void _reloadChapters(List<BookChapter> chapters) {
     final model = _model;
     if (model == null) return;
-    final here = _progress.value;
+    final here = _readingLocation;
     final url = _chapters[here.chapterIndex].url;
     final index = chapters.indexWhere((chapter) => chapter.url == url);
     final ComicPageSource source;
@@ -674,7 +681,8 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     setState(() {
       _chapters = chapters;
       _model = fresh;
-      _initialFraction = 0;
+      _initialFraction = index < 0 || fresh.anchorMoved ? 0 : here.fraction;
+      _location = null;
     });
     fresh.start();
   }
