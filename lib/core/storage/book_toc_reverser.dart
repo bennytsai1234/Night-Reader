@@ -14,8 +14,9 @@ import 'package:night_reader/core/models/book/book_chapter.dart';
 ///
 /// 存著的目錄的順序永遠等於「書源給的順序，`reverseToc` 開著時再翻過來」；
 /// 這個開關只從這裡改，存著的目錄跟著一起翻。閱讀進度照章節網址對回
-/// 同一章（[BookLogic.realignProgress]），書籤與標註的序號跟著換；下載的
-/// 正文照章節網址存，不用動。
+/// 同一章（[BookLogic.realignProgress]）；書籤與標註的序號不動，還沒記方向
+/// 的記下翻之前的方向，用的時候方向不同才從另一頭數（`chapterIndexByTitle`，
+/// ADR 0085）。下載的正文照章節網址存，不用動。
 class BookTocReverser {
   BookTocReverser({
     BookDao? bookDao,
@@ -51,17 +52,17 @@ class BookTocReverser {
     )..reverseToc = reversed;
     if (chapters.isNotEmpty) {
       await _chapterDao.replaceByBook(bookUrl, chapters);
-      await _bookmarkDao.reverseChapters(
-        bookName: book.name,
-        bookAuthor: book.author,
-        chapterCount: chapters.length,
-      );
-      await _highlightDao.reverseChapters(
-        bookName: book.name,
-        bookAuthor: book.author,
-        chapterCount: chapters.length,
-      );
     }
+    await _bookmarkDao.recordTocDirection(
+      bookName: book.recordName,
+      bookAuthor: book.author,
+      reversed: !reversed,
+    );
+    await _highlightDao.recordTocDirection(
+      bookName: book.recordName,
+      bookAuthor: book.author,
+      reversed: !reversed,
+    );
     await _bookDao.writeFields(
       book,
       BooksCompanion(

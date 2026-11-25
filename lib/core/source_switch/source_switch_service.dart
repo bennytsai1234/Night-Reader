@@ -533,6 +533,8 @@ class SourceSwitchService {
           toName: migratedBook.recordName,
           toAuthor: migratedBook.author,
           oldTotalCount: oldBook.totalChapterNum,
+          fromReversed: oldBook.getReverseToc(),
+          toReversed: migratedBook.getReverseToc(),
           chapters: prepared.chapters,
         );
         await HighlightDao(db).moveToSource(
@@ -541,6 +543,8 @@ class SourceSwitchService {
           toName: migratedBook.recordName,
           toAuthor: migratedBook.author,
           oldTotalCount: oldBook.totalChapterNum,
+          fromReversed: oldBook.getReverseToc(),
+          toReversed: migratedBook.getReverseToc(),
           chapters: prepared.chapters,
         );
 

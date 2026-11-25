@@ -412,6 +412,7 @@ class _ReaderPageState extends State<ReaderPage>
                         ReaderBookmarks.chapterIndexIn(
                           bookmark,
                           runtime?.chapters ?? widget.initialChapters,
+                          reversed: widget.book.getReverseToc(),
                         ),
                     onBookmarkTap: _jumpToBookmarkFromDrawer,
                     onBookmarkDelete: _deleteBookmark,
@@ -422,6 +423,7 @@ class _ReaderPageState extends State<ReaderPage>
                         ReaderHighlights.chapterIndexIn(
                           highlight,
                           runtime?.chapters ?? widget.initialChapters,
+                          reversed: widget.book.getReverseToc(),
                         ),
                     onHighlightTap: _jumpToHighlightFromDrawer,
                     onHighlightDelete: _coordinator.deleteHighlight,

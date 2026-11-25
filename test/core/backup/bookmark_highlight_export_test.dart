@@ -98,6 +98,7 @@ void main() {
       bookmarks: [mark('第三章', '書籤那一句', offset: 5, chapterIndex: 9)],
       highlights: [paint('第一章', '標註的字', offset: 3)],
       toc: toc,
+      reversed: false,
     );
 
     expect([for (final item in items) item.chapter], [0, 2]);

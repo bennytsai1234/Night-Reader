@@ -18,9 +18,14 @@ import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/models/book/chapter_alignment.dart';
+import 'package:night_reader/core/models/reading/bookmark.dart';
+import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/storage/book_storage_service.dart';
+import 'package:night_reader/core/sync/bookmark_sync.dart';
 import 'package:night_reader/core/sync/bookshelf_sync.dart';
+import 'package:night_reader/core/sync/highlight_sync.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/replace_rule_sync.dart';
 import 'package:night_reader/core/sync/source_sync.dart';
@@ -147,6 +152,8 @@ class _Phone {
     chapters = ChapterDao(db);
     sources = BookSourceDao(db);
     rules = ReplaceRuleDao(db);
+    bookmarks = BookmarkDao(db);
+    highlights = HighlightDao(db);
     sync = SyncService(
       settings: SyncSettings(),
       bases: SyncBaseStorage(directory: () async => dir),
@@ -168,12 +175,7 @@ class _Phone {
         ReplaceRuleSync(dao: rules),
         BookshelfSync(
           bookDao: books,
-          tocReverser: BookTocReverser(
-            bookDao: books,
-            chapterDao: chapters,
-            bookmarkDao: BookmarkDao(db),
-            highlightDao: HighlightDao(db),
-          ),
+          tocReverser: reverser,
           storage: _Storage(books, discarded),
           isOpen: service.isBookOpen,
           download: downloaded.add,
@@ -181,9 +183,18 @@ class _Phone {
           renames: BookRenames(prefs, namespace: dir.path),
         ),
         progress(service),
+        BookmarkSync(dao: bookmarks),
+        HighlightSync(dao: highlights),
       ],
     );
   }
+
+  BookTocReverser get reverser => BookTocReverser(
+    bookDao: books,
+    chapterDao: chapters,
+    bookmarkDao: bookmarks,
+    highlightDao: highlights,
+  );
 
   ProgressSync progress(SyncService service) => ProgressSync(
     bookDao: books,
@@ -199,6 +210,8 @@ class _Phone {
   late final ChapterDao chapters;
   late final BookSourceDao sources;
   late final ReplaceRuleDao rules;
+  late final BookmarkDao bookmarks;
+  late final HighlightDao highlights;
   late final SyncService sync;
 
   /// 照書架自動下載的書（網址）。
@@ -1472,12 +1485,7 @@ void main() {
       await a.sync.syncAll();
       await b.sync.syncAll();
 
-      await BookTocReverser(
-        bookDao: a.books,
-        chapterDao: a.chapters,
-        bookmarkDao: BookmarkDao(a.db),
-        highlightDao: HighlightDao(a.db),
-      ).setReversed(await a.book('x'), true);
+      await a.reverser.setReversed(await a.book('x'), true);
       await a.sync.syncAll();
       await b.sync.syncAll();
 
@@ -1487,6 +1495,177 @@ void main() {
       expect(book.readConfig!.reverseToc, isTrue);
       expect(stored[book.chapterIndex].url, 'x/1');
       expect(book.charOffset, 9);
+    });
+
+    group('a TOC with two chapters of the same name (ADR 0085)', () {
+      // 兩個同名的「番外」只能靠序號與記下時的目錄方向分。
+      const twins = ['番外', '第一章', '第二章', '第三章', '番外'];
+
+      /// 這台的書籤（或標註）落在這台目錄的哪一章（網址）。
+      Future<String> landing(
+        _Phone phone, {
+        required int index,
+        required String title,
+        required bool? countedReversed,
+      }) async {
+        final book = await phone.book('x');
+        final chapters = await phone.chapters.getByBook('x');
+        return chapters[chapterIndexByTitle(
+              chapterIndex: index,
+              chapterTitle: title,
+              countedReversed: countedReversed,
+              reversed: book.getReverseToc(),
+              chapters: chapters,
+            )]
+            .url;
+      }
+
+      Future<String> bookmarkOn(_Phone phone) async {
+        final mark = (await phone.bookmarks.getAll()).single;
+        return landing(
+          phone,
+          index: mark.chapterIndex,
+          title: mark.chapterTitle,
+          countedReversed: mark.tocReversed,
+        );
+      }
+
+      Future<String> highlightOn(_Phone phone) async {
+        final mark = (await phone.highlights.getAll()).single;
+        return landing(
+          phone,
+          index: mark.chapterIndex,
+          title: mark.chapterTitle,
+          countedReversed: mark.tocReversed,
+        );
+      }
+
+      test('a bookmark and a highlight on either 番外 stay on it on both '
+          'phones, the switch arriving before or after them, and nothing is '
+          'sent again afterwards', () async {
+        await a.addBook('x', toc: twins, time: 100);
+        await b.addBook('x', toc: twins, time: 100);
+        // 舊版留的（沒記方向）：一個在後面的番外、一個在前面的番外。
+        await a.bookmarks.upsertAll([
+          Bookmark(
+            id: 1,
+            bookName: '夜航',
+            bookAuthor: '某人',
+            chapterIndex: 4,
+            chapterTitle: '番外',
+          ),
+        ]);
+        await a.highlights.upsertAll([
+          Highlight(
+            id: 2,
+            bookName: '夜航',
+            bookAuthor: '某人',
+            chapterIndex: 0,
+            chapterTitle: '番外',
+            quote: '字',
+          ),
+        ]);
+        await a.sync.syncAll();
+        await b.sync.syncAll();
+
+        await a.reverser.setReversed(await a.book('x'), true);
+        expect(await bookmarkOn(a), 'x/4');
+        expect(await highlightOn(a), 'x/0');
+        await a.sync.syncAll();
+
+        // B 開著這本書：書架不套用開關，書籤與標註先到。
+        final opened = await b.book('x');
+        b.sync.openBook(opened);
+        await b.sync.syncAll();
+        expect((await b.book('x')).getReverseToc(), isFalse);
+        // A 翻目錄時記下的方向送過來了（序號沒變，只多了方向）。
+        expect((await b.bookmarks.getAll()).single.tocReversed, isFalse);
+        expect((await b.highlights.getAll()).single.tocReversed, isFalse);
+        expect(await bookmarkOn(b), 'x/4');
+        expect(await highlightOn(b), 'x/0');
+
+        // 關掉之後開關才到。
+        b.sync.closeBook(opened);
+        await b.sync.syncAll();
+        expect((await b.book('x')).getReverseToc(), isTrue);
+        expect(await bookmarkOn(b), 'x/4');
+        expect(await highlightOn(b), 'x/0');
+
+        await a.sync.syncAll();
+        await b.sync.syncAll();
+        final writes = store.writes;
+        await a.sync.syncAll();
+        await b.sync.syncAll();
+        expect(store.writes, writes);
+        expect(await bookmarkOn(a), 'x/4');
+        expect(await highlightOn(a), 'x/0');
+      });
+
+      test('a bookmark left on the reversed TOC lands on the same 番外 on a '
+          'phone that has not reversed yet', () async {
+        await a.addBook('x', toc: twins, time: 100);
+        await b.addBook('x', toc: twins, time: 100);
+        await a.sync.syncAll();
+        await b.sync.syncAll();
+        await a.reverser.setReversed(await a.book('x'), true);
+        // 反轉後的第 0 章是原本後面的番外（x/4）。
+        await a.bookmarks.upsertAll([
+          Bookmark(
+            id: 1,
+            bookName: '夜航',
+            bookAuthor: '某人',
+            chapterIndex: 0,
+            chapterTitle: '番外',
+            tocReversed: true,
+          ),
+        ]);
+        await a.sync.syncAll();
+
+        final opened = await b.book('x');
+        b.sync.openBook(opened);
+        await b.sync.syncAll();
+        expect(await bookmarkOn(b), 'x/4');
+        b.sync.closeBook(opened);
+        await b.sync.syncAll();
+        expect(await bookmarkOn(b), 'x/4');
+      });
+
+      test('progress on the later 番外 from the reversed phone lands on it '
+          'when the daily progress sync arrives before the switch', () async {
+        await a.addBook('x', toc: twins, time: 100);
+        await b.addBook('x', toc: twins, time: 100);
+        await a.sync.syncAll();
+        await b.sync.syncAll();
+        await a.reverser.setReversed(await a.book('x'), true);
+        // 反轉後的第 0 章是原本後面的番外（x/4）。
+        await a.books.updateProgress('x', 0, '番外', 7);
+        await a.sync.syncAll();
+
+        b.sync.syncAfterResume();
+        await b.sync.progressReady;
+        var book = await b.book('x');
+        var stored = await b.chapters.getByBook('x');
+        expect(book.getReverseToc(), isFalse);
+        expect(stored[book.chapterIndex].url, 'x/4');
+        expect(book.charOffset, 7);
+
+        await b.sync.syncAll();
+        book = await b.book('x');
+        stored = await b.chapters.getByBook('x');
+        expect(book.getReverseToc(), isTrue);
+        expect(stored[book.chapterIndex].url, 'x/4');
+        expect(book.charOffset, 7);
+
+        await a.sync.syncAll();
+        await b.sync.syncAll();
+        final writes = store.writes;
+        await a.sync.syncAll();
+        await b.sync.syncAll();
+        expect(store.writes, writes);
+        final aBook = await a.book('x');
+        final aStored = await a.chapters.getByBook('x');
+        expect(aStored[aBook.chapterIndex].url, 'x/4');
+      });
     });
 
     test('a cover picked from the gallery on one phone (a file only there) '

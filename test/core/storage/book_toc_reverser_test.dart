@@ -15,6 +15,7 @@ import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/core/storage/book_toc_reverser.dart';
 import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
 import 'package:night_reader/features/reader/features/bookmark/reader_bookmarks.dart';
+import 'package:night_reader/features/reader/features/highlight/reader_highlights.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/session/reader_progress_controller.dart';
 
@@ -103,7 +104,8 @@ void main() {
     expect(jsonDecode(saved.readerAnchorJson!)['chapterIndex'], 1);
   });
 
-  test('同名的章（兩個番外）上的書籤與標註，翻過來還是同一章', () async {
+  test('同名的章（兩個番外）上的書籤與標註：章序不動、記下原本的方向，'
+      '翻過來還是對回同一章', () async {
     await bookmarkDao.upsertAll([
       Bookmark(
         id: 1,
@@ -128,19 +130,80 @@ void main() {
     final stored = await chapterDao.getByBook(bookUrl);
     final bookmark = (await bookmarkDao.getAll()).single;
     final highlight = (await highlightDao.getAll()).single;
-    int resolved(int index, String title) => chapterIndexByTitle(
-      chapterIndex: index,
-      chapterTitle: title,
-      chapters: stored,
-    );
+    expect((bookmark.chapterIndex, bookmark.tocReversed), (3, false));
+    expect((highlight.chapterIndex, highlight.tocReversed), (1, false));
     expect(
-      stored[resolved(bookmark.chapterIndex, bookmark.chapterTitle)].url,
+      stored[ReaderBookmarks.chapterIndexIn(bookmark, stored, reversed: true)]
+          .url,
       'https://s.example/c/3',
     );
     expect(
-      stored[resolved(highlight.chapterIndex, highlight.chapterTitle)].url,
+      stored[ReaderHighlights.chapterIndexIn(highlight, stored, reversed: true)]
+          .url,
       'https://s.example/c/1',
     );
+
+    // 翻回去：記下的方向又和目錄一樣，照記下的序號。
+    await reverser.setReversed(book(), false);
+    final back = await chapterDao.getByBook(bookUrl);
+    final again = (await bookmarkDao.getAll()).single;
+    expect((again.chapterIndex, again.tocReversed), (3, false));
+    expect(
+      back[ReaderBookmarks.chapterIndexIn(again, back, reversed: false)].url,
+      'https://s.example/c/3',
+    );
+  });
+
+  test('同名同作者兩個書源共用書籤：翻一本，另一本照舊對到同一章；'
+      '兩本都翻也只記一次方向', () async {
+    const otherUrl = 'https://t.example/book/1';
+    await bookDao.upsert(
+      Book.fromJson({
+        ...book().toJson(),
+        'bookUrl': otherUrl,
+        'origin': 'https://t.example',
+      }),
+    );
+    await chapterDao.replaceByBook(otherUrl, [
+      for (final (i, title) in titles.indexed)
+        BookChapter(
+          url: 'https://t.example/c/$i',
+          title: title,
+          bookUrl: otherUrl,
+          index: i,
+        ),
+    ]);
+    await bookmarkDao.upsertAll([
+      Bookmark(
+        id: 1,
+        bookName: '書',
+        bookAuthor: '作者',
+        chapterIndex: 3,
+        chapterTitle: '番外',
+      ),
+    ]);
+    Future<String> resolvedIn(String url) async {
+      final chapters = await chapterDao.getByBook(url);
+      final reversed = (await bookDao.getByUrl(url))!.getReverseToc();
+      final bookmark = (await bookmarkDao.getAll()).single;
+      return chapters[ReaderBookmarks.chapterIndexIn(
+            bookmark,
+            chapters,
+            reversed: reversed,
+          )]
+          .url;
+    }
+
+    await reverser.setReversed(book(), true);
+    expect(await resolvedIn(bookUrl), 'https://s.example/c/3');
+    expect(await resolvedIn(otherUrl), 'https://t.example/c/3');
+
+    // 同步把開關套到這台的兩本（BookshelfSync 逐本套用）。
+    await reverser.setReversed((await bookDao.getByUrl(otherUrl))!, true);
+    expect(await resolvedIn(bookUrl), 'https://s.example/c/3');
+    expect(await resolvedIn(otherUrl), 'https://t.example/c/3');
+    final bookmark = (await bookmarkDao.getAll()).single;
+    expect((bookmark.chapterIndex, bookmark.tocReversed), (3, false));
   });
 
   test('再翻一次回到原本的順序；已經是那個順序時什麼都不動', () async {

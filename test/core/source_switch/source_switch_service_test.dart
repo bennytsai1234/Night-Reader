@@ -911,6 +911,59 @@ void main() {
       expect(movedHighlight.color, HighlightColor.green);
     });
 
+    test('反轉了的書換源：書籤與標註照記下的方向對到新目錄裡同一個番外，'
+        '記下新書的方向（ADR 0085）', () async {
+      // 兩本都反轉了；書源原本的順序是「番外、第一章、第二章、第三章、番外」。
+      const reversedTitles = ['番外', '第三章', '第二章', '第一章', '番外'];
+      final newChapters = [
+        for (final (i, title) in reversedTitles.indexed)
+          BookChapter(url: 'new/$i', title: title, bookUrl: 'new', index: i),
+      ];
+      final bookmarks = BookmarkDao(db);
+      final highlights = HighlightDao(db);
+      // 沒反轉時記在後面的番外（書源順序第 4 章，反轉後是第 0 章）。
+      await bookmarks.upsertAll([
+        Bookmark(
+          id: 1,
+          bookName: '書',
+          chapterIndex: 4,
+          chapterTitle: '番外',
+          tocReversed: false,
+        ),
+        // 沒記方向：當成和舊書一樣（反轉後的第 4 章）。
+        Bookmark(id: 2, bookName: '書', chapterIndex: 4, chapterTitle: '番外'),
+      ]);
+      await highlights.upsertAll([
+        Highlight(
+          id: 3,
+          bookName: '書',
+          chapterIndex: 4,
+          chapterTitle: '番外',
+          quote: '字',
+          tocReversed: false,
+        ),
+      ]);
+
+      for (final move in [bookmarks.moveToSource, highlights.moveToSource]) {
+        await move(
+          fromName: '書',
+          fromAuthor: '',
+          toName: '書',
+          toAuthor: '',
+          oldTotalCount: 5,
+          fromReversed: true,
+          toReversed: true,
+          chapters: newChapters,
+        );
+      }
+
+      final moved = {for (final b in await bookmarks.getAll()) b.id: b};
+      expect((moved[1]!.chapterIndex, moved[1]!.tocReversed), (0, true));
+      expect((moved[2]!.chapterIndex, moved[2]!.tocReversed), (4, true));
+      final highlight = (await highlights.getAll()).single;
+      expect((highlight.chapterIndex, highlight.tocReversed), (0, true));
+    });
+
     test('換源時那一章的插圖暫時連不上，留記號給書架自動下載補抓', () async {
       final root = await Directory.systemTemp.createTemp('switch_images');
       addTearDown(() => root.delete(recursive: true));
