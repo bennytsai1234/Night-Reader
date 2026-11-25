@@ -97,8 +97,17 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
       if (regex == null) return rule.replacement;
       final match = regex.firstMatch(result);
       if (match == null) return '';
+      // 同 Legado：先截出第一個對到的片段，再在片段上換第一處（前後文的
+      // 條件在片段裡可能對不到，片段就照原樣）。
+      final piece = match.group(0)!;
+      final inPiece = regex.firstMatch(piece);
+      if (inPiece == null) return piece;
       try {
-        return javaReplacement(rule.replacement, match);
+        return piece.replaceRange(
+          inPiece.start,
+          inPiece.end,
+          javaReplacement(rule.replacement, inPiece),
+        );
       } on FormatException {
         return rule.replacement;
       }

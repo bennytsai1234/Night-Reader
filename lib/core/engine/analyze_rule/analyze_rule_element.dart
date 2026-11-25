@@ -31,16 +31,16 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     if (content != null && ruleList.isNotEmpty) {
       result = content;
       for (final sourceRule in ruleList) {
-        result = coerceNullInterimResult(result, sourceRule);
-        if (result == null) {
-          break;
-        }
-
+        // 同 Legado `putRule`：先存這一段的 @put（取到空的也存，蓋掉上一次
+        // 存的值），再看上一段有沒有結果。
         if (sourceRule.putMap.isNotEmpty) {
-          // 同 Legado `putRule`：空的結果也存，蓋掉上一次存的值。
           sourceRule.putMap.forEach(
             (key, valueRule) => put(key, getString(valueRule)),
           );
+        }
+        result = coerceNullInterimResult(result, sourceRule);
+        if (result == null) {
+          break;
         }
 
         final made = sourceRule.makeUp(result, this);
@@ -110,16 +110,16 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     if (content != null && ruleList.isNotEmpty) {
       result = content;
       for (final sourceRule in ruleList) {
-        result = coerceNullInterimResult(result, sourceRule);
-        if (result == null) {
-          break;
-        }
-
+        // 同 Legado `putRule`：先存這一段的 @put（取到空的也存，蓋掉上一次
+        // 存的值），再看上一段有沒有結果。
         if (sourceRule.putMap.isNotEmpty) {
-          // 同 Legado `putRule`：空的結果也存，蓋掉上一次存的值。
           sourceRule.putMap.forEach(
             (key, valueRule) => put(key, getString(valueRule)),
           );
+        }
+        result = coerceNullInterimResult(result, sourceRule);
+        if (result == null) {
+          break;
         }
 
         final made = sourceRule.makeUp(result, this);

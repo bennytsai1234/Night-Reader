@@ -119,6 +119,11 @@ class AnalyzeByJsonPath {
         try {
           final path = _compile(rule);
           final matches = path.read(_jsonData);
+          // 同 Legado `getList`（Jayway `read`）：確定路徑對到陣列時是陣列裡
+          // 的每一筆；其他路徑是對到的每一個值，值本身是陣列也不展開。
+          if (!_isDefinite(rule)) {
+            return [for (final match in matches) match.value];
+          }
           final values = <dynamic>[];
           for (final match in matches) {
             final value = match.value;
@@ -184,12 +189,43 @@ class AnalyzeByJsonPath {
     }
     try {
       final matches = _compile(rule).read(_jsonData).toList();
-      if (matches.isEmpty) return null;
-      if (matches.length == 1) return matches.single.value;
-      return [for (final match in matches) match.value];
+      if (!_isDefinite(rule)) return [for (final match in matches) match.value];
+      return matches.isEmpty ? null : matches.first.value;
     } catch (_) {
       return null;
     }
+  }
+
+  /// Jayway 的「確定路徑」：只會對到一個值（沒有 `..`、`*`、篩選、切片、
+  /// 好幾個索引或名稱）。確定路徑交出那個值，其他的交出對到的清單，筆數
+  /// 是 0 或 1 也一樣。
+  static bool _isDefinite(String rule) {
+    if (rule.contains('..')) return false;
+    String? quote;
+    var depth = 0;
+    for (var i = 0; i < rule.length; i++) {
+      final c = rule[i];
+      if (quote != null) {
+        if (c == '\\') {
+          i++;
+        } else if (c == quote) {
+          quote = null;
+        }
+        continue;
+      }
+      if (c == '"' || c == "'") {
+        quote = c;
+      } else if (c == '[') {
+        depth++;
+      } else if (c == ']') {
+        depth--;
+      } else if (c == '*') {
+        return false;
+      } else if (depth > 0 && (c == ',' || c == ':' || c == '?')) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Get a list of strings

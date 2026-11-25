@@ -105,4 +105,37 @@ void main() {
       expect(r.get('titleSuffix'), '');
     });
   });
+
+  group('審查補的', () {
+    test('最後一頁沒有下一頁連結時，組字的網址清單是空的', () {
+      expect(
+        rule('<p>沒有下一頁</p>').getStringList('{{@css:a.next@href}}', isUrl: true),
+        isEmpty,
+      );
+    });
+
+    test('JSON 不確定的路徑（[*]、..）不管幾筆都是清單，值是陣列也不展開', () {
+      final one = rule('{"books":[{"name":"A"}]}');
+      expect(one.getElement(r'$.books[*].name'), ['A']);
+      final none = rule('{"books":[]}');
+      expect(none.getElement(r'$.books[*].name'), isEmpty);
+      final groups = rule('{"groups":[[{"t":"一"},{"t":"二"}]]}');
+      expect(groups.getElements(r'$.groups[*]'), hasLength(1));
+      expect(groups.getElements(r'$.groups[0]'), hasLength(2));
+    });
+
+    test('### 先截出片段再在片段上換：前後文的條件對不到就照原樣', () {
+      expect(
+        rule('<p>Author: Alice</p>')
+            .getString(r'@css:p@text##(?<=Author: )(\w+)##[$1]###'),
+        'Alice',
+      );
+    });
+
+    test('上一段沒有結果時，這一段的 @put 照樣先存', () {
+      final r = rule('<p>甲</p>');
+      r.getString('<js>null</js>@put:{"k":"@css:p@text"}@css:p@text');
+      expect(r.get('k'), '甲');
+    });
+  });
 }
