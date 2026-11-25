@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
@@ -120,5 +122,51 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('規則「回溯」執行超過 200 毫秒，已停止'), findsNothing);
+  });
+
+  testWidgets('按了儲存、還沒存好就關掉編輯畫面：存好之後呼叫的一方才收到結果', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    final writing = Completer<void>();
+    var saved = false;
+    bool? savedWhenClosed;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                // 同閱讀器的「新增規則」：關掉之後看存了沒，存了才重載正文。
+                await ReaderReplaceRuleEditorSheet.show(
+                  context,
+                  rule: ReplaceRule(name: '城門', pattern: '城門', isRegex: false),
+                  onSave: (rule) async {
+                    await writing.future;
+                    saved = true;
+                  },
+                );
+                savedWhenClosed = saved;
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('儲存'));
+    await tester.pump();
+
+    // 資料庫還在寫：按返回關掉編輯畫面。
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('新增規則'), findsNothing);
+    expect(savedWhenClosed, isNull, reason: '還沒存好，呼叫的一方還在等');
+
+    writing.complete();
+    await tester.pumpAndSettle();
+    expect(savedWhenClosed, isTrue);
   });
 }
