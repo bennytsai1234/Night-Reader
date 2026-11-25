@@ -128,4 +128,26 @@ void main() {
     expect(provider.activeKindFilter, isNull);
     expect(provider.shownBooks, hasLength(2));
   });
+
+  testWidgets('書源改了類型、重讀書架：篩選跟著換掉那本書', (tester) async {
+    final shelf = [_book('小說甲', 0), _book('小說乙', 0), _book('漫畫丙', 2)];
+    await pumpShelf(tester, shelf);
+    provider.setKindFilter(BookSourceKind.novel);
+    await tester.pumpAndSettle();
+    expect(find.text('小說甲'), findsOneWidget);
+    expect(find.text('漫畫丙'), findsNothing);
+
+    // 小說甲的書源改成漫畫：書跟著換類別，網址與順序都沒變（ADR 0053）。
+    shelf[0] = _book('小說甲', 2);
+    await provider.loadBooks();
+    await tester.pumpAndSettle();
+    expect(find.text('小說甲'), findsNothing);
+    expect(find.text('小說乙'), findsOneWidget);
+
+    // 改回小說：回到小說的篩選裡。
+    shelf[0] = _book('小說甲', 0);
+    await provider.loadBooks();
+    await tester.pumpAndSettle();
+    expect(find.text('小說甲'), findsOneWidget);
+  });
 }

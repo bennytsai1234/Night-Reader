@@ -260,6 +260,26 @@ void main() {
     // 下次開編輯頁拿到的是存過的規則，不會蓋掉剛才的修改。
     expect(provider.currentSource?.bookSourceName, '新名字');
   });
+
+  test('書源改了類型，回來後這本書跟著換類別（ADR 0053）', () async {
+    await db.bookSourceDao.upsert(
+      BookSource(bookSourceUrl: 'https://old.example', bookSourceName: '書源'),
+    );
+    final provider = await openDetail();
+    expect(provider.book.bookKind, BookSourceKind.novel);
+
+    // 書源編輯頁把類型改成有聲。
+    await db.bookSourceDao.upsert(
+      BookSource(
+        bookSourceUrl: 'https://old.example',
+        bookSourceName: '書源',
+        bookSourceType: 1,
+      ),
+    );
+    await provider.reloadSource();
+
+    expect(provider.book.bookKind, BookSourceKind.audio);
+  });
 }
 
 /// 加入書架時排的整本下載：這裡不下載。
