@@ -411,6 +411,22 @@ void main() {
     expect(sync.opened, [book.bookUrl]);
   });
 
+  test('開書等同步時停止，不把傳進來的舊進度蓋回資料庫', () async {
+    final ready = Completer<void>();
+    sync.ready = ready.future;
+    final opening = player.open(book);
+    await pumpEventQueue();
+
+    await bookDao.updateProgress(book.bookUrl, 3, '第 3 集', 12345);
+    await player.stop();
+    ready.complete();
+    await opening;
+
+    final saved = await stored();
+    expect(saved.chapterIndex, 3);
+    expect(saved.charOffset, 12345);
+  });
+
   test('按了下一集、上一集還沒停聲時停止：換集不再往下做', () async {
     await player.open(book, chapterIndex: 1);
     await pumpEventQueue();

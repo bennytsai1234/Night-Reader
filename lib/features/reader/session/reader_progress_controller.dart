@@ -46,8 +46,7 @@ class ReaderProgressController {
     await _queue.saveImmediately(location.normalized());
   }
 
-  Future<void> flush() =>
-      _retired ? Future<void>.value() : _queue.flush();
+  Future<void> flush() => _retired ? Future<void>.value() : _queue.flush();
 
   Future<void> _write(ReaderLocation location) async {
     final normalized = location.normalized(

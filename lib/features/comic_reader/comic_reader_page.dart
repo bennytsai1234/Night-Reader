@@ -133,6 +133,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
           fraction: _initialFraction,
         );
   }
+
   late final ComicProgressSync _sync = ComicProgressSync(
     book: _book,
     bookDao: getIt<BookDao>(),
@@ -622,6 +623,8 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       _initialFraction = fresh.anchorMoved ? 0 : here.fraction;
       _location = null;
     });
+    _currentChapter.value = fresh.anchorChapter;
+    _refreshProgress(fresh.anchorChapter, fresh.anchorPage);
     fresh.start();
   }
 
@@ -640,8 +643,14 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     final changed =
         latest.isNotEmpty &&
         (latest.length != _chapters.length ||
-            latest.last.url != _chapters.last.url);
-    if (changed) _reloadChapters(latest);
+            latest.indexed.any(
+              (entry) => entry.$2.url != _chapters[entry.$1].url,
+            ));
+    if (changed) {
+      await _flush();
+      if (!mounted) return;
+      _reloadChapters(latest);
+    }
     if (targetUrl == null) return;
     final index = _chapters.indexWhere((chapter) => chapter.url == targetUrl);
     if (index >= 0) _jumpTo(index);
@@ -684,6 +693,8 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       _initialFraction = index < 0 || fresh.anchorMoved ? 0 : here.fraction;
       _location = null;
     });
+    _currentChapter.value = fresh.anchorChapter;
+    _refreshProgress(fresh.anchorChapter, fresh.anchorPage);
     fresh.start();
   }
 

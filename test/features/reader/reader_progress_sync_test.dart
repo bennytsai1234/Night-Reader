@@ -223,13 +223,13 @@ void main() {
     expect(at?.charOffset, 5);
   });
 
-  test('closing before positioning does not overwrite saved progress', () async {
+  test('closing before positioning preserves saved progress', () async {
     bookDao.stored = book.copyWith(chapterIndex: 3, charOffset: 40);
     expect(await runtime.flushProgress(), isNull);
     expect(bookDao.writes, 0);
   });
 
-  test('opening uses the latest saved visual offset at the same character', () async {
+  test('opening uses the latest visual offset', () async {
     bookDao.stored = book.copyWith(visualOffsetPx: 24);
     final at = await start().openLocation(runtime);
     expect(at?.visualOffsetPx, 24);
