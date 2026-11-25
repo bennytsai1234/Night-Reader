@@ -78,7 +78,8 @@ class _SourceBrowserPageState extends State<SourceBrowserPage> {
   @override
   void initState() {
     super.initState();
-    final headers = Map.of(widget.headers);
+    // 代理設定（可能含帳號密碼）不送給網站。
+    final headers = Map.of(widget.headers)..remove('proxy');
     final userAgent =
         headers.remove('User-Agent') ?? headers.remove('user-agent');
     _controller = WebViewController()

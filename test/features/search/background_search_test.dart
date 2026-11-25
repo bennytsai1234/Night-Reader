@@ -76,6 +76,7 @@ class _Loader {
     BookSource source,
     String key, {
     CancelToken? cancelToken,
+    int page = 1,
   }) {
     final name = source.bookSourceName;
     sent.add(name);

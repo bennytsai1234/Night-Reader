@@ -54,12 +54,11 @@ class AppStoragePaths {
     }
   }
 
-  static Future<Directory> ruleDataDir({bool ensureExists = false}) async {
-    return _subdirectory(
-      await documentsDir(),
-      'ruleData',
-      ensureExists: ensureExists,
-    );
+  /// 舊版把很長的書源變數另外寫在 `ruleData` 資料夾，從來沒有讀過（變數
+  /// 本來就存在書與章節上）；開 App 後刪掉。
+  static Future<void> removeLegacyRuleData() async {
+    final dir = Directory(p.join((await documentsDir()).path, 'ruleData'));
+    if (await dir.exists()) await dir.delete(recursive: true);
   }
 
   /// 加入書架的本地書原檔（TXT、EPUB）。選檔器給的是會被系統清掉的暫存

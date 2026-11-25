@@ -173,6 +173,31 @@ final class CompleteContentFetcher {
     // （網址裡的規則讀得到章名、存進這一章），也從它取章名（`title`，見
     // [fetch]）；下一頁照一般的請求抓。
     final firstPage = url == chapter.url;
+    // 同 Legado：章節網址就是書的網址、目錄頁還在手上（詳情頁就是目錄頁時
+    // 存著的那一頁）就直接解析，不再抓一次，也不跑 webJs 與登入檢查。
+    final storedPage = book.tocHtml;
+    if (firstPage &&
+        url == book.bookUrl &&
+        storedPage != null &&
+        storedPage.isNotEmpty) {
+      final result = await ContentParser.parse(
+        source: source,
+        book: book,
+        chapter: chapter,
+        body: storedPage,
+        baseUrl: url,
+        redirectUrl: url,
+        nextChapterUrl: nextChapterUrl,
+        readTitle: true,
+      );
+      LoginWall.checkContent(null, result.content);
+      return _FetchedContentPage(
+        content: result.content,
+        nextUrls: result.nextUrls,
+        baseUrl: url,
+        title: result.title,
+      );
+    }
     final contentRule = source.ruleContent;
     final analyzeUrl = AnalyzeUrl(
       url,

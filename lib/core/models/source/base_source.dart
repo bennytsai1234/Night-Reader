@@ -336,6 +336,8 @@ abstract class BaseSource {
         }
       } catch (_) {}
     }
+    // `proxy` 是代理設定（可能含帳號密碼），不是送給網站的標頭。
+    headerMap.remove('proxy');
 
     if (hasLoginHeader) {
       headerMap.addAll(
