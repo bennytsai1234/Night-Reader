@@ -42,8 +42,8 @@ Widget bookTocRow(
   );
 }
 
-/// 目錄的一列章節：目前閱讀章節以主色標示，右側「目前」；付費還沒買的章節
-/// 右側鎖頭。
+/// 目錄的一列章節：目前閱讀章節以主色加粗，右側「目前」；付費還沒買的章節
+/// 右側鎖頭，目前這章是付費章節時也只畫鎖頭（章名照樣主色加粗）。
 class BookTocChapterRow extends StatelessWidget implements GroupedSkeletonItem {
   const BookTocChapterRow({
     super.key,
@@ -92,13 +92,13 @@ class BookTocChapterRow extends StatelessWidget implements GroupedSkeletonItem {
         ),
       ),
       showChevron: false,
-      trailing: isCurrent
+      trailing: isLocked
+          ? const LockedChapterIcon()
+          : isCurrent
           ? UiText(
               '目前',
               style: AppTextStyles.labelSm.copyWith(color: scheme.primary),
             )
-          : isLocked
-          ? const LockedChapterIcon()
           : null,
       onTap: onTap,
     );
