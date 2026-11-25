@@ -422,13 +422,16 @@ class SourceSwitchService {
     // 漫畫的圖由漫畫閱讀器照書源抓（ADR 0052），不當插圖存。
     if (migratedBook.bookKind == BookSourceKind.novel &&
         validatedContent.contains('<img')) {
-      await _service.fetchIllustrations(
+      // 暫時連不上的圖留記號，書架自動下載之後再補（同閱讀器抓正文）。
+      final pending = await _service.fetchIllustrations(
         source,
         migratedBook,
         validatedContent,
         dir: await BookIllustrationStorage.dirFor(migratedBook),
         cancelToken: cancelToken,
       );
+      if (pending > 0)
+        await BookIllustrationStorage.markUnfetched(migratedBook);
     }
 
     return PreparedSourceSwitch(
