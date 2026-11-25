@@ -268,6 +268,8 @@ extension JsNetworkExtensions on JsExtensions {
           sourceRegex: sourceRegex,
           overrideUrlRegex: overrideUrlRegex,
           tag: source?.getKey(),
+          // 同 Legado：書源的標頭含登入標頭（`getHeaderMap(true)`）。
+          headerMap: _sourceHeaders(),
         ),
       ) as String;
     } catch (e) {

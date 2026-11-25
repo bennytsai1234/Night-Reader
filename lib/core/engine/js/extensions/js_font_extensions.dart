@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:crypto/crypto.dart';
 
+import '../../analyze_url.dart';
 import '../js_extensions_base.dart';
 import '../query_ttf.dart';
 import 'js_blocking_tasks.dart';
@@ -37,11 +38,10 @@ extension JsFontExtensions on JsExtensionsBase {
         final buffer =
             bytes ??
             (dataStr.startsWith('http')
+                // 照書源的請求抓（標頭、登入、網址選項），同 Legado 經書源的
+                // AnalyzeUrl。
                 ? BlockingCall.run(
-                    plainBytes(
-                      dataStr,
-                      cookieJar: source?.enabledCookieJar == true,
-                    ),
+                    responseBytes(AnalyzeUrl(dataStr, source: source)),
                   ) as Uint8List
                 : EncodeUtilsBase64.decodeAndroid(dataStr));
         final qTTF = QueryTTF(buffer);

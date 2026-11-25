@@ -116,6 +116,17 @@ Future<Object?> _webViewTagsInSourceIsolate(Map<String, dynamic> sourceJson) =>
       return '${option.body}|$js';
     });
 
+/// 在書源 isolate 裡用書源 [sourceJson] 跑一段規則 JS [code]，傳回結果的文字。
+Future<String> _sourceJs(Map<String, dynamic> sourceJson, String code) =>
+    SourceIsolate.run((_) async {
+      final rule = AnalyzeRule(source: BookSource.fromJson(sourceJson));
+      try {
+        return '${rule.evalJS(code, null)}';
+      } finally {
+        rule.dispose();
+      }
+    });
+
 /// 在書源 isolate 裡照書源校驗的方式記請求與回應，抓 [chapterUrl] 的正文；
 /// 傳回記下的行與看起來是暫時性失敗的回應數。
 Future<(List<String>, int)> _contentRequestLogInSourceIsolate(
@@ -438,6 +449,25 @@ void main() {
             '<script>location="https://ads.example/go"</script></head>'
             '<body><p>第一章的正文，夜裡讀起來剛好。</p></body></html>',
           );
+        case '/gbk':
+          request.response.headers.contentType = ContentType(
+            'text',
+            'html',
+            charset: 'gbk',
+          );
+          request.response.add([0xD6, 0xD0]);
+        case '/raw':
+          request.response.headers.contentType = ContentType.binary;
+          request.response.add([0, 128, 255]);
+        case '/hang':
+          // 接上了不回。
+          await Completer<void>().future;
+        case '/token.js':
+          if (request.headers.value('x-source-token') == 't') {
+            request.response.write('var token = "ok";');
+          } else {
+            request.response.statusCode = HttpStatus.forbidden;
+          }
         case '/echo-cookie':
           request.response.write(request.headers.value('cookie') ?? '');
         case '/set-delay':
@@ -724,6 +754,27 @@ void main() {
 
   group('WebView requests are served by the main isolate', () {
     tearDown(() => BackstageWebView.delegate = null);
+
+    // 同 Legado：java.webView 這三個入口帶書源的標頭（含登入標頭）。
+    test('java.webView carries the source headers', () async {
+      BackstageWebView.delegate = (request) async => {
+        'body': request.headerMap?['X-Source-Token'] ?? 'none',
+      };
+      expect(
+        await _sourceJs(
+          {
+            'bookSourceUrl': 'https://web.test',
+            'bookSourceName': '網頁',
+            'header': '{"X-Source-Token":"t"}',
+          },
+          '[java.webView(null, "https://web.test/q", null),'
+          ' java.webViewGetSource(null, "https://web.test/q", null, "x"),'
+          ' java.webViewGetOverrideUrl(null, "https://web.test/q", null, "x")]'
+          '.join(",")',
+        ),
+        't,t,t',
+      );
+    }, skip: quickJsUnavailableReason());
 
     test('java.webView', () async {
       // 測試裡沒有平台的 WebView：主 isolate 這一端換成假的，看請求有沒有
@@ -1072,6 +1123,55 @@ void main() {
         );
       });
     }
+
+    // 同 Legado：java.get／post 交回網站給的原始位元組，body() 照回應標頭
+    // 的字元集解。
+    test('java.get keeps the bytes the site sent', () async {
+      expect(
+        await _evaluateJs(
+          'var r = java.get("$baseUrl/gbk", {});'
+          'java.bytesToStr(r.bodyAsBytes(), "GBK") + "|" + r.body()',
+        ),
+        '中|中',
+      );
+      expect(
+        await _evaluateJs(
+          'Array.prototype.map.call(java.post("$baseUrl/raw", "a=1", {})'
+          '.bodyAsBytes(), function (b) { return b & 255; }).join(",")',
+        ),
+        '0,128,255',
+      );
+    });
+
+    test('java.get stops when the site never answers', () async {
+      final watch = Stopwatch()..start();
+      final code = await _evaluateJs(
+        'String(java.get("$baseUrl/hang", {}).statusCode())',
+      );
+      expect(code, '500');
+      expect(watch.elapsed, lessThan(const Duration(seconds: 40)));
+    }, timeout: const Timeout(Duration(seconds: 60)));
+
+    // 同 Legado：cacheFile、importScript 與網址的 queryTTF 照書源的請求抓
+    // （書源標頭、登入、網址選項）。
+    test('java.cacheFile and importScript send the source headers', () async {
+      final source = {
+        'bookSourceUrl': baseUrl,
+        'bookSourceName': '標頭',
+        'header': '{"X-Source-Token":"t"}',
+      };
+      expect(
+        await _sourceJs(source, 'java.cacheFile("$baseUrl/token.js?c=1")'),
+        'var token = "ok";',
+      );
+      expect(
+        await _sourceJs(
+          source,
+          'eval(String(java.importScript("$baseUrl/token.js?i=1"))); token',
+        ),
+        'ok',
+      );
+    });
 
     test('cookie.getCookie and removeCookie see the cookies the site set, '
         'like Legado', () async {
