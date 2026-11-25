@@ -7,6 +7,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
+import 'package:night_reader/features/source_manager/views/source_edit_basic.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 
@@ -75,6 +76,27 @@ void main() {
     }
     await tester.pumpAndSettle();
   }
+
+  // 同 Legado：從書源編輯進除錯時先問關鍵字，預先填書源的校驗關鍵字。
+  testWidgets('debugging from the editor asks for the keyword first', (
+    tester,
+  ) async {
+    final source = sampleSource()..ruleSearch = SearchRule(checkKeyWord: '斗羅');
+    await tester.runAsync(() => dao.upsert(source));
+    await pumpEditor(tester, source);
+
+    await tester.dragUntilVisible(
+      find.text('除錯書源'),
+      find.byType(SourceEditBasic),
+      const Offset(0, -200),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('除錯書源'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('輸入除錯關鍵字'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '斗羅'), findsOneWidget);
+  });
 
   testWidgets('saving keeps rules the editor does not show', (tester) async {
     await tester.runAsync(() => dao.upsert(sampleSource()));

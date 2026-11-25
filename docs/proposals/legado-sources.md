@@ -422,7 +422,7 @@
 - [ ] **O5 匯入預覽的四個選項（不做）**：自訂分組（加進原本的分組或整個取代）、保留原名、保留分組、保留啟用狀態；後三個預設關，關著時兩邊都照檔案覆蓋，夜讀現在等於永遠關著。
 - [x] **O6 書源編輯頁的動作（已定，只做登入、在此書源搜尋、清除 Cookie、複製與貼上書源）**：登入、在這個書源搜尋、清除 Cookie（沒有登入網址的書源現在清不了）、自動補全、複製與貼上書源、設定書源變數（附 `variableComment` 的說明）。夜讀頁首只有「儲存」（`docs/design/screens.md` 第 58 行）。
 - [ ] **O7 書源編輯頁的欄位（不做）**：夜讀沒列、改不到的有詳情頁網址規則（`bookUrlPattern`）、校驗關鍵字、併發率、自動存 Cookie、程式庫、變數說明、封面解密；搜尋與發現的簡介；詳情的 `canReName`、`downloadUrls`；目錄的卷名、付費、更新時間、`formatJs`、`preUpdateJs`；正文的章名、`webJs`、`sourceRegex`、`imageStyle`、`imageDecode`、`payAction`（`N:lib/features/source_manager/source_editor_page.dart` 的 `_controllers`）。匯入的值照存，只是不能在 App 裡改。
-- [x] **O8 除錯（已定，只做改關鍵字）**：從書源編輯進除錯時改關鍵字（Legado 有輸入框，「我的」「系統」、書源的校驗關鍵字與第一個發現分類可以點，`L:ui/book/source/debug/BookSourceDebugActivity.kt:94-107`；夜讀固定搜「我的世界」）；看搜尋、詳情、目錄、正文四步的原始網頁；重新整理發現分類。
+- [x] **O8 除錯（已定，只做改關鍵字；已做，PR 待補）**：從書源編輯進除錯時改關鍵字（Legado 有輸入框，「我的」「系統」、書源的校驗關鍵字與第一個發現分類可以點，`L:ui/book/source/debug/BookSourceDebugActivity.kt:94-107`；夜讀固定搜「我的世界」）；看搜尋、詳情、目錄、正文四步的原始網頁；重新整理發現分類。
 - [ ] **O9 換源（不做）**：搜到一半停止；結果長按選單（置頂、置底、編輯、停用、刪除書源），置頂置底會記住、下次照它排；載入字數（抓每個書源讀到的那一章，列出字數並照它排）。
 - [x] **O10 登入頁只刪登入標頭（已定）**：Legado 登入選單有「刪除登入標頭」，表單內容與 Cookie 留著；夜讀只有全部一起清的「清除登入資料」。
 
@@ -430,9 +430,9 @@
 
 使用者 2026-11-25 照 Claude 的建議定了：打勾的已定，其餘不做。都不改變書源跑出來的結果。
 
-- [x] **B1 大筆變數不另外寫檔（已定）**：書與章節的變數超過 5000 字時，夜讀另外寫一份檔案（`N:lib/core/engine/analyze_rule/analyze_rule_base.dart:54-75`），但變數照樣存在書與章節上，讀的時候從來不讀那份檔案（`N:lib/core/source/rule_big_data_service.dart:47, 79` 的讀取沒有人呼叫）。Legado 超過一萬字只存檔、不放進書的資料（`L:model/analyzeRule/RuleDataInterface.kt:15-26`）。拿掉寫檔，或照 Legado 改成只存檔，資料庫的列小一點。
+- [x] **B1 大筆變數不另外寫檔（已定；已做，拿掉寫檔，PR 待補）**：書與章節的變數超過 5000 字時，夜讀另外寫一份檔案（`N:lib/core/engine/analyze_rule/analyze_rule_base.dart:54-75`），但變數照樣存在書與章節上，讀的時候從來不讀那份檔案（`N:lib/core/source/rule_big_data_service.dart:47, 79` 的讀取沒有人呼叫）。Legado 超過一萬字只存檔、不放進書的資料（`L:model/analyzeRule/RuleDataInterface.kt:15-26`）。拿掉寫檔，或照 Legado 改成只存檔，資料庫的列小一點。
 - [ ] **B2 程式庫（`jsLib`）同一個書源共用一次（不做）**：夜讀每建一個規則引擎就把程式庫跑一次，Legado 整個書源共用一個作用域；結果相同，只是一本書的目錄、正文各自多跑。
-- [x] **B3 章節網址就是書的網址時，用存著的那一頁（已定）**：Legado 抓正文時，章節網址等於書的網址、目錄頁還在手上就直接解析（`L:model/webBook/WebBook.kt:314`），夜讀再抓一次同一頁。
+- [x] **B3 章節網址就是書的網址時，用存著的那一頁（已定；已做，PR 待補）**：Legado 抓正文時，章節網址等於書的網址、目錄頁還在手上就直接解析（`L:model/webBook/WebBook.kt:314`），夜讀再抓一次同一頁。
 - [ ] **B4 檢查新章節時不必每本都重抓詳情（不做）**：已有目錄網址時 Legado 只跑目錄的預整理 JS、不抓詳情（`L:ui/main/MainViewModel.kt:161-165`），夜讀每本先抓詳情（`N:lib/core/download/book_update_service.dart:124`），每本多一個請求。代價是書籍詳情的簡介、封面不會跟著網站更新。
 
 ## Legado 有、夜讀完全沒有的功能
