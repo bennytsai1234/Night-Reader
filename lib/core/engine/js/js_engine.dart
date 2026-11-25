@@ -612,9 +612,13 @@ var __lrScopedObject = function(scope, seed) {
   String? _contextBaseUrl;
 
   /// 元素交給 JS 時是真的 Jsoup 元素（`JsoupBridge`），和 `java.getElements`
-  /// 拿到的一樣。
+  /// 拿到的一樣。元素已經有自己網址的（`java.setContent` 交來的文件）
+  /// 照它，沒有時才用這次執行的頁面網址。
   String _encodeElement(dom.Node element) {
-    final jsoup = _extensions!.jsoup..setBaseUri(element, _contextBaseUrl);
+    final jsoup = _extensions!.jsoup;
+    if (jsoup.baseUriOf(element).isEmpty) {
+      jsoup.setBaseUri(element, _contextBaseUrl);
+    }
     return '__lrJsoupDecode(${jsonEncode(jsoup.toJs(element))})';
   }
 
@@ -623,7 +627,9 @@ var __lrScopedObject = function(scope, seed) {
   String _encodeElements(List<dom.Node> nodes) {
     final jsoup = _extensions!.jsoup;
     for (final node in nodes) {
-      jsoup.setBaseUri(node, _contextBaseUrl);
+      if (jsoup.baseUriOf(node).isEmpty) {
+        jsoup.setBaseUri(node, _contextBaseUrl);
+      }
     }
     return '__lrJsoupDecode(${jsonEncode(jsoup.toJs(nodes))})';
   }

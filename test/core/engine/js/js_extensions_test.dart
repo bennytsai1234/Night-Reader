@@ -1016,7 +1016,7 @@ void main() {
       expect(result.stringResult, '{"book":[{"title":"深空彼岸"}],"ok":true}');
     });
 
-    test('java.toNumChapter reads 两、兩、万、亿 and spoken forms', () {
+    test('java.toNumChapter 同 Legado：只換第一個「第…章」中間那段', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);
         return;
@@ -1031,8 +1031,13 @@ void main() {
       expect(numbered('第十二萬三千章'), '第123000章');
       expect(numbered('第一千五章'), '第1500章');
       expect(numbered('第一零二五章'), '第1025章');
-      expect(numbered('第貳拾章 陸續'), '第20章 陸續');
+      expect(numbered('第貳拾章 陸續'), '第20章');
       expect(numbered('序章'), '序章');
+      // Legado 只交出「第」+換好的數字+「章」，前後的字不留。
+      expect(numbered('一夜之間 第十章'), '第10章');
+      expect(numbered('第十回'), '第十回');
+      expect(numbered('第１２章'), '第12章');
+      expect(numbered('第一卷 第十章'), '第-1章');
     });
 
     test('java.ajax results support chained Java-style replaceAll rules', () {

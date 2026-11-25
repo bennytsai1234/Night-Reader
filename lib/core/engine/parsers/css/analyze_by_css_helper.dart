@@ -1,5 +1,6 @@
 import 'package:html/dom.dart';
 
+import 'package:night_reader/core/engine/parsers/jsoup_base_uri.dart';
 import 'package:night_reader/core/engine/parsers/jsoup_text.dart';
 
 import 'analyze_by_css_base.dart';
@@ -90,9 +91,11 @@ extension AnalyzeByCssHelper on AnalyzeByCssBase {
     return textS;
   }
 
-  /// Jsoup 的 `attr`：`abs:` 開頭的是那個屬性的完整網址。Legado 解析網頁時
-  /// 沒給頁面網址（`Jsoup.parse(html)`），只認網頁 `<base href>` 給的基準，
-  /// 本來就是完整網址的照原樣，其他的是空的。
+  /// Jsoup 的 `attr`：`abs:` 開頭的是那個屬性的完整網址。規則 JS 交來的
+  /// Jsoup 節點有自己的網址（`java.setContent` 收到的文件、文件的
+  /// `setBaseUri`），先用它；沒有時才看網頁 `<base href>` 給的基準。
+  /// 純字串內容同 Legado（`Jsoup.parse(html)` 沒給頁面網址）只認絕對的
+  /// `<base href>`。
   static String? _attr(Element el, String name) {
     if (!name.toLowerCase().startsWith('abs:')) {
       return el.attributes[name]?.trim();
@@ -103,6 +106,16 @@ extension AnalyzeByCssHelper on AnalyzeByCssBase {
       final uri = Uri.tryParse(value);
       if (uri == null) return null;
       if (uri.hasScheme) return value;
+    }
+    final nodeBaseUri = nodeBaseUriOf(el);
+    if (nodeBaseUri.isNotEmpty) {
+      final base = Uri.tryParse(nodeBaseUri);
+      if (base == null || !base.hasScheme) return null;
+      try {
+        return base.resolve(value).toString();
+      } on FormatException {
+        return null;
+      }
     }
     final base = _documentBase(el);
     if (base == null) return null;

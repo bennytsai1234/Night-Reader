@@ -88,11 +88,6 @@ class JsExtensions extends JsExtensionsBase {
         } else {
           JsExtensionsBase.sharedScope[key] = stringValue;
         }
-        if (source != null) {
-          final scopedKey = source!.ruleVariableCacheKey(key);
-          cacheManager.putMemory(scopedKey, stringValue);
-          unawaited(cacheManager.put(scopedKey, stringValue));
-        }
       }
       return null;
     });
@@ -714,7 +709,10 @@ class JsExtensions extends JsExtensionsBase {
       final baseUrl = context == null
           ? null
           : (context.redirectUrl ?? context.baseUrl) as String?;
-      jsoup.setBaseUri(node, baseUrl);
+      // 元素已經有自己網址的（`java.setContent` 交來的文件），照它。
+      if (jsoup.baseUriOf(node).isEmpty) {
+        jsoup.setBaseUri(node, baseUrl);
+      }
       return jsoup.toJs(node);
     }
     if (value is Map) {

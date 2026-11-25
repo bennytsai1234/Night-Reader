@@ -71,13 +71,14 @@ class AnalyzeByJsonPath {
 
           final values = matches.map((m) => m.value).toList();
           if (values.length == 1) {
-            // 對到的是陣列時一項一行，同 Legado `ob.joinToString("\n")`。
+            // 對到的是陣列時一項一行，同 Legado `ob.joinToString("\n")`；
+            // 物件與陣列的每一項照 JsonSmart 的 `toString()` 交出 JSON。
             final value = values[0];
             return value is List
-                ? value.map((v) => '$v').join('\n')
-                : value.toString();
+                ? value.map(_jsonText).join('\n')
+                : _jsonText(value);
           } else {
-            return values.map((v) => v.toString()).join('\n');
+            return values.map(_jsonText).join('\n');
           }
         } catch (e) {
           // 如果解析失敗且包含 {$.，則可能真的是沒匹配到
@@ -231,6 +232,11 @@ class AnalyzeByJsonPath {
   /// Get a list of strings
   List<String> getStringList(String rule) {
     final list = getElements(rule);
-    return list.map((e) => e.toString()).toList();
+    return list.map(_jsonText).toList();
   }
+
+  /// 對到的值是 JsonSmart 的物件或陣列時，Legado 的 `toString()` 就是
+  /// JSON；夜讀要交出 JSON 文字，後面的 `@js:JSON.parse(result)` 才接得上。
+  static String _jsonText(dynamic value) =>
+      value is Map || value is List ? jsonEncode(value) : '$value';
 }

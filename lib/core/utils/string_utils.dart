@@ -87,7 +87,8 @@ class StringUtils {
   );
 
   /// 中文數字轉數字 (對標 Legado StringUtils.chineseNumToInt)：「一零二五」逐字
-  /// 照寫；「一千零二十五」照位數算，結尾省略單位的「一千五」是 1500。
+  /// 照寫；「一千零二十五」照位數算，結尾省略單位的「一千五」是 1500；
+  /// 有不認得的字時是 -1（同 Legado 遇到 ChnMap 沒有的字）。
   static int chineseNumToInt(String chNum) {
     var result = 0;
     var tmp = 0;
@@ -106,7 +107,7 @@ class StringUtils {
     try {
       for (var i = 0; i < chNum.length; i++) {
         final val = _chnMap[chNum[i]];
-        if (val == null) continue;
+        if (val == null) return -1;
 
         if (val == 100000000) {
           result += tmp;

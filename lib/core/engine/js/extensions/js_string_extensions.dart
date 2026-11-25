@@ -7,6 +7,7 @@ import '../encode/charsets.dart';
 import '../js_extensions.dart';
 
 import 'package:night_reader/core/chinese/chinese_utils.dart';
+import 'package:night_reader/core/constant/app_pattern.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 
 extension JsStringExtensions on JsExtensions {
@@ -169,15 +170,14 @@ extension JsStringExtensions on JsExtensions {
       (dynamic args) => ChineseUtils.s2t(args.toString()),
     );
 
-    // java.toNumChapter：章名裡第一段中文數字換成阿拉伯數字，認得的字與
-    // 換算都照 [StringUtils]，簡體、繁體與大寫數字一樣。
+    // java.toNumChapter：同 Legado 只換第一個「第…章」中間那段（前後的字
+    // 不留在結果裡，連它自己的怪結果也照做），先轉半形數字再換中文數字。
     runtime.onMessage('_toNumChapter', (dynamic args) {
       final s = args.toString();
-      final match = StringUtils.chineseNumberRun.firstMatch(s);
+      final match = AppPattern.titleNumPattern.firstMatch(s);
       if (match == null) return s;
-      final number = StringUtils.chineseNumToInt(match.group(0)!);
-      if (number < 0) return s;
-      return s.replaceRange(match.start, match.end, '$number');
+      final number = StringUtils.stringToInt(match.group(2));
+      return '${match.group(1)}$number${match.group(3)}';
     });
   }
 }
