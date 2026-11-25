@@ -316,6 +316,10 @@ class SyncService {
 
   /// 讀出設定，更新 [status]。
   Future<void> load() async {
+    // 還原備份直接改了同步設定、還沒同步過（[_claimBases] 還沒跑）：上一個
+    // 空間的時間不算，升級前存的沒記空間，照合併紀錄屬於誰判斷。
+    final owner = (await _bases.readJson(_ownerFile))['space'];
+    if (owner != await _settings.identity()) await _settings.forgetLastSync();
     final lastSyncAt = await _settings.lastSyncAt();
     status.value = status.value.copyWith(
       space: await _settings.space(),
@@ -350,6 +354,8 @@ class SyncService {
     _settled.clear();
     await _bases.clear();
     await _bases.writeJson(_ownerFile, {'space': identity});
+    await _settings.forgetLastSync();
+    status.value = status.value.copyWith(clearLastSyncAt: true);
     return true;
   }
 

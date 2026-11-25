@@ -389,6 +389,55 @@ class DownloadService extends DownloadBase
     }
   }
 
+  /// 還原備份前呼叫：備份裡有下載任務的 [bookUrls]，正在跑的那一輪先停下、
+  /// 等它收尾，整份還原期間也不開新的一輪，舊的那一輪不會事後把還原的狀態
+  /// 蓋掉（暫停的照樣暫停，ADR 0008）。在還原的資料庫交易之外等：那一輪
+  /// 收尾時可能還要寫資料庫。還原寫完後呼叫回傳的函式，照資料庫換掉記憶體
+  /// 裡這幾本的任務；備份時還在下載的照開 App 讀回的規則改回排隊。
+  Future<Future<void> Function()> holdForRestore(
+    Iterable<String> bookUrls,
+  ) async {
+    await _initialization;
+    final held = bookUrls.toSet();
+    for (final bookUrl in held) {
+      markTaskRetiring(bookUrl);
+    }
+    for (final bookUrl in held) {
+      await waitForTaskIdle(bookUrl);
+    }
+    return () async {
+      try {
+        final stored = {
+          for (final task in await downloadDao.getAll())
+            if (held.contains(task.bookUrl)) task.bookUrl: task,
+        };
+        for (final bookUrl in held) {
+          final index = tasks.indexWhere((t) => t.bookUrl == bookUrl);
+          final task = stored[bookUrl] ?? (index == -1 ? null : tasks[index]);
+          if (task == null) continue;
+          if (task.isDownloading) {
+            task.status = DownloadTask.statusWaiting;
+            await downloadDao.updateProgress(
+              bookUrl,
+              status: DownloadTask.statusWaiting,
+            );
+          }
+          await rememberKind(bookUrl);
+          if (index == -1) {
+            tasks.add(task);
+          } else {
+            tasks[index] = task;
+          }
+        }
+      } finally {
+        for (final bookUrl in held) {
+          clearTaskRetiring(bookUrl);
+        }
+        update();
+      }
+    };
+  }
+
   void moveTask(String bookUrl, int delta) {
     final current = tasks.indexWhere((t) => t.bookUrl == bookUrl);
     if (current < 0) return;

@@ -556,6 +556,15 @@ void main() {
     final result = await LocalBookService().importBook(path);
     final chapter = result!.chapters.first..start = null;
 
-    expect(await LocalBookService().getContent(book, chapter), '本地書索引缺失，請重新匯入');
+    await expectLater(
+      LocalBookService().getContent(book, chapter),
+      throwsA(
+        isA<LocalBookContentException>().having(
+          (e) => e.message,
+          'message',
+          '本地書索引缺失，請重新匯入',
+        ),
+      ),
+    );
   });
 }

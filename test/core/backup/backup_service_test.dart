@@ -10,6 +10,7 @@ import 'package:night_reader/core/database/dao/ai_find_dao.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/cache_dao.dart';
 import 'package:night_reader/core/database/dao/cookie_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
@@ -50,6 +51,7 @@ void main() {
       ..registerSingleton<AppDatabase>(db)
       ..registerSingleton<BookDao>(BookDao(db))
       ..registerSingleton<BookSourceDao>(BookSourceDao(db))
+      ..registerSingleton<ChapterDao>(ChapterDao(db))
       ..registerSingleton<ReplaceRuleDao>(ReplaceRuleDao(db))
       ..registerSingleton<BookGroupDao>(BookGroupDao(db))
       ..registerSingleton<DownloadDao>(DownloadDao(db))

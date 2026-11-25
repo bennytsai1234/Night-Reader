@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import '../diagnostics/app_log_service.dart';
 import '../models/book/book.dart';
+import '../models/book/reader_chapter_content.dart';
 import 'app_storage_paths.dart';
 import 'storage_metrics.dart';
 import '../utils/illustration_markers.dart';
@@ -70,6 +72,25 @@ abstract final class BookIllustrationStorage {
   static Future<void> markUnfetched(Book book) async {
     final flag = await _unfetchedFlag(book);
     await flag.create(recursive: true);
+  }
+
+  /// 帶回了別台存好的正文、沒帶圖檔（還原備份、匯入書架檔）：網路書這章
+  /// 已存好的正文裡有插圖就留記號，書架自動下載才會把圖補抓下來。記號
+  /// 寫不進去也不擋正文：閱讀器打開那一章時還是會補抓。
+  static Future<void> markUnfetchedIfIllustrated(
+    ReaderChapterContentEntry entry,
+  ) async {
+    final book = Book(bookUrl: entry.bookUrl, origin: entry.origin);
+    if (!entry.isReady ||
+        book.isLocal ||
+        !(entry.content ?? '').contains('<img')) {
+      return;
+    }
+    try {
+      await markUnfetched(book);
+    } on FileSystemException catch (error) {
+      AppLog.w('插圖待抓記號寫入失敗 ${entry.bookUrl}: $error');
+    }
   }
 
   static Future<bool> isUnfetched(Book book) async =>

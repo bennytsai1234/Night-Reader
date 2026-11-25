@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui show TextDirection;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, visibleForTesting;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/popups/popup_routes.dart';
@@ -1202,6 +1203,15 @@ class _ReaderClock extends StatefulWidget {
   State<_ReaderClock> createState() => _ReaderClockState();
 }
 
+/// 從 [now] 到下一個整分還有多久，照實際經過的時間算：夏令時間結束那天
+/// 當地時間撥回一小時，照當地的年月日時「分鐘加一」算會變成一小時後。時區
+/// 與 UTC 的差都是整分，UTC 的整分就是當地的整分。
+@visibleForTesting
+Duration untilNextClockMinute(DateTime now) {
+  const minute = Duration.microsecondsPerMinute;
+  return Duration(microseconds: minute - now.microsecondsSinceEpoch % minute);
+}
+
 class _ReaderClockState extends State<_ReaderClock> {
   Timer? _timer;
   late DateTime _now;
@@ -1220,15 +1230,7 @@ class _ReaderClockState extends State<_ReaderClock> {
   }
 
   void _scheduleTick() {
-    final now = DateTime.now();
-    final nextMinute = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      now.hour,
-      now.minute + 1,
-    );
-    _timer = Timer(nextMinute.difference(now), () {
+    _timer = Timer(untilNextClockMinute(DateTime.now()), () {
       if (!mounted) return;
       setState(() => _now = DateTime.now());
       _scheduleTick();

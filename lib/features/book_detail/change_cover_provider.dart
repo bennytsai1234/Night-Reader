@@ -18,7 +18,8 @@ class ChangeCoverProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    // 還在排隊或進行中的書源搜尋看到這個旗標就不再寫入結果。
+    // 還在排隊或進行中的書源搜尋看到輪次換了就不再寫入結果。
+    _searchRound++;
     _isSearching = false;
     super.dispose();
   }
@@ -60,6 +61,10 @@ class ChangeCoverProvider extends ChangeNotifier {
   int _searchCount = 0;
   int _totalSources = 0;
 
+  /// 第幾輪搜尋：停止、清空、重搜都換一輪，上一輪晚到的結果、計數與收尾
+  /// 都不算進這一輪。
+  int _searchRound = 0;
+
   List<AggregatedSearchBook> get covers => _covers;
   bool get isInitialized => _isInitialized;
   bool get isSearching => _isSearching;
@@ -80,11 +85,13 @@ class ChangeCoverProvider extends ChangeNotifier {
   }
 
   void stopSearch() {
+    _searchRound++;
     _isSearching = false;
     notifyListeners();
   }
 
   void clear() {
+    _searchRound++;
     _covers = [];
     _isInitialized = false;
     _isSearching = false;
@@ -125,6 +132,8 @@ class ChangeCoverProvider extends ChangeNotifier {
 
   Future<void> search(String name, String author) async {
     if (_isSearching || _disposed) return;
+    final round = ++_searchRound;
+    bool current() => round == _searchRound;
     _isInitialized = true;
     _isSearching = true;
     _errorMessage = null;
@@ -135,9 +144,12 @@ class ChangeCoverProvider extends ChangeNotifier {
 
     try {
       final names = await _coverNames(name);
+      if (!current()) return;
       await _addStoredCovers(names, author);
+      if (!current()) return;
 
       final enabledSources = await _sourceDao.getEnabled();
+      if (!current()) return;
       final coverSources = enabledSources
           .where(
             (source) =>
@@ -150,26 +162,29 @@ class ChangeCoverProvider extends ChangeNotifier {
       if (_totalSources == 0) return;
 
       final coverPool = Pool(await SearchModel.threadCount());
+      if (!current()) return;
 
       final tasks = <Future<bool>>[];
       for (final source in coverSources) {
-        if (!_isSearching) break;
         tasks.add(
           coverPool.withResource(
-            () => _searchSingleSource(source, name, names, author),
+            () => _searchSingleSource(source, name, names, author, round),
           ),
         );
       }
       final results = await Future.wait(tasks);
-      if (_isSearching && results.isNotEmpty && results.every((ok) => !ok)) {
+      if (current() && results.isNotEmpty && results.every((ok) => !ok)) {
         _errorMessage = '封面搜尋失敗，請重試';
       }
     } catch (error) {
       AppLog.e('搜尋封面失敗: $error', error: error);
-      _errorMessage = '封面搜尋失敗，請重試';
+      if (current()) _errorMessage = '封面搜尋失敗，請重試';
     } finally {
-      _isSearching = false;
-      notifyListeners();
+      // 已經換了一輪：這一輪的收尾不動新一輪的狀態。
+      if (current()) {
+        _isSearching = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -220,15 +235,18 @@ class ChangeCoverProvider extends ChangeNotifier {
     String name,
     Set<String> names,
     String author,
+    int round,
   ) async {
-    if (!_isSearching) return true;
+    bool current() => round == _searchRound;
+    if (!current()) return true;
     try {
       final books = await _service.searchBooks(source, name);
+      if (!current()) return true;
 
       final filtered = books.where((book) => _isCoverOf(book, names, author));
 
       for (final result in filtered) {
-        if (!_isSearching) break;
+        if (!current()) break;
         if (result.coverUrl != null && result.coverUrl!.isNotEmpty) {
           if (!_covers.any((cover) => cover.book.coverUrl == result.coverUrl)) {
             final aggregated = AggregatedSearchBook(
@@ -246,8 +264,10 @@ class ChangeCoverProvider extends ChangeNotifier {
       AppLog.e('搜尋封面書源 ${source.bookSourceName} 失敗: $error', error: error);
       return false;
     } finally {
-      _searchCount++;
-      notifyListeners();
+      if (current()) {
+        _searchCount++;
+        notifyListeners();
+      }
     }
   }
 }
