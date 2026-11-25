@@ -13,7 +13,7 @@ import 'package:night_reader/core/models/reading/bookmark.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
-import 'package:night_reader/core/backup/highlight_export.dart';
+import 'package:night_reader/core/backup/bookmark_highlight_export.dart';
 import 'package:night_reader/features/reader/features/bookmark/reader_bookmarks.dart';
 import 'package:night_reader/features/reader/features/highlight/reader_highlights.dart';
 import 'package:night_reader/features/reader/text_view/overlay/highlight_marks.dart';
@@ -288,17 +288,62 @@ class _BookmarksPageState extends State<BookmarksPage> {
     _showUndo('已刪除標註', () => unawaited(dao.upsertAll([highlight])));
   }
 
-  /// 所有書的標註匯出成一個檔，照這頁的順序。
-  void _exportHighlights() {
+  /// 所有書的書籤與標註匯出成一個檔：一本書一組，最近留過的書在上。
+  void _exportMarks() {
+    final bookmarks = <String, List<Bookmark>>{};
+    final highlights = <String, List<Highlight>>{};
+    for (final bookmark in _items) {
+      final key = BookmarksPage.keyOf(bookmark.bookName, bookmark.bookAuthor);
+      (bookmarks[key] ??= []).add(bookmark);
+    }
+    for (final highlight in _highlights) {
+      final key = BookmarksPage.keyOf(highlight.bookName, highlight.bookAuthor);
+      (highlights[key] ??= []).add(highlight);
+    }
+    int latest(String key) {
+      var latest = 0;
+      for (final item in bookmarks[key] ?? const <Bookmark>[]) {
+        if (item.id > latest) latest = item.id;
+      }
+      for (final item in highlights[key] ?? const <Highlight>[]) {
+        if (item.id > latest) latest = item.id;
+      }
+      return latest;
+    }
+
+    final keys = {...bookmarks.keys, ...highlights.keys}.toList()
+      ..sort((a, b) => latest(b).compareTo(latest(a)));
     unawaited(
-      shareHighlights([
-        for (final group in _groups(_highlights, _highlightEntry))
-          (
-            bookName: BookSourceKind.splitRecordName(group.first.bookName).name,
-            bookAuthor: group.first.bookAuthor,
-            items: group,
+      shareBookmarksAndHighlights([
+        for (final key in keys)
+          _exportBook(
+            key,
+            bookmarks[key] ?? const [],
+            highlights[key] ?? const [],
           ),
       ]),
+    );
+  }
+
+  BookmarkHighlightExportBook _exportBook(
+    String key,
+    List<Bookmark> bookmarks,
+    List<Highlight> highlights,
+  ) {
+    final recordName = bookmarks.isNotEmpty
+        ? bookmarks.first.bookName
+        : highlights.first.bookName;
+    final author = bookmarks.isNotEmpty
+        ? bookmarks.first.bookAuthor
+        : highlights.first.bookAuthor;
+    return (
+      bookName: BookSourceKind.splitRecordName(recordName).name,
+      bookAuthor: author,
+      items: bookmarkHighlightExportItems(
+        bookmarks: bookmarks,
+        highlights: highlights,
+        toc: widget.tocs[key] ?? const [],
+      ),
     );
   }
 
@@ -309,11 +354,13 @@ class _BookmarksPageState extends State<BookmarksPage> {
       appBar: GlassNavHeader(
         title: '閱讀紀錄',
         actions: [
-          // 每個分頁都在，沒有標註時灰掉（ADR 0059）。
+          // 每個分頁都在，書籤與標註都空時灰掉（ADR 0059）。
           GlassIconButton(
-            tooltip: '匯出標註',
+            tooltip: '匯出書籤與標註',
             icon: Icons.ios_share_rounded,
-            onPressed: _highlights.isNotEmpty ? _exportHighlights : null,
+            onPressed: _items.isNotEmpty || _highlights.isNotEmpty
+                ? _exportMarks
+                : null,
           ),
         ],
         bottomHeight: _tabsHeight,

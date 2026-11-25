@@ -79,6 +79,12 @@ final class ReaderMenuPages {
       // 本地書與沒有登入的書源用不到的項目灰著留在原位（ADR 0059）。
       actions: [
         AppSheetAction(
+          label: '書籤',
+          icon: Icons.bookmark_add_outlined,
+          value: _ReaderMoreAction.bookmark,
+          enabled: _host.bookmarks.available,
+        ),
+        AppSheetAction(
           label: '換源',
           icon: Icons.swap_horiz_rounded,
           value: _ReaderMoreAction.changeSource,
@@ -122,6 +128,9 @@ final class ReaderMenuPages {
     );
     if (!_mounted() || action == null) return;
     switch (action) {
+      case _ReaderMoreAction.bookmark:
+        _host.menu.dismissControls();
+        await _coordinator.addBookmarkAtTop();
       case _ReaderMoreAction.changeSource:
         _host.menu.dismissControls();
         await _changeSource.show();
@@ -416,6 +425,7 @@ Future<({int index, List<BookChapter>? latest})?> resolveDetailChapter({
 }
 
 enum _ReaderMoreAction {
+  bookmark,
   changeSource,
   borrowChapter,
   refetchChapter,

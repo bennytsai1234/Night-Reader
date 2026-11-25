@@ -43,6 +43,47 @@ typedef SelectionHighlight = ({
   String quote,
 });
 
+/// 在 [displayText] 的這一段正文（[paragraphStart]～[paragraphEnd]）裡，
+/// 從 [start] 所在那一句的句首留一個書籤；[end] 是選取結尾，選得比一句
+/// 長時清單帶到那裡。句子照朗讀的分句、在開頭所在的那一段裡切。選字選單
+/// 的「書籤」與「更多」的「書籤」共用這一套，章、章內位置、錨點與摘錄
+/// 都一樣。
+SelectionBookmark bookmarkInSentence({
+  required String displayText,
+  required String contentHash,
+  required String chapterTitle,
+  required int chapterIndex,
+  required int paragraphStart,
+  required int paragraphEnd,
+  required int start,
+  required int end,
+}) {
+  final paragraphText = displayText.substring(paragraphStart, paragraphEnd);
+  final local = start - paragraphStart;
+  var sentenceStart = start;
+  var sentenceEnd = end;
+  for (final sentence in const ReaderTtsSegmenter().segment(
+    text: paragraphText,
+    chapterIndex: chapterIndex,
+    startOffset: local,
+  )) {
+    if (sentence.startCharOffset > local) break;
+    if (local < sentence.endCharOffset) {
+      sentenceStart = paragraphStart + sentence.startCharOffset;
+      sentenceEnd = math.max(end, paragraphStart + sentence.endCharOffset);
+      break;
+    }
+  }
+  return (
+    location: ReaderLocation(
+      chapterIndex: chapterIndex,
+      charOffset: sentenceStart,
+    ).withContentIdentity(contentHash: contentHash, displayText: displayText),
+    chapterTitle: chapterTitle,
+    excerpt: displayText.substring(sentenceStart, sentenceEnd).trim(),
+  );
+}
+
 /// 選取在 viewport 上要畫的東西：看得到的那一段的字形框（每條視覺行一個）、
 /// 開頭與結尾那個字的行框（不在畫面上或那一段還沒排好時是 null），以及這一
 /// 章正文的頂端還在 viewport 上緣上面多遠、底端還在下緣下面多遠（0 或負的
@@ -162,33 +203,15 @@ final class ReaderTextSelection {
           blocks.blockForCharOffset(range.start).key,
         ) ??
         range;
-    final paragraphText = blocks.displayText.substring(
-      paragraph.start,
-      paragraph.end,
-    );
-    final local = range.start - paragraph.start;
-    var start = range.start;
-    var end = range.end;
-    for (final sentence in const ReaderTtsSegmenter().segment(
-      text: paragraphText,
-      chapterIndex: chapterIndex,
-      startOffset: local,
-    )) {
-      if (sentence.startCharOffset > local) break;
-      if (local < sentence.endCharOffset) {
-        start = paragraph.start + sentence.startCharOffset;
-        end = math.max(end, paragraph.start + sentence.endCharOffset);
-        break;
-      }
-    }
-    return (
-      location: ReaderLocation(chapterIndex: chapterIndex, charOffset: start)
-          .withContentIdentity(
-            contentHash: blocks.contentHash,
-            displayText: blocks.displayText,
-          ),
+    return bookmarkInSentence(
+      displayText: blocks.displayText,
+      contentHash: blocks.contentHash,
       chapterTitle: blocks.title,
-      excerpt: blocks.displayText.substring(start, end).trim(),
+      chapterIndex: chapterIndex,
+      paragraphStart: paragraph.start,
+      paragraphEnd: paragraph.end,
+      start: range.start,
+      end: range.end,
     );
   }
 
