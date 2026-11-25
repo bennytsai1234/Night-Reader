@@ -281,7 +281,7 @@
 - 讀者會碰到：書源用 `###` 從一段字裡「挑出」某一塊，例如作者欄 `.info@text##作者：(\S+)##$1###`、更新時間 `##\d{4}-\d{2}-\d{2}##$0###`。Legado 只留比對到、換過的那一段；夜讀把整段字留著、只換掉第一處，書籍詳情的作者、分類、最新章節、字數就多了前後的字（「類別：玄幻 張三」）。比對不到時 Legado 是空的、夜讀是原文，該空著的欄位出現一整段網頁文字。
 - Legado：`L:model/analyzeRule/AnalyzeRule.kt:441-452`：`matcher.find()` 找到就回 `matcher.group(0)!!.replaceFirst(regex, replacement)`（只有比對到的那段），找不到回 `""`；正則寫錯時回取代式本身。另外不加 `###` 的正則寫錯時照字面取代（`result.replace(replaceRegex, replacement)`，同一段 455-459）。
 - 夜讀：`N:lib/core/engine/analyze_rule/analyze_rule_regex_helper.dart:93-112`：規則本身不是空的時回 `result.replaceFirstMapped(...)`（整段字），找不到回原文；正則寫錯一律不取代（同檔 140-151）。測試把這個行為寫死了：`N:test/core/engine/template_replace_rule_test.dart:41` 期待 `{{'甲乙乙'}}##乙##丁###` 是「甲丁乙」，Legado 是「丁」。
-- 補充（少數寫法，還沒修）：取代式最後一個字是 `#` 時（`##a##b#`），夜讀當成「只換第一個」並把 `#` 拿掉，Legado 照字面當取代式的一部分（`N:lib/core/engine/analyze_rule/analyze_rule_support.dart:52-63`）。
+- 補充（少數寫法，已修，#636）：取代式最後一個字是 `#` 時（`##a##b#`），夜讀當成「只換第一個」並把 `#` 拿掉，Legado 照字面當取代式的一部分（`N:lib/core/engine/analyze_rule/analyze_rule_support.dart:52-63`）。
 
 ### R4 JSONPath 取到一整個陣列時變成 `[甲, 乙]`（少數寫法才碰到）（已修，#553）
 
@@ -379,7 +379,7 @@
 - 讀者會碰到：章節網址開了 `webView`、正文規則寫了 `webJs`（等網頁跑完後取出正文或解密）或 `sourceRegex`（等網頁去抓正文的 API）的書源。Legado 用網頁抓這一頁時跑那段 JS、或等那個資源；夜讀只用網址選項裡的 `webJs`，正文規則的兩條都沒用，拿到的是網頁原本的 HTML，正文是亂的、空的或只有載入中的字。
 - Legado：`L:model/webBook/WebBook.kt:334-337`，`getStrResponseAwait(jsStr = 正文規則.webJs, sourceRegex = 正文規則.sourceRegex)`；網址選項的 `webJs` 優先（`L:model/analyzeRule/AnalyzeUrl.kt:427, 437`）。
 - 夜讀：`N:lib/core/engine/web_book/complete_content_fetcher.dart:156-157`，`AnalyzeUrl(...).getStrResponse(cancelToken:)` 沒給 `jsStr`、`sourceRegex`；`getStrResponse` 本身收這兩個參數（`N:lib/core/engine/analyze_url.dart:599-626`）。整個 `lib/` 沒有地方讀正文規則的這兩個欄位。
-- 附帶（少數寫法，還沒修）：Legado 抓正文的請求帶著這一章（`L:model/webBook/WebBook.kt:331`），章節網址裡的 `java.get("title")` 拿到章名、`java.put` 存進這一章（`L:model/analyzeRule/AnalyzeUrl.kt:373-394`）；夜讀的 `AnalyzeUrl` 沒有章節（`N:lib/core/engine/analyze_url.dart:86-95`），拿到空的、存進書。
+- 附帶（少數寫法，已修，#636）：Legado 抓正文的請求帶著這一章（`L:model/webBook/WebBook.kt:331`），章節網址裡的 `java.get("title")` 拿到章名、`java.put` 存進這一章（`L:model/analyzeRule/AnalyzeUrl.kt:373-394`）；夜讀的 `AnalyzeUrl` 沒有章節（`N:lib/core/engine/analyze_url.dart:86-95`），拿到空的、存進書。
 
 ### R19 正文頁的章名規則（`title`）沒有用（少數寫法才碰到）（已修，#556）
 
