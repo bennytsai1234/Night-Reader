@@ -389,6 +389,34 @@ class DownloadService extends DownloadBase
     }
   }
 
+  /// 還原備份裡的下載任務：這本書正在跑的那一輪先停下、等它收尾，再寫進
+  /// 資料庫、換掉記憶體裡的任務，舊的那一輪不會事後把還原的狀態蓋掉（暫停
+  /// 的照樣暫停，ADR 0008）。備份時還在下載的照開 App 讀回的規則改回排隊。
+  Future<void> restoreTask(DownloadTask task) async {
+    await _initialization;
+    final bookUrl = task.bookUrl;
+    markTaskRetiring(bookUrl);
+    try {
+      for (final running in tasks.where((t) => t.bookUrl == bookUrl)) {
+        running.status = DownloadTask.statusPaused;
+      }
+      update();
+      await waitForTaskIdle(bookUrl);
+      if (task.isDownloading) task.status = DownloadTask.statusWaiting;
+      await downloadDao.upsert(task);
+      await rememberKind(bookUrl);
+      final index = tasks.indexWhere((t) => t.bookUrl == bookUrl);
+      if (index == -1) {
+        tasks.add(task);
+      } else {
+        tasks[index] = task;
+      }
+    } finally {
+      clearTaskRetiring(bookUrl);
+      update();
+    }
+  }
+
   void moveTask(String bookUrl, int delta) {
     final current = tasks.indexWhere((t) => t.bookUrl == bookUrl);
     if (current < 0) return;

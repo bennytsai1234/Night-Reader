@@ -32,7 +32,7 @@ import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/models/reading/read_record.dart';
 import 'package:night_reader/core/models/book/reader_chapter_content.dart';
 import 'package:night_reader/core/database/app_database.dart';
-import 'package:night_reader/core/database/dao/download_dao.dart';
+import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/sync/read_stats_sync.dart';
@@ -75,7 +75,6 @@ class RestoreService {
   final BookmarkDao _bookmarkDao = getIt<BookmarkDao>();
   final HighlightDao _highlightDao = getIt<HighlightDao>();
   final AiFindDao _aiFindDao = getIt<AiFindDao>();
-  final DownloadDao _downloadDao = getIt<DownloadDao>();
   final ReadRecordDao _readRecordDao = getIt<ReadRecordDao>();
   final ReaderChapterContentDao _chapterContentDao =
       getIt<ReaderChapterContentDao>();
@@ -424,7 +423,7 @@ class RestoreService {
             break;
           case 'downloadTask.json':
           case 'downloadTasks.json':
-            await _downloadDao.upsert(DownloadTask.fromJson(item));
+            await DownloadService().restoreTask(DownloadTask.fromJson(item));
             break;
           case 'readerChapterContent.json':
           case 'readerChapterContents.json':
