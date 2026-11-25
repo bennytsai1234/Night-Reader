@@ -461,6 +461,8 @@ class ReaderMenuIcon extends StatelessWidget {
       button: true,
       label: label,
       excludeSemantics: true,
+      // 排除子語意也排除了 PressScale 的點擊：讀屏的點擊接在這裡。
+      onTap: onTap,
       child: PressScale(
         onTap: onTap,
         child: Padding(

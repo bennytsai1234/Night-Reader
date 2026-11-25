@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 import 'package:night_reader/features/reader/text_view/paragraph/paragraph_cache.dart';
 
+import '../geometry/text_geometry.dart';
 import '../layout/reader_paragraph_layout.dart';
 import '../measure/measurement_store.dart';
 import '../layout/visual_line_layout_engine.dart';
@@ -496,13 +497,7 @@ final class LayoutPump {
     if (textLength <= 0) return 0.0;
     final safeOffset = offset.clamp(0, textLength).toInt();
     final start = safeOffset >= textLength ? textLength - 1 : safeOffset;
-    var boxes = paragraph.getBoxesForRange(start, start + 1);
-    if (boxes.isEmpty && start + 1 < textLength) {
-      boxes = paragraph.getBoxesForRange(
-        start,
-        math.min(textLength, start + 2),
-      );
-    }
+    final boxes = TextGeometry.glyphBoxesAt(paragraph, start);
     if (boxes.isEmpty) return null;
     return boxes.first.top;
   }

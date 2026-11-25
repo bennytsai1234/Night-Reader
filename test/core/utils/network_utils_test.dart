@@ -138,4 +138,22 @@ void main() {
       }
     });
   });
+
+  group('getBaseUrl', () {
+    test('IPv6 的主機留著方括號', () {
+      expect(
+        NetworkUtils.getBaseUrl('http://[::1]:8080/list'),
+        'http://[::1]:8080',
+      );
+      expect(
+        NetworkUtils.getBaseUrl('https://[2001:db8::1]/a'),
+        'https://[2001:db8::1]',
+      );
+      expect(
+        NetworkUtils.getBaseUrl('https://a.test:8443/x'),
+        'https://a.test:8443',
+      );
+      expect(NetworkUtils.getBaseUrl('http://127.0.0.1/x'), 'http://127.0.0.1');
+    });
+  });
 }

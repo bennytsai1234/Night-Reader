@@ -112,7 +112,7 @@ class BookshelfProvider extends BookshelfProviderBase
     isLoading = true;
     loadErrorMessage = null;
     if (showsLoading) notifyListeners();
-    // 讀回來的書和原本同樣幾本、同樣順序時，書架本身沒變：不通知整頁，
+    // 讀回來的書和原本同樣幾本、同樣順序、同樣類別時，書架本身沒變：不通知整頁，
     // 只有畫面上看得到的內容變了的那幾張書卡各自更新（[bookListenable]，
     // ADR 0029）。書架檢查、下載完成都會重讀，多半只改了其中幾本。
     var listChanged = true;
@@ -132,10 +132,14 @@ class BookshelfProvider extends BookshelfProviderBase
     }
   }
 
+  /// 同樣幾本、同樣順序、每本還是同一類：類別決定篩選畫哪幾本與哪幾類能選
+  /// （[shownBooks]、[canFilterKinds]），書源改了類型時書跟著換（ADR 0053），
+  /// 只更新書卡會留在原本那一類的清單裡。
   static bool _sameOrder(List<Book> a, List<Book> b) {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
       if (a[i].bookUrl != b[i].bookUrl) return false;
+      if (a[i].bookKind != b[i].bookKind) return false;
     }
     return true;
   }

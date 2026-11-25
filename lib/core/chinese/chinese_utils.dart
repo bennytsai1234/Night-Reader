@@ -158,11 +158,19 @@ class _Direction {
         buf.write(match);
         i += matchLen;
       } else {
-        // 單字映射
-        final char = text[i];
+        // 單字映射：補充平面的字（𠮶）佔兩個 UTF-16 單位，整個字一起查。
+        final unit = text.codeUnitAt(i);
+        final width =
+            unit >= 0xD800 &&
+                unit <= 0xDBFF &&
+                i + 1 < len &&
+                (text.codeUnitAt(i + 1) & 0xFC00) == 0xDC00
+            ? 2
+            : 1;
+        final char = text.substring(i, i + width);
         final mapped = chars[char];
         buf.write(mapped ?? char);
-        i++;
+        i += width;
       }
     }
 

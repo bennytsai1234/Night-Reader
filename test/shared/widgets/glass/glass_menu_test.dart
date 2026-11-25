@@ -136,6 +136,78 @@ void main() {
     expect(picked, '移出書架');
   });
 
+  testWidgets('字放大後選單比估的高：選單不超出畫面，最後一項捲得到', (tester) async {
+    tester.view.physicalSize = const Size(900, 430);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    String? picked;
+    var anchor = const Rect.fromLTWH(840, 31, 44, 44);
+    const labels = [
+      '檢查更新',
+      '自動檢查更新',
+      '預下載章節',
+      '換封面',
+      '匯出全書',
+      '編輯資訊',
+      '清除已下載的正文',
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: const TextScaler.linear(2),
+            padding: const EdgeInsets.only(top: 24),
+          ),
+          child: child!,
+        ),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async {
+                picked = await showGlassMenu<String>(
+                  context: context,
+                  anchor: anchor,
+                  entries: [
+                    for (final label in labels)
+                      GlassMenuItem(
+                        value: label,
+                        label: label,
+                        icon: Icons.refresh_rounded,
+                        checked: label == '自動檢查更新' ? true : null,
+                      ),
+                  ],
+                );
+              },
+              child: const Text('開'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('開'));
+    await tester.pumpAndSettle();
+
+    final list = find.byType(ListView).last;
+    expect(tester.getRect(list).bottom, lessThanOrEqualTo(430));
+    await tester.drag(list, const Offset(0, -400));
+    await tester.pumpAndSettle();
+    final last = find.text(labels.last).last;
+    expect(tester.getRect(last).bottom, lessThanOrEqualTo(430));
+    await tester.tap(last);
+    await tester.pumpAndSettle();
+    expect(picked, labels.last);
+
+    // 開在錨點上方：往上長，不壓到錨點。
+    anchor = const Rect.fromLTWH(840, 370, 44, 44);
+    await tester.tap(find.text('開'));
+    await tester.pumpAndSettle();
+    final above = tester.getRect(find.byType(ListView).last);
+    expect(above.top, greaterThanOrEqualTo(24));
+    expect(above.bottom, lessThanOrEqualTo(370));
+  });
+
   testWidgets('the lifted preview shadow grows and shrinks with the lift', (
     tester,
   ) async {

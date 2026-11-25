@@ -39,9 +39,24 @@ class _LenderService extends BookSourceService {
   }
 }
 
+/// 查這一章的那一下會先跑 [onGetByUrl]（讀者在等資料庫的這段時間關掉面板）。
+class _WatchedChapterDao extends ChapterDao {
+  _WatchedChapterDao(super.db);
+
+  void Function(int call)? onGetByUrl;
+  int _calls = 0;
+
+  @override
+  Future<BookChapter?> getByUrl(String bookUrl, String url) async {
+    final result = await super.getByUrl(bookUrl, url);
+    onGetByUrl?.call(++_calls);
+    return result;
+  }
+}
+
 void main() {
   late AppDatabase db;
-  late ChapterDao chapterDao;
+  late _WatchedChapterDao chapterDao;
   late ReaderChapterContentDao contentDao;
 
   final book = Book(
@@ -111,7 +126,7 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
-    chapterDao = ChapterDao(db);
+    chapterDao = _WatchedChapterDao(db);
     contentDao = ReaderChapterContentDao(db);
     await chapterDao.insertChapters([mainChapter()]);
   });
@@ -189,6 +204,28 @@ void main() {
     );
     expect(await stored(), isNull);
   });
+
+  // 寫進去的交易裡要等兩次資料庫（看這一章還在不在目錄、是不是付費），資料庫
+  // 在另一個 isolate，等的時候畫面照樣收得到返回鍵。
+  for (final (call, step) in [(1, '看這一章還在不在目錄'), (2, '看是不是付費章節')]) {
+    test('寫進去的途中（$step時）取消就不存，原本的正文留著', () async {
+      await ReaderChapterContentStore(
+        chapterDao: chapterDao,
+        contentDao: contentDao,
+      ).saveRawContent(book: book, chapter: mainChapter(), content: '原本的正文');
+      final cancelToken = CancelToken();
+      chapterDao.onGetByUrl = (n) {
+        if (n == call) cancelToken.cancel();
+      };
+
+      await expectLater(
+        borrow(_LenderService(), cancelToken: cancelToken),
+        throwsA(isA<DioException>()),
+      );
+      chapterDao.onGetByUrl = null;
+      expect(await stored(), '原本的正文');
+    });
+  }
 
   test('分卷標題與付費章節不能借', () {
     final toc = lenderToc();
