@@ -694,6 +694,164 @@ void main() {
     );
   });
 
+  group('jumping by sentence', () {
+    test('next sentence reads the following one in the same chapter', () async {
+      const text = '第一句。第二句。第三句。';
+      await open({0: text});
+      await tts.startFromVisibleLocation();
+      expect(engine.spoken, ['第一句。']);
+
+      await tts.skipToNextSentence();
+      await pumpEventQueue();
+
+      expect(engine.spoken.last, '第二句。');
+      expect(tts.currentHighlight?.sentenceStart, text.indexOf('第二句'));
+      expect(tts.currentHighlight?.sentenceEnd, text.indexOf('第三句'));
+      expect(tts.isPlaying, isTrue);
+    });
+
+    test('previous goes back one and starts reading while paused', () async {
+      const text = '第一句。第二句。第三句。';
+      await open({0: text});
+      await tts.startFromVisibleLocation();
+      await tts.skipToNextSentence();
+      await tts.skipToNextSentence();
+      await pumpEventQueue();
+      expect(engine.spoken.last, '第三句。');
+      await tts.toggle();
+      expect(tts.phase, ReaderTtsPhase.paused);
+
+      await tts.skipToPreviousSentence();
+      await pumpEventQueue();
+
+      expect(tts.phase, ReaderTtsPhase.reading);
+      expect(engine.spoken.last, '第二句。');
+      expect(tts.currentHighlight?.sentenceStart, text.indexOf('第二句'));
+    });
+
+    test('next while paused starts reading the following sentence', () async {
+      const text = '第一句。第二句。第三句。';
+      await open({0: text});
+      await tts.startFromVisibleLocation();
+      await tts.toggle();
+      expect(tts.phase, ReaderTtsPhase.paused);
+
+      await tts.skipToNextSentence();
+      await pumpEventQueue();
+
+      expect(tts.phase, ReaderTtsPhase.reading);
+      expect(engine.spoken.last, '第二句。');
+    });
+
+    test(
+      'the last sentence of a chapter reads on from the next chapter',
+      () async {
+        await open({0: '第一句。最後一句。', 1: '第二章開頭。'}, titles: {1: '第二章'});
+        await tts.startFromVisibleLocation();
+        await tts.skipToNextSentence();
+        await pumpEventQueue();
+        expect(engine.spoken.last, '最後一句。');
+
+        await tts.skipToNextSentence();
+        await pumpEventQueue();
+
+        expect(engine.spoken.last, '第二章');
+        expect(tts.currentHighlight?.chapterIndex, 1);
+        expect(tts.currentHighlight?.sentenceStart, 0);
+      },
+    );
+
+    test(
+      'the first sentence of a chapter reads the last one before it',
+      () async {
+        const first = '第一章第一句。第一章最後一句。';
+        await open({0: first, 1: '第二章第一句。'});
+        moveTo(1);
+        await tts.startFromVisibleLocation();
+        expect(engine.spoken, ['第二章第一句。']);
+
+        await tts.skipToPreviousSentence();
+        await pumpEventQueue();
+
+        expect(engine.spoken.last, '第一章最後一句。');
+        expect(tts.currentHighlight?.chapterIndex, 0);
+        expect(tts.currentHighlight?.sentenceStart, first.indexOf('第一章最後一句'));
+      },
+    );
+
+    test('previous skips paid chapters', () async {
+      await open({0: '甲。乙。', 1: null, 2: '丙。'}, paid: {1});
+      moveTo(2);
+      await tts.startFromVisibleLocation();
+
+      await tts.skipToPreviousSentence();
+      await pumpEventQueue();
+
+      expect(engine.spoken.last, '乙。');
+      expect(tts.currentHighlight?.chapterIndex, 0);
+    });
+
+    test(
+      'previous from a reading started mid-chapter goes back within it',
+      () async {
+        const text = '第一句。第二句。第三句。';
+        await open({0: text});
+        runtime.updateVisibleLocation(
+          ReaderLocation(chapterIndex: 0, charOffset: text.indexOf('第三句')),
+        );
+        await tts.startFromVisibleLocation();
+        expect(engine.spoken, ['第三句。']);
+
+        await tts.skipToPreviousSentence();
+        await pumpEventQueue();
+
+        expect(engine.spoken.last, '第二句。');
+        expect(tts.currentHighlight?.chapterIndex, 0);
+      },
+    );
+
+    test('the first sentence of the book has nothing before it', () async {
+      await open({0: '唯一的一句。'});
+      await tts.startFromVisibleLocation();
+
+      await tts.skipToPreviousSentence();
+      await pumpEventQueue();
+
+      expect(engine.spoken, ['唯一的一句。']);
+      expect(tts.isPlaying, isTrue);
+      expect(tts.currentHighlight?.sentenceStart, 0);
+    });
+
+    test('the last sentence of the book reads no further', () async {
+      await open({0: '唯一的一句。'});
+      await tts.startFromVisibleLocation();
+
+      await tts.skipToNextSentence();
+      await pumpEventQueue();
+
+      expect(engine.spoken, ['唯一的一句。']);
+      expect(tts.isPlaying, isTrue);
+      expect(tts.currentHighlight?.sentenceStart, 0);
+    });
+
+    test(
+      'starting from a selection reads the sentence at that place',
+      () async {
+        const text = '第一句。第二句。第三句。';
+        await open({0: text});
+
+        await tts.startFromSelection(
+          ReaderLocation(chapterIndex: 0, charOffset: text.indexOf('第二句')),
+        );
+        await pumpEventQueue();
+
+        expect(engine.spoken, ['第二句。']);
+        expect(tts.currentHighlight?.sentenceStart, text.indexOf('第二句'));
+        expect(tts.isPlaying, isTrue);
+      },
+    );
+  });
+
   group('when the engine cannot speak', () {
     test('reading pauses on that sentence and says so', () async {
       await open({0: '甲。乙。'});

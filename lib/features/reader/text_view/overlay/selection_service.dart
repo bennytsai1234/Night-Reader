@@ -215,6 +215,10 @@ final class ReaderTextSelection {
     );
   }
 
+  /// 選字「朗讀」的起點：選取開頭那一句的句首。分句與書籤 [asBookmark]
+  /// 同一套（`bookmarkInSentence`）。
+  ReaderLocation get asSpeechStart => asBookmark.location;
+
   /// 把選到的字畫上標註：從選取開頭畫到結尾，頭尾的空白不算（全是空白時
   /// [SelectionHighlight.quote] 是空的）；跨段時段落分隔照正文原樣記。位置
   /// 和書籤同一套（[asBookmark]）。
