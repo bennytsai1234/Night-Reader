@@ -367,9 +367,6 @@ class RestoreService {
     required bool fromLegado,
   }) async {
     var importedAny = false;
-    // 正文裡有插圖的網路書：插圖不在備份裡，留記號讓書架自動下載抓回來
-    // （ADR 0050）。
-    final unfetched = <String>{};
     for (var item in list) {
       if (item is Map<String, dynamic>) {
         importedAny = true;
@@ -430,18 +427,7 @@ class RestoreService {
           case 'readerChapterContents.json':
             final entry = ReaderChapterContentEntry.fromJson(item);
             await _chapterContentDao.upsertEntry(entry);
-            final book = Book(bookUrl: entry.bookUrl, origin: entry.origin);
-            if (entry.isReady &&
-                !book.isLocal &&
-                (entry.content ?? '').contains('<img') &&
-                unfetched.add('${entry.origin}\n${entry.bookUrl}')) {
-              // 記號寫不進去也照樣還原正文：閱讀器打開那一章時還是會補抓。
-              try {
-                await BookIllustrationStorage.markUnfetched(book);
-              } on FileSystemException catch (error) {
-                AppLog.w('還原：插圖待抓記號寫入失敗 ${entry.bookUrl}: $error');
-              }
-            }
+            await BookIllustrationStorage.markUnfetchedIfIllustrated(entry);
             break;
         }
       }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,7 +13,10 @@ import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/book/reader_chapter_content.dart';
+import 'package:night_reader/core/download/download_executor.dart';
 import 'package:night_reader/core/network/network_service.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/storage/book_illustration_storage.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -217,5 +221,47 @@ void main() {
     expect(book.isInBookshelf, isTrue);
     expect(book.chapterIndex, 2);
     expect((await ChapterDao(db).titlesByBook(url))[2], '二');
+  });
+
+  // 書架檔帶正文、不帶圖檔：有插圖的書要排插圖補抓，離線才看得到圖。
+  test('text with illustrations from the file is marked for the shelf '
+      'download to fetch its pictures', () async {
+    final root = await Directory.systemTemp.createTemp('shelf_file_images');
+    addTearDown(() => root.delete(recursive: true));
+    AppStoragePaths.useRoots((
+      documents: root.path,
+      support: root.path,
+      temporary: root.path,
+    ));
+    final book = Book(bookUrl: url, origin: origin, name: '有圖');
+    ReaderChapterContentEntry entry(int i, String text) =>
+        ReaderChapterContentEntry(
+          contentKey: key(i),
+          origin: origin,
+          bookUrl: url,
+          chapterUrl: '$url/$i',
+          chapterIndex: i,
+          status: ReaderChapterContentStatus.ready,
+          content: text,
+          updatedAt: 1,
+        );
+    final file = jsonEncode({
+      'kind': 'night_reader.bookshelf',
+      'version': 1,
+      'books': [book.toJson()],
+      'chapters': [
+        for (final c in toc(['一', '二'])) c.toJson(),
+      ],
+      'chapterContents': [
+        entry(0, '前文\n<img src="https://i.example/1.png">\n後文').toJson(),
+        entry(1, '沒有圖').toJson(),
+      ],
+      'sources': [],
+    });
+
+    await BookshelfExchangeService().importFromText(file);
+
+    expect(await BookIllustrationStorage.isUnfetched(book), isTrue);
+    expect(await chaptersWithUntriedIllustrations(book), {'$url/0'});
   });
 }
