@@ -82,6 +82,17 @@ void main() {
       '第1話',
     ]);
 
+    // JPEG 的寬高常在檔頭 64 個位元組之後（前面是 EXIF 這類資料）。
+    final jpeg = Directory(p.join(picked.path, '第2話'))..createSync();
+    File(p.join(jpeg.path, '001')).writeAsBytesSync([
+      0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0xA0, //
+      ...List.filled(0xA0, 0),
+    ]);
+    expect(LocalComicLibrary.discover(picked.path).map((s) => s.title), [
+      '第1話',
+      '第2話',
+    ]);
+
     final loose = Directory(p.join(root.path, 'picked', '散圖'))..createSync();
     File(p.join(loose.path, '002')).writeAsBytesSync(stripedPng(4, 4, 0, 0));
     expect(LocalComicLibrary.discover(loose.path).map((s) => s.title), ['散圖']);
