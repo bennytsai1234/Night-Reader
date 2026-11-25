@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
+import 'package:flutter/services.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
@@ -14,6 +16,8 @@ import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_editor_sheet.dart';
 import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_select_bar.dart';
+import 'package:night_reader/features/replace_rule/replace_rule_exchange.dart';
+import 'package:night_reader/shared/share_json_file.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
@@ -247,6 +251,65 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
     }
   }
 
+  /// 選中的規則，照套用的順序。
+  List<ReplaceRule> get _selectedRules => [
+    for (final rule in _rules)
+      if (_selectedIds.contains(rule.id)) rule,
+  ];
+
+  /// 匯出選中：複製成 JSON（Legado 讀得懂，`encodeReplaceRules`）；太大放不進
+  /// 剪貼簿時改用分享（同書源管理的「匯出選中」）。
+  Future<void> _exportSelected() async {
+    final rules = _selectedRules;
+    if (rules.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final json = encodeReplaceRules(rules);
+    try {
+      // Android Binder IPC 上限約 1 MB；超過時改走檔案分享。
+      if (utf8.encode(json).length > 512 * 1024) {
+        await _shareJson(json, rules);
+        if (!mounted) return;
+        messenger.showSnackBar(
+          const SnackBar(content: UiText('規則過多，已改用分享方式匯出')),
+        );
+        return;
+      }
+      await Clipboard.setData(ClipboardData(text: json));
+      if (!mounted) return;
+      messenger.showSnackBar(const SnackBar(content: UiText('已複製至剪貼簿')));
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: UiText(failureMessage('匯出規則', error))),
+      );
+    }
+  }
+
+  /// 分享選中：存成 JSON 檔、用系統分享傳出去。
+  Future<void> _shareSelected() async {
+    final rules = _selectedRules;
+    if (rules.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _shareJson(encodeReplaceRules(rules), rules);
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: UiText(failureMessage('分享規則', error))),
+      );
+    }
+  }
+
+  Future<void> _shareJson(String json, List<ReplaceRule> rules) =>
+      shareJsonFile(
+        json,
+        fileName: rules.length == 1
+            ? rules.single.name
+            : 'export_${rules.length}_replace_rules',
+        fallbackName: 'replaceRule',
+        what: '替換規則',
+      );
+
   @override
   Widget build(BuildContext context) {
     final editing = _editing;
@@ -308,6 +371,8 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
               hasSelection: _selectedIds.isNotEmpty,
               onEnable: () => _setSelectedEnabled(true),
               onDisable: () => _setSelectedEnabled(false),
+              onExport: _exportSelected,
+              onShare: _shareSelected,
               onDelete: _confirmDeleteSelected,
             )
           : const SizedBox.shrink(

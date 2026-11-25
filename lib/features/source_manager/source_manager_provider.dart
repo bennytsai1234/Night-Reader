@@ -1279,9 +1279,7 @@ class SourceManagerProvider with ChangeNotifier {
       final full = await _dao.getByUrl(url);
       if (full != null) selectedFullSources.add(full);
     }
-    final json = jsonEncode(
-      selectedFullSources.map((s) => s.toJson()).toList(),
-    );
+    final json = encodeBookSources(selectedFullSources);
     // Android Binder IPC 上限約 1 MB；超過時改走檔案分享。
     const clipboardSafeBytes = 512 * 1024;
     if (_shouldShareExportPayload(json, limitBytes: clipboardSafeBytes)) {

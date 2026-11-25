@@ -3,15 +3,19 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 
-/// 替換規則多選時底部的玻璃工具列：只有啟用、停用、刪除三個動作。
+/// 替換規則多選時底部的玻璃工具列：啟用、停用、匯出、刪除四個動作；
+/// 「匯出」在同一處開出匯出選中、分享選中（同書源管理的「匯出與分享」）。
 class ReaderReplaceRuleSelectBar extends StatelessWidget {
   const ReaderReplaceRuleSelectBar({
     super.key,
     required this.hasSelection,
     required this.onEnable,
     required this.onDisable,
+    required this.onExport,
+    required this.onShare,
     required this.onDelete,
   });
 
@@ -21,6 +25,8 @@ class ReaderReplaceRuleSelectBar extends StatelessWidget {
   final bool hasSelection;
   final VoidCallback onEnable;
   final VoidCallback onDisable;
+  final VoidCallback onExport;
+  final VoidCallback onShare;
   final VoidCallback onDelete;
 
   @override
@@ -46,6 +52,15 @@ class ReaderReplaceRuleSelectBar extends StatelessWidget {
             ),
           ),
           Expanded(
+            child: Builder(
+              builder: (buttonContext) => _BarTextButton(
+                label: '匯出',
+                color: scheme.onSurface,
+                onTap: actionsEnabled ? () => _pickExport(buttonContext) : null,
+              ),
+            ),
+          ),
+          Expanded(
             child: _BarTextButton(
               label: '刪除',
               color: context.danger,
@@ -55,6 +70,31 @@ class ReaderReplaceRuleSelectBar extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _pickExport(BuildContext buttonContext) async {
+    final picked = await showGlassMenu<String>(
+      context: buttonContext,
+      anchor: globalRectOf(buttonContext),
+      entries: const [
+        GlassMenuItem(
+          value: 'export',
+          icon: Icons.file_download_outlined,
+          label: '匯出選中',
+        ),
+        GlassMenuItem(
+          value: 'share',
+          icon: Icons.share_outlined,
+          label: '分享選中',
+        ),
+      ],
+    );
+    switch (picked) {
+      case 'export':
+        onExport();
+      case 'share':
+        onShare();
+    }
   }
 }
 

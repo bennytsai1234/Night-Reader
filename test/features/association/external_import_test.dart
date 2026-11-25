@@ -6,7 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/features/association/association_handler_service.dart';
 import 'package:night_reader/features/association/import_content.dart';
@@ -282,6 +284,61 @@ void main() {
       await tester.pumpAndSettle();
       expect(older, findsOneWidget);
       expect(find.text('匯入'), findsOneWidget);
+    });
+
+    testWidgets('分享的替換規則先開匯入預覽：這台已有的預設不勾，不被蓋掉', (tester) async {
+      await GetIt.instance.reset();
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      registerDatabase(db);
+      addTearDown(() async {
+        await db.close();
+        await GetIt.instance.reset();
+      });
+      final dao = GetIt.instance<ReplaceRuleDao>();
+      await tester.runAsync(
+        () => dao.upsert(
+          ReplaceRule(id: 1700000000005, name: '這台改過的', pattern: '甲'),
+        ),
+      );
+      final context = await pumpHost(tester);
+      // Legado 匯出的樣子：開關是 true／false。
+      const shared =
+          '[{"id":1700000000005,"name":"檔案裡的","pattern":"甲甲","isEnabled":true,'
+          '"isRegex":false,"scopeTitle":false,"scopeContent":true},'
+          '{"id":1700000000006,"name":"新規則","pattern":"乙","isEnabled":true,'
+          '"isRegex":false,"scopeTitle":false,"scopeContent":true}]';
+
+      await tester.runAsync(
+        () => service.handleSharedMedia(context, [
+          SharedMediaFile(path: shared, type: SharedMediaType.text),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('匯入替換規則'));
+      final sheet = find.text('匯入 2 個替換規則');
+      for (var i = 0; i < 40 && sheet.evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      expect(sheet, findsOneWidget);
+
+      await tester.tap(find.text('匯入 1 個'));
+      for (var i = 0; i < 10; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      final rules = (await tester.runAsync(dao.getAll))!;
+      expect(
+        {for (final r in rules) r.id: r.name},
+        {1700000000005: '這台改過的', 1700000000006: '新規則'},
+      );
+      expect(find.text('成功匯入 1 個替換規則'), findsOneWidget);
     });
 
     testWidgets('認不出的分享檔案說明不是夜讀能匯入的格式', (tester) async {
