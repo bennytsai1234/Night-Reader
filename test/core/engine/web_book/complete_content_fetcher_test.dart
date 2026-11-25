@@ -71,6 +71,14 @@ void main() {
           request.response.write(page('第$n章的正文。', '/book/${n + 1}'));
         case 'loop':
           request.response.write(page('第$n頁的正文。', '/loop/${3 - n}'));
+        case 'start':
+          // 章節網址轉到真正的第一頁；第二頁的「下一頁」又連回第一頁。
+          request.response.statusCode = HttpStatus.found;
+          request.response.headers.set(HttpHeaders.locationHeader, '/p/1');
+        case 'p':
+          request.response.write(
+            n == 1 ? page('甲段正文。', '/p/2') : page('乙段正文。', '/p/1'),
+          );
         default:
           request.response.statusCode = HttpStatus.notFound;
       }
@@ -133,5 +141,41 @@ void main() {
     );
     expect(content, contains('第3章的正文'));
     expect(content, isNot(contains('第4章的正文')));
+  });
+
+  // 同 Legado `BookContent`：已抓的網址從第一頁轉址後的網址算起。
+  test('a next-page link back to where the chapter url redirected does not '
+      'read that page again', () async {
+    final content = await CompleteContentFetcher.fetch(
+      source,
+      book,
+      chapter('/start/0'),
+    );
+    expect('甲段'.allMatches(content), hasLength(1));
+    expect('乙段'.allMatches(content), hasLength(1));
+  });
+
+  // 同 Legado `WebBook.getContentAwait`：正文規則空白時正文是章節網址
+  // （有聲書的章節網址本身是音訊），不去抓。
+  test('a blank content rule gives the chapter url without fetching', () async {
+    for (final ruleContent in [
+      null,
+      {'content': ' '},
+    ]) {
+      final blank = BookSource.fromJson({
+        'bookSourceName': '有聲',
+        'bookSourceUrl': 'http://local.test',
+        'bookSourceType': 1,
+        'ruleContent': ?ruleContent,
+      });
+      expect(
+        await CompleteContentFetcher.fetch(
+          blank,
+          book,
+          BookChapter(url: 'http://unreachable.invalid/a.mp3', title: '第一集'),
+        ),
+        'http://unreachable.invalid/a.mp3',
+      );
+    }
   });
 }

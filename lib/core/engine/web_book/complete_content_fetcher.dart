@@ -36,6 +36,9 @@ final class CompleteContentFetcher {
     int? pageConcurrency,
     CancelToken? cancelToken,
   }) async {
+    // 同 Legado `WebBook.getContentAwait`：正文規則空白時正文就是章節網址
+    // （有聲書的章節網址本身是音訊），不抓。
+    if ((source.ruleContent?.content ?? '').trim().isEmpty) return chapter.url;
     final stopAt = (nextChapterUrl == null || nextChapterUrl.isEmpty)
         ? await _storedNextChapterUrl(book, chapter)
         : nextChapterUrl;
@@ -79,6 +82,9 @@ final class CompleteContentFetcher {
       fetchedPages += pages.length;
       for (final page in pages) {
         if (page.content.isNotEmpty) contentParts.add(page.content);
+        // 同 Legado `BookContent`：第一頁轉址後的網址也算抓過，後面的頁連回
+        // 它時不再抓一次（不然正文整段重複）。
+        if (firstRedirectUrl == null) queuedUrls.add(page.baseUrl);
         firstRedirectUrl ??= page.baseUrl;
         title ??= page.title;
         for (final nextUrl in page.nextUrls) {

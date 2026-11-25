@@ -18,6 +18,10 @@ import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 
+/// 正文規則空白時不抓網頁（同 Legado `WebBook.getContentAwait`），測試的書源要有
+/// 規則才會發出請求。
+const _contentRule = {'content': 'tag.body@text'};
+
 void main() {
   late AppDatabase db;
   late Directory root;
@@ -235,7 +239,11 @@ void main() {
       isInBookshelf: true,
     );
     await GetIt.instance<BookSourceDao>().upsert(
-      BookSource.fromJson({'bookSourceName': '壞', 'bookSourceUrl': origin}),
+      BookSource.fromJson({
+        'bookSourceName': '壞',
+        'bookSourceUrl': origin,
+        'ruleContent': _contentRule,
+      }),
     );
     await GetIt.instance<BookDao>().upsert(book);
     // 測試裡沒有初始化網路服務：每章都立刻失敗，不會真的連網。
@@ -331,7 +339,11 @@ void main() {
         name: '插章後的整本',
       );
       await GetIt.instance<BookSourceDao>().upsert(
-        BookSource.fromJson({'bookSourceName': '數', 'bookSourceUrl': origin}),
+        BookSource.fromJson({
+          'bookSourceName': '數',
+          'bookSourceUrl': origin,
+          'ruleContent': _contentRule,
+        }),
       );
       await GetIt.instance<BookDao>().upsert(book);
       final store = ReaderChapterContentStore(
@@ -383,7 +395,11 @@ void main() {
         name: '刪了起點',
       );
       await GetIt.instance<BookSourceDao>().upsert(
-        BookSource.fromJson({'bookSourceName': '刪', 'bookSourceUrl': origin}),
+        BookSource.fromJson({
+          'bookSourceName': '刪',
+          'bookSourceUrl': origin,
+          'ruleContent': _contentRule,
+        }),
       );
       await GetIt.instance<BookDao>().upsert(book);
       await GetIt.instance<ChapterDao>().insertChapters([
@@ -427,7 +443,11 @@ void main() {
         isInBookshelf: true,
       );
       await GetIt.instance<BookSourceDao>().upsert(
-        BookSource.fromJson({'bookSourceName': '晚', 'bookSourceUrl': origin}),
+        BookSource.fromJson({
+          'bookSourceName': '晚',
+          'bookSourceUrl': origin,
+          'ruleContent': _contentRule,
+        }),
       );
       await GetIt.instance<BookDao>().upsert(book);
       // 任務排進來時還沒有目錄；開跑前目錄已被別處（例如閱讀器）抓好。
@@ -469,7 +489,11 @@ void main() {
       isInBookshelf: true,
     );
     await GetIt.instance<BookSourceDao>().upsert(
-      BookSource.fromJson({'bookSourceName': '刪', 'bookSourceUrl': origin}),
+      BookSource.fromJson({
+        'bookSourceName': '刪',
+        'bookSourceUrl': origin,
+        'ruleContent': _contentRule,
+      }),
     );
     await GetIt.instance<BookDao>().upsert(book);
     await GetIt.instance<ChapterDao>().insertChapters([
@@ -513,7 +537,11 @@ void main() {
         isInBookshelf: inShelf,
       );
       await GetIt.instance<BookSourceDao>().upsert(
-        BookSource.fromJson({'bookSourceName': '架', 'bookSourceUrl': origin}),
+        BookSource.fromJson({
+          'bookSourceName': '架',
+          'bookSourceUrl': origin,
+          'ruleContent': _contentRule,
+        }),
       );
       await GetIt.instance<BookDao>().upsert(book);
       await GetIt.instance<ChapterDao>().insertChapters([
@@ -597,7 +625,11 @@ void main() {
         isInBookshelf: true,
       );
       await GetIt.instance<BookSourceDao>().upsert(
-        BookSource.fromJson({'bookSourceName': '架', 'bookSourceUrl': origin}),
+        BookSource.fromJson({
+          'bookSourceName': '架',
+          'bookSourceUrl': origin,
+          'ruleContent': _contentRule,
+        }),
       );
       await GetIt.instance<BookDao>().upsert(book);
       final service = DownloadService();
