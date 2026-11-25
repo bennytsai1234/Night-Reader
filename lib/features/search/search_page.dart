@@ -118,6 +118,11 @@ class _SearchViewState extends State<SearchView> {
   /// 這一輪搜尋已經出現過的結果；新一輪搜尋開始時清空。
   final Set<String> _knownResultKeys = {};
 
+  /// 捲到底可以接著搜下一頁：接著搜一次就收起，讀者離開底部（清單變長也
+  /// 算）或再拖一次才放開。回彈中下一頁剛好回來、或新書都併進原本的卡讓
+  /// 清單沒變長時，不會一次甩到底就連搜好幾頁。
+  bool _loadMoreArmed = true;
+
   /// 這一幀才串流進來的結果。只有這一幀就畫出來的列播淡入，落在畫面外、
   /// 之後才捲進來的列不播；幀結束時清空。
   final Set<String> _arrivingResultKeys = {};
@@ -963,20 +968,29 @@ class _SearchViewState extends State<SearchView> {
     final indexByKey = <String, int>{
       for (var i = 0; i < results.length; i++) _resultKey(results[i]): i,
     };
-    return NotificationListener<ScrollUpdateNotification>(
-      // 使用者一開始捲，結果順序就固定，之後找到的書接在尾端。
+    return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
-        if (notification.depth == 0 &&
+        if (notification.depth != 0) return false;
+        final metrics = notification.metrics;
+        // 使用者一開始捲，結果順序就固定，之後找到的書接在尾端。
+        if (notification is ScrollUpdateNotification &&
             notification.dragDetails != null &&
-            notification.metrics.pixels > 0) {
+            metrics.pixels > 0) {
           p.holdResultOrder();
         }
+        if ((notification is ScrollStartNotification &&
+                notification.dragDetails != null) ||
+            metrics.extentAfter > 0) {
+          _loadMoreArmed = true;
+        }
         // 捲到底接著搜下一頁（同 Legado `SearchActivity.scrollToBottom`）。
-        if (notification.depth == 0 &&
-            notification.metrics.extentAfter <= 0 &&
-            notification.metrics.maxScrollExtent > 0 &&
+        if (_loadMoreArmed &&
+            notification is ScrollUpdateNotification &&
+            metrics.extentAfter <= 0 &&
+            metrics.maxScrollExtent > 0 &&
             p.hasMorePages &&
             !p.isSearching) {
+          _loadMoreArmed = false;
           unawaited(p.loadMorePages());
         }
         return false;

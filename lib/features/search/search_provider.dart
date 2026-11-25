@@ -246,6 +246,9 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   /// 結果捲到底：接著搜下一頁（同 Legado `SearchActivity.scrollToBottom`）。
   Future<void> loadMorePages() async {
     if (!hasMorePages || _run.isSearching) return;
+    // 接著搜的書接在尾端（docs/design/screens.md），用滾輪、觸控板捲到底
+    // 沒有拖曳、還沒固定順序時也一樣。
+    holdResultOrder();
     await _run.loadMore();
   }
 

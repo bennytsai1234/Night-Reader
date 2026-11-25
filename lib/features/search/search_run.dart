@@ -157,7 +157,7 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     ..onSourcesChosen = _rememberSources
     ..onScopeNarrowed = _narrowScope
     ..onSourceSearched = _recordSearched
-    ..onSourceMerged = _recordPage;
+    ..onSourcePage = _recordPage;
 
   final SearchBookLoader? _loader;
   final ReadingFetches _readingFetches;
@@ -217,6 +217,11 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   final Map<String, int> _pages = {};
   final Map<String, BookSource> _withMore = {};
 
+  /// 各書源（網址）搜到過的書（過濾前，網址或書名加作者）：這一頁有沒有
+  /// 新書照它判斷，不照合併後的卡（合併卡展開時別的書源會被填上代表書的
+  /// 網址）。
+  final Map<String, Set<String>> _seenBySource = {};
+
   /// 讀者按了結束：捲到底不再自己搜下一頁，新的一次搜尋才重來（同 Legado
   /// `isManualStopSearch`）。
   bool _stoppedByReader = false;
@@ -259,6 +264,7 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     _failuresBefore = const [];
     _pages.clear();
     _withMore.clear();
+    _seenBySource.clear();
     _stoppedByReader = false;
     _phase = _Phase.saving;
     completed = 0;
@@ -381,15 +387,22 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
         key: key,
         sources: sources,
         precisionSearch: conditions!.precision,
-        initialResults: List<SearchBook>.from(results),
+        // 同接著搜暫停的：帶各書源的原始書，不帶合併卡。
+        initialResults: [for (final books in _searched.values) ...books],
         pages: pages,
       ),
     );
   }
 
-  /// 一個書源這一頁搜完：記下搜到第幾頁，沒搜到新書的不再往下一頁搜。
-  void _recordPage(BookSource source, bool foundNew) {
+  /// 一個書源這一頁搜完：記下搜到第幾頁，沒搜到新書（過濾前）的不再往
+  /// 下一頁搜。
+  void _recordPage(BookSource source, List<SearchBook> books) {
     final url = source.bookSourceUrl;
+    final seen = _seenBySource.putIfAbsent(url, () => {});
+    var foundNew = false;
+    for (final book in books) {
+      if (seen.add(_pageIdentity(book))) foundNew = true;
+    }
     if (_phase == _Phase.loadingMore) {
       _pages[url] = (_pages[url] ?? 1) + 1;
     } else {
@@ -400,6 +413,11 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     } else {
       _withMore.remove(url);
     }
+  }
+
+  static String _pageIdentity(SearchBook book) {
+    final url = book.bookUrl.trim();
+    return url.isNotEmpty ? url : '${book.name}\u0000${book.author}';
   }
 
   /// 接著搜暫停的搜尋：只搜 [remaining]，前面搜完的結果帶著、進度接著數。
@@ -522,9 +540,17 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
 
   void _recordSearched(BookSource source, List<SearchBook> books) {
     final url = source.bookSourceUrl;
-    _searched[url] = _phase == _Phase.loadingMore
-        ? [...?_searched[url], ...books]
-        : books;
+    if (_phase == _Phase.loadingMore) {
+      final kept = _searched[url] ?? const <SearchBook>[];
+      final known = {for (final book in kept) _pageIdentity(book)};
+      _searched[url] = [
+        ...kept,
+        for (final book in books)
+          if (known.add(_pageIdentity(book))) book,
+      ];
+    } else {
+      _searched[url] = books;
+    }
     _failedNotes.remove(url);
     recorder?.sourceDone(url, books, null);
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
@@ -13,6 +14,7 @@ import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:night_reader/core/models/search/ai_find_record.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/shared/widgets/book/book_cover_widget.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
@@ -504,6 +506,77 @@ void main() {
     await tester.pumpAndSettle();
     expect(provider.loads, greaterThan(0));
   });
+
+  // 用真的搜尋：第 2 頁以後的書都併進原本的卡、清單不變長，回彈中第 2 頁
+  // 就回來了。一次捲到底只接著搜一頁，讀者再拖一次才搜下一頁。
+  testWidgets('one scroll to the end loads one page, even when the list '
+      'does not grow', (tester) async {
+    final pages = <int>[];
+    Future<List<SearchBook>> loader(
+      BookSource source,
+      String key, {
+      CancelToken? cancelToken,
+      int page = 1,
+    }) async {
+      pages.add(page);
+      return [
+        for (var i = 0; i < (page == 1 ? 30 : 1); i++)
+          SearchBook(
+            bookUrl: 'https://s.example/p$page/$i',
+            name: '書$i',
+            author: '作者',
+            origin: 'https://s.example',
+            originName: '書源',
+          ),
+      ];
+    }
+
+    late SearchProvider provider;
+    await tester.runAsync(() async {
+      await GetIt.instance<BookSourceDao>().upsert(
+        BookSource(bookSourceUrl: 'https://s.example', bookSourceName: '書源'),
+      );
+      provider = SearchProvider(
+        entrance: Future<void>.value(),
+        searchLoader: loader,
+      );
+      await provider.ready;
+      await provider.search('夜');
+    });
+    await tester.pumpWidget(
+      ChangeNotifierProvider<SearchProvider>(
+        create: (_) => provider,
+        child: MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: const SearchView(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(provider.hasMorePages, isTrue);
+
+    pages.clear();
+    await tester.fling(find.byType(ListView), const Offset(0, -20000), 8000);
+    for (var i = 0; i < 60; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await tester.pumpAndSettle();
+    expect(pages, [2]);
+
+    // 再拖一次才接著搜下一頁。
+    await tester.drag(find.byType(ListView), const Offset(0, -200));
+    for (var i = 0; i < 20; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await tester.pumpAndSettle();
+    expect(pages, [2, 3]);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('typing suggests matching history in either script', (
     tester,

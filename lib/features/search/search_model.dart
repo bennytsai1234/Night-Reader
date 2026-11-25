@@ -250,9 +250,9 @@ class SearchModel {
   /// 和併進結果在同一處，記下的與畫面上的不會對不上。
   void Function(BookSource source, List<SearchBook> books)? onSourceSearched;
 
-  /// 一個書源搜完、結果併好時呼叫：[foundNew] 是這次有沒有搜到結果裡還沒
-  /// 有的書（同源去重後），決定它還要不要往下一頁搜。
-  void Function(BookSource source, bool foundNew)? onSourceMerged;
+  /// 一個書源這一頁搜完時呼叫，[books] 是精準搜尋過濾前搜到的書：有沒有
+  /// 下一頁照它判斷（第 1 頁全被精準搜尋濾掉，符合的可能在第 2 頁）。
+  void Function(BookSource source, List<SearchBook> books)? onSourcePage;
 
   /// 每個書源送出前等它：放到背景的搜尋先等閱讀時的抓章（ADR 0070）。
   Future<void> Function()? beforeSource;
@@ -458,14 +458,13 @@ class SearchModel {
         if (stale()) return;
       }
       onSourceSearched?.call(source, filteredBooks);
-      var foundNew = false;
+      onSourcePage?.call(source, books);
       if (filteredBooks.isNotEmpty) {
         // 合併結果：書源常常幾個一起回來，合併與通知頁面集中在一段時間內
         // 做一次（見 [_publishDelay]）。
-        foundNew = _appendRawBooks(filteredBooks);
+        _appendRawBooks(filteredBooks);
         _schedulePublish(key, precisionSearch);
       }
-      onSourceMerged?.call(source, foundNew);
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel || stale()) return;
       _failedCount++;
@@ -530,17 +529,11 @@ class SearchModel {
     _searchBooks = _rebuild(searchKey, precision);
   }
 
-  /// 傳回有沒有加進新的書。
-  bool _appendRawBooks(List<SearchBook> newBooks) {
-    var added = false;
+  void _appendRawBooks(List<SearchBook> newBooks) {
     for (final book in newBooks) {
       // 同源去重：沿用既有 bookUrl / 同名同作者判定，群組內同源只算一個 origin。
-      if (_rawIndex.add(book)) {
-        _groups.add(book);
-        added = true;
-      }
+      if (_rawIndex.add(book)) _groups.add(book);
     }
-    return added;
   }
 
   /// 每次重建要把所有結果重新排序，頁面也跟著整份重排；上百個書源陸續
