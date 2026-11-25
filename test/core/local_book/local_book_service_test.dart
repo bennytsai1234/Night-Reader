@@ -50,10 +50,11 @@ void main() {
 
   test('選到的檔案複製進 App 的本地書資料夾，原檔刪了也讀得到', () async {
     final source = await pick('書.txt', '第一章\n內容');
-    final stored = await LocalBookService().storeInLibrary(
+    final (path: stored, :created) = await LocalBookService().storeInLibrary(
       source,
       bookDao: bookDao,
     );
+    expect(created, isTrue);
 
     expect(p.dirname(stored), p.join(documents.path, 'InkpageBooks'));
     expect(p.basename(stored), '書.txt');
@@ -62,8 +63,8 @@ void main() {
   });
 
   test('同名同內容視為同一本，同名不同內容（大小一樣也算）另取名字', () async {
-    Future<String> store(String path) =>
-        LocalBookService().storeInLibrary(path, bookDao: bookDao);
+    Future<String> store(String path) async =>
+        (await LocalBookService().storeInLibrary(path, bookDao: bookDao)).path;
     final first = await store(await pick('書.txt', '甲'));
     final again = await store(await pick('書.txt', '甲'));
     final other = await store(await pick('書.txt', '乙'));
