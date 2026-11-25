@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io' hide Cookie;
 import 'dart:io' as io show Cookie;
 
@@ -8,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/sync_store_blobs.dart';
 
+import 'package:night_reader/core/models/reading/read_record.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/cookie_dao.dart';
@@ -231,6 +233,131 @@ void main() {
       // B：這台的 15 分鐘（含還原的 10 分鐘）+ A 那筆扣掉還原的部分。
       final bLocal = (await b.dao.getByBookName('夜航'))!.readTime;
       expect(bLocal + (await b.others()).books['夜航']!.readTime, 15 * 60);
+    });
+
+    /// [to] 還原 [from] 的備份（同 `RestoreService` 還原閱讀統計）。
+    Future<void> restore(_StatsPhone to, _StatsPhone from, {String? id}) async {
+      final records = await from.dao.getAll();
+      final days = await from.dao.getAllDays();
+      await to.dao.restoreReadingStats(records: records, days: days);
+      await RestoredStats.remember(
+        to.prefs,
+        from: id,
+        records: records,
+        days: days,
+      );
+    }
+
+    /// [phone] 這台送上去的、別台看到的每本書秒數（[on] 那台看）。
+    Future<int> uploadedBy(_StatsPhone on, String book) async =>
+        (await on.others()).books[book]?.readTime ?? 0;
+
+    test('restoring two phones\' backups one after the other counts neither '
+        'twice', () async {
+      final a = await statsPhone('a');
+      await read(a, '夜航', 10);
+      await a.sync.syncAll();
+      final aId = await SyncSettings(a.prefs).deviceId();
+      final b = await statsPhone('b');
+      await read(b, '別本', 20);
+      await b.sync.syncAll();
+      final bId = await SyncSettings(b.prefs).deviceId();
+
+      final c = await statsPhone('c');
+      await restore(c, a, id: aId);
+      await restore(c, b, id: bId);
+      await c.sync.syncAll();
+      await a.sync.syncAll();
+
+      // A 看到的是 B 的 20 分鐘，C 沒有自己讀，不多送。
+      expect(await uploadedBy(a, '夜航'), 0);
+      expect(await uploadedBy(a, '別本'), 20 * 60);
+      expect((await a.others()).secondsBetween(today, today), 20 * 60);
+      // C：這台的（還原來的）加別台扣掉還原的，各 10、20 分鐘。
+      for (final (book, minutes) in [('夜航', 10), ('別本', 20)]) {
+        final local = (await c.dao.getByBookName(book))!.readTime;
+        expect(local + await uploadedBy(c, book), minutes * 60, reason: book);
+      }
+    });
+
+    test('a backup from a phone that never synced keeps what was restored '
+        'from another phone', () async {
+      final a = await statsPhone('a');
+      await read(a, '夜航', 10);
+      await a.sync.syncAll();
+      final aId = await SyncSettings(a.prefs).deviceId();
+      final offline = await statsPhone('offline');
+      await read(offline, '別本', 5);
+
+      final c = await statsPhone('c');
+      await restore(c, a, id: aId);
+      await restore(c, offline);
+      await c.sync.syncAll();
+      await a.sync.syncAll();
+
+      expect(await uploadedBy(a, '夜航'), 0);
+      expect(await uploadedBy(a, '別本'), 5 * 60, reason: '沒同步過那台的算這台的');
+    });
+
+    test('what an older version remembered (one phone, days summed) is still '
+        'held back', () async {
+      final prefs = await prefsOf({
+        RestoredStats.prefKey: jsonEncode({
+          'from': 'phone-a',
+          'books': {'夜航': 600},
+          'days': {today: 600},
+        }),
+      });
+
+      final total = RestoredStats.read(prefs)!.total(except: 'phone-c');
+
+      expect(total.books, {'夜航': 600});
+      expect(total.days, {today: 600});
+    });
+
+    test('restoring again after upgrading replaces the older version\'s '
+        'daily seconds for that phone', () async {
+      final prefs = await prefsOf({
+        RestoredStats.prefKey: jsonEncode({
+          'from': 'phone-a',
+          'books': {'夜航': 600},
+          'days': {today: 600},
+        }),
+      });
+
+      await RestoredStats.remember(
+        prefs,
+        from: 'phone-b',
+        records: [
+          ReadRecord(bookName: '夜航', deviceId: '', readTime: 900, lastRead: 1),
+        ],
+        days: [ReadDay(bookName: '夜航', day: today, seconds: 900)],
+      );
+
+      final total = RestoredStats.read(prefs)!.total(except: 'phone-c');
+      expect(total.books, {'夜航': 900});
+      expect(total.days, {today: 900});
+    });
+
+    test('renaming a restored book keeps it from being sent again', () async {
+      final a = await statsPhone('a');
+      await read(a, '夜航', 10);
+      await a.sync.syncAll();
+      final aId = await SyncSettings(a.prefs).deviceId();
+
+      final c = await statsPhone('c');
+      await restore(c, a, id: aId);
+      await ReadStatsSync.renameBook(
+        c.dao,
+        from: '夜航',
+        to: '夜航船',
+        prefs: c.prefs,
+      );
+      await c.sync.syncAll();
+      await a.sync.syncAll();
+
+      expect(await uploadedBy(a, '夜航船'), 0);
+      expect((await a.others()).secondsBetween(today, today), 0);
     });
   });
 
