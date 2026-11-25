@@ -931,7 +931,7 @@ void main() {
     expect(a.sync.status.value.lastSyncAt, isNull, reason: '重進備份與同步頁也一樣');
   });
 
-  test('只改密碼重連同一個空間：上次全面同步的時間留著；換回原本的空間又算', () async {
+  test('只改密碼重連同一個空間：上次全面同步的時間留著；換了空間就不留', () async {
     await a.sync.useWebDav((
       url: 'https://one.example',
       user: '',
@@ -955,8 +955,51 @@ void main() {
       password: '',
     ));
     expect(a.sync.status.value.lastSyncAt, isNull);
+    // 換回原本的空間：合併紀錄已經作廢，照沒全面同步過。
     await a.sync.useWebDav(account);
-    expect(a.sync.status.value.lastSyncAt?.millisecondsSinceEpoch, done);
+    expect(a.sync.status.value.lastSyncAt, isNull);
+  });
+
+  test('升級前存的時間（沒記空間）：換到另一個空間就不算', () async {
+    await a.sync.useWebDav((
+      url: 'https://one.example',
+      user: '',
+      password: '',
+    ));
+    final legacy = DateTime(2026, 11, 1);
+    await a.prefs.setInt(
+      SyncSettings.lastSyncKey,
+      legacy.millisecondsSinceEpoch,
+    );
+    await a.prefs.remove(SyncSettings.lastSyncSpaceKey);
+    await a.sync.load();
+    expect(a.sync.status.value.lastSyncAt, legacy, reason: '同一個空間照舊算');
+
+    await a.sync.useWebDav((
+      url: 'https://other.example',
+      user: '',
+      password: '',
+    ));
+    expect(a.sync.status.value.lastSyncAt, isNull);
+    await a.sync.load();
+    expect(a.sync.status.value.lastSyncAt, isNull);
+  });
+
+  test('升級前存的時間，還原備份把設定換成另一個空間：還沒同步前讀回來也不算', () async {
+    await a.sync.useWebDav((
+      url: 'https://one.example',
+      user: '',
+      password: '',
+    ));
+    await a.prefs.setInt(
+      SyncSettings.lastSyncKey,
+      DateTime(2026, 11, 1).millisecondsSinceEpoch,
+    );
+    await a.prefs.remove(SyncSettings.lastSyncSpaceKey);
+
+    await a.prefs.setString('sync.webdav.url', 'https://restored.example');
+    await a.sync.load();
+    expect(a.sync.status.value.lastSyncAt, isNull);
   });
 
   test('還原備份把設定換成另一個空間：讀回來不算上一個空間的時間', () async {
