@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:night_reader/core/sync/read_stats_sync.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/foundation.dart';
@@ -903,10 +904,13 @@ class BookDetailProvider extends ChangeNotifier {
         // 閱讀統計照書名記，改名要一起搬，不然會分成兩筆。搬失敗不擋存檔：
         // 書的資訊已經存好，統計只是留在舊名字下。
         try {
-          await _readRecordDao?.renameBook(
-            from: previousName,
-            to: next.recordName,
-          );
+          if (_readRecordDao case final dao?) {
+            await ReadStatsSync.renameBook(
+              dao,
+              from: previousName,
+              to: next.recordName,
+            );
+          }
         } catch (error) {
           AppLog.e('改書名時搬閱讀統計失敗: $error', error: error);
         }

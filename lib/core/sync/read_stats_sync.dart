@@ -57,10 +57,9 @@ class ReadStatsSync extends SyncKind {
   @override
   Future<Map<String, SyncRecord>> local() async {
     final deviceId = _deviceId ??= await _settings.deviceId();
-    final restored = RestoredStats.read(_prefs);
-    final skip = restored != null && restored.from != deviceId
-        ? restored
-        : RestoredStats.none;
+    final skip = (RestoredStats.read(_prefs) ?? RestoredStats.none).total(
+      except: deviceId,
+    );
     final days = <String, int>{};
     for (final day in await _dao.getAllDays()) {
       days.update(
@@ -92,6 +91,23 @@ class ReadStatsSync extends SyncKind {
   static int _minus(int value, int? restored) {
     final left = value - (restored ?? 0);
     return left < 0 ? 0 : left;
+  }
+
+  /// 書改名：閱讀統計（`ReadRecordDao.renameBook`）與從別台還原進來的那份
+  /// （[RestoredStats.renameBook]）一起從 [from] 併到 [to]，不然還原的時間
+  /// 在新書名下會被當成這台讀的再送一次。
+  static Future<void> renameBook(
+    ReadRecordDao dao, {
+    required String from,
+    required String to,
+    SharedPreferences? prefs,
+  }) async {
+    await dao.renameBook(from: from, to: to);
+    await RestoredStats.renameBook(
+      prefs ?? await SharedPreferences.getInstance(),
+      from: from,
+      to: to,
+    );
   }
 
   /// 只收別台的；這台的那筆只有這台寫。
@@ -149,96 +165,206 @@ class ReadStatsSync extends SyncKind {
         }
       }
     }
-    final restored = RestoredStats.read(prefs ?? getIt<SharedPreferences>());
-    if (restored != null && json.containsKey(restored.from)) {
-      for (final MapEntry(:key, :value) in restored.books.entries) {
-        if (books[key] case final book?) {
-          books[key] = (
-            readTime: _minus(book.readTime, value),
-            lastRead: book.lastRead,
-          );
-        }
+    final restored =
+        (RestoredStats.read(prefs ?? getIt<SharedPreferences>()) ??
+                RestoredStats.none)
+            .total(only: json.keys.toSet());
+    for (final MapEntry(:key, :value) in restored.books.entries) {
+      if (books[key] case final book?) {
+        books[key] = (
+          readTime: _minus(book.readTime, value),
+          lastRead: book.lastRead,
+        );
       }
-      for (final MapEntry(:key, :value) in restored.days.entries) {
-        if (days[key] case final seconds?) days[key] = _minus(seconds, value);
-      }
+    }
+    for (final MapEntry(:key, :value) in restored.days.entries) {
+      if (days[key] case final seconds?) days[key] = _minus(seconds, value);
     }
     return OtherDevicesStats(books: books, days: days);
   }
 }
 
-/// 從另一台的備份還原進來的閱讀統計：那台在同步裡的名字（[from]），與還原
-/// 時每本書的累計秒數、每天的秒數（所有書加總）。記在這台的偏好設定。
+/// 從別台的備份還原進來、這台統計裡有的閱讀時間，照來源那台（它在同步裡的
+/// 名字）分開記：每本書的累計秒數、每本書每天的秒數。記在這台的偏好設定，
+/// 不進備份（`BackupService.deviceOnlyKeys`）。
+///
+/// 每一秒最多記在一台下面：還原只換掉備份裡有的書（`restoreReadingStats`），
+/// 那幾本照這次的備份重記，其他書原本記的來源不動；書改名時跟著搬
+/// （[renameBook]）。
 class RestoredStats {
-  const RestoredStats({
-    required this.from,
-    required this.books,
-    required this.days,
-  });
+  const RestoredStats(this.devices);
 
-  static const RestoredStats none = RestoredStats(
-    from: '',
-    books: {},
-    days: {},
-  );
+  static const RestoredStats none = RestoredStats({});
 
-  static const String _key = 'sync.restored_stats';
+  static const String prefKey = 'sync.restored_stats';
 
-  final String from;
-  final Map<String, int> books;
-  final Map<String, int> days;
+  /// 來源那台 → 那台還原進來的每本書累計秒數（`books`）與每本書每天的秒數
+  /// （`days`：書名 → 日期 → 秒數）。
+  final Map<
+    String,
+    ({Map<String, int> books, Map<String, Map<String, int>> days})
+  >
+  devices;
 
-  /// 還原備份後記下；備份那台沒用過同步（[from] 是 null）時，那些時間不在
-  /// 雲端任何一筆裡，算這台的，不記。
+  /// [only] 那幾台（給了的話）、[except] 以外的還原進來的時間：每本書的
+  /// 累計秒數，與每天的秒數（所有書加總）。
+  ({Map<String, int> books, Map<String, int> days}) total({
+    String? except,
+    Set<String>? only,
+  }) {
+    final books = <String, int>{};
+    final days = <String, int>{};
+    for (final MapEntry(key: device, :value) in devices.entries) {
+      if (device == except || only != null && !only.contains(device)) continue;
+      for (final MapEntry(:key, value: seconds) in value.books.entries) {
+        books.update(key, (sum) => sum + seconds, ifAbsent: () => seconds);
+      }
+      for (final perDay in value.days.values) {
+        for (final MapEntry(:key, value: seconds) in perDay.entries) {
+          days.update(key, (sum) => sum + seconds, ifAbsent: () => seconds);
+        }
+      }
+    }
+    return (books: books, days: days);
+  }
+
+  /// 還原備份後記下：備份裡有的書（累計換成備份的值、每日也照備份重寫）
+  /// 原本記在哪台都清掉，再記到 [from] 下面；備份那台沒用過同步（[from] 是
+  /// null）時，那些時間不在雲端任何一筆裡，算這台的，不記。
   static Future<void> remember(
     SharedPreferences prefs, {
     required String? from,
     required List<ReadRecord> records,
     required List<ReadDay> days,
   }) async {
-    if (from == null || from.isEmpty) {
-      await prefs.remove(_key);
-      return;
+    final devices = _mutable(read(prefs) ?? none);
+    final replacedBooks = {for (final record in records) record.bookName};
+    for (final device in devices.values) {
+      for (final book in replacedBooks) {
+        device.books.remove(book);
+        device.days.remove(book);
+      }
+      for (final day in days) {
+        device.days[day.bookName]?.remove(day.day);
+      }
     }
-    final perDay = <String, int>{};
-    for (final day in days) {
-      perDay.update(
-        day.day,
-        (seconds) => seconds + day.seconds,
-        ifAbsent: () => day.seconds,
-      );
+    if (from != null && from.isNotEmpty) {
+      final device = devices[from] ??= (books: {}, days: {});
+      for (final record in records) {
+        device.books[record.bookName] = record.readTime;
+      }
+      for (final day in days) {
+        (device.days[day.bookName] ??= {})[day.day] = day.seconds;
+      }
     }
-    await prefs.setString(
-      _key,
-      jsonEncode({
-        'from': from,
-        'books': {
-          for (final record in records) record.bookName: record.readTime,
-        },
-        'days': perDay,
-      }),
-    );
+    await _write(prefs, devices);
+  }
+
+  /// 書改名（`ReadRecordDao.renameBook` 把 [from] 併進 [to]）：還原進來的
+  /// 那份跟著併過去。
+  static Future<void> renameBook(
+    SharedPreferences prefs, {
+    required String from,
+    required String to,
+  }) async {
+    if (from == to) return;
+    final restored = read(prefs);
+    if (restored == null) return;
+    final devices = _mutable(restored);
+    for (final device in devices.values) {
+      if (device.books.remove(from) case final seconds?) {
+        device.books.update(
+          to,
+          (sum) => sum + seconds,
+          ifAbsent: () => seconds,
+        );
+      }
+      if (device.days.remove(from) case final perDay?) {
+        final target = device.days[to] ??= {};
+        for (final MapEntry(:key, value: seconds) in perDay.entries) {
+          target.update(key, (sum) => sum + seconds, ifAbsent: () => seconds);
+        }
+      }
+    }
+    await _write(prefs, devices);
   }
 
   static RestoredStats? read(SharedPreferences prefs) {
-    final raw = prefs.getString(_key);
+    final raw = prefs.getString(prefKey);
     if (raw == null) return null;
     try {
       final json = jsonDecode(raw);
-      if (json is! Map || json['from'] is! String) return null;
+      if (json is! Map) return null;
       Map<String, int> ints(Object? value) => {
         if (value is Map)
           for (final MapEntry(:key, :value) in value.entries)
             if (value is int) '$key': value,
       };
-      return RestoredStats(
-        from: json['from'] as String,
-        books: ints(json['books']),
-        days: ints(json['days']),
-      );
+      // 2026-11 以前只記最後一次還原的那台，每天的秒數是所有書加總：記在
+      // 書名空白下面，照樣扣得到。
+      if (json['from'] case final String from) {
+        return RestoredStats({
+          from: (books: ints(json['books']), days: {'': ints(json['days'])}),
+        });
+      }
+      return RestoredStats({
+        if (json['devices'] case final Map devices)
+          for (final MapEntry(:key, :value) in devices.entries)
+            if (value is Map)
+              '$key': (
+                books: ints(value['books']),
+                days: {
+                  if (value['days'] case final Map days)
+                    for (final MapEntry(key: book, value: perDay)
+                        in days.entries)
+                      '$book': ints(perDay),
+                },
+              ),
+      });
     } on FormatException {
       return null;
     }
+  }
+
+  static Map<
+    String,
+    ({Map<String, int> books, Map<String, Map<String, int>> days})
+  >
+  _mutable(RestoredStats stats) => {
+    for (final MapEntry(:key, :value) in stats.devices.entries)
+      key: (
+        books: {...value.books},
+        days: {
+          for (final MapEntry(key: book, value: perDay) in value.days.entries)
+            book: {...perDay},
+        },
+      ),
+  };
+
+  static Future<void> _write(
+    SharedPreferences prefs,
+    Map<String, ({Map<String, int> books, Map<String, Map<String, int>> days})>
+    devices,
+  ) async {
+    for (final device in devices.values) {
+      device.days.removeWhere((_, perDay) => perDay.isEmpty);
+    }
+    devices.removeWhere(
+      (_, device) => device.books.isEmpty && device.days.isEmpty,
+    );
+    if (devices.isEmpty) {
+      await prefs.remove(prefKey);
+      return;
+    }
+    await prefs.setString(
+      prefKey,
+      jsonEncode({
+        'devices': {
+          for (final MapEntry(:key, :value) in devices.entries)
+            key: {'books': value.books, 'days': value.days},
+        },
+      }),
+    );
   }
 }
 
