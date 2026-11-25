@@ -52,7 +52,7 @@ void main() {
   Future<void> pumpEditor(
     WidgetTester tester,
     BookSource? source, {
-    VoidCallback? onSaved,
+    ValueChanged<String>? onSaved,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -260,7 +260,7 @@ void main() {
       () => dao.getByUrl('https://login.example'),
     );
     var savedCalls = 0;
-    await pumpEditor(tester, stored, onSaved: () => savedCalls++);
+    await pumpEditor(tester, stored, onSaved: (_) => savedCalls++);
 
     await tester.enterText(field(0), '改過的書源');
     await choose(tester, '登入');

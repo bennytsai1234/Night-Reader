@@ -1084,18 +1084,25 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     // 結果要用另一個變數接，不能蓋掉 onSaved 記下的。
     var saved = false;
     var changed = false;
+    // 編輯時改了網址的話，存下的是新網址：合併優先留下的照它。
+    var savedUrl = sourceUrl;
     try {
       if (mounted) {
         final result = await Navigator.of(context).push<bool>(
           MaterialPageRoute(
-            builder: (_) =>
-                SourceEditorPage(source: full, onSaved: () => saved = true),
+            builder: (_) => SourceEditorPage(
+              source: full,
+              onSaved: (url) {
+                saved = true;
+                savedUrl = url;
+              },
+            ),
           ),
         );
         changed = result == true || saved;
       }
     } finally {
-      await p.endEditing(sourceUrl, changed: changed);
+      await p.endEditing(sourceUrl, changed: changed, savedUrl: savedUrl);
     }
   }
 
@@ -1103,7 +1110,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     var saved = false;
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => SourceEditorPage(onSaved: () => saved = true),
+        builder: (_) => SourceEditorPage(onSaved: (_) => saved = true),
       ),
     );
     if ((changed == true || saved) && mounted) await provider.loadSources();

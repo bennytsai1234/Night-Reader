@@ -80,4 +80,32 @@ void main() {
     );
     expect(await dao.getByUrl('https://a.example#a'), isNull);
   });
+
+  test('when the edit changed the address, the saved address is the one '
+      'kept', () async {
+    final provider = SourceManagerProvider(entrance: Future<void>.value());
+    addTearDown(provider.dispose);
+    await _until(() => !provider.isLoading && provider.totalSourceCount == 1);
+    await dao.upsert(_source('https://a.example#c', order: 2));
+    await provider.beginEditing('https://a.example#c');
+
+    // 編輯頁把網址從 #c 改成 #z 存下：照原本的規則 #a 在前會被留下。
+    await dao.deleteByUrl('https://a.example#c');
+    await dao.upsert(
+      _source('https://a.example#z', order: 2, searchUrl: '/z?q={{key}}'),
+    );
+    await provider.endEditing(
+      'https://a.example#c',
+      changed: true,
+      savedUrl: 'https://a.example#z',
+    );
+
+    expect(provider.allSources.map((s) => s.bookSourceUrl), [
+      'https://a.example#z',
+    ]);
+    expect(
+      (await dao.getByUrl('https://a.example#z'))!.searchUrl,
+      '/z?q={{key}}',
+    );
+  });
 }

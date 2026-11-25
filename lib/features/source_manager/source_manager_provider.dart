@@ -932,14 +932,19 @@ class SourceManagerProvider with ChangeNotifier {
   /// [url] 的編輯頁關掉了：存過（[changed]）或開著的期間有重複書源沒併，
   /// 重讀清單（照常併）。剛存過的那一個這次合併優先留下，規則不會隨它被
   /// 併掉。
-  Future<void> endEditing(String url, {required bool changed}) async {
+  /// [savedUrl] 是存下的網址（編輯時改了網址就是新的），合併這次優先留它。
+  Future<void> endEditing(
+    String url, {
+    required bool changed,
+    String? savedUrl,
+  }) async {
     _editingUrls.remove(url);
     if (_disposed) return;
     if (!changed &&
         (_editingUrls.isNotEmpty || duplicateSourceGroups(_sources).isEmpty)) {
       return;
     }
-    if (changed) _preferredKeeperUrl = url;
+    if (changed) _preferredKeeperUrl = savedUrl ?? url;
     await loadSources();
   }
 
