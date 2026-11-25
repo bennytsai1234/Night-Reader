@@ -17,11 +17,12 @@ void main() {
     ]);
   });
 
-  /// 正文照顯示的寫法轉過，再套照同一個寫法轉過的規則。
+  /// 正文照顯示的寫法轉過，再依序套這條規則的每種寫法（同閱讀器）。
   String shown(String raw, ReplaceRule rule, int convertType) => rule
-      .inScript(convertType)
-      .apply(
+      .matchVariants([convertType])
+      .fold(
         const ChineseTextConverter().convert(raw, convertType: convertType),
+        (text, variant) => variant.apply(text),
       );
 
   group('正則的語法轉完和原本一樣，只轉漢字', () {
@@ -30,41 +31,50 @@ void main() {
         pattern: r'(?<名>广告)\p{P}+[^\s\d]\\n\.\x{5E7F}[广告]{2}\k<名>(?<=说)',
       );
       expect(
-        rule.inScript(_s2t).pattern,
+        rule.matchVariants([_s2t]).last.pattern,
         r'(?<名>廣告)\p{P}+[^\s\d]\\n\.\x{5E7F}[廣告]{2}\k<名>(?<=說)',
       );
     });
 
-    test('「替換為」的 \$1、\${名稱}、跳脫字元不動，@js: 整段不動', () {
-      expect(
-        ReplaceRule(
-          pattern: '(说)',
-          replacement: r'$1说${名}\$',
-        ).inScript(_s2t).replacement,
-        r'$1說${名}\$',
-      );
-      const js = '@js:result.replace("说", "话")';
-      expect(
-        ReplaceRule(pattern: '说', replacement: js).inScript(_s2t).replacement,
-        js,
-      );
+    test('先比字面，再比轉過的；替換成的字照字面放（同 Legado）', () {
+      final variants = ReplaceRule(
+        pattern: '(说)',
+        replacement: r'$1说',
+      ).matchVariants([_s2t]);
+      expect([for (final rule in variants) rule.pattern], ['(说)', '(說)']);
+      expect([for (final rule in variants) rule.replacement], [r'$1说', r'$1说']);
     });
 
-    test('不轉繁簡時規則照原樣', () {
+    test('不轉繁簡、或轉完和字面一樣時只比一次', () {
       final rule = ReplaceRule(pattern: '广告', replacement: '说');
-      expect(rule.inScript(0), same(rule));
+      expect(rule.matchVariants([0]), [same(rule)]);
+      expect(ReplaceRule(pattern: 'ad').matchVariants([_s2t]), hasLength(1));
     });
 
-    test('轉出來的規則存起來重用', () {
-      final rule = ReplaceRule(pattern: '广告词', replacement: '');
-      expect(
-        identical(
-          rule.inScript(_s2t).pattern,
-          ReplaceRule(pattern: '广告词', replacement: '').inScript(_s2t).pattern,
-        ),
-        isTrue,
-      );
+    test('轉出來的規則字存起來重用', () {
+      String converted() => ReplaceRule(
+        pattern: '广告词',
+        replacement: '',
+      ).matchVariants([_s2t]).last.pattern;
+      expect(identical(converted(), converted()), isTrue);
     });
+  });
+
+  // 轉換器轉兩次不一定一樣（干擾→幹擾、襯托→襯託）：照畫面寫的規則靠字面
+  // 那次對上，不會被轉壞。
+  group('照畫面寫的規則，字面就對得到', () {
+    for (final (pattern, raw) in [
+      ('干擾', '干扰'),
+      ('襯托', '衬托'),
+      ('幾里', '几里'),
+      ('征討', '征讨'),
+      ('斗膽', '斗胆'),
+    ]) {
+      test('規則「$pattern」、正文「$raw」', () {
+        final rule = ReplaceRule(pattern: pattern, isRegex: false);
+        expect(shown('前$raw後', rule, _s2t), '前後');
+      });
+    }
   });
 
   group('簡體寫的規則與繁體寫的規則，對同一份正文都對得到', () {

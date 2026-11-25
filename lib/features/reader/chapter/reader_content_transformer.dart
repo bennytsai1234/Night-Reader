@@ -817,13 +817,16 @@ class ReaderContentTransformer {
   /// [RuleStageText]）。接在既有規則之後的新規則看到的就是這些字（選字
   /// 「隱藏」「替換」用它找原文），已經照 [chineseConvertType] 轉過繁簡，
   /// 和畫面上的寫法一樣。在處理正文的 worker 裡做（字典在那裡），整章跑
-  /// 規則的正規表示式不佔畫面執行緒。
+  /// 規則的正規表示式不佔畫面執行緒。有規則跑超過逾時就略過它並呼叫
+  /// [onRuleTimedOut]，同 [process]：給閱讀器停用它的那一個，找到的原文才和
+  /// 停用後畫面上的一致。
   static Future<RuleStageText> ruleStageParagraphs({
     required Book book,
     required BookChapter chapter,
     required String rawContent,
     required List<ReplaceRule> enabledRules,
     required int chineseConvertType,
+    void Function(ReplaceRule rule)? onRuleTimedOut,
   }) async {
     final result = await ReaderContentTransformWorker.instance.process({
       'stage': 'rules',
@@ -835,7 +838,7 @@ class ReaderContentTransformer {
       'useReplaceRules': book.getUseReplaceRule(),
       'reSegmentEnabled': book.getReSegment(),
       'chineseConvertType': chineseConvertType,
-    });
+    }, onRuleTimedOut: onRuleTimedOut);
     return result['stage']! as RuleStageText;
   }
 
@@ -974,15 +977,18 @@ class ReaderContentTransformer {
     return result;
   }
 
-  /// [rules] 轉成正文顯示的寫法（[ReplaceRuleScript.inScript]），保留每條在
-  /// `rulesJson` 的位置（逾時計時照它找規則）。
-  static Iterable<ReplaceRule> _inScript(
+  /// [rules] 每條依序要比的寫法（[ReplaceRuleScript.matchVariants]：字面，
+  /// 再來是規則的字轉成 [convertTypes] 的寫法），保留每條在 `rulesJson` 的
+  /// 位置（逾時計時照它找規則）。
+  static Iterable<ReplaceRule> _matchVariants(
     Iterable<ReplaceRule> rules,
-    int convertType,
-  ) => rules.map((rule) {
-    final converted = rule.inScript(convertType);
-    if (!identical(converted, rule)) converted._sourceIndex = rule._sourceIndex;
-    return converted;
+    List<int> convertTypes,
+  ) => rules.expand((rule) {
+    final variants = rule.matchVariants(convertTypes);
+    for (final variant in variants) {
+      variant._sourceIndex = rule._sourceIndex;
+    }
+    return variants;
   });
 
   static List<ReplaceRule> _titleRulesOf(
@@ -1042,8 +1048,8 @@ class ReaderContentTransformer {
 
   /// 去掉開頭重複的章名與分頁留下的頁碼（[removePageLeftovers]）、重新分段、
   /// 繁簡轉換（[convertType]），再每行 trim 並套用替換規則；排版整理之前。
-  /// 先轉再套規則同 Legado（`ContentProcessor.getContent`），規則的字也轉成
-  /// 同一個寫法（[ReplaceRuleScript.inScript]，ADR 0084）。
+  /// 先轉再套規則同 Legado（`ContentProcessor.getContent`），規則照字面與照
+  /// 顯示的寫法各比一次（[ReplaceRuleScript.matchVariants]，ADR 0084）。
   static String _applyRules({
     required String bookName,
     required String bookOrigin,
@@ -1081,12 +1087,14 @@ class ReaderContentTransformer {
     if (duplicateTitleMatch != null) {
       content = content.substring(duplicateTitleMatch.end);
     } else if (useReplaceRules && titleRules.isNotEmpty) {
-      // 同 Legado：正文還沒轉繁簡，章名也照原文套規則來比。
+      // 同 Legado：正文還沒轉繁簡，章名也不轉、套了規則來比。網站原文是
+      // 簡體還是繁體不一定，規則的字照字面、轉繁、轉簡都比（ADR 0084）。
       final displayTitle = _processTitle(
         chapterTitle: chapterTitle,
         rules: titleRules,
         useReplaceRules: true,
         convertType: 0,
+        matchTypes: const [1, 2],
         onRule: onRule,
       );
       if (displayTitle.trim().isNotEmpty && displayTitle != chapterTitle) {
@@ -1130,14 +1138,14 @@ class ReaderContentTransformer {
       }
       content = _applyEach(
         buffer.toString(),
-        _inScript(
+        _matchVariants(
           rules.where(
             (rule) => rule.appliesToContent(
               bookName: bookName,
               bookOrigin: bookOrigin,
             ),
           ),
-          convertType,
+          [convertType],
         ),
         onRule: onRule,
       );
@@ -1148,11 +1156,14 @@ class ReaderContentTransformer {
 
   /// 章名：先轉繁簡（[convertType]）再套標題規則，同 Legado
   /// `BookChapter.getDisplayTitle`。
+  /// [matchTypes] 是規則的字另外要轉成哪些寫法來比，沒給時是 [convertType]
+  /// （[_matchVariants]）。
   static String _processTitle({
     required String chapterTitle,
     required List<ReplaceRule> rules,
     required bool useReplaceRules,
     required int convertType,
+    List<int>? matchTypes,
     _RuleProgress? onRule,
   }) {
     var displayTitle = const ChineseTextConverter().convert(
@@ -1162,7 +1173,10 @@ class ReaderContentTransformer {
     if (useReplaceRules) {
       displayTitle = _applyEach(
         displayTitle,
-        _inScript(rules.where((rule) => rule.pattern.isNotEmpty), convertType),
+        _matchVariants(
+          rules.where((rule) => rule.pattern.isNotEmpty),
+          matchTypes ?? [convertType],
+        ),
         onRule: onRule,
         keep: (next) => next.trim().isNotEmpty,
       );

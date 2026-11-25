@@ -84,7 +84,7 @@ class ReaderChapterRepository {
   /// 「顯示插圖」開著沒（ADR 0050）。
   final bool Function() currentShowIllustrations;
 
-  /// 套用正文時有規則跑太久、被停用了（[_disableTimedOutRule]），閱讀器拿來
+  /// 套用正文時有規則跑太久、被停用了（[disableTimedOutRule]），閱讀器拿來
   /// 提示讀者。
   final void Function(ReplaceRule rule)? onReplaceRuleDisabled;
 
@@ -593,7 +593,7 @@ class ReaderChapterRepository {
         illustrationsDir: currentShowIllustrations()
             ? await BookIllustrationStorage.dirFor(book)
             : null,
-        onRuleTimedOut: _disableTimedOutRule,
+        onRuleTimedOut: disableTimedOutRule,
       );
       return (content: content, raw: prepared.content);
     } on ReaderContentTransformException catch (error) {
@@ -624,8 +624,9 @@ class ReaderChapterRepository {
   ///
   /// 停用一定要讓讀者看到提示（[onReplaceRuleDisabled]）。閱讀器已經關掉
   /// 時（還在預載的章才逾時）說不了，就先不停用：下次開書再逾時時，在畫面
-  /// 上停用並提示。
-  void _disableTimedOutRule(ReplaceRule rule) {
+  /// 上停用並提示。選字與替換規則面板找原文時規則逾時，也照這樣停用
+  /// （和畫面上那次一樣，`ReaderContentTransformer.ruleStageParagraphs`）。
+  void disableTimedOutRule(ReplaceRule rule) {
     if (_disposed) return;
     _forgetEnabledRules();
     final dao = replaceDao;

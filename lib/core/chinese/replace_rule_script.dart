@@ -1,49 +1,48 @@
 import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 
-/// 替換規則照正文顯示的寫法比對（ADR 0084）：正文先做繁簡轉換再套規則
-/// （同 Legado），規則的字也用同一個轉換器轉成顯示的寫法，照簡體寫的與
-/// 照繁體寫的規則都對得到。
+/// 替換規則兩種寫法都比（ADR 0084）：正文先做繁簡轉換再套規則（同
+/// Legado），規則照字面比一次；規則的字轉成顯示的寫法後和字面不同時，
+/// 再用轉過的比一次。照畫面寫的規則用字面那次對上，照網站原文寫的舊規則
+/// 用轉過的那次對上。規則的字不能只用轉過的：轉換器轉兩次不一定一樣
+/// （「干擾」再轉成「幹擾」），照畫面寫的規則會被轉壞。
 extension ReplaceRuleScript on ReplaceRule {
-  /// 這條規則轉成 [convertType]（`ChineseTextConverter` 的轉換方式）的寫法；
-  /// 不轉換或轉完一樣時傳回自己。正則只轉語法以外的字（[_convertRegex]），
-  /// 「替換為」寫 `@js:` 時那一段不動。
-  ReplaceRule inScript(int convertType) {
-    if (convertType == 0) return this;
-    final nextPattern = _cached(
-      convertType,
-      isRegex ? 'p' : 't',
-      pattern,
-      () => isRegex
-          ? _convertRegex(pattern, convertType)
-          : _convertText(pattern, convertType),
-    );
-    final nextReplacement = isRegex && replacement.startsWith('@js:')
-        ? replacement
-        : _cached(
-            convertType,
-            isRegex ? 'r' : 't',
-            replacement,
-            () => isRegex
-                ? _convertRegexReplacement(replacement, convertType)
-                : _convertText(replacement, convertType),
-          );
-    if (nextPattern == pattern && nextReplacement == replacement) return this;
-    return ReplaceRule(
-      id: id,
-      name: name,
-      group: group,
-      pattern: nextPattern,
-      replacement: nextReplacement,
-      scope: scope,
-      scopeTitle: scopeTitle,
-      scopeContent: scopeContent,
-      excludeScope: excludeScope,
-      isEnabled: isEnabled,
-      isRegex: isRegex,
-      timeoutMillisecond: timeoutMillisecond,
-      order: order,
-    );
+  /// 套這條規則時依序要比的寫法：字面這一條；再來是規則的字轉成
+  /// [convertTypes]（`ChineseTextConverter` 的轉換方式，0 不轉）各自的寫法、
+  /// 和前面都不同的。替換成的字一律照字面放（同 Legado）。正則只轉語法
+  /// 以外的字（[_convertRegex]）。
+  List<ReplaceRule> matchVariants(Iterable<int> convertTypes) {
+    final variants = [this];
+    for (final convertType in convertTypes) {
+      if (convertType == 0) continue;
+      final converted = _cached(
+        convertType,
+        isRegex ? 'p' : 't',
+        pattern,
+        () => isRegex
+            ? _convertRegex(pattern, convertType)
+            : _convertText(pattern, convertType),
+      );
+      if (variants.any((rule) => rule.pattern == converted)) continue;
+      variants.add(
+        ReplaceRule(
+          id: id,
+          name: name,
+          group: group,
+          pattern: converted,
+          replacement: replacement,
+          scope: scope,
+          scopeTitle: scopeTitle,
+          scopeContent: scopeContent,
+          excludeScope: excludeScope,
+          isEnabled: isEnabled,
+          isRegex: isRegex,
+          timeoutMillisecond: timeoutMillisecond,
+          order: order,
+        ),
+      );
+    }
+    return variants;
   }
 }
 
@@ -135,45 +134,4 @@ int _escapeEnd(String pattern, int start) {
   final unit = pattern.codeUnitAt(next);
   final isLead = unit >= 0xD800 && unit <= 0xDBFF;
   return (isLead && next + 1 < pattern.length ? next + 2 : next + 1);
-}
-
-/// 正則規則的「替換為」：`$1`、`${名稱}` 與反斜線跳脫不動，其他非 ASCII 的
-/// 字照正文轉。
-String _convertRegexReplacement(String replacement, int convertType) {
-  final out = StringBuffer();
-  final run = StringBuffer();
-  void flush() {
-    if (run.isEmpty) return;
-    out.write(_convertText(run.toString(), convertType));
-    run.clear();
-  }
-
-  var i = 0;
-  while (i < replacement.length) {
-    final unit = replacement.codeUnitAt(i);
-    if (unit == 0x5C /* \ */ ) {
-      flush();
-      final end = _escapeEnd(replacement, i);
-      out.write(replacement.substring(i, end));
-      i = end;
-      continue;
-    }
-    if (replacement.startsWith(r'${', i)) {
-      flush();
-      final close = replacement.indexOf('}', i + 2);
-      final end = close < 0 ? replacement.length : close + 1;
-      out.write(replacement.substring(i, end));
-      i = end;
-      continue;
-    }
-    if (_isAscii(unit)) {
-      flush();
-      out.writeCharCode(unit);
-    } else {
-      run.writeCharCode(unit);
-    }
-    i += 1;
-  }
-  flush();
-  return out.toString();
 }

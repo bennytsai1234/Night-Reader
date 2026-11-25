@@ -254,14 +254,71 @@ void main() {
       expect(result['displayTitle'], '第一章');
     });
 
-    test('照原文的簡體寫的規則照樣對得到，換上的字照顯示的寫法', () async {
+    test('照原文的簡體寫的規則照樣對得到，換上的字照字面放（同 Legado）', () async {
       final result = await worker.process(
         converting([
           ReplaceRule(pattern: '头发', replacement: '这是', isRegex: false),
           ReplaceRule(pattern: r'(广告)词', replacement: r'$1语'),
         ]),
       );
-      expect(result['content'], '　　她的這是很長。\n　　廣告語結束。');
+      expect(result['content'], '　　她的这是很長。\n　　廣告语結束。');
+    });
+
+    Map<String, Object?> chapter(
+      String raw,
+      List<ReplaceRule> rules, {
+      int convertType = s2t,
+      String title = '第一章',
+    }) => {
+      ..._args(
+        rules: [for (final rule in rules) rule.toJson()],
+        rawContent: raw,
+      ),
+      'chapterTitle': title,
+      'chineseConvertType': convertType,
+    };
+
+    test('照畫面建的規則（選字隱藏「干擾。」）照字面對得到，不再轉一次變字', () async {
+      final result = await worker.process(
+        chapter('前文。\n干扰。', [
+          ReplaceRule(pattern: '干擾。', replacement: '', isRegex: false),
+        ]),
+      );
+      expect(result['content'], '　　前文。');
+    });
+
+    test('換成「襯托」，正文就是「襯托」', () async {
+      final result = await worker.process(
+        chapter('前文。\n后文。', [
+          ReplaceRule(pattern: '前文', replacement: '襯托', isRegex: false),
+        ]),
+      );
+      expect(result['content'], '　　襯托。\n　　後文。');
+    });
+
+    test('標題規則寫繁體時，正文開頭重複的章名照樣去得掉', () async {
+      final result = await worker.process(
+        chapter('第一章 风起\n正文开始。', [
+          ReplaceRule(
+            pattern: '【廣告】',
+            replacement: '',
+            isRegex: false,
+            scopeTitle: true,
+            scopeContent: false,
+          ),
+        ], title: '第一章 风起【广告】'),
+      );
+      expect(result['content'], '　　正文開始。');
+      expect(result['displayTitle'], '第一章 風起');
+    });
+
+    test('關掉繁簡轉換時照字面比：簡轉繁下建的繁體規則對不到簡體原文', () async {
+      final result = await worker.process(
+        chapter('她的头发很长。', [
+          ReplaceRule(pattern: '頭髮', replacement: '', isRegex: false),
+        ], convertType: 0),
+      );
+      expect(result['content'], '　　她的头发很长。');
     });
 
     test('選字找原文用的段落也是轉過的寫法', () async {

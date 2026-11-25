@@ -55,8 +55,8 @@ class ReplaceRulePreview {
   _PreviewRun? _current;
 
   /// 依序套用 [rules] 到 [text]；被下一次試跑或 [cancel] 取代時傳回 null。
-  /// 規則照閱讀器一樣轉成 [chineseConvertType] 的寫法再套
-  /// （[ReplaceRuleScript.inScript]）：[text] 是轉過繁簡的字。
+  /// 規則照閱讀器一樣，字面與轉成 [chineseConvertType] 的寫法各比一次
+  /// （[ReplaceRuleScript.matchVariants]）：[text] 是轉過繁簡的字。
   Future<ReplaceRulePreviewResult?> run(
     List<ReplaceRule> rules,
     String text, {
@@ -65,7 +65,7 @@ class ReplaceRulePreview {
     cancel();
     if (rules.isEmpty) return Future.value(ReplaceRulePreviewDone(text));
     final run = _current = _PreviewRun([
-      for (final rule in rules) rule.inScript(chineseConvertType),
+      for (final rule in rules) ...rule.matchVariants([chineseConvertType]),
     ], text);
     return run.result;
   }
