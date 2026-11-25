@@ -24,16 +24,18 @@ extension JsNetworkExtensions on JsExtensions {
     // ─── java.ajax(url) — 返回 body 字串 ─────────────────────────
     // 同 Legado：請求失敗用 runCatching 接住、回傳錯誤文字，規則照常往下跑。
     // 網址組不起來（AnalyzeUrl 在建構時跑網址裡的 JS）照 Legado 在
-    // runCatching 外面，錯誤丟給規則；主 isolate 不能停住的錯誤也照丟
-    // （ADR 0034）。
+    // runCatching 外面，錯誤丟給規則；主 isolate 不能停住的錯誤、這項工作
+    // 被取消（Legado 失敗時先 `ensureActive()`）也照丟（ADR 0034）。
     onBlocking('ajax', (payload) {
       final url = _parseUrlArg(payload);
       final analyzeUrl = _analyzeUrl(url);
       try {
         return BlockingCall.run(responseBody(analyzeUrl));
-      } on BlockingCallUnavailable {
-        rethrow;
       } catch (e) {
+        if (e is BlockingCallUnavailable ||
+            (e is BlockingCallError && e.cancelled)) {
+          rethrow;
+        }
         AppLog.e('java.ajax($url) error\n$e', error: e);
         return '$e';
       }

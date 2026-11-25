@@ -182,6 +182,23 @@ Future<void> _putMemoryInSourceIsolate(String key, String value) =>
 Future<String> _cookieStoreInSourceIsolate(String url) =>
     SourceIsolate.run((_) => CookieStore().getCookie(url));
 
+/// 在書源 isolate 用規則 JS 的 `java.ajax` 抓 [url]，自己接住丟出的錯誤：
+/// 回 `returned`（拿到結果或錯誤文字）或 `threw`。
+Future<String> _ajaxCaught(String url, {CancelToken? cancelToken}) =>
+    SourceIsolate.run((_) async {
+      final engine = JsEngine();
+      try {
+        return '${engine.evaluate('''
+          var got;
+          try { java.ajax("$url"); got = "returned"; }
+          catch (e) { got = "threw"; }
+          got
+        ''')}';
+      } finally {
+        engine.dispose();
+      }
+    }, cancelToken: cancelToken);
+
 Future<String> _evaluateJs(String code) => SourceIsolate.run((_) async {
   final engine = JsEngine();
   try {
@@ -930,6 +947,21 @@ void main() {
         );
       },
     );
+
+    // 取消不是請求失敗：同 Legado 失敗時先 `ensureActive()`，規則不會拿到
+    // 錯誤文字接著跑。
+    test('java.ajax rethrows when its work is cancelled', () async {
+      final cancelToken = CancelToken();
+      final work = _ajaxCaught(
+        '$baseUrl/held/ajax-cancel',
+        cancelToken: cancelToken,
+      );
+      await gate(arrived, 'ajax-cancel').future;
+      cancelToken.cancel();
+      final outcome = await work.then<Object?>((v) => v, onError: (e) => e);
+      gate(released, 'ajax-cancel').complete();
+      expect(outcome, isNot('returned'));
+    });
 
     // Legado 的 java.connect(url, header) 收的是 JSON 文字（Gson 寬鬆讀），
     // 書源寫 `JSON.stringify({...})` 或直接一段 JSON；物件照樣收。
