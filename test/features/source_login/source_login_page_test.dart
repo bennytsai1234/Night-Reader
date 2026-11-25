@@ -11,6 +11,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/network/cookie_store.dart';
 import 'package:night_reader/features/source_login/source_browser_page.dart';
 import 'package:night_reader/features/source_login/source_login_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -353,6 +354,39 @@ void main() {
         find.widgetWithText(GroupedRow, '在網站登入'),
       );
       expect(row.enabled, isFalse);
+    });
+
+    testWidgets('刪除登入標頭只刪標頭，表單內容與 Cookie 留著', (tester) async {
+      setupTestDI();
+      await tester.runAsync(() async {
+        await dao.upsert(source);
+        // 前面的測試留下的，先換成本次要看的。
+        await source.putLoginInfo('{"帳號":"舊帳號"}');
+        await source.putLoginHeader('{"Authorization":"Bearer keep"}');
+        await CookieStore().setCookie(url, 'sid=keep');
+      });
+      await openLogin(tester);
+      await tester.ensureVisible(find.text('刪除登入標頭'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('刪除登入標頭'));
+      for (var i = 0; i < 80 && find.text('已刪除登入標頭').evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(await tester.runAsync(() => source.getLoginHeader()), isNull);
+      expect(
+        await tester.runAsync(() => source.getLoginInfo()),
+        '{"帳號":"舊帳號"}',
+      );
+      expect(
+        await tester.runAsync(() => CookieStore().getCookie(url)),
+        'sid=keep',
+      );
+      expect(find.widgetWithText(TextField, '舊帳號'), findsOneWidget);
     });
 
     test('opens the login URL when it is a URL, else the source URL', () {

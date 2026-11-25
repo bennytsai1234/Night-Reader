@@ -341,6 +341,8 @@ class SourceManagerProvider with ChangeNotifier {
       list = list.where((s) => s.enabled).toList();
     } else if (filterGroup == '已停用') {
       list = list.where((s) => !s.enabled).toList();
+    } else if (filterGroup == needLoginFilter) {
+      list = list.where((s) => s.hasLogin).toList();
     } else if (filterGroup == '已啟用發現') {
       list = list.where((s) => s.enabledExplore && s.hasExploreUrl).toList();
     } else if (filterGroup == '已停用發現') {
@@ -541,6 +543,9 @@ class SourceManagerProvider with ChangeNotifier {
 
   /// 篩選「沒有異常」：校驗沒有標上「異常」的書源（含還沒校驗過的）。
   static const String noAbnormalFilter = '沒有異常';
+
+  /// 篩選「需要登入」：有登入網址的書源（同 Legado `flowLogin`）。
+  static const String needLoginFilter = '需要登入';
 
   /// 帶「異常」標記的書源網址（修復異常書源修的就是這些）。
   List<String> get abnormalSourceUrls => [

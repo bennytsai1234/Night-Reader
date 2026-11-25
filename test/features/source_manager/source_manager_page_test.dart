@@ -572,6 +572,49 @@ void main() {
     expect(find.textContaining('書源0'), findsOneWidget);
   });
 
+  testWidgets('篩選「需要登入」只留有登入網址的書源', (tester) async {
+    final dao = GetIt.instance<BookSourceDao>();
+    await tester.runAsync(() async {
+      await dao.upsert(
+        BookSource(
+          bookSourceUrl: 'https://login.example',
+          bookSourceName: '有登入網址',
+          loginUrl: '@js: function login() {}',
+          customOrder: 0,
+        ),
+      );
+      await dao.upsert(
+        BookSource(
+          bookSourceUrl: 'https://plain.example',
+          bookSourceName: '沒有登入網址',
+          // 校驗標記也叫「需要登入」：篩選只有一項，篩的是有登入網址的。
+          bookSourceGroup: loginRequiredSourceGroupTag,
+          customOrder: 1,
+        ),
+      );
+    });
+    await pumpPage(tester, sources: 0);
+    final provider = Provider.of<SourceManagerProvider>(
+      tester.element(find.byType(Scaffold).last),
+      listen: false,
+    );
+    await tester.runAsync(() => provider.loadSources());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsLabel('更多操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('分組與篩選'));
+    await tester.pumpAndSettle();
+    // 清單列上的校驗標記也叫「需要登入」；選單裡只有這一項。
+    expect(find.text('需要登入'), findsNWidgets(2));
+    await tester.tap(find.text('需要登入').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('有登入網址'), findsOneWidget);
+    expect(find.text('沒有登入網址'), findsNothing);
+    expect(provider.filterGroup, '需要登入');
+  });
+
   testWidgets('名稱旁的分組只列使用者的分組，校驗結果只在狀態標籤出現一次', (tester) async {
     final dao = GetIt.instance<BookSourceDao>();
     await tester.runAsync(() async {

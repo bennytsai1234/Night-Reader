@@ -264,12 +264,15 @@ abstract class BaseSource {
       (await getLoginHeader() ?? '').isNotEmpty ||
       (await CookieStore().getCookie(getKey())).isNotEmpty;
 
+  /// 清掉夜讀自己存的網站 Cookie；表單內容與登入標頭不動。
+  Future<void> removeLoginCookies() => CookieStore().removeCookie(getKey());
+
   /// 清掉這個書源的登入資料：表單內容、登入標頭與夜讀存的網站 Cookie。
   /// 手機瀏覽器裡的 Cookie 由呼叫端另外清（只有主 isolate 碰得到瀏覽器）。
   Future<void> clearLoginData() async {
     await removeLoginInfo();
     await removeLoginHeader();
-    await CookieStore().removeCookie(getKey());
+    await removeLoginCookies();
   }
 
   /// 登入標頭解成的標頭；沒有或格式不對時是空的。

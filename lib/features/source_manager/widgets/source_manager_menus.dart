@@ -11,6 +11,7 @@ class SourceManagerMenus {
     '全部',
     '已啟用',
     '已停用',
+    SourceManagerProvider.needLoginFilter,
     '已啟用發現',
     '已停用發現',
     '無分組',
@@ -46,11 +47,14 @@ class SourceManagerMenus {
       enabled: provider.anySourceChecked,
     ),
     for (final tag in provider.checkResultTags)
-      GlassMenuItem(
-        value: tag,
-        label: tag,
-        checked: provider.filterGroup == tag,
-      ),
+      // 「需要登入」在上面已經有一項（篩有登入網址的），標記的同一項不
+      // 再列一次。
+      if (tag != SourceManagerProvider.needLoginFilter)
+        GlassMenuItem(
+          value: tag,
+          label: tag,
+          checked: provider.filterGroup == tag,
+        ),
     if (provider.userGroups.isNotEmpty) const GlassMenuDivider(),
     for (final group in provider.userGroups)
       GlassMenuItem(
