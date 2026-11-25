@@ -9,9 +9,13 @@ import 'package:night_reader/core/source_check/check_source_service.dart';
 
 /// 重複書源（ADR 0062）：同一個網站（[siteHost]，和「按域名分組」同一個
 /// 分法）、同一類（`bookSourceType`）的書源。每組照 [keeperOrder] 排好，
-/// 第一個留下；只有一個的不列。書源清單的精簡書源沒有規則，認不出聚合源，
+/// 第一個留下；只有一個的不列。[preferredUrl] 是這次剛存過、要優先留下的
+/// 書源（書源管理編輯後合併）。書源清單的精簡書源沒有規則，認不出聚合源，
 /// 這裡分出來的是候選，合併前照完整書源再分一次（[mergeDuplicateSources]）。
-List<List<BookSource>> duplicateSourceGroups(Iterable<BookSource> sources) {
+List<List<BookSource>> duplicateSourceGroups(
+  Iterable<BookSource> sources, {
+  String? preferredUrl,
+}) {
   final groups = <(String, int, bool), List<BookSource>>{};
   for (final source in sources) {
     final host = siteHost(source.bookSourceUrl);
@@ -26,14 +30,20 @@ List<List<BookSource>> duplicateSourceGroups(Iterable<BookSource> sources) {
   }
   return [
     for (final group in groups.values)
-      if (group.length > 1) group..sort(keeperOrder),
+      if (group.length > 1)
+        group..sort((a, b) => keeperOrder(a, b, preferredUrl: preferredUrl)),
   ];
 }
 
 /// 一組重複書源留哪一個：沒有「異常」標記的、啟用的、手動排序在前的，
 /// 最後照網址。只看會同步的欄位，兩台各自合併也留同一個（書架上的書數、
-/// 最後更新時間各台不同）。
-int keeperOrder(BookSource a, BookSource b) {
+/// 最後更新時間各台不同）。[preferredUrl] 是這次剛存過的書源，優先留下：
+/// 使用者剛改的規則不會隨它被併掉；其他時候照上面的規則。
+int keeperOrder(BookSource a, BookSource b, {String? preferredUrl}) {
+  if (preferredUrl != null &&
+      (a.bookSourceUrl == preferredUrl) != (b.bookSourceUrl == preferredUrl)) {
+    return a.bookSourceUrl == preferredUrl ? -1 : 1;
+  }
   int flag(bool value) => value ? 0 : 1;
   final byHealth = flag(!a.hasGroupTag(abnormalSourceGroupTag))
       .compareTo(flag(!b.hasGroupTag(abnormalSourceGroupTag)));
@@ -54,12 +64,14 @@ bool _sourcesIdle() =>
 
 /// 把重複書源併成一個（[BookSourceService.mergeSources]）：書架上的書、搜尋
 /// 紀錄與快取的正文搬到留下的那個，重複的刪掉。[sources] 是已經讀好的
-/// 書源清單（不給就讀一次）。批次工作在跑時什麼都不做。傳回真的併掉幾個。
+/// 書源清單（不給就讀一次）。[preferredUrl] 是這次剛存過的書源，它那組優先
+/// 留下（書源管理編輯後合併）。批次工作在跑時什麼都不做。傳回真的併掉幾個。
 ///
 /// 聚合源（ADR 0056）和一般書源不併：聚合源的書各自是哪一類，併進一般書源
 /// 會跟著它的類型，漫畫、有聲書會變成小說。
 Future<int> mergeDuplicateSources({
   List<BookSource>? sources,
+  String? preferredUrl,
   Future<List<String>> Function(List<String> from, String into)? merge,
   bool Function()? idle,
 }) async {
@@ -73,7 +85,10 @@ Future<int> mergeDuplicateSources({
     final full = [
       for (final source in candidate) ?await dao.getByUrl(source.bookSourceUrl),
     ];
-    for (final [keeper, ...rest] in duplicateSourceGroups(full)) {
+    for (final [keeper, ...rest] in duplicateSourceGroups(
+      full,
+      preferredUrl: preferredUrl,
+    )) {
       try {
         merged += (await mergeInto([
           for (final source in rest) source.bookSourceUrl,

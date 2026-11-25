@@ -62,12 +62,13 @@ class _GatedMerge {
   var gate = Completer<void>();
   var calls = 0;
 
-  Future<int> call(List<BookSource> sources) async {
+  Future<int> call(List<BookSource> sources, {String? preferredUrl}) async {
     calls++;
     if (!started.isCompleted) started.complete();
     await gate.future;
     return mergeDuplicateSources(
       sources: sources,
+      preferredUrl: preferredUrl,
       idle: () => true,
       merge: (from, into) async {
         await dao.deleteByUrls(from);
@@ -121,7 +122,8 @@ void main() {
 
   Future<SourceManagerProvider> loaded({
     SourceImportService? importService,
-    Future<int> Function(List<BookSource> sources)? mergeDuplicates,
+    Future<int> Function(List<BookSource> sources, {String? preferredUrl})?
+    mergeDuplicates,
   }) async {
     final provider = SourceManagerProvider(
       entrance: Future<void>.value(),

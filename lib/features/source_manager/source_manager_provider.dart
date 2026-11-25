@@ -476,11 +476,17 @@ class SourceManagerProvider with ChangeNotifier {
   /// 併完過幾次：讀清單時用來看讀的期間有沒有合併跑完。
   int _mergesDone = 0;
 
+  /// 這次合併優先留下的書源（[endEditing] 剛存過的那一個）：使用者剛改的
+  /// 規則不會被同網站的重複書源併掉。清單裡沒有重複書源了就清掉；合併被
+  /// 批次工作擋下時留著，等它們做完重讀再併。
+  String? _preferredKeeperUrl;
+
   Future<int> _merge(List<BookSource> sources) =>
-      _merging = _mergeDuplicates(sources).whenComplete(() {
-        _merging = null;
-        _mergesDone++;
-      });
+      _merging = _mergeDuplicates(sources, preferredUrl: _preferredKeeperUrl)
+          .whenComplete(() {
+            _merging = null;
+            _mergesDone++;
+          });
 
   /// 最新一次讀清單收尾時的序號；和 [_loadGeneration] 不同就是最新一次還在讀。
   int _settledGeneration = 0;
@@ -671,11 +677,15 @@ class SourceManagerProvider with ChangeNotifier {
     CheckSourceService? sourceCheckService,
     RepairRuns? repairRuns,
     PausedSourceCheck? pausedCheck,
-    Future<int> Function(List<BookSource> sources)? mergeDuplicates,
+    Future<int> Function(List<BookSource> sources, {String? preferredUrl})?
+    mergeDuplicates,
   }) : _importService = importService ?? SourceImportService(),
        _mergeDuplicates =
            mergeDuplicates ??
-           ((sources) => mergeDuplicateSources(sources: sources)),
+           ((sources, {preferredUrl}) => mergeDuplicateSources(
+             sources: sources,
+             preferredUrl: preferredUrl,
+           )),
        checkService = sourceCheckService ?? getIt<CheckSourceService>(),
        _repairRuns = repairRuns ?? RepairRuns.instance,
        pausedCheck = pausedCheck ?? PausedSourceCheck.instance,
@@ -703,7 +713,8 @@ class SourceManagerProvider with ChangeNotifier {
 
   /// 暫停中的校驗（ADR 0058）：校驗膠囊照它顯示已暫停。
   final PausedSourceCheck pausedCheck;
-  final Future<int> Function(List<BookSource> sources) _mergeDuplicates;
+  final Future<int> Function(List<BookSource> sources, {String? preferredUrl})
+  _mergeDuplicates;
 
   /// 讀清單時併掉了重複書源（ADR 0062）：每併一次加一，頁面聽它從底部提示
   /// 「已合併 [lastMergedDuplicates] 個同網站重複的書源」。
@@ -837,6 +848,12 @@ class SourceManagerProvider with ChangeNotifier {
         }
       }
       _sources = loadedSources;
+      // 剛存過的書源只在有重複書源等著併時優先留下；沒有了就不再影響之後
+      // 的合併。
+      if (_preferredKeeperUrl != null &&
+          duplicateSourceGroups(loadedSources).isEmpty) {
+        _preferredKeeperUrl = null;
+      }
       checkService.forgetOutdatedProgress(loadedSources);
       _rememberCount(loadedSources.length);
       _selectedUrls.retainAll(
@@ -889,8 +906,8 @@ class SourceManagerProvider with ChangeNotifier {
   /// 獲取完整書源 (用於編輯或除錯)
   Future<BookSource?> getFullSource(String url) => _dao.getByUrl(url);
 
-  /// 編輯頁開著的書源：開著時不併重複書源（[_canMerge]），存的時候它可能
-  /// 已經被併掉，存了的修改會在下次合併時隨它刪掉。
+  /// 編輯頁開著的書源：開著時不併重複書源（[_canMerge]）。存過的這一個在
+  /// 關閉編輯頁時優先留下（[_preferredKeeperUrl]），剛改的規則不會被併掉。
   final Set<String> _editingUrls = {};
 
   /// 打開 [url] 的編輯頁前呼叫，傳回要編輯的完整書源；編輯頁關掉後呼叫
@@ -913,14 +930,17 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   /// [url] 的編輯頁關掉了：存過（[changed]）或開著的期間有重複書源沒併，
-  /// 重讀清單（照常併）。
+  /// 重讀清單（照常併）。剛存過的那一個這次合併優先留下，規則不會隨它被
+  /// 併掉。
   Future<void> endEditing(String url, {required bool changed}) async {
     _editingUrls.remove(url);
     if (_disposed) return;
-    if (changed ||
-        (_editingUrls.isEmpty && duplicateSourceGroups(_sources).isNotEmpty)) {
-      await loadSources();
+    if (!changed &&
+        (_editingUrls.isNotEmpty || duplicateSourceGroups(_sources).isEmpty)) {
+      return;
     }
+    if (changed) _preferredKeeperUrl = url;
+    await loadSources();
   }
 
   void _updateGroups() {

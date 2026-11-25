@@ -190,4 +190,63 @@ void main() {
     expect(result.chapters[book.chapterIndex].url, renamed.url);
     expect(result.moved, {old[4].url: renamed.url});
   });
+
+  group('分段章節（上）（下）', () {
+    BookChapter chapter(String url, String title) => BookChapter(
+      url: url,
+      title: title,
+      bookUrl: 'https://s.example/book/1',
+    );
+
+    test('新目錄只剩換了網址的「（上）」：舊的「（下）」留著、不記成換網址', () {
+      final old = [
+        chapter('https://old.example/1', '第1章 序'),
+        chapter('https://old.example/10a', '第10章 大戰（上）'),
+        chapter('https://old.example/10b', '第10章 大戰（下）'),
+        chapter('https://old.example/11', '第11章 尾'),
+      ];
+      final newUp = chapter('https://new.example/10a', '第10章 大戰（上）');
+      final result = mergeFetchedToc(
+        oldToc: old,
+        fetched: [old[0], newUp, old[3]],
+        keep: (chapter) => chapter.url == old[2].url,
+      );
+
+      expect(result.moved, {old[1].url: newUp.url});
+      // 留下的「（下）」接在換了網址的「（上）」後面。
+      expect(result.chapters.map((c) => c.url), [
+        old[0].url,
+        newUp.url,
+        old[2].url,
+        old[3].url,
+      ]);
+    });
+
+    test('兩半都換了網址：舊的「（下）」對到新的「（下）」，不是「（上）」', () {
+      final old = [
+        chapter('https://old.example/1', '第1章 序'),
+        chapter('https://old.example/10a', '第10章 大戰（上）'),
+        chapter('https://old.example/10b', '第10章 大戰（下）'),
+        chapter('https://old.example/11', '第11章 尾'),
+      ];
+      final newUp = chapter('https://new.example/10a', '第十章 大戰（上）');
+      final newDown = chapter('https://new.example/10b', '第十章 大戰（下）');
+      // 多兩章，照比例估的位置落在「（上）」。
+      final result = mergeFetchedToc(
+        oldToc: old,
+        fetched: [
+          old[0],
+          chapter('https://new.example/x1', '作品相關1'),
+          chapter('https://new.example/x2', '作品相關2'),
+          newUp,
+          newDown,
+          old[3],
+        ],
+        keep: (_) => true,
+      );
+
+      expect(result.moved, {old[1].url: newUp.url, old[2].url: newDown.url});
+      expect(result.chapters, hasLength(6));
+    });
+  });
 }
