@@ -11,6 +11,7 @@
 
 - AVD 是 `pixel_9`（Android 16、x86_64，能跑 `arm64-v8a` 的 APK；螢幕 120Hz、記憶體 4 GB、用顯示卡畫）。`medium_phone` 沒有螢幕圓角與挖孔的設定，T3 裝置面板的外框會切掉狀態列的時間與圖示，不用它。
 - 用顯示卡開：T3 的 `device_open` 自己開機時帶 `-gpu auto`，沒有視窗時會選到 SwiftShader（處理器模擬顯示卡，畫面很頓）。所以先在背景自己開 `C:/Android/Sdk/emulator/emulator -avd pixel_9 -no-audio -no-window -no-metrics -gpu host -no-boot-anim -port 5554`，`adb -s emulator-5554 shell dumpsys SurfaceFlinger | grep ^GLES` 看到 NVIDIA 才對；開好再 `device_list`，用 `device_open` 接上序號 `emulator-5554`，使用者在裝置面板看得到。點畫面、截圖用它給的 `agent-device` 指令；不在 T3 時用下面的 `adb` 做法。面板的圓角外框是 T3 畫的，不是機型。
+- 家裡的 Linux 筆電：SDK 在 `~/Android/Sdk`，同一行指令改用 `~/Android/Sdk/emulator/emulator`，`GLES` 看到 AMD Radeon 才對。
 - 電腦上常有別的模擬器在跑，那些不是你的。開機前後各看一次 `adb devices`，新出現的那個序號才是你開的；之後每個指令都加 `adb -s <序號>`。等 `adb -s <序號> shell getprop sys.boot_completed` 回 `1` 才算開好。
 - 用完 `adb -s <序號> emu kill`。
 
