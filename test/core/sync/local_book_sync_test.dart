@@ -1179,6 +1179,64 @@ void main() {
       expect(copied.existsSync(), isFalse);
     });
 
+    // 這台有一本好好的「夜航」，又還原了另一台的備份帶回同一個檔的另一筆
+    // （原檔在那台的路徑、寫不回去）。再選一次同名同內容的檔補那一筆時，
+    // 本地書資料夾裡那份是好的那本在用的，不是這次複製的，不能刪。
+    group('repairing a book whose original sits where another book already '
+        'keeps the same file', () {
+      late Book kept;
+      late String keptPath;
+      late String lostUrl;
+
+      setUp(() async {
+        kept = await a.import('夜航.txt', _novel);
+        keptPath = LocalBookService.filePathOf(kept);
+        final blocked = File(p.join(a.root.path, 'blocked'));
+        await blocked.writeAsString('不是資料夾');
+        lostUrl = 'local://${p.join(blocked.path, '夜航.txt')}';
+        final chapters = await a.chapters.getByBook(kept.bookUrl);
+        await a.books.upsert(kept.copyWith(bookUrl: lostUrl));
+        await a.chapters.insertChapters([
+          for (final chapter in chapters)
+            chapter.copyWith(
+              bookUrl: lostUrl,
+              url: '$lostUrl#${chapter.index}',
+            ),
+        ]);
+      });
+
+      test('keeps that file when the repair succeeds', () async {
+        await a.import('夜航.txt', _novel);
+
+        expect(File(keptPath).readAsStringSync(), _novel);
+        expect(await a.books.getByUrl(kept.bookUrl), isNotNull);
+        final shelf = await a.shelf();
+        expect(shelf, hasLength(2));
+        for (final book in shelf) {
+          final path = LocalBookService.filePathOf(book);
+          expect(File(path).readAsStringSync(), _novel, reason: path);
+        }
+      });
+
+      test('keeps that file when the repair fails', () async {
+        final picked = File(p.join(a.root.path, 'picked', '夜航.txt'));
+        await picked.parent.create(recursive: true);
+        await picked.writeAsString(_novel);
+
+        await expectLater(
+          LocalBookService().addToShelf(
+            picked.path,
+            bookDao: a.books,
+            chapterDao: _FailingChapterDao(a.db),
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        expect(File(keptPath).readAsStringSync(), _novel);
+        expect(await a.books.getByUrl(lostUrl), isNotNull);
+      });
+    });
+
     test('removing one of two books that share an original keeps the '
         'file', () async {
       final mine = await a.import('夜航.txt', _novel);
