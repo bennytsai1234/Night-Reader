@@ -49,11 +49,15 @@ void main() {
     );
     AudioServicePlatform.instance = _ReadyAudioPlatform();
     final playback = SystemPlayback.instance;
+    // 等引擎的上限改短，測完讓計時器跑完，不留給測試收尾。
+    TTSService.debugEngineReplyWait = const Duration(milliseconds: 100);
+    addTearDown(() => TTSService.debugEngineReplyWait = null);
     unawaited(TTSService().init());
 
     var ready = false;
     unawaited(playback.ready().then((_) => ready = true));
     await tester.pump(const Duration(milliseconds: 10));
     expect(ready, isTrue, reason: '媒體工作階段開好就進場，不等朗讀引擎');
+    await tester.pump(const Duration(milliseconds: 200));
   });
 }

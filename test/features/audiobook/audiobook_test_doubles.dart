@@ -1,9 +1,11 @@
-// 有聲書播放器的測試替身：假的播放引擎、書源、同步與系統播放資訊。
+// 有聲書播放器的測試替身：假的播放引擎、書源、同步、音訊焦點與系統播放資訊。
 import 'dart:async';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
+import 'package:night_reader/core/playback/audio_focus.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
@@ -166,6 +168,41 @@ class FakeAudioSourceService extends BookSourceService {
       headers: const {'Referer': 'https://audio.test/'},
     );
   }
+}
+
+/// 假的音訊工作階段：照 `audio_session` 在 Android 上的樣子，已經要過焦點
+/// 就直接回給了、不再問系統，放掉才會再問。打斷由測試送事件。
+class FakeAudioFocusSession implements AudioFocusPlatform {
+  FakeAudioFocusSession({this.granted = true});
+
+  bool granted;
+
+  /// 真的問了系統幾次。
+  int asked = 0;
+  bool _requested = false;
+
+  final interruptionEvents =
+      StreamController<AudioInterruptionEvent>.broadcast();
+  final noisyEvents = StreamController<void>.broadcast();
+
+  @override
+  Future<bool> activate() async {
+    if (_requested) return true;
+    _requested = true;
+    asked += 1;
+    return granted;
+  }
+
+  @override
+  Future<void> deactivate() async {
+    _requested = false;
+  }
+
+  @override
+  Stream<AudioInterruptionEvent> get interruptions => interruptionEvents.stream;
+
+  @override
+  Stream<void> get becomingNoisy => noisyEvents.stream;
 }
 
 /// 系統播放資訊：不向系統開工作階段，記下最後交出去的內容；收掉時清空。

@@ -57,6 +57,9 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
     private var silencems = 0
     private var lastProgress = 0
     private var currentText: String? = null
+    // nightreader.6：現在念的那一句的 utterance id。換句之後上一句晚到的完成、
+    // 錯誤與停止不算，也不放焦點。
+    @Volatile private var currentUtteranceId: String? = null
     private var pauseText: String? = null
     private var isPaused: Boolean = false
     private var queueMode: Int = TextToSpeech.QUEUE_FLUSH
@@ -111,6 +114,7 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
                     it.shutdown()
                 }
                 tts = null
+                currentUtteranceId = null
                 releaseAudioFocus()
                 context = null
             }
@@ -196,6 +200,10 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
                     }
                     invokeMethod("synth.onComplete", true)
                 } else {
+                    // nightreader.6：只認現在念的那一句。換句後上一句晚到的
+                    // 完成不回報、不重設進度，也不放掉焦點。
+                    if (utteranceId != currentUtteranceId) return
+                    currentUtteranceId = null
                     Log.d(tag, "Utterance ID has completed: $utteranceId")
                     if (awaitSpeakCompletion && queueMode == TextToSpeech.QUEUE_FLUSH) {
                         speakCompletion(1)
@@ -209,6 +217,10 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
             }
 
             override fun onStop(utteranceId: String, interrupted: Boolean) {
+                // nightreader.6：舊句晚到的停止不當成現在這一句停了，也不放
+                // 掉新的一句的焦點。
+                if (utteranceId != currentUtteranceId) return
+                currentUtteranceId = null
                 Log.d(
                     tag,
                     "Utterance ID has been stopped: $utteranceId. Interrupted: $interrupted"
@@ -248,7 +260,6 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
             @Deprecated("")
             override fun onError(utteranceId: String) {
                 onError(utteranceId, "")
-                releaseAudioFocus()
             }
 
             override fun onError(utteranceId: String, errorCode: Int) {
@@ -263,12 +274,17 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
                         synthCompletion(0)
                     }
                     invokeMethod("synth.onError", "Error from TextToSpeech (synth)$code")
-                } else {
-                    if (awaitSpeakCompletion) {
-                        speakCompletion(0)
-                    }
-                    invokeMethod("speak.onError", "Error from TextToSpeech (speak)$code")
+                    return
                 }
+                // nightreader.6：只認現在念的那一句；換句後上一句晚到的錯誤
+                // 不回報、不放焦點。
+                if (utteranceId != currentUtteranceId) return
+                currentUtteranceId = null
+                if (awaitSpeakCompletion) {
+                    speakCompletion(0)
+                }
+                invokeMethod("speak.onError", "Error from TextToSpeech (speak)$code")
+                releaseAudioFocus()
             }
         }
 
@@ -304,6 +320,7 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
         if (synthResult != null) synthCompletion(0)
         speaking = false
         synth = false
+        currentUtteranceId = null
         ttsStatus = null
         // 換掉的引擎要關掉，不然它和系統朗讀服務的連線一直留著。
         tts?.shutdown()
@@ -367,9 +384,9 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
     }
 
     /** 在 [worker] 上執行；丟出的例外回成這次呼叫的錯誤（見 [guarded]）。 */
-    private fun runCall(call: MethodCall, result: Result) {
+    private fun runCall(call: MethodCall, result: Result, allowReconnect: Boolean = true) {
         try {
-            handleMethodCall(call, result)
+            handleMethodCall(call, result, allowReconnect)
         } catch (e: Exception) {
             Log.e(tag, "${call.method}: $e")
             result.error("TtsError", "${call.method}: $e", null)
@@ -377,11 +394,15 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
     }
 
     /** 在 [worker] 上執行。 */
-    private fun handleMethodCall(call: MethodCall, result: Result) {
+    private fun handleMethodCall(
+        call: MethodCall,
+        result: Result,
+        allowReconnect: Boolean = true,
+    ) {
         // If TTS is still loading
         if (ttsStatus == null) {
             // Suspend method call until the TTS engine is ready
-            pendingMethodCalls.add(Runnable { runCall(call, result) })
+            pendingMethodCalls.add(Runnable { runCall(call, result, allowReconnect) })
             return
         }
         when (call.method) {
@@ -409,15 +430,16 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
                         return
                     }
                 }
-                when (speak(text, focus)) {
+                when (speak(text, focus, allowReconnect)) {
                     SpeakOutcome.STARTED -> {}
                     SpeakOutcome.RECONNECTING -> {
-                        // 連上後再念這句。
-                        pendingMethodCalls.add(Runnable { runCall(call, result) })
+                        // 連上後再念這句；換了新引擎還是連不上就回覆失敗，不再
+                        // 換一個引擎把它排回去（nightreader.6）。
+                        pendingMethodCalls.add(Runnable { runCall(call, result, false) })
                         return
                     }
                     SpeakOutcome.REJECTED -> {
-                        // 引擎連著但不收這句：沒有要等的連線，直接回覆失敗。
+                        // 引擎連著但不收這句，或重連過一次還連不上：直接回覆失敗。
                         result.success(0)
                         return
                     }
@@ -782,8 +804,11 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
 
     private enum class SpeakOutcome { STARTED, RECONNECTING, REJECTED }
 
-    private fun speak(text: String, focus: Boolean): SpeakOutcome {
+    private fun speak(text: String, focus: Boolean, allowReconnect: Boolean): SpeakOutcome {
         if (!ismServiceConnectionUsable(tts)) {
+            // nightreader.6：重連只留一次。換了新引擎還是連不上就把這句回成
+            // 失敗，不再換一個引擎、把它排回去，不然會一直重連、Dart 一直等。
+            if (!allowReconnect) return SpeakOutcome.REJECTED
             createEngine(selectedEngine, null)
             return SpeakOutcome.RECONNECTING
         }
@@ -792,6 +817,10 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
         if(focus){
             requestAudioFocus()
         }
+        // 送出之前就記下：很短的一句可能在 speak 回來之前就念完，回呼在別的
+        // 執行緒，晚記會把這一句自己的完成當成舊句丟掉。
+        val previousUtteranceId = currentUtteranceId
+        currentUtteranceId = uuid
         val accepted = if (silencems > 0) {
             tts!!.playSilentUtterance(
                 silencems.toLong(),
@@ -803,6 +832,7 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
             tts!!.speak(text, queueMode, bundle, uuid) == 0
         }
         if (accepted) return SpeakOutcome.STARTED
+        currentUtteranceId = previousUtteranceId
         utterances.remove(uuid)
         return SpeakOutcome.REJECTED
     }

@@ -93,11 +93,15 @@ class _AudiobookPageState extends State<AudiobookPage> {
   /// 離開這一頁時要自己收掉。
   ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _notice;
 
+  /// 播放器不影響階段的提示（例如通話中按播放沒出聲）。
+  late final StreamSubscription<String> _notices;
+
   @override
   void initState() {
     super.initState();
     // 進來之前就留著的失敗不再跳一次；按播放重試又失敗才跳。
     _noticedError = _playbackError;
+    _notices = _player.notices.listen(_showNotice);
     _player.addListener(_onPlayerChanged);
     unawaited(_start());
   }
@@ -109,20 +113,29 @@ class _AudiobookPageState extends State<AudiobookPage> {
     _noticedError = error;
     if (error == null || !mounted) return;
     final remedy = SourceFailureRemedy.of(error, _player.source);
+    _showNotice(
+      error,
+      action: remedy == null
+          ? null
+          : SnackBarAction(
+              label: context.ui(remedy.label),
+              onPressed: () {
+                if (mounted) unawaited(_runRemedy(context, remedy));
+              },
+            ),
+    );
+  }
+
+  /// 跳一則提示；新的蓋掉還在畫面上的那一則。
+  void _showNotice(String message, {SnackBarAction? action}) {
+    if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
     final notice = messenger.showSnackBar(
       SnackBar(
-        content: UiText(error),
+        content: UiText(message),
         persist: false,
         duration: const Duration(seconds: 4),
-        action: remedy == null
-            ? null
-            : SnackBarAction(
-                label: context.ui(remedy.label),
-                onPressed: () {
-                  if (mounted) unawaited(_runRemedy(context, remedy));
-                },
-              ),
+        action: action,
       ),
     );
     _notice = notice;
@@ -185,6 +198,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
   @override
   void dispose() {
     _player.removeListener(_onPlayerChanged);
+    unawaited(_notices.cancel());
     _notice?.close();
     unawaited(_downloads?.cancel());
     _listScroll?.dispose();

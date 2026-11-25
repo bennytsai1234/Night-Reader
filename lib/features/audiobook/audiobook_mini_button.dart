@@ -12,6 +12,7 @@ import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 
 import 'audiobook_player.dart';
 
@@ -78,17 +79,35 @@ class _AudiobookMiniButtonState extends State<AudiobookMiniButton>
   /// 滑進來之前那一段：在畫面外畫好、等一下。
   bool _preparing = false;
 
+  /// 播放器不影響階段的提示（例如通話中按播放沒出聲）。
+  late final StreamSubscription<String> _notices;
+
   @override
   void initState() {
     super.initState();
+    _notices = _player.notices.listen(_showNotice);
     _player.addListener(_onPlayer);
     _book = _player.book;
     if (_book != null) _shown.value = 1;
   }
 
+  void _showNotice(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: UiText(message),
+          persist: false,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+  }
+
   @override
   void dispose() {
     _player.removeListener(_onPlayer);
+    unawaited(_notices.cancel());
     _shown.dispose();
     super.dispose();
   }

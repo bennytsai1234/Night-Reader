@@ -18,6 +18,7 @@ import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/book_chapter_files.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/storage/books_in_use.dart';
+import 'package:night_reader/core/playback/audio_focus.dart';
 import 'package:night_reader/core/playback/sleep_timer.dart';
 import 'package:night_reader/core/playback/system_playback.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
@@ -74,6 +75,9 @@ enum AudiobookPhase {
   ended,
 }
 
+/// 要不到音訊焦點（例如通話中）時不播，提示這一句。
+const String audiobookNoAudioFocusNotice = '通話中或其他聲音正在播放，有聲書已暫停';
+
 /// 有聲書的播放（ADR 0055）。整個 App 一個，離開播放器畫面照樣在播；
 /// 播放器畫面、離開播放器時的圓鈕、通知與鎖定畫面都看它。
 ///
@@ -90,6 +94,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     BookSourceService? sourceService,
     SyncService? sync,
     SystemPlayback? playback,
+    AudioFocus? audioFocus,
     Random? random,
     DateTime Function()? now,
     this._readRecordDao,
@@ -97,6 +102,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
        _sourceService = sourceService ?? BookSourceService(),
        _sync = sync ?? SyncService.instance,
        _playback = playback ?? SystemPlayback.instance,
+       _audioFocus = audioFocus ?? AudioFocus.instance,
        _random = random ?? Random(),
        _now = now ?? DateTime.now {
     sleepTimer = SleepTimer(onExpired: () => unawaited(pause()), now: now);
@@ -166,6 +172,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   final BookSourceService _sourceService;
   final SyncService _sync;
   final SystemPlayback _playback;
+  final AudioFocus _audioFocus;
   final Random _random;
   final DateTime Function() _now;
 
@@ -254,6 +261,12 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       _phase == AudiobookPhase.openFailed || _phase == AudiobookPhase.failed
       ? _failure
       : null;
+
+  /// 不影響階段的提示（例如通話中按播放沒出聲）；播放器頁與收聽圓鈕跳一則
+  /// 提示。
+  Stream<String> get notices => _notices.stream;
+  final StreamController<String> _notices =
+      StreamController<String>.broadcast();
 
   /// 換到 [phase]：收聽計時與定時跟著出聲與否，畫面重畫。系統播放資訊由
   /// 呼叫的地方決定交不交（載入這一集時刻意不交，停在上一集）。
@@ -901,16 +914,33 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   // --- 系統播放資訊 ---
 
   /// 開始播：先接手系統播放資訊（原本在播的朗讀收到暫停），再讓引擎播。
-  /// 叫引擎出聲都經過這裡：還要出聲、還是同一次載入、這一集開好了才播。
+  /// 叫引擎出聲都經過這裡：還要出聲、還是同一次載入、這一集開好了才播；
+  /// 要不到音訊焦點（通話中、別的 App 正在出聲）不播，留在暫停並說一聲。
   Future<void> _startPlaying(AudioEngine engine) async {
     final generation = _generation;
     await _playback.start();
     // 等系統播放控制的這段時間按了暫停、換了集或停了：不出聲。
-    if (!_wantPlay ||
-        generation != _generation ||
-        (_phase != AudiobookPhase.playing && _phase != AudiobookPhase.paused)) {
+    bool ready() =>
+        _wantPlay &&
+        generation == _generation &&
+        (_phase == AudiobookPhase.playing || _phase == AudiobookPhase.paused);
+    if (!ready()) return;
+    // `audio_session` 已經要過焦點時會直接回「給了」，不再問系統：通話中
+    // 按播放也說給了。焦點整個 App 一份（[AudioFocus]），和有聲書原本的
+    // 打斷處理照同一份走，通話中的這一下由這裡擋住。
+    if (!await _audioFocus.request()) {
+      if (!ready()) return;
+      _wantPlay = false;
+      _notices.add(audiobookNoAudioFocusNotice);
+      if (_phase == AudiobookPhase.playing) {
+        await engine.pause();
+        _moveTo(AudiobookPhase.paused);
+      } else {
+        notifyListeners();
+      }
       return;
     }
+    if (!ready()) return;
     _publish(playing: true);
     await engine.play();
   }
@@ -982,6 +1012,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     _inUse?.release();
     sleepTimer.dispose();
     position.dispose();
+    unawaited(_notices.close());
     super.dispose();
   }
 }

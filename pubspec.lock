@@ -497,7 +497,7 @@ packages:
       path: "third_party/flutter_tts"
       relative: true
     source: path
-    version: "4.2.5+nightreader.5"
+    version: "4.2.5+nightreader.6"
   flutter_web_plugins:
     dependency: transitive
     description: flutter

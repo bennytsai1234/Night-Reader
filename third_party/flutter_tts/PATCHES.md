@@ -6,7 +6,7 @@
 - Archive: `https://pub.dev/api/archives/flutter_tts-4.2.5.tar.gz`
 - Archive SHA-256: `ce5eb209b40e95f2f4a1397116c87ab2fcdff32257d04ed7a764e75894c03775`
 - Upstream repository: <https://github.com/dlutton/flutter_tts>
-- Vendored version: `4.2.5+nightreader.5`
+- Vendored version: `4.2.5+nightreader.6`
 - License: MIT; the upstream [`LICENSE`](LICENSE) is retained unchanged.
 
 ## Local patch
@@ -87,3 +87,24 @@ Night Reader maintains this package in-tree and no longer tracks upstream.
   complete an awaited `speak`/`synthesizeToFile` with `0`; `setSilence` replies.
   On Android 24–25, `onStart` for silence and synthesis utterances no longer
   dereferences a missing text.
+
+## Patch `nightreader.6`: bounded reconnect and current-utterance callbacks
+
+- A `speak` whose engine connection is gone reconnects at most once. The call
+  is replayed after that one engine reports `onInit`; if the connection is
+  still unusable, or the engine rejects the sentence, it replies `0` instead of
+  starting another engine and queueing itself again. Before this, a phone with
+  no working TTS service kept replacing the engine forever: every failed
+  `onInit` replayed the queued `speak`, which reconnected again, so Dart never
+  got a reply.
+- Calls still queue while an engine has not answered `onInit` at all. The app
+  bounds that wait with its own timeouts (`TTSService.engineReplyWait`); the
+  plugin cannot tell a slow engine from a dead one.
+- Utterance callbacks belong to the sentence that is current when they arrive:
+  `onDone`, `onStop` and `onError` for an utterance replaced by a newer `speak`
+  are ignored. The late completion of the previous sentence no longer reads as
+  the end of the new one (which made the reader skip a sentence) and no longer
+  releases audio focus while the new sentence is speaking.
+- The current utterance id is recorded before `speak` is handed to the engine
+  (and restored if the engine rejects it), so a very short sentence that
+  finishes before `speak` returns still reports its own completion.
