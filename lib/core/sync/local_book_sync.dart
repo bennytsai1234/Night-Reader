@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:night_reader/core/comic/local_comic_library.dart';
@@ -296,35 +297,37 @@ class LocalBookSync {
   }
 
   /// 書架上每個原檔指紋的本地書。原檔大小這時才量；原檔不見了的記下來，
-  /// 雲端有就下載補回。
+  /// 雲端有就下載補回。同一個檔在書架上有好幾筆（還原了另一台的備份）時
+  /// 併成一組（[LocalShelfBook.merge]）。
   Future<Map<String, LocalShelfBook>> _shelf() async {
-    final shelf = <String, LocalShelfBook>{};
+    final groups = <String, List<LocalShelfBook>>{};
     for (final book in await _bookDao.getInBookshelf()) {
       final print = book.fileFingerprint;
       if (!book.isLocal || print == null) continue;
-      if (shelf[print] case final same?) {
-        shelf[print] = same.withBook(book.bookUrl);
-        continue;
-      }
       final path = LocalBookService.filePathOf(book);
+      final LocalShelfBook one;
       if (book.bookKind == BookSourceKind.comic) {
-        shelf[print] = await _comicShelfBook(book, path);
-        continue;
+        one = await _comicShelfBook(book, path);
+      } else {
+        final file = File(path);
+        final hasFile = await file.exists();
+        one = LocalShelfBook(
+          name: book.name,
+          author: book.author,
+          extension: localBookExtensionFromPath(path),
+          size: hasFile ? await file.length() : 0,
+          hasFile: hasFile,
+          addedTime: book.syncTime,
+          path: path,
+          bookUrls: [book.bookUrl],
+        );
       }
-      final file = File(path);
-      final hasFile = await file.exists();
-      shelf[print] = LocalShelfBook(
-        name: book.name,
-        author: book.author,
-        extension: localBookExtensionFromPath(path),
-        size: hasFile ? await file.length() : 0,
-        hasFile: hasFile,
-        addedTime: book.syncTime,
-        path: path,
-        bookUrls: [book.bookUrl],
-      );
+      (groups[print] ??= []).add(one);
     }
-    return shelf;
+    return {
+      for (final MapEntry(:key, :value) in groups.entries)
+        key: LocalShelfBook.merge(value),
+    };
   }
 
   /// 書架上的一本本地漫畫：書的資料夾裡每話一個 CBZ。只算檔案真的在的
@@ -753,17 +756,30 @@ class LocalShelfBook {
   /// 本地漫畫的每一話；其他本地書是空的。
   final List<ComicSyncChapter> chapters;
 
-  LocalShelfBook withBook(String bookUrl) => LocalShelfBook(
-    name: name,
-    author: author,
-    extension: extension,
-    size: size,
-    addedTime: addedTime,
-    path: path,
-    bookUrls: [...bookUrls, bookUrl],
-    hasFile: hasFile,
-    chapters: chapters,
-  );
+  /// 同一個檔的好幾筆書（照書架順序，最近讀的在前）併成一組：加進書架的
+  /// 時間取最晚的那筆（比雲端刪除晚重新加入的不跟著移出），原檔、大小與
+  /// 每一話取原檔還在、話數最多的那筆（上傳與比對用得到的那份）。
+  static LocalShelfBook merge(List<LocalShelfBook> books) {
+    var file = books.first;
+    for (final book in books.skip(1)) {
+      if (book.hasFile && !file.hasFile ||
+          book.hasFile == file.hasFile &&
+              book.chapters.length > file.chapters.length) {
+        file = book;
+      }
+    }
+    return LocalShelfBook(
+      name: file.name,
+      author: file.author,
+      extension: file.extension,
+      size: file.size,
+      addedTime: books.map((book) => book.addedTime).reduce(max),
+      path: file.path,
+      bookUrls: [for (final book in books) ...book.bookUrls],
+      hasFile: file.hasFile,
+      chapters: file.chapters,
+    );
+  }
 }
 
 /// 每個原檔指紋，這台（[local]）、雲端（[remote]）與上次同步時（[base]）
