@@ -112,6 +112,10 @@ void main() {
         authorizations.add(request.headers.value('proxy-authorization'));
         if (request.method == 'CONNECT') {
           request.response.statusCode = HttpStatus.forbidden;
+        } else if (request.uri.path == '/needs-auth') {
+          request.response
+            ..statusCode = HttpStatus.proxyAuthenticationRequired
+            ..headers.set('proxy-authenticate', 'Basic realm="proxy"');
         } else {
           request.response.write('經過 HTTP 代理');
         }
@@ -143,6 +147,28 @@ void main() {
       expect(response.body, '經過 HTTP 代理');
       expect(authorizations, [null]);
     });
+
+    // 帳密不對或代理要驗證：代理回 407，說是代理的問題，網址選項的 retry
+    // 也不重送。
+    test(
+      'a 407 from the proxy says it is the proxy and is not resent',
+      () async {
+        final port = proxyServer.port;
+        await expectLater(
+          fetch(
+            'http://site.test/needs-auth,{"retry":2}',
+            'http://127.0.0.1:$port',
+          ),
+          throwsA(
+            predicate(
+              (Object e) => userErrorReason(e).contains('代理要求驗證'),
+              '說是代理要驗證',
+            ),
+          ),
+        );
+        expect(requested, ['GET http://site.test/needs-auth']);
+      },
+    );
 
     test('https opens a tunnel with the credentials; a refusal is not '
         'retried and says it is the proxy', () async {
@@ -228,6 +254,69 @@ void main() {
     });
   });
 
+  // https 網站經 HTTP 代理：通道開好後 TLS 完整握手走通；通道開好之後才
+  // 逾時或放棄，代理那頭的連線也關乾淨。
+  group('https through an http proxy tunnel', () {
+    late _FakeTunnel tunnel;
+    setUp(() async => tunnel = await _FakeTunnel.start());
+    tearDown(() => tunnel.close());
+
+    Future<HttpServer> site() async {
+      final context = SecurityContext()
+        ..useCertificateChain('test/fixtures/tls/self_signed_cert.pem')
+        ..usePrivateKey('test/fixtures/tls/self_signed_key.pem');
+      final server = await HttpServer.bindSecure(
+        InternetAddress.loopbackIPv4,
+        0,
+        context,
+      );
+      addTearDown(() => server.close(force: true));
+      return server;
+    }
+
+    test('the TLS handshake completes and the page comes back', () async {
+      final server = await site();
+      server.listen((request) async {
+        request.response.write('經過通道的 https');
+        await request.response.close();
+      });
+      final response = await fetch(
+        'https://127.0.0.1:${server.port}/book/1',
+        'http://127.0.0.1:${tunnel.port}@user@pass',
+      );
+      expect(response.body, '經過通道的 https');
+      expect(tunnel.connects, ['127.0.0.1:${server.port}']);
+      expect(tunnel.authorizations, [
+        'Basic ${base64Encode(utf8.encode('user:pass'))}',
+      ]);
+    });
+
+    test(
+      'a site that stops answering after the tunnel leaves nothing open',
+      () async {
+        final server = await site();
+        server.listen((_) {}); // 收了請求不回。
+        final client = SourceProxy.parse('http://127.0.0.1:${tunnel.port}')!
+            .httpClient();
+        try {
+          final request = await client.getUrl(
+            Uri.parse('https://127.0.0.1:${server.port}/a'),
+          );
+          await request.close().timeout(const Duration(milliseconds: 500));
+        } on TimeoutException {
+          // 預期的。
+        } finally {
+          client.close(force: true);
+        }
+        for (var i = 0; i < 50 && tunnel.open > 0; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        expect(tunnel.connects, hasLength(1));
+        expect(tunnel.open, 0);
+      },
+    );
+  });
+
   // 等太久或不要了的連線，代理那頭不留連線（每個逾時的請求都留一條的話，
   // 一次搜尋走慢代理就一直累積）。
   group('connections left at the proxy', () {
@@ -289,6 +378,88 @@ void main() {
 }
 
 enum _Stall { none, greeting, slowGreeting, tls }
+
+/// 假的 HTTP 代理，只開通道（CONNECT）：記下連到哪裡、帶的帳密、代理那頭
+/// 還開著幾條連線。
+final class _FakeTunnel {
+  _FakeTunnel._(this._server) {
+    _server.listen(_serve);
+  }
+
+  static Future<_FakeTunnel> start() async =>
+      _FakeTunnel._(await ServerSocket.bind(InternetAddress.loopbackIPv4, 0));
+
+  final ServerSocket _server;
+  final List<String> connects = [];
+  final List<String?> authorizations = [];
+  final List<Socket> _sockets = [];
+  int open = 0;
+
+  int get port => _server.port;
+
+  Future<void> close() async {
+    for (final socket in _sockets) {
+      socket.destroy();
+    }
+    await _server.close();
+  }
+
+  void _serve(Socket client) {
+    open++;
+    _sockets.add(client);
+    final head = <int>[];
+    Socket? target;
+    var piping = false;
+    var closed = false;
+    void done() {
+      if (closed) return;
+      closed = true;
+      open--;
+      target?.destroy();
+    }
+
+    client.listen(
+      (data) async {
+        if (piping) {
+          target?.add(data);
+          return;
+        }
+        head.addAll(data);
+        final text = latin1.decode(head);
+        final end = text.indexOf('\r\n\r\n');
+        if (end < 0) return;
+        piping = true;
+        final lines = text.substring(0, end).split('\r\n');
+        final hostPort = lines.first.split(' ')[1];
+        connects.add(hostPort);
+        authorizations.add(
+          lines
+              .where((l) => l.toLowerCase().startsWith('proxy-authorization:'))
+              .map((l) => l.substring(l.indexOf(':') + 1).trim())
+              .firstOrNull,
+        );
+        final colon = hostPort.lastIndexOf(':');
+        final upstream = target = await Socket.connect(
+          hostPort.substring(0, colon),
+          int.parse(hostPort.substring(colon + 1)),
+        );
+        _sockets.add(upstream);
+        client.add(
+          latin1.encode('HTTP/1.1 200 Connection established\r\n\r\n'),
+        );
+        final rest = head.sublist(end + 4);
+        if (rest.isNotEmpty) upstream.add(rest);
+        upstream.listen(
+          client.add,
+          onError: (Object _) => client.destroy(),
+          onDone: () => client.destroy(),
+        );
+      },
+      onError: (Object _) => done(),
+      onDone: done,
+    );
+  }
+}
 
 /// 假的 SOCKS 代理：握手後自己當網站回一頁；記下連進來幾條、還開著幾條。
 final class _FakeSocks {

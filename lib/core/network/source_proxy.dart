@@ -417,24 +417,35 @@ final class SourceProxyAdapter implements HttpClientAdapter {
 
   final HttpClientAdapter _direct;
   final Map<String, HttpClientAdapter> _byProxy = {};
+  final Map<String, SourceProxy?> _proxies = {};
 
   @override
   Future<ResponseBody> fetch(
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) {
+  ) async {
     final raw = options.extra[extraKey];
-    final adapter = raw is String && raw.trim().isNotEmpty
-        ? _adapterFor(raw)
-        : _direct;
-    return adapter.fetch(options, requestStream, cancelFuture);
+    if (raw is! String || raw.trim().isEmpty) {
+      return _direct.fetch(options, requestStream, cancelFuture);
+    }
+    final adapter = _adapterFor(raw);
+    final body = await adapter.fetch(options, requestStream, cancelFuture);
+    // http 網站經 HTTP 代理時，407 是代理回的（https 網站的通道被拒在開
+    // 通道時就報了）：說是代理的問題，不當成網站的回應、不重送。
+    if (body.statusCode == HttpStatus.proxyAuthenticationRequired &&
+        _proxies[raw]?.type == 'http' &&
+        options.uri.scheme == 'http') {
+      unawaited(body.stream.drain<void>().catchError((_) {}));
+      throw SourceProxyException('書源設定的代理要求驗證，或帳號密碼不對');
+    }
+    return body;
   }
 
   HttpClientAdapter _adapterFor(String raw) {
     final cached = _byProxy[raw];
     if (cached != null) return cached;
-    final proxy = SourceProxy.parse(raw);
+    final proxy = _proxies[raw] = SourceProxy.parse(raw);
     final adapter = proxy == null
         ? _direct
         : IOHttpClientAdapter(createHttpClient: proxy.httpClient);
@@ -448,5 +459,6 @@ final class SourceProxyAdapter implements HttpClientAdapter {
       if (!identical(adapter, _direct)) adapter.close(force: force);
     }
     _byProxy.clear();
+    _proxies.clear();
   }
 }
