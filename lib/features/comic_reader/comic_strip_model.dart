@@ -91,9 +91,9 @@ class ComicStripModel extends ChangeNotifier {
     int pageIndex = 0,
     bool Function(int chapterIndex)? isReadable,
   }) : _isReadable = isReadable ?? _always,
-       _anchorChapter = chapterIndex.clamp(0, chapterCount - 1).toInt(),
-       _anchorPage = pageIndex < 0 ? 0 : pageIndex {
-    _anchorChapter = _readableAt(_anchorChapter);
+       _anchorChapter = 0,
+       _anchorPage = 0 {
+    _setAnchor(chapterIndex, pageIndex);
   }
 
   final ComicPageSource source;
@@ -125,6 +125,22 @@ class ComicStripModel extends ChangeNotifier {
   int _readableAt(int index) => _isReadable(index)
       ? index
       : nextReadable(index) ?? previousReadable(index) ?? index;
+
+  /// 錨點定在第 [chapterIndex] 話第 [pageIndex] 張；那一話不能讀時換到
+  /// [_readableAt] 那一話的第一張（第幾張是原本那一話的，套到別話會跳過
+  /// 開頭），[anchorMoved] 是 true。
+  void _setAnchor(int chapterIndex, int pageIndex) {
+    final wanted = chapterIndex.clamp(0, chapterCount - 1).toInt();
+    _anchorChapter = _readableAt(wanted);
+    _anchorMoved = _anchorChapter != wanted;
+    _anchorPage = _anchorMoved || pageIndex < 0 ? 0 : pageIndex;
+  }
+
+  bool _anchorMoved = false;
+
+  /// 錨點不是要的那一話（那一話不能讀，換到別話的開頭）：閱讀器不接回原本
+  /// 在那張圖的幾成。
+  bool get anchorMoved => _anchorMoved;
 
   /// 開書時還不知道有幾張，先畫幾張骨架。
   static const int placeholderPages = 3;
@@ -186,10 +202,7 @@ class ComicStripModel extends ChangeNotifier {
 
   /// 跳到第 [chapterIndex] 話第 [pageIndex] 張：換錨點，已經載好的話留著用。
   void jumpTo(int chapterIndex, {int pageIndex = 0}) {
-    _anchorChapter = _readableAt(
-      chapterIndex.clamp(0, chapterCount - 1).toInt(),
-    );
-    _anchorPage = pageIndex < 0 ? 0 : pageIndex;
+    _setAnchor(chapterIndex, pageIndex);
     _lo = 0;
     _hi = -1;
     _generation += 1;

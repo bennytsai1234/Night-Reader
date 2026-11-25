@@ -227,7 +227,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
         _chapters = chapters;
         _source = source;
         _model = model;
-        _initialFraction = start == null
+        _initialFraction = start == null && !model.anchorMoved
             ? (resume?.fraction ?? _book.visualOffsetPx)
                   .clamp(0.0, 1.0)
                   .toDouble()
