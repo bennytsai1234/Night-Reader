@@ -33,6 +33,7 @@ class ReaderChapterContentStorage {
     BookSource? Function()? getSource,
     void Function(BookSource source)? setSource,
     String? Function(int chapterIndex)? resolveNextChapterUrl,
+    bool Function()? shouldStore,
   }) {
     final pipeline = ChapterContentPreparationPipeline(
       book: book,
@@ -42,6 +43,7 @@ class ReaderChapterContentStorage {
       getSource: getSource,
       setSource: setSource,
       resolveNextChapterUrl: resolveNextChapterUrl,
+      shouldStore: shouldStore,
     );
     return ReaderChapterContentStorage(
       book: book,

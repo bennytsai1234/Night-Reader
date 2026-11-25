@@ -60,6 +60,23 @@ class ReaderProgressSync {
   bool _opened = false;
   bool _disposed = false;
 
+  /// 這本書要換目錄了（改編碼）：不再上傳進度，關掉時也不存；換好之後由
+  /// 新閱讀器接手。呼叫前先 flushProgress。
+  bool _retired = false;
+
+  void retire() {
+    _retired = true;
+    _graceTimer?.cancel();
+    _graceTimer = null;
+    final grace = _grace;
+    if (grace != null && !grace.isCompleted) grace.complete(false);
+  }
+
+  /// 換目錄失敗、閱讀器照舊時恢復。
+  void resume() {
+    _retired = false;
+  }
+
   void start() {
     // 照點的章節開書不等同步，馬上記成開著，背景同步就不改這本。
     if (!_resumes) _markOpen();
@@ -100,6 +117,7 @@ class ReaderProgressSync {
   /// 開書定位完成時呼叫。
   void bookOpened() {
     _opened = true;
+    if (_retired) return;
     _markOpen();
     final late = _lateProgress;
     _lateProgress = null;
@@ -126,15 +144,19 @@ class ReaderProgressSync {
 
   Future<void> _pullAfterResume() async {
     final runtime = _runtime();
-    if (!_opened || _disposed || runtime == null) return;
+    if (!_opened || _disposed || _retired || runtime == null) return;
     await runtime.flushProgress();
     final since = runtime.state.visibleLocation;
     await _jumpIfStill(await _sync.pullProgress(book.bookUrl), since);
   }
 
-  void _onHide() => _upload(_runtime());
+  void _onHide() {
+    if (_retired) return;
+    _upload(_runtime());
+  }
 
   void _upload(ReaderRuntime? runtime) {
+    if (_retired) return;
     final flushing = runtime == null || runtime.disposed
         ? Future<void>.value()
         : runtime.flushProgress();
@@ -216,7 +238,9 @@ class ReaderProgressSync {
     final grace = _grace;
     if (grace != null && !grace.isCompleted) grace.complete(false);
     _lifecycle?.dispose();
-    if (_marked) _sync.closeBook(book);
-    _upload(_runtime());
+    // 換目錄（改編碼）時是由新的閱讀器接手，舊的不能再把這本書記成關掉，
+    // 否則新閱讀器開著、背景同步卻會改它。
+    if (_marked && !_retired) _sync.closeBook(book);
+    if (!_retired) _upload(_runtime());
   }
 }
