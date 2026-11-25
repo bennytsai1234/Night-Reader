@@ -111,10 +111,11 @@ void main() {
           .getStringList('text.chapter@text'),
       ['Chapter 1'],
     );
-    // 字只在子元素裡：父元素自己的文字沒有。
+    // 字只在子元素裡：只選到 <b>，父元素自己的文字沒有。
     expect(
-      rule('<div><p><b>第一章</b></p></div>').getStringList('text.第一章@tag'),
-      isEmpty,
+      rule('<div><p class="p"><b class="b">第一章</b></p></div>')
+          .getStringList('text.第一章@class'),
+      ['b'],
     );
   });
 
@@ -137,5 +138,47 @@ void main() {
       'https://cdn.test/b/x.png',
     );
     expect(rule('<a href="/chapter/1">一</a>').getString('a@abs:href'), '');
+  });
+
+  test('屬性相等配上別的屬性條件照常選得到，不會卡住', () {
+    const html =
+        '<a data-type="chapter" href="/chapter/1">一</a><a data-type="CHAPTER " href="/2">二</a>'
+        '<a data-type="chapter">沒有網址</a><a href="/x">x</a>';
+    expect(rule(html).getStringList('@css:a[data-type=chapter][href]@text'), [
+      '一',
+      '二',
+    ]);
+    expect(
+      rule(html).getStringList('@css:a[href=/chapter/1][data-type]@text'),
+      ['一'],
+    );
+  });
+
+  test(':has 以正在檢查的元素為界，逗號分開的幾組有一組成立就算', () {
+    const html =
+        '<section><div class="d1"><a href="/1">一</a></div></section>'
+        '<div class="d2"><section><a href="/2">二</a></section></div>'
+        '<div class="d3"><a href="/3">三</a></div>';
+    expect(rule(html).getStringList('@css:div:has(section a)@class'), ['d2']);
+    expect(rule(html).getStringList('@css:div:has(> p, a)@class'), [
+      'd1',
+      'd2',
+      'd3',
+    ]);
+  });
+
+  test('[屬性~="…"] 的引號也是正則的一部分（同 Jsoup）', () {
+    const html = '<a class="chapter listed">一</a>';
+    expect(rule(html).getStringList('@css:a[class~="chapter"]@text'), isEmpty);
+    expect(rule(html).getStringList('@css:a[class~=chapter]@text'), ['一']);
+  });
+
+  test('@abs: 的空網址照 <base> 是基準本身', () {
+    expect(
+      rule(
+        '<html><head><base href="https://cdn.test/b/"></head><body><a href="">a</a></body></html>',
+      ).getString('a@abs:href'),
+      'https://cdn.test/b/',
+    );
   });
 }

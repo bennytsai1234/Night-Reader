@@ -301,29 +301,12 @@ bool _matchesCompoundSelector(Element element, String compound) {
     }
   }
   for (final hasSelector in parsed.hasSelectors) {
-    final trimmed = hasSelector.trim();
-    if (trimmed.isEmpty) return false;
-    final relative = RegExp(r'^([>+~])\s*').firstMatch(trimmed);
-    if (relative != null) {
-      // Jsoup 的相對選擇器：:has(> p a) 是「直接子元素 p 裡有 a」。
-      final matched = runZoned(
-        () => _hasRelative(
-          element,
-          relative.group(1)!,
-          trimmed.substring(relative.end),
-        ),
-        zoneValues: {_selectRootKey: element},
-      );
-      if (!matched) return false;
-      continue;
-    }
-    // Jsoup `StructuralEvaluator.Has`：只看底下的元素，不算自己。
-    if (!querySelectorAllCompat(
-      element,
-      trimmed,
-    ).any((match) => !identical(match, element))) {
-      return false;
-    }
+    if (hasSelector.trim().isEmpty) return false;
+    // 逗號分開的幾組，有一組成立就算。
+    final groups = _splitSelectorList(hasSelector)
+        .map((group) => group.trim())
+        .where((group) => group.isNotEmpty);
+    if (!groups.any((group) => _hasGroup(element, group))) return false;
   }
   for (final notSelector in parsed.notSelectors) {
     final groups = _splitSelectorList(notSelector);
@@ -379,7 +362,13 @@ bool? _matchesSimpleBaseSelectorDirectly(Element element, String selector) {
   }
 
   if (_hasUnsupportedAttributeSyntax(normalizedSelector)) {
-    return null;
+    if (extracted.attributeSelectors.isEmpty) return null;
+    // 屬性相等先在這個元素上比完，剩下的條件另外比；整串交回去比會又
+    // 走到這裡，一直繞（`a[data-type=chapter][href]`）。
+    if (!_matchesExactAttributes(element, extracted.attributeSelectors)) {
+      return false;
+    }
+    return _matchesBaseSelector(element, normalizedSelector);
   }
 
   final match = RegExp(r'^([a-zA-Z][\w-]*)?(#[\w-]+)?((?:\.[\w-]+)*)$')
@@ -409,9 +398,15 @@ bool? _matchesSimpleBaseSelectorDirectly(Element element, String selector) {
       }
     }
   }
-  for (final attribute in extracted.attributeSelectors) {
-    // Jsoup `AttributeWithValue`：有這個屬性，值去掉頭尾空白後不分大小寫
-    // 相等。
+  return _matchesExactAttributes(element, extracted.attributeSelectors);
+}
+
+/// Jsoup `AttributeWithValue`：有這個屬性，值去掉頭尾空白後不分大小寫相等。
+bool _matchesExactAttributes(
+  Element element,
+  List<_AttributeExactSelector> attributes,
+) {
+  for (final attribute in attributes) {
     final value = element.attributes[attribute.name];
     if (value == null ||
         value.trim().toLowerCase() != attribute.value.trim().toLowerCase()) {
@@ -795,19 +790,16 @@ bool _hasRegexAttributeSelector(String selector) {
 ({String baseSelector, List<_AttributeRegexSelector> attributeRegexes})
 _extractRegexAttributeSelectors(String selector) {
   final attributeRegexes = <_AttributeRegexSelector>[];
-  // Jsoup `QueryParser.byAttribute`：`[屬性~=正則]` 的值不管長什麼樣都是正則，
-  // 方括號照配對找結尾（正則裡的 `[0-9]` 不算結尾）。加了引號的照 CSS 讀。
+  // Jsoup `QueryParser.byAttribute`：`[屬性~=正則]` 的值不管長什麼樣都是正則
+  // （加了引號的，引號也是正則的一部分），方括號照配對找結尾（正則裡的
+  // `[0-9]` 不算結尾）。
   final normalized = _replaceAttributeBrackets(selector, (inner) {
     final match = RegExp(r'^\s*([^\s~=\]]+)\s*~=\s*([\s\S]+)$')
         .firstMatch(inner);
     if (match == null) return null;
     final name = match.group(1)!.trim().toLowerCase();
     final rawPattern = match.group(2)!.trim();
-    if (rawPattern.isEmpty ||
-        (rawPattern.startsWith('"') && rawPattern.endsWith('"')) ||
-        (rawPattern.startsWith("'") && rawPattern.endsWith("'"))) {
-      return null;
-    }
+    if (rawPattern.isEmpty) return null;
     final pattern = _buildRegexAttributePattern(rawPattern);
     if (pattern == null) return null;
     attributeRegexes.add(_AttributeRegexSelector(name: name, pattern: pattern));
@@ -1485,6 +1477,58 @@ String _elementData(Element element) {
 
 /// `:has(> …)`、`:has(+ …)`、`:has(~ …)`：[selector] 的第一段要和 [anchor]
 /// 有 [combinator] 的關係，後面照一般的鏈比對。
+/// `:has(…)` 的一組選擇器在 [element] 成不成立。
+bool _hasGroup(Element element, String group) {
+  final relative = RegExp(r'^([>+~])\s*').firstMatch(group);
+  if (relative != null) {
+    // Jsoup 的相對選擇器：:has(> p a) 是「直接子元素 p 裡有 a」。
+    return runZoned(
+      () => _hasRelative(
+        element,
+        relative.group(1)!,
+        group.substring(relative.end),
+      ),
+      zoneValues: {_selectRootKey: element},
+    );
+  }
+  // Jsoup `StructuralEvaluator.Has`：只看底下的元素，不算自己；整串選擇器
+  // 以 [element] 為界，往上找祖先找到它就停（`div:has(section a)` 的
+  // section 要在 div 裡）。
+  final segments = _selectorSegmentsFor(group);
+  if (segments.isEmpty) return false;
+  return runZoned(
+    () => element
+        .querySelectorAll('*')
+        .any(
+          (candidate) =>
+              _matchesWithin(candidate, segments, segments.length - 1, element),
+        ),
+    zoneValues: {_selectRootKey: element},
+  );
+}
+
+/// [element] 符合 [segments] 到第 [index] 段，往前找的元素都在 [root] 裡
+/// （可以是 [root] 自己）。
+bool _matchesWithin(
+  Element element,
+  List<_SelectorSegment> segments,
+  int index,
+  Element root,
+) {
+  if (!_matchesCompoundSelector(element, segments[index].compound)) {
+    return false;
+  }
+  if (index == 0) return true;
+  // 再往前的元素（root 的祖先、兄弟）在 root 外面。
+  if (identical(element, root)) return false;
+  final combinator = segments[index].combinator ?? ' ';
+  for (final previous in _relatedElementsForCombinator(element, combinator)) {
+    if (_matchesWithin(previous, segments, index - 1, root)) return true;
+    if (identical(previous, root)) break;
+  }
+  return false;
+}
+
 bool _hasRelative(Element anchor, String combinator, String selector) {
   final segments = _selectorSegmentsFor(selector);
   if (segments.isEmpty) return false;

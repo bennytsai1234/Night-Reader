@@ -97,35 +97,44 @@ extension AnalyzeByCssHelper on AnalyzeByCssBase {
     if (!name.toLowerCase().startsWith('abs:')) {
       return el.attributes[name]?.trim();
     }
-    final value = el.attributes[name.substring(4)]?.trim();
-    if (value == null || value.isEmpty) return null;
-    final Uri uri;
-    try {
-      uri = Uri.parse(value);
-    } on FormatException {
-      return null;
+    final value = el.attributes[name.substring(4).toLowerCase()]?.trim();
+    if (value == null) return null;
+    if (value.isNotEmpty) {
+      final uri = Uri.tryParse(value);
+      if (uri == null) return null;
+      if (uri.hasScheme) return value;
     }
-    if (uri.hasScheme) return value;
     final base = _documentBase(el);
     if (base == null) return null;
     try {
-      return base.resolveUri(uri).toString();
+      return base.resolve(value).toString();
     } on FormatException {
       return null;
     }
   }
+
+  /// 每份網頁的 `<base href>` 只找一次（沒有也記著），一頁幾千個連結時
+  /// 不用每個都整頁找。
+  static final Expando<Object> _baseOfRoot = Expando();
+  static final Object _noBase = Object();
 
   static Uri? _documentBase(Element el) {
     Node top = el;
     while (top.parentNode != null) {
       top = top.parentNode!;
     }
+    final cached = _baseOfRoot[top];
+    if (cached != null) {
+      return identical(cached, _noBase) ? null : cached as Uri;
+    }
     final href = switch (top) {
       Document() => top.querySelector('base[href]')?.attributes['href'],
       Element() => top.querySelector('base[href]')?.attributes['href'],
       _ => null,
     };
-    final base = href == null ? null : Uri.tryParse(href.trim());
-    return base != null && base.hasScheme ? base : null;
+    final parsed = href == null ? null : Uri.tryParse(href.trim());
+    final base = parsed != null && parsed.hasScheme ? parsed : null;
+    _baseOfRoot[top] = base ?? _noBase;
+    return base;
   }
 }
