@@ -26,6 +26,8 @@ import 'package:share_plus/share_plus.dart';
 class BookshelfImportResult {
   final int books;
   final int chapters;
+
+  /// 實際寫進來的書源；這台已有同網址且不比檔案裡的舊時不算。
   final int sources;
   final int contents;
 
@@ -301,8 +303,19 @@ class BookshelfExchangeService {
       await _bookDao.upsert(normalized);
     }
     // 書源在書之後存：存書源時書跟著它的類型（ADR 0053），書已經在才跟得到。
+    // 這台已經有同一個網址的書源時，只有檔案裡的比較新才換（同書源匯入預覽
+    // 比 lastUpdateTime）；較舊或一樣的不動，新加的書照這台的類型。
+    var writtenSources = 0;
     for (final source in sources) {
-      await _sourceDao.upsert(source);
+      final existing = await _sourceDao.getByUrl(source.bookSourceUrl);
+      if (existing == null || source.isNewerThan(existing)) {
+        await _sourceDao.upsert(source);
+        writtenSources += 1;
+      } else {
+        await _bookDao.followSourceKinds(
+          BookSourceDao.kindsToFollow([existing]),
+        );
+      }
     }
     // 書架上已有的書，目錄只在這台還沒有時寫；其他的書照檔裡寫（書與目錄
     // 一起換成檔裡的，閱讀進度才對得上目錄）。
@@ -363,7 +376,7 @@ class BookshelfExchangeService {
       books: books.length - kept.length + found.added.length,
       alreadyOnShelf: kept.length + found.alreadyOnShelf,
       chapters: newChapters.length,
-      sources: sources.length,
+      sources: writtenSources,
       contents: contents,
       notFound: found.notFound,
     );

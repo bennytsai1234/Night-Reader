@@ -648,15 +648,159 @@ void main() {
 
       expect(rows.where((row) => row['source'] != null), hasLength(1));
 
-      // 舊版匯出的檔每本都帶一份同樣的書源。
+      // 舊版匯出的檔每本都帶一份同樣的書源；檔案裡的比較新才寫，重複的只寫
+      // 一次。
+      final fromFile = source(origin)..lastUpdateTime = 2000;
       final old = [
-        for (final row in rows) {...row, 'source': source(origin).toJson()},
+        for (final row in rows) {...row, 'source': fromFile.toJson()},
       ];
       final result = await BookshelfExchangeService().importFromText(
         jsonEncode(old),
       );
       expect(result.sources, 1);
       expect(result.summary, contains('1 個書源'));
+    });
+  });
+
+  group('書架檔的書源', () {
+    BookSource source({
+      String name = '這台',
+      int type = 0,
+      int order = 0,
+      bool enabled = true,
+      int lastUpdateTime = 0,
+      String searchUrl = 'https://mine.example/s',
+    }) => BookSource(
+      bookSourceUrl: origin,
+      bookSourceName: name,
+      bookSourceType: type,
+      customOrder: order,
+      enabled: enabled,
+      lastUpdateTime: lastUpdateTime,
+      searchUrl: searchUrl,
+    );
+
+    // 檔案裡的一本書帶著它的書源。
+    String fileWithSource(BookSource source, {int bookType = 0}) => jsonEncode([
+      {
+        ...Book(
+          bookUrl: url,
+          origin: origin,
+          name: '夜航',
+          type: bookType,
+        ).toJson(),
+        'source': source.toJson(),
+      },
+    ]);
+
+    test('這台的書源比較新時不換成檔案裡的，新加的書照這台的類型', () async {
+      final dao = BookSourceDao(db);
+      await dao.upsert(
+        source(
+          type: BookSourceKind.comic.bookType,
+          order: 5,
+          enabled: false,
+          lastUpdateTime: 2000,
+        ),
+      );
+
+      final result = await BookshelfExchangeService().importFromText(
+        fileWithSource(
+          source(
+            name: '檔案',
+            type: BookSourceKind.novel.bookType,
+            order: 9,
+            lastUpdateTime: 1000,
+            searchUrl: 'https://file.example/s',
+          ),
+        ),
+      );
+
+      final stored = (await dao.getByUrl(origin))!;
+      expect(stored.bookSourceName, '這台');
+      expect(stored.searchUrl, 'https://mine.example/s');
+      expect(stored.enabled, isFalse);
+      expect(stored.customOrder, 5);
+      expect(stored.bookSourceType, BookSourceKind.comic.bookType);
+      expect(
+        (await BookDao(db).getByUrl(url))!.bookKind,
+        BookSourceKind.comic,
+        reason: '新加的書照這台的書源類型',
+      );
+      expect(result.sources, 0, reason: '書源沒有寫進去，不算匯入');
+    });
+
+    test('更新時間一樣時書源也不換', () async {
+      final dao = BookSourceDao(db);
+      await dao.upsert(source(lastUpdateTime: 1000));
+
+      final result = await BookshelfExchangeService().importFromText(
+        fileWithSource(
+          source(
+            name: '檔案',
+            lastUpdateTime: 1000,
+            searchUrl: 'https://file.example/s',
+          ),
+        ),
+      );
+
+      expect((await dao.getByUrl(origin))!.bookSourceName, '這台');
+      expect(result.sources, 0);
+    });
+
+    test('檔案裡的書源比較新時照檔案寫，新加的書照它的類型', () async {
+      final dao = BookSourceDao(db);
+      await dao.upsert(
+        source(
+          type: BookSourceKind.comic.bookType,
+          order: 5,
+          enabled: false,
+          lastUpdateTime: 1000,
+        ),
+      );
+
+      final result = await BookshelfExchangeService().importFromText(
+        fileWithSource(
+          source(
+            name: '檔案',
+            type: BookSourceKind.novel.bookType,
+            order: 9,
+            lastUpdateTime: 2000,
+            searchUrl: 'https://file.example/s',
+          ),
+          bookType: BookSourceKind.novel.bookType,
+        ),
+      );
+
+      final stored = (await dao.getByUrl(origin))!;
+      expect(stored.bookSourceName, '檔案');
+      expect(stored.searchUrl, 'https://file.example/s');
+      expect(stored.enabled, isTrue);
+      expect(stored.customOrder, 9);
+      expect(stored.bookSourceType, BookSourceKind.novel.bookType);
+      expect((await BookDao(db).getByUrl(url))!.bookKind, BookSourceKind.novel);
+      expect(result.sources, 1);
+    });
+
+    test('這台沒有的書源照檔案寫進去', () async {
+      final result = await BookshelfExchangeService().importFromText(
+        fileWithSource(
+          source(
+            name: '檔案',
+            type: BookSourceKind.comic.bookType,
+            order: 3,
+            lastUpdateTime: 1000,
+          ),
+          bookType: BookSourceKind.comic.bookType,
+        ),
+      );
+
+      final stored = (await BookSourceDao(db).getByUrl(origin))!;
+      expect(stored.bookSourceName, '檔案');
+      expect(stored.bookSourceType, BookSourceKind.comic.bookType);
+      expect(stored.customOrder, 3);
+      expect((await BookDao(db).getByUrl(url))!.bookKind, BookSourceKind.comic);
+      expect(result.sources, 1);
     });
   });
 }
