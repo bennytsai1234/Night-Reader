@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/chinese/chinese_utils.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 import 'package:night_reader/shared/widgets/lists/number_stepper_row.dart';
 import 'package:night_reader/shared/widgets/lists/press_ink.dart';
 
@@ -29,26 +31,32 @@ void main() {
     double displayScale = 1,
     String unit = '',
     bool trimZeroFraction = false,
+    bool simplified = false,
   }) async {
     final changes = <double>[];
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: StatefulBuilder(
-            builder: (context, setState) => NumberStepperRow(
-              label: '字號',
-              value: value,
-              min: min,
-              max: max,
-              step: step,
-              fractionDigits: fractionDigits,
-              displayScale: displayScale,
-              unit: unit,
-              trimZeroFraction: trimZeroFraction,
-              onChanged: (next) {
-                changes.add(next);
-                setState(() => value = next);
-              },
+      UiLanguageScope(
+        locale: simplified
+            ? const Locale('zh', 'CN')
+            : const Locale('zh', 'TW'),
+        child: MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) => NumberStepperRow(
+                label: '字號',
+                value: value,
+                min: min,
+                max: max,
+                step: step,
+                fractionDigits: fractionDigits,
+                displayScale: displayScale,
+                unit: unit,
+                trimZeroFraction: trimZeroFraction,
+                onChanged: (next) {
+                  changes.add(next);
+                  setState(() => value = next);
+                },
+              ),
             ),
           ),
         ),
@@ -124,6 +132,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(changes, isEmpty);
     expect(find.text('超出範圍 14–40'), findsOneWidget);
+  });
+
+  group('簡體介面', () {
+    setUpAll(
+      () => ChineseUtils.initializeFromDictionaryData([
+        '',
+        '',
+        '',
+        '請\t请\n輸\t输\n數\t数\n範\t范\n圍\t围\n',
+      ]),
+    );
+    setUp(UiLanguageText.clearCache);
+
+    testWidgets('輸入框的錯誤跟著介面轉成簡體', (tester) async {
+      final changes = await pumpRow(tester, value: 18, simplified: true);
+      await tester.tap(find.text('18').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '');
+      await tester.tap(find.text('確定'));
+      await tester.pumpAndSettle();
+      expect(find.text('请输入数字'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), '99');
+      await tester.tap(find.text('確定'));
+      await tester.pumpAndSettle();
+      expect(find.text('超出范围 14–40'), findsOneWidget);
+      expect(changes, isEmpty);
+    });
   });
 
   testWidgets('percent display converts typed value back to storage unit', (

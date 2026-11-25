@@ -51,13 +51,15 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
 
   List<SearchBook> allResults = <SearchBook>[];
   List<SearchBook> filteredResults = <SearchBook>[];
-  static const String allGroups = '全部';
 
-  /// 已啟用書源的分組（不含「全部」）與各分組的書源數。
+  /// 已啟用書源的分組與各分組的書源數。
   List<String> groups = <String>[];
   Map<String, int> groupCounts = <String, int>{};
   int enabledSourceCount = 0;
-  String selectedGroup = allGroups;
+
+  /// 只搜這個分組；null 是不限分組（篩選列的「全部」）。使用者的分組也可能
+  /// 叫「全部」，不限分組不能用字串表示。
+  String? selectedGroup;
   bool isSearching = false;
   String status = '正在初始化...';
   bool checkAuthor = true;
@@ -81,9 +83,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     groupCounts = counts;
     enabledSourceCount = sources.length;
     groups = counts.keys.toList()..sort();
-    if (!counts.containsKey(selectedGroup)) {
-      selectedGroup = allGroups;
-    }
+    if (!counts.containsKey(selectedGroup)) selectedGroup = null;
     _notifySafely();
   }
 
@@ -339,7 +339,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     _notifySafely();
   }
 
-  void updateSelectedGroup(String group) {
+  void updateSelectedGroup(String? group) {
     if (selectedGroup == group) return;
     selectedGroup = group;
     unawaited(startSearch());
@@ -364,14 +364,12 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
               source.bookSourceUrl != book.origin,
         )
         .toList();
-    if (selectedGroup == allGroups) {
-      return enabledSources;
-    }
+    final group = selectedGroup;
+    if (group == null) return enabledSources;
     enabledSources = enabledSources
         .where(
           (source) =>
-              _splitGroups(source.bookSourceGroup ?? '')
-                  .contains(selectedGroup),
+              _splitGroups(source.bookSourceGroup ?? '').contains(group),
         )
         .toList();
     return enabledSources;

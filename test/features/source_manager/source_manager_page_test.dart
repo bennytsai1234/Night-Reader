@@ -26,6 +26,7 @@ import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:night_reader/shared/widgets/lists/search_field.dart';
+import 'package:night_reader/shared/widgets/lists/selection_circle.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:provider/provider.dart';
@@ -331,7 +332,7 @@ void main() {
         find.descendant(
           of: tile,
           matching: find.byWidgetPredicate(
-            (widget) => widget.runtimeType.toString() == '_SelectionCircle',
+            (widget) => widget is SelectionCircle,
           ),
         ),
       );
