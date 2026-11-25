@@ -337,15 +337,15 @@
 
 ### 朗讀
 
-- [x] **A3　朗讀跳到上一段、下一段（已定）**：Legado 朗讀面板有上一段、下一段（`legado:service/BaseReadAloudService.kt:333-385`），漏聽一句可以退回去。夜讀只有上一章、下一章，要重聽一句得停掉、捲回去、再從那一頁開始念。要補的話：朗讀面板加「上一句」「下一句」（夜讀一句一念），通知欄不加。
+- [x] **A3　朗讀跳到上一段、下一段（已做）**：Legado 朗讀面板有上一段、下一段（`legado:service/BaseReadAloudService.kt:333-385`），漏聽一句可以退回去。夜讀只有上一章、下一章，要重聽一句得停掉、捲回去、再從那一頁開始念。要補的話：朗讀面板加「上一句」「下一句」（夜讀一句一念），通知欄不加。
 - [ ] **A6　語速跟隨手機設定（不做）**：Legado 語速旁有「跟隨系統」（`legado:res/layout/dialog_read_aloud.xml` 的 `cb_tts_follow_sys`），勾了用手機文字轉語音設定裡的語速。夜讀只有自己的語速。要補的話預設不跟隨，放「朗讀與語音」。
 - [ ] **A8　每本書指定朗讀引擎（不做）**：Legado 可以給某一本書指定引擎（`legado:data/entities/Book.kt:400`），例如外文書用另一個引擎。夜讀的書有這個欄位（`lib/core/models/book/book_base.dart:112`）但沒有用，引擎只有一個全域設定（`lib/core/playback/tts_service.dart:443-446`）。要補的話預設跟全域。
 - [ ] **A12　耳機鍵的兩個開關（不做）**：Legado 有「媒體鍵下一首改成下一段」與「按媒體鍵開始朗讀」（`legado:res/xml/pref_config_aloud.xml` 的 `mediaButtonPerNext`、`pref_config_other.xml` 的 `readAloudByMediaButton`）。夜讀耳機的上一首、下一首固定是換章，閱讀器開著時按耳機播放鍵不會開始朗讀。要補的話兩個都預設關，和現在一樣。
 
 ### 選字
 
-- [x] **S4　從選到的地方開始朗讀（已定）**：Legado 選字選單有「朗讀」，從選到的字開始念（`legado:res/menu/content_select_action.xml` 的 `menu_aloud`）。夜讀朗讀只從畫面頂端那一句開始，想從中間某句念要先捲到那句在最上面。要補的話收在「⋮」裡，從選取開頭那一句念。
-- [x] **S8　分享選到的字（已定）**：Legado 選字選單有「分享」（`menu_share_str`），交給手機的分享面板。夜讀只列能處理文字的 App（翻譯、字典），沒有一般的分享（`lib/features/reader/text_view/overlay/reader_text_selection_layer.dart:416-468`）。要補的話收在「⋮」裡。
+- [x] **S4　從選到的地方開始朗讀（已做）**：Legado 選字選單有「朗讀」，從選到的字開始念（`legado:res/menu/content_select_action.xml` 的 `menu_aloud`）。夜讀朗讀只從畫面頂端那一句開始，想從中間某句念要先捲到那句在最上面。要補的話收在「⋮」裡，從選取開頭那一句念。
+- [x] **S8　分享選到的字（已做）**：Legado 選字選單有「分享」（`menu_share_str`），交給手機的分享面板。夜讀只列能處理文字的 App（翻譯、字典），沒有一般的分享（`lib/features/reader/text_view/overlay/reader_text_selection_layer.dart:416-468`）。要補的話收在「⋮」裡。
 
 ### 正文整理
 

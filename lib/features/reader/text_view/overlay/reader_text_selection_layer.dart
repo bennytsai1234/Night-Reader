@@ -9,8 +9,15 @@ import 'package:flutter/services.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/models/reading/excerpt_text.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
+import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 import 'package:night_reader/features/reader/text_view/overlay/selection_service.dart';
+import 'package:share_plus/share_plus.dart';
+
+/// 選字「分享」：把選到的字交給手機的分享面板。
+Future<void> shareSelectionText(String text) async {
+  await SharePlus.instance.share(ShareParams(text: text));
+}
 
 /// 正文選字的反白、兩端把手與選單。
 ///
@@ -31,6 +38,8 @@ final class ReaderTextSelectionLayer extends StatefulWidget {
     this.onReplace,
     this.onBookmark,
     this.onHighlight,
+    this.onReadAloud,
+    this.shareText = shareSelectionText,
     required this.highlightColor,
     required this.child,
   });
@@ -73,6 +82,13 @@ final class ReaderTextSelectionLayer extends StatefulWidget {
 
   /// 「⋮」裡的「標註」：把選到的字畫上底色或底線；沒給就不顯示。
   final ValueChanged<ReaderTextSelection>? onHighlight;
+
+  /// 「⋮」裡的「朗讀」：從選取開頭那一句的句首開始念
+  /// （[ReaderTextSelection.asSpeechStart]）；沒給就不顯示。
+  final ValueChanged<ReaderLocation>? onReadAloud;
+
+  /// 「⋮」裡的「分享」：把選到的字交給手機的分享面板；測試換掉它。
+  final Future<void> Function(String text) shareText;
 
   final Color highlightColor;
   final Widget child;
@@ -452,8 +468,16 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer>
           },
         ),
     ];
-    // 「⋮」裡：自己的「標註」在前，系統能處理文字的 App 在後。
+    // 「⋮」裡：自己的「朗讀」「標註」「分享」在前，系統能處理文字的 App 在後。
     final moreItems = <ContextMenuButtonItem>[
+      if (widget.onReadAloud case final onReadAloud?)
+        ContextMenuButtonItem(
+          label: '朗讀',
+          onPressed: () {
+            widget.selection.clear();
+            onReadAloud(selection.asSpeechStart);
+          },
+        ),
       if (widget.onHighlight case final onHighlight?)
         ContextMenuButtonItem(
           label: '標註',
@@ -462,6 +486,10 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer>
             onHighlight(selection);
           },
         ),
+      ContextMenuButtonItem(
+        label: '分享',
+        onPressed: () => unawaited(_share(selection)),
+      ),
       for (final action in _processTextActions)
         ContextMenuButtonItem(
           label: action.label,
@@ -477,18 +505,13 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer>
       context: context,
       removeTop: true,
       removeBottom: true,
-      child: moreItems.isEmpty
-          ? AdaptiveTextSelectionToolbar.buttonItems(
-              anchors: anchors,
-              buttonItems: items,
-            )
-          : _SelectionToolbarWithMore(
-              // 選了別的字就從收起的樣子開始。
-              key: ValueKey(selection.range),
-              anchors: anchors,
-              items: items,
-              moreItems: moreItems,
-            ),
+      child: _SelectionToolbarWithMore(
+        // 選了別的字就從收起的樣子開始。
+        key: ValueKey(selection.range),
+        anchors: anchors,
+        items: items,
+        moreItems: moreItems,
+      ),
     );
   }
 
@@ -521,6 +544,20 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer>
     await Clipboard.setData(ClipboardData(text: text));
   }
 
+  Future<void> _share(ReaderTextSelection selection) async {
+    final text = withSingleLineBreaks(selection.text);
+    widget.selection.clear();
+    try {
+      await widget.shareText(text);
+    } catch (error, stackTrace) {
+      AppLog.e('分享選字失敗', error: error, stackTrace: stackTrace);
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)
+            ?.showSnackBar(const SnackBar(content: UiText('無法分享選到的字')));
+      }
+    }
+  }
+
   Future<void> _webSearch(ReaderTextSelection selection) async {
     final query = Uri.encodeQueryComponent(
       selection.text.trim().replaceAll(RegExp(r'\n+'), ' '),
@@ -530,10 +567,11 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer>
   }
 }
 
-/// 有「⋮」的選單：列上固定只有 [items]，[moreItems]（「標註」與系統能處理
-/// 文字的 App）一律收在「⋮」裡，按下展開成直式選單、左上（選單在字上方
-/// 時是左下）的返回鍵收回。對方 App 的名稱由它自己決定，會混進簡體字，
-/// 所以不和自己的按鈕並排；「標註」不常用，收起來讓列上放得下。
+/// 有「⋮」的選單：列上固定只有 [items]，[moreItems]（「朗讀」「標註」
+/// 「分享」與系統能處理文字的 App）一律收在「⋮」裡，按下展開成直式選單、
+/// 左上（選單在字上方時是左下）的返回鍵收回。對方 App 的名稱由它自己決定，
+/// 會混進簡體字，所以不和自己的按鈕並排；「朗讀」「標註」「分享」不常用，
+/// 收起來讓列上放得下。
 ///
 /// Flutter 的 [TextSelectionToolbar] 只在寬度放不下時才把按鈕收進「⋮」，
 /// 指定不了哪些收起來；這裡照它的樣子（外框、按鈕、位置、展開的時間與
