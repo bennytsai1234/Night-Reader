@@ -217,4 +217,98 @@ void main() {
     expect(savedHighlight.charOffset, updated.charOffset);
     expect(savedHighlight.anchor, isNull);
   });
+
+  test('改編碼後章內位置照新章裡的位元組位置重算，不會用舊章的比例跳到一半', () async {
+    final dir = await Directory.systemTemp.createTemp(
+      'local_book_charset_ratio',
+    );
+    addTearDown(() async {
+      await LocalBookService().closeOpenFile();
+      await dir.delete(recursive: true);
+    });
+    final file = File(p.join(dir.path, '書.txt'));
+    const chapterLength = 7500;
+    String chapter(String title) {
+      final bodyLength = chapterLength - title.length - 2;
+      return '$title\n${'字' * bodyLength}\n';
+    }
+
+    final text = [
+      chapter('第一章 開始'),
+      chapter('第二章 中間'),
+      chapter('第三章 轉折'),
+      chapter('第四章 結束'),
+    ].join();
+    expect(text.length, chapterLength * 4);
+    await file.writeAsBytes(EncodingDetect.encodeWithCharset(text, 'UTF-16LE'));
+
+    // 正確編碼的新目錄：四章，每章 7500 個字（UTF-16 一個字 2 位元組）。
+    final correct = await TxtParser(file).splitChapters(charset: 'UTF-16LE');
+    expect(correct.chapters.map((c) => c['title']), [
+      '第一章 開始',
+      '第二章 中間',
+      '第三章 轉折',
+      '第四章 結束',
+    ]);
+    final thirdStart = correct.chapters[2]['start'] as int;
+    expect(thirdStart, chapterLength * 2 * 2);
+
+    // 模擬認錯編碼：整本照大端序解成一個 3 萬字的「正文」。
+    final wrong = await TxtParser(file).splitChapters(charset: 'UTF-16BE');
+    expect(wrong.chapters, hasLength(1));
+    expect(wrong.chapters.single['title'], '正文');
+    final book = Book(
+      bookUrl: 'local://${file.path}',
+      origin: 'local',
+      originName: '本地',
+      name: '書',
+      author: '本地',
+      isInBookshelf: true,
+      charset: 'UTF-16BE',
+    );
+    final wrongChapters = LocalBookService().chaptersOf(book, [
+      (
+        title: wrong.chapters.single['title'] as String,
+        start: wrong.chapters.single['start'] as int,
+        end: wrong.chapters.single['end'] as int,
+      ),
+    ]);
+    await bookDao.upsert(book);
+    await chapterDao.insertChapters(wrongChapters);
+
+    // 讀到舊章（整本）的一半：位元組位置剛好是新目錄第三章的開頭。
+    final oldOffset = thirdStart ~/ 2;
+    expect(oldOffset, chapterLength * 2);
+    await bookDao.updateProgress(book.bookUrl, 0, '正文', oldOffset);
+    final bookmark = await bookmarkDao.add(
+      Bookmark(
+        id: 0,
+        bookName: book.name,
+        bookAuthor: book.author,
+        chapterIndex: 0,
+        chapterTitle: '正文',
+        charOffset: oldOffset,
+        excerpt: '一半的地方',
+      ),
+    );
+
+    final updated = await LocalBookService().changeCharset(
+      (await bookDao.getByUrl(book.bookUrl))!,
+      'UTF-16LE',
+      bookDao: bookDao,
+      chapterDao: chapterDao,
+      bookmarkDao: bookmarkDao,
+    );
+
+    expect(updated!.chapterIndex, 2);
+    expect(updated.durChapterTitle, '第三章 轉折');
+    // 位元組位置在第三章的開頭，章內位置要接近 0，不是舊比例的 7500÷2。
+    expect(updated.charOffset, lessThan(10));
+    final savedBookmark =
+        (await bookmarkDao.watchByBook(book.name, book.author).first).single;
+    expect(savedBookmark.id, bookmark.id);
+    expect(savedBookmark.chapterIndex, 2);
+    expect(savedBookmark.chapterTitle, '第三章 轉折');
+    expect(savedBookmark.charOffset, updated.charOffset);
+  });
 }

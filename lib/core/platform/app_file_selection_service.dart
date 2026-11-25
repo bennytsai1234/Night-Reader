@@ -12,9 +12,7 @@ typedef AppPickFiles = Future<FilePickerResult?> Function({
 /// Native pickers are filters rather than a trust boundary. Every selected
 /// path is therefore validated again before it can reach an import service.
 class AppFileSelectionService {
-  // 參數叫 picker 不叫 _picker：元件測試要從外面換掉選檔器。
-  // ignore: prefer_initializing_formals
-  const AppFileSelectionService({AppPickFiles? picker}) : _picker = picker;
+  const AppFileSelectionService({this._picker});
 
   static const AppFileSelectionService instance = AppFileSelectionService();
 

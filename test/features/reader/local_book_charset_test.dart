@@ -108,11 +108,21 @@ void main() {
     await settle(tester, const Duration(milliseconds: 900));
     await waitForText(tester);
 
-    expect(find.textContaining('第一章 開始'), findsWidgets);
-    final saved = await tester.runAsync(
-      () => getIt<BookDao>().getByUrl(book.bookUrl),
-    );
+    // 換編碼在背景解碼、分章，好了才會重開閱讀器；機器忙時比假時鐘慢。
+    Book? saved;
+    for (var i = 0; i < 200; i++) {
+      saved = await tester.runAsync<Book?>(
+        () => getIt<BookDao>().getByUrl(book.bookUrl),
+      );
+      if (saved?.charset == 'Big5') break;
+      await settle(tester, const Duration(milliseconds: 100));
+    }
     expect(saved!.charset, 'Big5');
+    final titleFinder = find.textContaining('第一章 開始');
+    for (var i = 0; i < 200 && titleFinder.evaluate().isEmpty; i++) {
+      await settle(tester, const Duration(milliseconds: 100));
+    }
+    expect(titleFinder, findsWidgets);
     final chapters = await tester.runAsync(
       () => getIt<ChapterDao>().getByBook(book.bookUrl),
     );

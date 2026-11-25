@@ -674,8 +674,9 @@ class LocalBookService {
   ///
   /// 兩個目錄的章節範圍都是同一個原檔的位元組位移，不隨編碼改變：先照舊章
   /// 的長度算出這個字在章內的比例，換成檔案裡的位元組位置，找新目錄裡蓋住
-  /// 這個位置的那一章，再照同一個比例換成那一章的章內字數。編碼錯了時新舊
-  /// 章名不一定一樣，所以不照章名對。
+  /// 這個位置的那一章；再照這個位元組位置在**新章**裡的比例換成新章的章內
+  /// 字數（新舊章的起訖不一樣，舊章的比例不能直接套）。編碼錯了時新舊章名
+  /// 不一定一樣，所以不照章名對。
   static ({int index, int charOffset}) _positionAfterDecode({
     required Uint8List bytes,
     required String oldCharset,
@@ -709,14 +710,16 @@ class LocalBookService {
       if (start == null || start > byte) break;
       newIndex = i;
     }
-    final newLength = _chapterCharLength(
-      bytes,
-      newChapters[newIndex],
-      newCharset,
-    );
+    final newChapter = newChapters[newIndex];
+    final newStart = newChapter.start;
+    final newEnd = newChapter.end;
+    final newFraction = newStart == null || newEnd == null || newEnd <= newStart
+        ? 0.0
+        : ((byte - newStart) / (newEnd - newStart)).clamp(0.0, 1.0);
+    final newLength = _chapterCharLength(bytes, newChapter, newCharset);
     final newOffset = newLength <= 0
         ? 0
-        : (fraction * newLength).round().clamp(0, newLength - 1);
+        : (newFraction * newLength).round().clamp(0, newLength - 1);
     return (index: newIndex, charOffset: newOffset);
   }
 
