@@ -14,6 +14,8 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/models/source/book_source_serialization.dart';
 import 'package:night_reader/core/app_update/app_version.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -222,8 +224,6 @@ class BackupService {
 
   static const Map<String, List<String>> _legadoSwitches = {
     'bookshelf.json': ['canUpdate', 'isInBookshelf'],
-    'bookSource.json': ['enabled', 'enabledExplore', 'enabledCookieJar'],
-    'replaceRule.json': ['scopeTitle', 'scopeContent', 'isEnabled', 'isRegex'],
   };
 
   static Map<String, dynamic> _legadoReadable(
@@ -231,6 +231,11 @@ class BackupService {
     Map<String, dynamic> json,
   ) {
     switch (name) {
+      // 書源與替換規則和匯出、分享共用同一份轉換。
+      case 'bookSource.json':
+        return BookSourceSerialization.legadoJsonOf(json);
+      case 'replaceRule.json':
+        return ReplaceRule.legadoJsonOf(json);
       // Legado 的閱讀時長以毫秒記（`ReadBook.upReadTime`）。
       case 'readRecord.json':
         return {...json, 'readTime': (json['readTime'] as int? ?? 0) * 1000};

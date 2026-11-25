@@ -33,7 +33,7 @@ ReplaceRule _rule({
 void main() {
   group('匯出的格式 Legado 讀得懂', () {
     test('開關寫成 true／false，欄位名稱照 Legado', () {
-      final json = replaceRuleToLegadoJson(_rule());
+      final json = _rule().toLegadoJson();
       expect(json, {
         'id': 1700000000001,
         'name': '去廣告',
@@ -51,9 +51,10 @@ void main() {
       });
     });
 
-    test('還沒有編號的規則不寫編號，Legado 讀到時自己配', () {
-      final json = replaceRuleToLegadoJson(ReplaceRule(pattern: 'a'));
-      expect(json.containsKey('id'), isFalse);
+    test('還沒有編號的規則編號寫 null，Legado 讀到時自己配', () {
+      final json = ReplaceRule(pattern: 'a').toLegadoJson();
+      expect(json.containsKey('id'), isTrue);
+      expect(json['id'], isNull);
     });
 
     test('匯出一批是一個陣列，一條是一個物件', () {
