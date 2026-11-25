@@ -347,12 +347,15 @@ GPT 那份讀書源的報告（#529）落在書源 0、1、2 的那幾條，加�
 | 31 | `java.get`、`post`、`head` 沒有逾時，網站不回時一直等 | 已修（#623） |
 | 32 | `bodyAsBytes()` 是文字再編回 UTF-8，GBK、加密的原文壞掉 | 已修（#623：收原始位元組，`body()` 照回應標頭的字元集解） |
 | 33 | 網址的 `queryTTF`、`cacheFile`、`importScript` 不帶書源標頭與登入 | 已修（#623；同這份「拿不準」原本的一筆） |
+| 34 | 寫明 GB18030 的網頁把四位元組的字讀成亂碼 | 已修（#628；沒寫字元集被認成 GB18030 的網頁與本地 TXT 也照 GB18030，TXT 分章認得四位元組） |
 | 35 | IPv6 書源組出的網站根網址少了方括號 | 已修（#596；`java.toURL` 同一個原因一起改，`HttpUrl.host()` 照 OkHttp 不帶方括號） |
 | 37 | 正文規則空白的有聲書源被校驗判成正文失效而隔離 | 已修（#618：照 Legado `getContentAwait`，正文規則空白時有聲書、漫畫的正文是章節網址；文字書照舊沒有正文，Legado 是顯示網址但不存） |
 | 43 | `java.webView` 這三個入口不帶書源標頭與登入 | 已修（#623；`source.getHeaderMap()` 也改成和送出請求同一套） |
 
 ## 拿不準
 
+- **規則 JS 遞迴很深時整個測試程序掛掉**（#529 第 1 條時看到）：`function f(n){return n>200000?0:f(n+1)}` 包在 `try` 裡，測試程序直接結束、後面的測試都沒跑，沒有交回 JS 的錯誤。第 1 條（`importPackage` 蓋掉 String 的無限遞迴）已修，但寫錯、無限遞迴的書源程式在手機上會不會讓書源 isolate 或整個 App 掛掉沒查。卡在：沒查 QuickJS 的堆疊上限與原生執行緒的堆疊怎麼設。
+- **規則 JS 用頁面網址解析的網頁交給下一條規則後，網址不見了**（#529 第 6、16 條的相容性審查）：`java.setContent(Jsoup.parse(html, url))` 之後，下一條 CSS 規則的 `@abs:` 只認 `<base href>`，不用解析時給的頁面網址；下一條規則 JS 對它呼叫 `location()`、`baseUri()` 是空的（Jsoup 橋接每條規則開始時清掉）。Legado 的網頁物件一直帶著網址。卡在：要讓網址跟著節點存（不放在每條規則都清的對照表），沒找到這樣寫的書源。
 - **`java.put` 存的值，下一章、同書源的別本書讀得到**（書源 0）：Legado 的 `java.put` 只存在章節、書或搜尋結果上，`java.get` 找不到時才看 `source.put` 存的（Legado `model/analyzeRule/AnalyzeRule.kt:740-768`）。夜讀的 `java.put` 另外存一份到書源的規則變數，和 `source.put` 同一個鍵，而且寫進資料庫（`lib/core/engine/js/js_extensions.dart:88-92`）；`java.get` 在章節、書都沒有時讀這一份（`js_extensions.dart:106-112`），`source.get` 也讀得到（`lib/core/models/source/base_source.dart:44-46` 的註解寫明兩者共用）。所以第二章 `java.get('k')` 拿到第一章存的值，Legado 是空的。卡在：註解看起來是刻意的，找不到哪個書源靠「讀不到」分支，說不出讀者實際會看到什麼。
 - **`java.ajax` 抓不到時丟出錯誤，Legado 交出錯誤文字**（書源 0）：Legado 的 `ajax` 失敗時傳回錯誤堆疊的文字、規則照常往下跑（Legado `help/JsExtensions.kt:93-108`）；夜讀丟出錯誤（`lib/core/engine/js/extensions/js_network_extensions.dart:25-33`），規則沒有自己 `try` 就整段失敗，`ajax` 一個鏡像站逾時再試下一個的書源在夜讀直接失敗。卡在：照 Legado 做，錯誤文字會被當成正文存起來（#137 的審查才修掉同類的事），要使用者決定哪邊對。
 - **`java.toNumChapter` 換的範圍和 Legado 不同**（書源 0）：Legado 只換「第…章」中間那一段（`AppPattern.titleNumPattern`：`(第)(.+?)(章)`，Legado `help/JsExtensions.kt:916-924`），全形數字也換；夜讀換整個章名裡第一段中文數字（`lib/core/engine/js/extensions/js_string_extensions.dart:167-174`），「一夜之間 第十章」會變成「1夜之間 第十章」，「第十回」也會換。卡在：Legado 遇到「第一卷 第十章」會換成「第-1章」，夜讀反而對；哪一種是讀者要的說不準。
