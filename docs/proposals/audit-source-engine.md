@@ -308,6 +308,19 @@
 
 **輕重**：畫面錯
 
+## #529 書源 0–2 部分（第 1–35、37、43 條）
+
+GPT 那份讀書源的報告（#529）落在書源 0、1、2 的那幾條，加上書源 3–4 那一半交過來的第 37、43 條，逐條走到 `origin/beta`（`2fe722ee`）核實；能重現的都先跑過報告給的例子。
+
+| 條 | 一句話 | 結論 |
+|---|---|---|
+| 3 | `java.queryTTF` 收到位元組時讀不出字型 | 早就修好（#532，`3c2fdd9a`；同這份書源 0 第 2 筆） |
+| 9 | JSON 的陣列欄位寫成一行 `[第一段, 第二段]` | 早就修好（#553，`c14264b1`；同這份書源 1 第 6 筆） |
+| 13 | `###` 只取一段字時交出整段原文 | 早就修好（#553，`c14264b1`；同這份書源 1 第 5 筆） |
+| 27 | 付費、分卷旗標只認 true／yes／1／是 | 早就修好（#542，`2c1ff9cf`：照 Legado `isTrue`，鎖章抽樣共用） |
+| 28 | 目錄 `formatJs` 拿不到 `index`、`gInt` | 早就修好（#556，`dc22f0d4`；同這份書源 2 第 11 筆，倒序目錄也照顯示順序編） |
+| 30 | 詳情頁轉址後重用頁面當目錄，章節連結照轉址前的網址補 | 不修：Legado 一樣（`model/webBook/WebBook.kt:236-243` 重用 `tocHtml` 時 `baseUrl`、`redirectUrl` 都是 `book.tocUrl`） |
+
 ## 拿不準
 
 - **`java.put` 存的值，下一章、同書源的別本書讀得到**（書源 0）：Legado 的 `java.put` 只存在章節、書或搜尋結果上，`java.get` 找不到時才看 `source.put` 存的（Legado `model/analyzeRule/AnalyzeRule.kt:740-768`）。夜讀的 `java.put` 另外存一份到書源的規則變數，和 `source.put` 同一個鍵，而且寫進資料庫（`lib/core/engine/js/js_extensions.dart:88-92`）；`java.get` 在章節、書都沒有時讀這一份（`js_extensions.dart:106-112`），`source.get` 也讀得到（`lib/core/models/source/base_source.dart:44-46` 的註解寫明兩者共用）。所以第二章 `java.get('k')` 拿到第一章存的值，Legado 是空的。卡在：註解看起來是刻意的，找不到哪個書源靠「讀不到」分支，說不出讀者實際會看到什麼。
