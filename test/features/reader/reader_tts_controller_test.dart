@@ -923,6 +923,30 @@ void main() {
       expect(engine.spoken, ['甲。', '第二章。']);
     });
 
+    test('previous pressed during an interruption wins over the interruption '
+        'ending while it loads', () async {
+      final earlier = Completer<void>();
+      await open({0: '零。', 1: '甲。', 2: '乙。丙。'}, gates: {1: earlier});
+      moveTo(2);
+      await tts.startFromVisibleLocation();
+      await pumpEventQueue();
+      expect(engine.spoken.last, '乙。');
+      engine.focus(AudioFocusChange.interrupted);
+      await pumpEventQueue();
+
+      // 這一章的第一句按上一句：要載入上一章找它的最後一句。
+      final previous = tts.skipToPreviousSentence();
+      await pumpEventQueue();
+      engine.focus(AudioFocusChange.regained);
+      await pumpEventQueue();
+      earlier.complete();
+      await previous;
+      await pumpEventQueue();
+
+      expect(engine.spoken, ['乙。', '甲。']);
+      expect(tts.phase, ReaderTtsPhase.reading);
+    });
+
     test('pausing by hand during an interruption stays paused when it '
         'ends', () async {
       await readingSecond();

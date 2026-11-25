@@ -59,10 +59,18 @@ class SessionAudioFocusPlatform implements AudioFocusPlatform {
 class AudioFocus {
   AudioFocus({AudioFocusPlatform? platform}) : _platformOverride = platform;
 
+  /// 整個 App 一份：有聲書播放器與朗讀共用，被打斷的狀態才看得到另一方
+  /// 拿著焦點時發生的事。
+  static final AudioFocus instance = AudioFocus();
+
   final AudioFocusPlatform? _platformOverride;
   AudioFocusPlatform? _platform;
 
-  /// 用到才開工作階段：開 App 時不碰，測試與沒有這個外掛的平台也不碰。
+  /// 開始聽打斷與拔耳機的消息。App 裡任何一方要建立音訊工作階段時先叫它
+  /// （有聲書播放器建立時、朗讀第一次要焦點時）：焦點兩邊共用，有聲書拿著
+  /// 焦點時來電，朗讀之後第一次要焦點也要知道還在通話中。開 App 時不碰。
+  void startWatching() => _session;
+
   AudioFocusPlatform get _session {
     final existing = _platform;
     if (existing != null) return existing;

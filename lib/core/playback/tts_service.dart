@@ -111,7 +111,7 @@ class TTSService extends ChangeNotifier {
   int currentWordEnd = 0;
 
   TTSService._internal() {
-    _useAudioFocus(AudioFocus());
+    _useAudioFocus(AudioFocus.instance);
     SettingsSync.applied.addListener(_reloadSyncedParams);
   }
 

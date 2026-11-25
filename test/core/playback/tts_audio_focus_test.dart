@@ -154,6 +154,24 @@ void main() {
     expect(failures, [TtsFailure.noAudioFocus]);
   });
 
+  test('a call that interrupted the audiobook before reading ever started '
+      'keeps the first start silent', () async {
+    final focus = AudioFocus(platform: session);
+    TTSService().audioFocus = focus;
+    // 有聲書播放器建立工作階段時開始聽，之後有聲書拿到焦點。
+    focus.startWatching();
+    await session.activate();
+    session.interruptionEvents.add(
+      AudioInterruptionEvent(true, AudioInterruptionType.pause),
+    );
+    await pumpEventQueue();
+
+    await TTSService().speak('甲。');
+    await pumpEventQueue();
+    expect(spoken, isEmpty);
+    expect(failures, [TtsFailure.noAudioFocus]);
+  });
+
   test('while a call has the focus, starting again does not speak; after it '
       'ends it does', () async {
     await TTSService().speak('甲。');

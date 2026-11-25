@@ -235,6 +235,9 @@ class ReaderTtsController extends ChangeNotifier
   Future<void> skipToNextSentence() => _skipSentence(1);
 
   Future<void> _skipSentence(int delta) async {
+    // 被打斷停下時按的：先拿掉打斷結束時接著念，下面要等載入，這段期間打斷
+    // 結束也不從原位置念，按的這一下說了算。
+    _stopAutoResume();
     final pressed = _state;
     final chapterIndex = _chapterIndex;
     if (chapterIndex == null || pressed is _Loading) return;
@@ -709,16 +712,9 @@ class ReaderTtsController extends ChangeNotifier
   ///
   /// [untilRegained]：被打斷停下的，打斷結束時接著念。
   void _pause({bool untilRegained = false}) {
+    if (!untilRegained) _stopAutoResume();
     final paused = switch (_state) {
-      _Idle() => null,
-      final _Paused paused =>
-        paused.untilRegained && !untilRegained
-            ? _Paused(
-                paused.resumeAt,
-                highlight: paused.highlight,
-                position: paused.position,
-              )
-            : null,
+      _Idle() || _Paused() => null,
       final _Loading loading => _Paused(
         loading.location,
         highlight: loading.highlight,
@@ -735,12 +731,20 @@ class ReaderTtsController extends ChangeNotifier
       ),
     };
     if (paused == null) return;
-    final wasPaused = _state is _Paused;
     _state = paused;
-    // 已經停著時只是不再接著念，引擎與畫面不用動。
-    if (wasPaused) return;
     unawaited(_tts.stop());
     notifyListeners();
+  }
+
+  /// 被打斷停下的：之後打斷結束不再自己接著念，停的位置不變。
+  void _stopAutoResume() {
+    if (_state case final _Paused paused when paused.untilRegained) {
+      _state = _Paused(
+        paused.resumeAt,
+        highlight: paused.highlight,
+        position: paused.position,
+      );
+    }
   }
 
   void _handleRuntimeChanged() {
