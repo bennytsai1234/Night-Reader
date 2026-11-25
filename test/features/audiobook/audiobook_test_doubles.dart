@@ -251,8 +251,11 @@ class FakeSync extends Fake implements SyncService {
   final List<String> opened = [];
   final List<String> closed = [];
 
+  /// 開 App 的同步還沒做完閱讀進度：開書等它。
+  Future<void>? ready;
+
   @override
-  Future<void>? get progressReady => null;
+  Future<void>? get progressReady => ready;
 
   @override
   void openBook(Book book) => opened.add(book.bookUrl);

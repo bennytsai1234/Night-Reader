@@ -395,6 +395,22 @@ void main() {
     });
   }
 
+  test('開書還在等上次聽到哪時選了別集：播選的那集，這本書照樣登記為開著', () async {
+    final ready = Completer<void>();
+    sync.ready = ready.future;
+    final opening = player.open(book);
+    await pumpEventQueue();
+
+    await player.playChapter(3);
+    ready.complete();
+    await opening;
+    await pumpEventQueue();
+
+    expect(player.chapterIndex, 3);
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/ep3.mp3');
+    expect(sync.opened, [book.bookUrl]);
+  });
+
   test('按了下一集、上一集還沒停聲時停止：換集不再往下做', () async {
     await player.open(book, chapterIndex: 1);
     await pumpEventQueue();

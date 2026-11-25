@@ -350,7 +350,15 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       var index = chapterIndex ?? book.chapterIndex;
       if (chapterIndex == null) {
         final stored = await _resumePosition(book);
-        if (generation != _generation) return;
+        if (generation != _generation) {
+          // 等的時候在目錄選了別集（[_switchTo]）：播選的那集，這本書照樣
+          // 算開著；停止或開了別本時 [_book] 已經換掉。
+          if (identical(_book, book)) {
+            _markOpen(book);
+            _ensureLifecycle();
+          }
+          return;
+        }
         index = stored.chapterIndex;
         start = Duration(milliseconds: stored.charOffset);
       }
