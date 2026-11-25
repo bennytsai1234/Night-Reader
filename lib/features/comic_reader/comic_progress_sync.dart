@@ -112,12 +112,9 @@ class ComicProgressSync {
     if (since == null) return;
     final pulled = await _sync.pullProgress(book.bookUrl);
     if (pulled == null || !pulled.isCurrent || _disposed) return;
+    // 抓的途中讀者捲過（同一張長圖裡往下讀也算）就不跳。
     final now = current();
-    if (now == null ||
-        now.chapterIndex != since.chapterIndex ||
-        now.pageIndex != since.pageIndex) {
-      return;
-    }
+    if (now == null || now != since) return;
     final index = pulled.progress.chapterIndexIn(titles(), ids: ids());
     final page = pulled.progress.charOffset;
     if (shouldJump(now, index, page)) jumpTo(index, page);

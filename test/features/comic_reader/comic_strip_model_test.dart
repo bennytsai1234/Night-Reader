@@ -99,4 +99,28 @@ void main() {
     expect(transitions.last.to, isNull);
     model.dispose();
   });
+
+  test('原本讀到的那一話不能讀（付費、分卷）時換到別話，從那一話的第一張開始，'
+      '不沿用原本的第幾張', () async {
+    // 0 第1話、1 付費、2 第3話（20 張）
+    final source = FakeComicSource(pagesPerChapter: 20);
+    final model = ComicStripModel(
+      source: source,
+      chapterCount: 3,
+      chapterIndex: 1,
+      pageIndex: 10,
+      isReadable: (i) => i != 1,
+    )..start();
+    await _idle();
+    expect(model.anchorChapter, 2);
+    expect(model.anchorPage, 0);
+    expect(model.anchorMoved, isTrue);
+
+    model.jumpTo(1, pageIndex: 7);
+    expect((model.anchorChapter, model.anchorPage), (2, 0));
+    model.jumpTo(2, pageIndex: 7);
+    expect((model.anchorChapter, model.anchorPage), (2, 7));
+    expect(model.anchorMoved, isFalse);
+    model.dispose();
+  });
 }
