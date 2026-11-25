@@ -7,7 +7,8 @@ import 'gb18030_ranges.dart';
 
 /// GB18030：雙位元組和 GBK 一樣，GBK 沒有的字（emoji、少見漢字、一些符號）
 /// 寫成四位元組，照 WHATWG Encoding Standard 的 gb18030 對照（序號與碼位的
-/// 對照表在 [gb18030RangePointers]）。網站明寫 GB18030 時照它解，搜尋送出的字
+/// 對照表在 [gb18030RangePointers]）；WHATWG 把 `81 35 F4 37` 另外對到私用區
+/// 的特例不照做，同 Java 與 Python（「ḿ」解得回來）。網站明寫 GB18030 時照它解，搜尋送出的字
 /// 也照它編（同 Legado 用 Java 的 GB18030）。
 abstract final class Gb18030 {
   /// 解：四位元組的照對照表，其他照 GBK（[EncodingDetect.decodeGbk]，壞掉的
@@ -26,10 +27,7 @@ abstract final class Gb18030 {
         i += 2;
         continue;
       }
-      if (i + 3 >= bytes.length ||
-          bytes[i + 2] < 0x81 ||
-          bytes[i + 2] > 0xFE ||
-          !_isDigit(bytes[i + 3])) {
+      if (!isFourByteAt(bytes, i)) {
         i++;
         continue;
       }
@@ -60,6 +58,11 @@ abstract final class Gb18030 {
         out.addByte(rune);
         continue;
       }
+      // 落單的代理碼位（半個 emoji），同 Java 編成 `?`。
+      if (rune >= 0xD800 && rune <= 0xDFFF) {
+        out.addByte(0x3F);
+        continue;
+      }
       final two = _gbkBytes(rune);
       if (two != null) {
         out.add(two);
@@ -74,6 +77,17 @@ abstract final class Gb18030 {
     }
     return out.takeBytes();
   }
+
+  /// [index] 開始是一個四位元組的字：0x81–0xFE、0x30–0x39、0x81–0xFE、
+  /// 0x30–0x39。
+  static bool isFourByteAt(List<int> bytes, int index) =>
+      index + 3 < bytes.length &&
+      bytes[index] >= 0x81 &&
+      bytes[index] <= 0xFE &&
+      _isDigit(bytes[index + 1]) &&
+      bytes[index + 2] >= 0x81 &&
+      bytes[index + 2] <= 0xFE &&
+      _isDigit(bytes[index + 3]);
 
   static bool _isDigit(int b) => b >= 0x30 && b <= 0x39;
 
@@ -94,7 +108,6 @@ abstract final class Gb18030 {
       return 0xFFFD;
     }
     if (pointer >= 189000) return 0x10000 + pointer - 189000;
-    if (pointer == 7457) return 0xE7C7;
     final index = _lastAtMost(gb18030RangePointers, pointer);
     return gb18030RangeCodePoints[index] +
         pointer -
@@ -103,7 +116,6 @@ abstract final class Gb18030 {
 
   static int _pointerOf(int rune) {
     if (rune >= 0x10000) return 189000 + rune - 0x10000;
-    if (rune == 0xE7C7) return 7457;
     final index = _lastAtMost(gb18030RangeCodePoints, rune);
     return gb18030RangePointers[index] + rune - gb18030RangeCodePoints[index];
   }

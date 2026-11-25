@@ -140,8 +140,8 @@ class EncodingDetect {
 
   /// 偵測位元組陣列的編碼。有 BOM 照 BOM；沒有時照 Legado 用的 ICU
   /// `CharsetDetector` 裡的五個辨識器（[_IcuGuess]），在 UTF-8、沒有 BOM 的
-  /// UTF-16、GB18030 與 Big5 之間挑信心最高的。GB18030 回傳 `GBK`（同一套
-  /// 解法）。
+  /// UTF-16、GB18030 與 Big5 之間挑信心最高的。名稱照辨識器（同 Legado），
+  /// GB18030 的四位元組字（emoji、少見漢字）才解得出來。
   static String getEncode(Uint8List bytes) {
     if (bytes.isEmpty) return 'UTF-8';
 
@@ -234,10 +234,10 @@ class _IcuGuess {
       ('UTF-16BE', _utf16(bigEndian: true)),
       ('UTF-16LE', _utf16(bigEndian: false)),
       // 同分時排在後面的贏。ICU 是 Big5 在後；夜讀讓 GBK 贏：10 個字以內的
-      // 短文字兩邊都是 10 分、分不出來，照改用 ICU 之前的判斷當 GBK（Legado
+      // 短文字兩邊都是 10 分、分不出來，照改用 ICU 之前的判斷當 GB18030（Legado
       // 在這種情況也常判錯）。
       ('Big5', _mbcs(_big5Next, _big5Common)),
-      ('GBK', _mbcs(_gb18030Next, _gb18030Common)),
+      ('GB18030', _mbcs(_gb18030Next, _gb18030Common)),
     ];
     var best = 'UTF-8';
     var confidence = 0;

@@ -59,25 +59,25 @@ void main() {
       expect(EncodingDetect.getEncode(Big5.encode(traditional * 20)), 'Big5');
     });
 
-    test('GBK 的 TXT 照舊認成 GBK', () {
+    test('GBK 的 TXT 認成 GB18030（GBK 的延伸，同 Legado 的辨識器名稱）', () {
       expect(
         EncodingDetect.getEncode(
           Uint8List.fromList(gbk.encode(simplified * 20)),
         ),
-        'GBK',
+        'GB18030',
       );
     });
 
-    test('10 個字以內分不出 GBK 與 Big5，照改之前當 GBK', () {
+    test('10 個字以內分不出 GBK 與 Big5，照改之前當 GB18030', () {
       expect(
         EncodingDetect.getEncode(Uint8List.fromList(gbk.encode('你好世界'))),
-        'GBK',
+        'GB18030',
       );
       expect(
         EncodingDetect.getEncode(
           Uint8List.fromList(gbk.encode('<html><body>你好世界</body></html>')),
         ),
-        'GBK',
+        'GB18030',
       );
     });
 
@@ -129,5 +129,19 @@ void main() {
         EncodingDetect.decodeWithCharset([0xD6, 0xD0, 0xD0, 0x3C, 0x61], 'GBK'),
       );
     });
+  });
+
+  test('GB18030 的「ḿ」與半個 emoji 照 Java', () {
+    expect(
+      EncodingDetect.decodeWithCharset([0x81, 0x35, 0xF4, 0x37], 'GB18030'),
+      'ḿ',
+    );
+    expect(EncodingDetect.encodeWithCharset('ḿ', 'GB18030'), [
+      0x81,
+      0x35,
+      0xF4,
+      0x37,
+    ]);
+    expect(EncodingDetect.encodeWithCharset('\uD83D', 'GB18030'), [0x3F]);
   });
 }
