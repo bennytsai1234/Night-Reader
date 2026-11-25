@@ -6,6 +6,8 @@ import '../diagnostics/app_log_service.dart';
 
 import 'package:fast_gbk/fast_gbk.dart';
 
+import 'gb18030.dart';
+
 import 'big5.dart';
 
 /// EncodingDetect - 簡易編碼偵測工具
@@ -31,9 +33,8 @@ class EncodingDetect {
       if (normalized == 'UTF-16BE' || normalized == 'UTF16BE') {
         return _decodeUtf16(data, Endian.big);
       }
-      if (normalized == 'GBK' ||
-          normalized == 'GB2312' ||
-          normalized == 'GB18030') {
+      if (normalized == 'GB18030') return Gb18030.decode(data);
+      if (normalized == 'GBK' || normalized == 'GB2312') {
         return decodeGbk(data);
       }
       if (Big5.names.contains(normalized)) return Big5.decode(data);
@@ -87,9 +88,8 @@ class EncodingDetect {
     if (normalized == 'UTF-16BE' || normalized == 'UTF16BE') {
       return _encodeUtf16(text, Endian.big);
     }
-    if (normalized == 'GBK' ||
-        normalized == 'GB2312' ||
-        normalized == 'GB18030') {
+    if (normalized == 'GB18030') return Gb18030.encode(text);
+    if (normalized == 'GBK' || normalized == 'GB2312') {
       return Uint8List.fromList(gbk.encode(text));
     }
     if (Big5.names.contains(normalized)) return Big5.encode(text);

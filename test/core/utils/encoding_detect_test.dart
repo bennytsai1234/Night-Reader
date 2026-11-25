@@ -98,4 +98,36 @@ void main() {
       );
     });
   });
+
+  // 網站明寫 GB18030 時，GBK 沒有的字（emoji、擴充區漢字、¥ 這類）是四位元組
+  // （WHATWG gb18030；位元組照 Python 的 gb18030 編碼器算）。
+  group('GB18030', () {
+    const text = '中a€😀𠀀¥é　';
+    const bytes = [
+      0xD6, 0xD0, 0x61, 0xA2, 0xE3, 0x94, 0x39, 0xFC, 0x36, //
+      0x95, 0x32, 0x82, 0x36, 0x81, 0x30, 0x84, 0x36, 0xA8, 0xA6, 0xA1, 0xA1,
+    ];
+
+    test('四位元組的字解得出來', () {
+      expect(EncodingDetect.decodeWithCharset(bytes, 'GB18030'), text);
+      expect(EncodingDetect.decodeWithCharset(bytes, 'gb18030'), text);
+    });
+
+    test('編得出四位元組，和解碼互為反向', () {
+      expect(EncodingDetect.encodeWithCharset(text, 'GB18030'), bytes);
+    });
+
+    test('只有雙位元組時和 GBK 一樣，壞掉的位元組照樣只換一個替代字元', () {
+      expect(
+        EncodingDetect.decodeWithCharset([
+          0xD6,
+          0xD0,
+          0xD0,
+          0x3C,
+          0x61,
+        ], 'GB18030'),
+        EncodingDetect.decodeWithCharset([0xD6, 0xD0, 0xD0, 0x3C, 0x61], 'GBK'),
+      );
+    });
+  });
 }
