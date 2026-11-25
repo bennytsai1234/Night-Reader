@@ -24,6 +24,7 @@ import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 import 'package:night_reader/features/reader/session/reader_read_time_controller.dart';
+import 'package:night_reader/core/storage/moved_chapters.dart';
 
 import 'audio_engine.dart';
 
@@ -821,14 +822,16 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     try {
       // 播放器開著時書架檢查更新可能已換上新目錄、集數重新編號（書源在前面
       // 插了幾集）；播放器手上仍是開書時的目錄。寫進資料庫的序號照這一集的
-      // 網址換成目前目錄的，重開才接回同一集；新目錄裡沒有這一集時照播放器
+      // 網址換成目前目錄的（書源換了網址的照換目錄時記下的新網址，
+      // [MovedChapters]），重開才接回同一集；新目錄裡沒有這一集時照播放器
       // 的序號寫。同文字閱讀器（`ReaderProgressController`）與漫畫閱讀器。
       final chapters = _chapterStore;
       int? moved;
       await chapters.transaction(() async {
         // 手上的書照舊記播放器目錄的序號：換源照這份目錄估位置。
         final index =
-            await chapters.indexOfUrl(book.bookUrl, chapter.url) ?? _index;
+            await MovedChapters.indexOf(chapters, book.bookUrl, chapter.url) ??
+            _index;
         moved = await _books.updateProgress(
           book.bookUrl,
           index,

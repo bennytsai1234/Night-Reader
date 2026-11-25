@@ -107,6 +107,7 @@ void main() {
           ),
           rawContent: raw,
           enabledRules: const [],
+          chineseConvertType: 0,
         )).paragraphs,
         ['前文。', '想隱藏的廣告。'],
       );

@@ -28,6 +28,7 @@ import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
+import 'package:night_reader/core/storage/moved_chapters.dart';
 
 /// 從閱讀選單開出去的東西：「更多」選單、推一整頁設定、替換規則管理頁、
 /// 書籍詳情，與從選單開的面板（排版、朗讀、替換規則）。推頁前等選單滑出
@@ -491,7 +492,8 @@ final class ReaderMenuPages {
     final chapterDao = _host.dependencies.chapterDao;
     final index =
         flushed?.chapterIndex ?? _info.currentChapterIndex(_host.runtime);
-    final storedIndex = await chapterDao.indexOfUrl(
+    final storedIndex = await MovedChapters.indexOf(
+      chapterDao,
       _book.bookUrl,
       _info.chapterUrlAt(index),
     );

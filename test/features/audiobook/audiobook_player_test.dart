@@ -18,6 +18,7 @@ import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/storage/books_in_use.dart';
+import 'package:night_reader/core/storage/moved_chapters.dart';
 import 'package:night_reader/core/playback/system_playback.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
@@ -625,6 +626,45 @@ void main() {
     await player.open(book);
     expect(engine.opened.last.$1.toString(), 'https://audio.test/ep2.mp3');
     expect(engine.opened.last.$2, const Duration(seconds: 30));
+  });
+
+  test('聽的時候檢查更新換了這一集的網址：存的是換目錄記下的新網址在新目錄的序號', () async {
+    addTearDown(MovedChapters.clear);
+    await player.open(book);
+    // 書架檢查更新換上新目錄：第 1 集前面多了番外，每一集都換了網址，
+    // 第 2 集變成序號 3。
+    await ChapterDao(db).replaceByBook(book.bookUrl, [
+      BookChapter(
+        url: 'https://audio.test/vol',
+        title: '第一卷',
+        isVolume: true,
+        bookUrl: book.bookUrl,
+        index: 0,
+      ),
+      BookChapter(
+        url: 'https://audio.test/extra',
+        title: '番外',
+        bookUrl: book.bookUrl,
+        index: 1,
+      ),
+      for (var i = 1; i <= 3; i++)
+        BookChapter(
+          url: 'https://audio.test/v2/ep$i',
+          title: '第 $i 集',
+          bookUrl: book.bookUrl,
+          index: i + 1,
+        ),
+    ]);
+    MovedChapters.record(book.bookUrl, {
+      for (var i = 1; i <= 3; i++)
+        'https://audio.test/ep$i': 'https://audio.test/v2/ep$i',
+    });
+    engine.advance(const Duration(seconds: 30));
+    await player.pause();
+
+    final saved = await stored();
+    expect(saved.chapterIndex, 3);
+    expect(saved.durChapterTitle, '第 2 集');
   });
 
   test('一集播完接著播下一集，最後一集播完停在結尾', () async {
