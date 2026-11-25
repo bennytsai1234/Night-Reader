@@ -416,6 +416,11 @@ abstract final class ComicChapterFiles {
       name.split('/').any((part) => part.startsWith('.')) ||
       name.startsWith('__MACOSX/');
 
+  /// 手機上的檔 [path] 是不是一張圖：照副檔名，沒有副檔名時看檔頭（同
+  /// 列圖時的認法，匯入本地漫畫找章節用）。
+  static bool isImagePath(String path) =>
+      _isImageFile(p.basename(path), () => _headOf(File(path)));
+
   static bool _isImageFile(String name, Uint8List? Function() head) {
     if (p.basename(name).startsWith('.')) return false;
     final extension = p.extension(name).toLowerCase();

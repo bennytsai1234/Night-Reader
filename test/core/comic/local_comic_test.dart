@@ -73,6 +73,20 @@ void main() {
     expect(LocalComicLibrary.discover(picked.path).map((s) => s.title), ['夜行']);
   });
 
+  test('沒有副檔名的圖照內容認（同 Mihon）：資料夾裡的圖與直接放的圖都算', () {
+    final chapter = Directory(p.join(picked.path, '第1話'))..createSync();
+    File(p.join(chapter.path, '001')).writeAsBytesSync(stripedPng(4, 4, 0, 0));
+    final notes = Directory(p.join(picked.path, '只有說明'))..createSync();
+    File(p.join(notes.path, 'README')).writeAsStringSync('x');
+    expect(LocalComicLibrary.discover(picked.path).map((s) => s.title), [
+      '第1話',
+    ]);
+
+    final loose = Directory(p.join(root.path, 'picked', '散圖'))..createSync();
+    File(p.join(loose.path, '002')).writeAsBytesSync(stripedPng(4, 4, 0, 0));
+    expect(LocalComicLibrary.discover(loose.path).map((s) => s.title), ['散圖']);
+  });
+
   test('章指紋只看圖：同樣的圖放在 CBZ 或資料夾都一樣', () {
     imageFolder('第1話', [5, 6]);
     cbz('第1話.cbz', [5, 6]);
