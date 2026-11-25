@@ -47,6 +47,52 @@ void main() {
     expect(saved, [1, 2]);
   });
 
+  testWidgets('saving immediately ends after its own write and leaves '
+      'positions scheduled meanwhile to the debounce timer', (tester) async {
+    final gate = Completer<void>();
+    final started = <int>[];
+    final saved = <int>[];
+    final queue = ProgressWriteQueue<int>(
+      write: (value) async {
+        started.add(value);
+        if (value == 1) await gate.future;
+        saved.add(value);
+      },
+    );
+    var done = false;
+    final saving = queue.saveImmediately(1).then((_) => done = true);
+    await tester.pump();
+    queue.schedule(2);
+    gate.complete();
+    await tester.pump();
+    await saving;
+    expect(done, isTrue);
+    expect(started, [1]);
+    expect(saved, [1]);
+    await tester.pump(const Duration(milliseconds: 399));
+    expect(started, [1]);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(saved, [1, 2]);
+  });
+
+  test('flush also writes positions scheduled while it is writing', () async {
+    final gate = Completer<void>();
+    final saved = <int>[];
+    final queue = ProgressWriteQueue<int>(
+      write: (value) async {
+        if (value == 1) await gate.future;
+        saved.add(value);
+      },
+    );
+    queue.schedule(1);
+    final flushing = queue.flush();
+    await pumpEventQueue();
+    queue.schedule(2);
+    gate.complete();
+    await flushing;
+    expect(saved, [1, 2]);
+  });
+
   test('failed writes remain pending for a later flush', () async {
     var fail = true;
     final saved = <int>[];

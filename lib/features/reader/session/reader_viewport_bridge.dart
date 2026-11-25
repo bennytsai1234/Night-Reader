@@ -62,16 +62,17 @@ class ReaderViewportBridge {
     return _saveProgressLocation(targetLocation, immediate: immediate);
   }
 
-  Future<ReaderLocation?> flushProgress() {
+  Future<ReaderLocation?> flushProgress() async {
     // 還沒成功開書時，暫定位置不能蓋掉資料庫裡的進度。
-    if (!_runtime.state.hasStableWorld) {
-      return Future<ReaderLocation?>.value();
-    }
+    if (!_runtime.state.hasStableWorld) return null;
     // 跳章或重排途中，記最後已顯示的位置，不量正在換掉的版面。
     final location = _runtime.pendingLocation == null
         ? captureVisibleLocation() ?? _runtime.state.visibleLocation
         : _runtime.state.visibleLocation;
-    return _saveProgressLocation(location);
+    final saved = await _saveProgressLocation(location);
+    // 立即存只寫一筆；離開、退背景前連寫入途中才排的位置也寫完。
+    await _runtime.progressController.flush();
+    return saved;
   }
 
   Future<ReaderLocation?> saveProgressLocation(

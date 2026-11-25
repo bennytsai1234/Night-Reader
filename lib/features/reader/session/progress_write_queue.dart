@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 
 /// 合併短時間內的進度變更，但持續移動時也定期存檔。
-/// 同一個閱讀器的寫入依序完成，離開時等最後一筆真正寫完。
+/// 同一個閱讀器的寫入依序完成。[saveImmediately] 與計時器只寫正在寫的那筆
+/// 之後的最新一筆，寫入途中才排的位置交給計時器，不追著持續移動連寫；
+/// [flush]（離開、退背景）一路寫到沒有待寫的位置為止。
 class ProgressWriteQueue<T extends Object> {
   ProgressWriteQueue({
     required this.write,
@@ -30,7 +32,7 @@ class ProgressWriteQueue<T extends Object> {
 
   Future<void> saveImmediately(T value) {
     _pending = value;
-    return flush();
+    return _flush(drain: false);
   }
 
   Future<void> flush() => _flush(drain: true);
