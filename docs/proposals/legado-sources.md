@@ -269,7 +269,7 @@
 - 夜讀：封面元件直接用網址字串抓（`N:lib/shared/widgets/book/book_cover_widget.dart:455-462`，`CachedNetworkImageProvider(source)`），存成檔的那條也是光網址（`N:lib/core/storage/book_cover_storage_service.dart:200-207`）；`coverDecodeJs` 只存在資料庫欄位，沒有地方執行（`N:lib/core/database/tables/app_tables.dart:295`）。網址選項整段當成網址的一部分送出。
 - 插圖（`imageDecode`）夜讀有照做（`N:lib/core/engine/web_book/illustration_fetcher.dart:111-119`），封面沒有。
 
-### R2 書源標頭裡的代理（`proxy`）被拿掉（少數寫法才碰到）
+### R2 書源標頭裡的代理（`proxy`）被拿掉（少數寫法才碰到）（已修，#640）
 
 - 讀者會碰到：書源在標頭寫了 `"proxy":"socks5://…"` 或 `"http://…"`，網站只讓經過代理的連線進來時，Legado 走代理抓得到，夜讀直接連、抓不到。
 - Legado：`L:model/analyzeRule/AnalyzeUrl.kt:120-127` 把標頭的 `proxy` 拿出來，`getClient()` 用 `getProxyClient(proxy)`（`L:model/analyzeRule/AnalyzeUrl.kt:516-517`）。
