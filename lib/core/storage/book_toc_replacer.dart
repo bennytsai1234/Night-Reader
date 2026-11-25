@@ -2,7 +2,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
-import 'package:night_reader/core/chinese/chinese_utils.dart';
+import 'package:night_reader/core/models/book/chapter_alignment.dart';
 
 /// 用書源最新的目錄換掉一本書已存的目錄（檢查更新用）。
 class BookTocReplacer {
@@ -81,29 +81,35 @@ bool _sameAsStored(List<BookChapter> stored, List<BookChapter> chapters) {
 }
 
 /// [fetched] 加上 [oldToc] 裡書源拿掉、但 [keep] 要留的章節。留下的章節接在
-/// 舊目錄裡它前面最近一個還在的章節後面；前面都不在了就放最前面。標題與
-/// [fetched] 裡某一章相同（繁簡視為相同）的不留。
+/// 舊目錄裡它前面最近一個還在的章節後面；前面都不在了就放最前面。在
+/// [fetched] 裡照章名找得到同一章的不留（[ChapterMatcher.sameChapter]，不單憑
+/// 章號）：章名一樣、繁簡不同，或只差章號的寫法（「第3章 風起」與「第三章
+/// 風起」），那是書源換了網址，閱讀進度照同一個比法對過去。
 List<BookChapter> keepDroppedChapters({
   required List<BookChapter> oldToc,
   required List<BookChapter> fetched,
   required bool Function(BookChapter chapter) keep,
 }) {
   final fetchedUrls = {for (final chapter in fetched) chapter.url};
-  // 只有真的遇到書源拿掉、又要留的章節才轉換整份新目錄的章名：一般檢查
-  // 更新沒有章節被拿掉，不必把上千個章名都轉一次。
-  late final fetchedTitles = {
-    for (final chapter in fetched) ChineseUtils.t2s(chapter.title),
-  };
+  // 只有真的遇到書源拿掉、又要留的章節才準備比章名：一般檢查更新沒有
+  // 章節被拿掉，不必把上千個章名都轉一次。
+  late final matcher = ChapterMatcher(fetched);
   final front = <BookChapter>[];
   final after = <String, List<BookChapter>>{};
   String? lastKeptUrl;
-  for (final chapter in oldToc) {
+  for (final (position, chapter) in oldToc.indexed) {
     if (fetchedUrls.contains(chapter.url)) {
       lastKeptUrl = chapter.url;
       continue;
     }
     if (!keep(chapter) ||
-        fetchedTitles.contains(ChineseUtils.t2s(chapter.title))) {
+        matcher.sameChapter(
+              oldIndex: position,
+              oldTitle: chapter.title,
+              oldTotalCount: oldToc.length,
+              byNumber: false,
+            ) !=
+            null) {
       continue;
     }
     // 複製一份：呼叫端會重編序號，[oldToc] 要留著對進度。

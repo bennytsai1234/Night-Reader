@@ -5,11 +5,7 @@ import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 
 /// 舊目錄第 [oldIndex] 章（章名 [oldTitle]）在 [newChapters] 裡是第幾章：
-/// 先找同名的章（[sameChapterTitle]：繁簡、空白不同也算）；再照 Legado
-/// `BookHelp.getDurChapter`，在估計位置前後 10 章裡比去掉章號的章名
-/// （相似度超過 0.96），再找同一個章號（認中文數字與「100、」）；都沒有就
-/// 照比例估。目錄裡有好幾章同名或同章號時（例如好幾個「番外」），取離估計
-/// 位置最近的那一章，不是第一個。
+/// 照 [ChapterMatcher.sameChapter] 找同一章，都沒有就照比例估。
 int alignChapterIndex({
   required int oldIndex,
   required String? oldTitle,
@@ -17,79 +13,123 @@ int alignChapterIndex({
   required List<BookChapter> newChapters,
 }) {
   if (newChapters.isEmpty) return oldIndex;
+  final matcher = ChapterMatcher(newChapters);
+  return matcher.sameChapter(
+        oldIndex: oldIndex,
+        oldTitle: oldTitle,
+        oldTotalCount: oldTotalCount,
+      ) ??
+      matcher.estimate(oldIndex: oldIndex, oldTotalCount: oldTotalCount);
+}
 
-  final newSize = newChapters.length;
-  var estimatedIndex = oldIndex;
-  if (oldTotalCount > 0) {
-    estimatedIndex = (oldIndex * newSize / oldTotalCount).round();
-  }
+/// 在一份目錄 [chapters] 裡找舊目錄的某一章。一份目錄要找很多章時（檢查
+/// 更新對每個書源拿掉的章節）共用一個，章名的比對用字只算一次。
+class ChapterMatcher {
+  ChapterMatcher(this.chapters);
 
-  int? nearest(bool Function(BookChapter chapter) matches) {
-    int? best;
-    for (var i = 0; i < newSize; i++) {
-      if (!matches(newChapters[i])) continue;
-      if (best == null ||
-          (i - estimatedIndex).abs() < (best - estimatedIndex).abs()) {
-        best = i;
-      }
+  final List<BookChapter> chapters;
+
+  late final List<String> _keys = [
+    for (final chapter in chapters) _titleKey(chapter.title),
+  ];
+  late final List<int?> _numbers = [
+    for (final chapter in chapters) _extractChapterNumber(chapter.title),
+  ];
+  final Map<int, String> _pureNames = {};
+
+  String _pureAt(int index) =>
+      _pureNames[index] ??= _pureChapterName(chapters[index].title);
+
+  /// 照章數比例估的位置。
+  int estimate({required int oldIndex, required int oldTotalCount}) {
+    if (chapters.isEmpty) return oldIndex;
+    var estimated = oldIndex;
+    if (oldTotalCount > 0) {
+      estimated = (oldIndex * chapters.length / oldTotalCount).round();
     }
-    return best;
+    return estimated.clamp(0, chapters.length - 1);
   }
 
-  if (oldTitle != null && oldTitle.isNotEmpty) {
-    final exact = nearest((chapter) => chapter.title == oldTitle);
-    if (exact != null) return exact;
-    final oldKey = _titleKey(oldTitle);
-    final converted = nearest((chapter) => _titleKey(chapter.title) == oldKey);
-    if (converted != null) return converted;
-  }
-
-  // 同 Legado：估計位置與原本的位置前後 10 章裡，比去掉章號與括號的章名。
-  // 好幾章一樣像時（每章都叫「正文」、短的「上」「下」），章號相同的優先，
-  // 再取離估計位置最近的（Legado 取第一個）。
-  final oldChapterNumber = _extractChapterNumber(oldTitle);
-  final windowStart = math.max(0, math.min(oldIndex, estimatedIndex) - 10);
-  final windowEnd = math.min(
-    newSize - 1,
-    math.max(oldIndex, estimatedIndex) + 10,
-  );
-  final oldPure = _pureChapterName(oldTitle);
-  if (oldPure.isNotEmpty) {
-    int? best;
-    var bestSimilarity = _similarEnough;
-    var bestSameNumber = false;
-    for (var i = windowStart; i <= windowEnd; i++) {
-      final title = newChapters[i].title;
-      final similarity = _jaccard(oldPure, _pureChapterName(title));
-      if (similarity <= _similarEnough) continue;
-      final sameNumber =
-          oldChapterNumber != null &&
-          _extractChapterNumber(title) == oldChapterNumber;
-      final better =
-          best == null ||
-          similarity > bestSimilarity ||
-          (similarity == bestSimilarity &&
-              (sameNumber && !bestSameNumber ||
-                  sameNumber == bestSameNumber &&
-                      (i - estimatedIndex).abs() <
-                          (best - estimatedIndex).abs()));
-      if (better) {
-        best = i;
-        bestSimilarity = similarity;
-        bestSameNumber = sameNumber;
-      }
+  /// 舊目錄第 [oldIndex] 章（章名 [oldTitle]）在這份目錄裡的同一章，沒有
+  /// 是 null：先找同名的章（[sameChapterTitle]：繁簡、空白不同也算）；再照
+  /// Legado `BookHelp.getDurChapter`，在估計位置前後 10 章裡比去掉章號的
+  /// 章名（相似度超過 0.96），再找同一個章號（認中文數字與「100、」）。
+  /// 目錄裡有好幾章同名或同章號時（例如好幾個「番外」），取離估計位置最近
+  /// 的那一章，不是第一個。[byNumber] 是 false 時只比章名，不單憑章號。
+  int? sameChapter({
+    required int oldIndex,
+    required String? oldTitle,
+    required int oldTotalCount,
+    bool byNumber = true,
+  }) {
+    if (chapters.isEmpty) return null;
+    final newSize = chapters.length;
+    var estimatedIndex = oldIndex;
+    if (oldTotalCount > 0) {
+      estimatedIndex = (oldIndex * newSize / oldTotalCount).round();
     }
-    if (best != null) return best;
-  }
 
-  if (oldChapterNumber != null) {
-    final numbered = nearest(
-      (chapter) => _extractChapterNumber(chapter.title) == oldChapterNumber,
+    int? nearest(bool Function(int index) matches) {
+      int? best;
+      for (var i = 0; i < newSize; i++) {
+        if (!matches(i)) continue;
+        if (best == null ||
+            (i - estimatedIndex).abs() < (best - estimatedIndex).abs()) {
+          best = i;
+        }
+      }
+      return best;
+    }
+
+    if (oldTitle != null && oldTitle.isNotEmpty) {
+      final exact = nearest((i) => chapters[i].title == oldTitle);
+      if (exact != null) return exact;
+      final oldKey = _titleKey(oldTitle);
+      final converted = nearest((i) => _keys[i] == oldKey);
+      if (converted != null) return converted;
+    }
+
+    // 同 Legado：估計位置與原本的位置前後 10 章裡，比去掉章號與括號的章名。
+    // 好幾章一樣像時（每章都叫「正文」、短的「上」「下」），章號相同的優先，
+    // 再取離估計位置最近的（Legado 取第一個）。
+    final oldChapterNumber = _extractChapterNumber(oldTitle);
+    final windowStart = math.max(0, math.min(oldIndex, estimatedIndex) - 10);
+    final windowEnd = math.min(
+      newSize - 1,
+      math.max(oldIndex, estimatedIndex) + 10,
     );
-    if (numbered != null) return numbered;
-  }
+    final oldPure = _pureChapterName(oldTitle);
+    if (oldPure.isNotEmpty) {
+      int? best;
+      var bestSimilarity = _similarEnough;
+      var bestSameNumber = false;
+      for (var i = windowStart; i <= windowEnd; i++) {
+        final similarity = _jaccard(oldPure, _pureAt(i));
+        if (similarity <= _similarEnough) continue;
+        final sameNumber =
+            oldChapterNumber != null && _numbers[i] == oldChapterNumber;
+        final better =
+            best == null ||
+            similarity > bestSimilarity ||
+            (similarity == bestSimilarity &&
+                (sameNumber && !bestSameNumber ||
+                    sameNumber == bestSameNumber &&
+                        (i - estimatedIndex).abs() <
+                            (best - estimatedIndex).abs()));
+        if (better) {
+          best = i;
+          bestSimilarity = similarity;
+          bestSameNumber = sameNumber;
+        }
+      }
+      if (best != null) return best;
+    }
 
-  return estimatedIndex.clamp(0, newSize - 1);
+    if (byNumber && oldChapterNumber != null) {
+      return nearest((i) => _numbers[i] == oldChapterNumber);
+    }
+    return null;
+  }
 }
 
 /// 兩個章名算不算同一章：繁簡不同（繁體站換簡體站）、空白不同也算。
