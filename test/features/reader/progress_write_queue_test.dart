@@ -61,4 +61,35 @@ void main() {
     await queue.flush();
     expect(saved, [1]);
   });
+
+  testWidgets('slow writes during nonstop movement neither overlap nor pile '
+      'up, and leaving writes the latest position', (tester) async {
+    var inFlight = 0;
+    var maxInFlight = 0;
+    final saved = <int>[];
+    final queue = ProgressWriteQueue<int>(
+      write: (value) async {
+        inFlight++;
+        if (inFlight > maxInFlight) maxInFlight = inFlight;
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        saved.add(value);
+        inFlight--;
+      },
+    );
+    // 每幀（16ms）一個新位置，連續十秒；每筆寫入要半秒。
+    var value = 0;
+    for (var frame = 0; frame < 625; frame++) {
+      queue.schedule(value++);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(maxInFlight, 1);
+    // 兩秒一次的定期寫入加上半秒的寫入時間：十秒內不超過五、六筆。
+    expect(saved.length, inInclusiveRange(4, 6));
+    expect(saved, orderedEquals([...saved]..sort()));
+    final leaving = queue.flush();
+    await tester.pump(const Duration(seconds: 2));
+    await leaving;
+    expect(saved.last, value - 1);
+    expect(maxInFlight, 1);
+  });
 }
