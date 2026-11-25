@@ -8,6 +8,7 @@ import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/sync/replace_rule_sync.dart';
 import 'package:night_reader/core/sync/sync_records.dart';
 import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_page.dart';
+import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_editor_sheet.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_row.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
@@ -88,7 +89,11 @@ void main() {
 
     await tester.tap(find.byTooltip('新增規則'));
     await tester.pumpAndSettle();
-    final fields = find.byType(TextField);
+    // 頁首的搜尋框也是 TextField，只找編輯面板裡的欄位。
+    final fields = find.descendant(
+      of: find.byType(ReaderReplaceRuleEditorSheet),
+      matching: find.byType(TextField),
+    );
     await tester.enterText(fields.at(0), '新規則');
     await tester.enterText(fields.at(3), 'x');
     await tester.tap(find.text('儲存'));

@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
+
+import 'package:archive/archive.dart';
 
 import 'package:dio/dio.dart';
 import 'package:drift/isolate.dart';
@@ -8,7 +11,9 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/backup/restore_service.dart';
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
@@ -22,6 +27,8 @@ import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/storage/chapter_content_preparation_pipeline.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/network/network_service.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../test_helper.dart';
 
@@ -150,6 +157,8 @@ void main() {
       source: BookSource.fromJson({
         'bookSourceName': '慢',
         'bookSourceUrl': book.origin,
+        // 正文規則空白時不抓網頁（同 Legado），要有規則才會發出請求。
+        'ruleContent': {'content': 'tag.body@text'},
       }),
       chapters: [
         for (var i = 0; i < 3; i++)
@@ -223,6 +232,8 @@ void main() {
         BookSource.fromJson({
           'bookSourceName': '改',
           'bookSourceUrl': book.origin,
+          // 正文規則空白時不抓網頁（同 Legado），要有規則才會發出請求。
+          'ruleContent': {'content': 'tag.body@text'},
         }),
       );
       await getIt<BookDao>().upsert(book);
@@ -286,6 +297,199 @@ void main() {
 
     expect(service.tasks.where((t) => t.bookUrl == book.bookUrl), isEmpty);
     expect(service.isTaskRetiring(book.bookUrl), isFalse);
+  });
+
+  // 暫停全部時正在跑的那一輪停在下一章之前等「繼續全部」；讀者這時從佇列
+  // 刪掉它，那一輪要跟著結束，同一本書才加得回佇列。
+  test('removing a download parked by pause-all ends its run so the book can '
+      'be queued again', () async {
+    final book = Book(
+      bookUrl: '$base/book/paused',
+      origin: '$base/source/paused',
+      name: '暫停全部時刪掉的書',
+      isInBookshelf: true,
+    );
+    final chapters = [
+      for (var i = 0; i < 2; i++)
+        BookChapter(
+          url: '$base/stall/paused/$i',
+          title: '第 $i 章',
+          index: i,
+          bookUrl: book.bookUrl,
+        ),
+    ];
+    await getIt<BookSourceDao>().upsert(
+      BookSource.fromJson({
+        'bookSourceName': '暫停',
+        'bookSourceUrl': book.origin,
+        // 正文規則空白時不抓網頁（同 Legado），要有規則才會發出請求。
+        'ruleContent': {'content': 'tag.body@text'},
+      }),
+    );
+    await getIt<BookDao>().upsert(book);
+    await getIt<ChapterDao>().insertChapters(chapters);
+    final service = DownloadService();
+    final task = DownloadTask(
+      bookUrl: book.bookUrl,
+      bookName: book.name,
+      totalCount: chapters.length,
+    );
+    service.tasks.add(task);
+    service.isDownloading = true;
+    service.isPaused = true;
+    addTearDown(() {
+      service.isDownloading = false;
+      service.isPaused = false;
+      service.pauseCompleter?.complete();
+      service.pauseCompleter = null;
+      service.tasks.removeWhere((t) => t.bookUrl == book.bookUrl);
+    });
+
+    final run = service.processTask(task);
+    await until(() => service.pauseCompleter != null, '停在暫停前');
+    service.removeTask(book.bookUrl);
+
+    await run.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => fail('刪掉後那一輪還在等「繼續全部」'),
+    );
+    expect(service.activeTaskUrls, isNot(contains(book.bookUrl)));
+    await service.addDownloadTask(book, chapters);
+    expect(
+      service.tasks.where((t) => t.bookUrl == book.bookUrl && t.isWaiting),
+      hasLength(1),
+    );
+  });
+
+  // 刪掉後那一輪還在收尾（例如規則 JS 還在跑）時又要求下載同一本：等它
+  // 收完再排，不能丟掉這次要求。
+  test('queueing a book again while its removed run is still finishing '
+      'waits for that run and then queues it', () async {
+    final book = Book(
+      bookUrl: '$base/book/finishing',
+      origin: '$base/source/finishing',
+      name: '刪掉後還在收尾的書',
+      isInBookshelf: true,
+    );
+    final chapters = [
+      BookChapter(
+        url: '$base/stall/finishing',
+        title: '一章',
+        index: 0,
+        bookUrl: book.bookUrl,
+      ),
+    ];
+    final service = DownloadService();
+    service.isPaused = true;
+    addTearDown(() {
+      service.isPaused = false;
+      service.tasks.removeWhere((t) => t.bookUrl == book.bookUrl);
+    });
+    // 那一輪還沒結束：佔著這本書、但已不在佇列裡。
+    service.beginTaskActivity(book.bookUrl);
+    service.activeTaskUrls.add(book.bookUrl);
+
+    var queued = false;
+    final adding = service
+        .addDownloadTask(book, chapters)
+        .then((_) => queued = true);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(queued, isFalse, reason: '舊的那一輪還沒收完');
+
+    service.activeTaskUrls.remove(book.bookUrl);
+    service.completeTaskActivity(book.bookUrl);
+    await adding.timeout(const Duration(seconds: 2));
+    expect(
+      service.tasks.where((t) => t.bookUrl == book.bookUrl && t.isWaiting),
+      hasLength(1),
+    );
+  });
+
+  // 還原備份時這本書正在下載：舊的那一輪不能在還原之後把備份裡的狀態蓋掉
+  // （備份裡是暫停的，蓋成完成的話重開後書架自動下載會接著抓）。
+  test('restoring a backup while the book is downloading keeps the backup\'s '
+      'task', () async {
+    SharedPreferences.setMockInitialValues({});
+    final book = Book(
+      bookUrl: '$base/book/restored',
+      origin: '$base/source/restored',
+      name: '還原時正在下載的書',
+      isInBookshelf: true,
+    );
+    final chapters = [
+      for (var i = 0; i < 2; i++)
+        BookChapter(
+          url: '$base/stall/restored/$i',
+          title: '第 $i 章',
+          index: i,
+          bookUrl: book.bookUrl,
+        ),
+    ];
+    await getIt<BookSourceDao>().upsert(
+      BookSource.fromJson({
+        'bookSourceName': '還原',
+        'bookSourceUrl': book.origin,
+        // 正文規則空白時不抓網頁（同 Legado），要有規則才會發出請求。
+        'ruleContent': {'content': 'tag.body@text'},
+      }),
+    );
+    await getIt<BookDao>().upsert(book);
+    await getIt<ChapterDao>().insertChapters(chapters);
+    final service = DownloadService();
+    final running = DownloadTask(
+      bookUrl: book.bookUrl,
+      bookName: book.name,
+      totalCount: 1,
+      startChapterUrl: chapters.first.url,
+      endChapterUrl: chapters.first.url,
+    );
+    service.tasks.add(running);
+    service.isDownloading = true;
+    addTearDown(() {
+      service.isDownloading = false;
+      service.tasks.removeWhere((t) => t.bookUrl == book.bookUrl);
+    });
+    final run = service.processTask(running);
+    await until(() => arrived.contains('/stall/restored/0'), '卡住的請求');
+
+    final archive = Archive();
+    void add(String name, Object json) {
+      final bytes = utf8.encode(jsonEncode(json));
+      archive.addFile(ArchiveFile(name, bytes.length, bytes));
+    }
+
+    add('manifest.json', {'schemaVersion': db.schemaVersion});
+    add('downloadTasks.json', [
+      DownloadTask(
+        bookUrl: book.bookUrl,
+        bookName: book.name,
+        totalCount: 2,
+        status: DownloadTask.statusPaused,
+      ).toJson(),
+    ]);
+    final zip = File(
+      '${(await Directory.systemTemp.createTemp('restore_running')).path}'
+      '/backup.zip',
+    );
+    await zip.writeAsBytes(ZipEncoder().encode(archive));
+
+    await RestoreService().restoreFromZip(zip);
+    await run.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => fail('還原後舊的那一輪還在跑'),
+    );
+
+    final stored = (await getIt<DownloadDao>().getAll()).singleWhere(
+      (t) => t.bookUrl == book.bookUrl,
+    );
+    expect(stored.status, DownloadTask.statusPaused);
+    expect(stored.totalCount, 2);
+    expect(stored.startChapterUrl, isNull, reason: '照備份是整本的任務');
+    final inMemory = service.tasks.singleWhere(
+      (t) => t.bookUrl == book.bookUrl,
+    );
+    expect(inMemory.status, DownloadTask.statusPaused);
+    expect(inMemory.totalCount, 2);
   });
 
   test('a chapter waiting to retry stops when cancelled', () async {

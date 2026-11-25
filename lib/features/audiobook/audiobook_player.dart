@@ -350,7 +350,15 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       var index = chapterIndex ?? book.chapterIndex;
       if (chapterIndex == null) {
         final stored = await _resumePosition(book);
-        if (generation != _generation) return;
+        if (generation != _generation) {
+          // 等的時候在目錄選了別集（[_switchTo]）：播選的那集，這本書照樣
+          // 算開著；停止或開了別本時 [_book] 已經換掉。
+          if (identical(_book, book)) {
+            _markOpen(book);
+            _ensureLifecycle();
+          }
+          return;
+        }
         index = stored.chapterIndex;
         start = Duration(milliseconds: stored.charOffset);
       }
@@ -371,9 +379,11 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   }
 
   /// 使用者換到第 [index] 集（目錄選集、上一集、下一集）：先存好這一集聽到
-  /// 哪，再從頭播那一集。存的這段時間停止、開了別本或又換了集就不換。
+  /// 哪，再從頭播那一集。按下去就換一次 [_generation]：之前還在做的載入與
+  /// 換集作廢；存的這段時間停止、開了別本或又換了集就不換，最後按的那一次
+  /// 算數。
   Future<void> _switchTo(int index) async {
-    final generation = _generation;
+    final generation = ++_generation;
     await _saveProgress();
     if (generation != _generation) return;
     await _load(index, start: Duration.zero, play: true);
@@ -809,13 +819,24 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       ..durChapterTitle = chapter.title
       ..charOffset = ms;
     try {
-      final moved = await _books.updateProgress(
-        book.bookUrl,
-        _index,
-        chapter.title,
-        ms,
-      );
-      if (moved != null) book.progressTime = moved;
+      // 播放器開著時書架檢查更新可能已換上新目錄、集數重新編號（書源在前面
+      // 插了幾集）；播放器手上仍是開書時的目錄。寫進資料庫的序號照這一集的
+      // 網址換成目前目錄的，重開才接回同一集；新目錄裡沒有這一集時照播放器
+      // 的序號寫。同文字閱讀器（`ReaderProgressController`）與漫畫閱讀器。
+      final chapters = _chapterStore;
+      int? moved;
+      await chapters.transaction(() async {
+        // 手上的書照舊記播放器目錄的序號：換源照這份目錄估位置。
+        final index =
+            await chapters.indexOfUrl(book.bookUrl, chapter.url) ?? _index;
+        moved = await _books.updateProgress(
+          book.bookUrl,
+          index,
+          chapter.title,
+          ms,
+        );
+      });
+      if (moved case final time?) book.progressTime = time;
     } catch (error, stackTrace) {
       AppLog.e('存收聽進度失敗', error: error, stackTrace: stackTrace);
     }

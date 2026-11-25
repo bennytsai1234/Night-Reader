@@ -294,7 +294,7 @@ final class TextGeometry {
         final position = paragraph.getPositionForOffset(
           Offset(0, line.top + 0.1),
         );
-        final boxTop = _textBoxTopForOffset(
+        final boxTop = textBoxTopForOffset(
           paragraph,
           position.offset,
           textMap.paragraphLength,
@@ -352,12 +352,14 @@ final class TextGeometry {
         at.textMap.isInsertedParagraphOffset(candidate)) {
       return null;
     }
+    // 量整個字：一個字可能佔好幾個單位，點到的是它的開頭。
+    final glyph = glyphRangeAt(at.paragraph, candidate);
     final onGlyph = at.paragraph
-        .getBoxesForRange(candidate, candidate + 1)
+        .getBoxesForRange(glyph.start, glyph.end)
         .any((box) => box.toRect().inflate(4).contains(at.local));
     if (!onGlyph) return null;
     final offset =
-        at.groupStart + at.textMap.sourceOffsetForParagraphOffset(candidate);
+        at.groupStart + at.textMap.sourceOffsetForParagraphOffset(glyph.start);
     if (!paragraphRange.containsOffset(offset)) return null;
     return (blocks: blocks, paragraph: paragraphRange, offset: offset);
   }
@@ -413,7 +415,7 @@ final class TextGeometry {
       sourceLocalOffset,
     );
     final paragraphY =
-        _textBoxTopForOffset(
+        textBoxTopForOffset(
           rawEntry.paragraph,
           groupLocalOffset,
           textMap.paragraphLength,
@@ -584,7 +586,27 @@ final class TextGeometry {
     return (top: lineTop, bottom: lineTop + line.height);
   }
 
-  static double? _textBoxTopForOffset(
+  /// [offset] 所在的那一個字（字素）在 [paragraph] 裡的範圍。一個字可能佔
+  /// 好幾個 UTF-16 單位（😀、𠮷、👩‍💻）；只量其中一個單位時 Flutter 不給框
+  /// （`getBoxesForRange` 只回傳整個落在範圍裡的字形）。
+  static ui.TextRange glyphRangeAt(ui.Paragraph paragraph, int offset) {
+    final range = paragraph
+        .getGlyphInfoAt(offset)
+        ?.graphemeClusterCodeUnitRange;
+    if (range == null || range.start > offset || range.end <= offset) {
+      return ui.TextRange(start: offset, end: offset + 1);
+    }
+    return range;
+  }
+
+  /// [offset] 所在的那一個字的框。
+  static List<ui.TextBox> glyphBoxesAt(ui.Paragraph paragraph, int offset) {
+    final range = glyphRangeAt(paragraph, offset);
+    return paragraph.getBoxesForRange(range.start, range.end);
+  }
+
+  @visibleForTesting
+  static double? textBoxTopForOffset(
     ui.Paragraph paragraph,
     int textOffset,
     int textLength,
@@ -592,7 +614,7 @@ final class TextGeometry {
     if (textLength <= 0) return 0.0;
     final safeOffset = textOffset.clamp(0, textLength).toInt();
     final start = safeOffset >= textLength ? textLength - 1 : safeOffset;
-    final boxes = paragraph.getBoxesForRange(start, start + 1);
+    final boxes = glyphBoxesAt(paragraph, start);
     if (boxes.isEmpty) return null;
     return boxes.first.top;
   }

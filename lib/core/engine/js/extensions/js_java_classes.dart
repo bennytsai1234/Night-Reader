@@ -935,9 +935,11 @@ extension JsJavaClasses on JsExtensionsBase {
       var u;
       try { u = new JavaURL(url); } catch (e) { return null; }
       if (u.getProtocol() !== 'http' && u.getProtocol() !== 'https') return null;
+      // java.net.URL 的 IPv6 主機帶方括號，OkHttp 的 host() 不帶。
+      var host = u.getHost().charAt(0) === '[' ? u.getHost().slice(1, -1) : u.getHost();
       return {
-        host: function() { return u.getHost(); },
-        topPrivateDomain: function() { return JSON.parse(send('_topPrivateDomain', JSON.stringify(u.getHost()))); },
+        host: function() { return host; },
+        topPrivateDomain: function() { return JSON.parse(send('_topPrivateDomain', JSON.stringify(host))); },
         scheme: function() { return u.getProtocol(); },
         port: function() { return u.getPort() > 0 ? u.getPort() : u.getDefaultPort(); },
         encodedPath: function() { return u.getPath(); },
@@ -1039,7 +1041,7 @@ extension JsJavaClasses on JsExtensionsBase {
     org: global.org,
     java: {
       lang: {
-        String: function(value) { return new JavaString(value); },
+        String: function(value, charset) { return new JavaString(value, charset); },
         Integer: global.Integer,
         Thread: Thread,
         System: JavaSystem,

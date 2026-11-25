@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
+
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,18 +17,24 @@ import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
 mixin DownloadScheduler on DownloadBase {
   final Set<String> _addingTaskUrls = <String>{};
 
-  Future<bool> waitUntilTaskRunnable(String bookUrl) async {
+  /// 暫停全部時等到繼續；這本書退役或這一輪被停下（[cancelToken]，例如
+  /// 讀者從佇列刪掉它）時不再等，回傳 false。
+  Future<bool> waitUntilTaskRunnable(
+    String bookUrl, {
+    required CancelToken cancelToken,
+  }) async {
     final retireSignal = retirementSignal(bookUrl);
-    if (isTaskRetiring(bookUrl)) return false;
+    if (isTaskRetiring(bookUrl) || cancelToken.isCancelled) return false;
 
     if (isPaused) {
       pauseCompleter ??= Completer<void>();
       await Future.any<void>(<Future<void>>[
         pauseCompleter!.future,
         retireSignal,
+        cancelToken.whenCancel,
       ]);
     }
-    return !isTaskRetiring(bookUrl);
+    return !isTaskRetiring(bookUrl) && !cancelToken.isCancelled;
   }
 
   /// 暫停全部／繼續全部；記在偏好設定，重開 App 照樣停著（[restorePausedAll]）。
@@ -118,9 +126,15 @@ mixin DownloadScheduler on DownloadBase {
     String? toUrl,
     required _DownloadTaskAdmissionIntent intent,
   }) async {
-    if (isTaskRetiring(bookUrl) || !_addingTaskUrls.add(bookUrl)) {
-      return false;
+    if (isTaskRetiring(bookUrl)) return false;
+    // 讀者剛從佇列刪掉這本、那一輪還在收尾：等它收完再排，這次要求才不會
+    // 被當成「已經在下載」丟掉。
+    if (activeTaskUrls.contains(bookUrl) &&
+        !tasks.any((t) => t.bookUrl == bookUrl)) {
+      await waitForTaskIdle(bookUrl);
+      if (isTaskRetiring(bookUrl)) return false;
     }
+    if (!_addingTaskUrls.add(bookUrl)) return false;
     beginTaskActivity(bookUrl);
     try {
       if (activeTaskUrls.contains(bookUrl)) return false;

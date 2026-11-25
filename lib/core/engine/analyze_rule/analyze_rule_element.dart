@@ -31,18 +31,16 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     if (content != null && ruleList.isNotEmpty) {
       result = content;
       for (final sourceRule in ruleList) {
+        // 同 Legado `putRule`：先存這一段的 @put（取到空的也存，蓋掉上一次
+        // 存的值），再看上一段有沒有結果。
+        if (sourceRule.putMap.isNotEmpty) {
+          sourceRule.putMap.forEach(
+            (key, valueRule) => put(key, getString(valueRule)),
+          );
+        }
         result = coerceNullInterimResult(result, sourceRule);
         if (result == null) {
           break;
-        }
-
-        if (sourceRule.putMap.isNotEmpty) {
-          sourceRule.putMap.forEach((key, valueRule) {
-            final val = getString(valueRule);
-            if (val.isNotEmpty) {
-              put(key, val);
-            }
-          });
         }
 
         final made = sourceRule.makeUp(result, this);
@@ -55,7 +53,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
             // 讀的就是它）。
             case Mode.regex:
               tempResult = AnalyzeByRegex.getElement(
-                result.toString(),
+                stringifyRuleResult(result),
                 rule.split('&&').where((s) => s.isNotEmpty).toList(),
               );
               break;
@@ -112,18 +110,16 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     if (content != null && ruleList.isNotEmpty) {
       result = content;
       for (final sourceRule in ruleList) {
+        // 同 Legado `putRule`：先存這一段的 @put（取到空的也存，蓋掉上一次
+        // 存的值），再看上一段有沒有結果。
+        if (sourceRule.putMap.isNotEmpty) {
+          sourceRule.putMap.forEach(
+            (key, valueRule) => put(key, getString(valueRule)),
+          );
+        }
         result = coerceNullInterimResult(result, sourceRule);
         if (result == null) {
           break;
-        }
-
-        if (sourceRule.putMap.isNotEmpty) {
-          sourceRule.putMap.forEach((key, valueRule) {
-            final val = getString(valueRule);
-            if (val.isNotEmpty) {
-              put(key, val);
-            }
-          });
         }
 
         final made = sourceRule.makeUp(result, this);
@@ -134,7 +130,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           switch (made.mode) {
             case Mode.regex:
               tempResult = AnalyzeByRegex.getElements(
-                result.toString(),
+                stringifyRuleResult(result),
                 rule.split('&&').where((s) => s.isNotEmpty).toList(),
               );
               break;

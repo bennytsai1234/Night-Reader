@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:night_reader/core/sync/read_stats_sync.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/foundation.dart';
@@ -441,6 +442,18 @@ class BookDetailProvider extends ChangeNotifier {
     }
     // 只重讀書源，書籍資訊與目錄沒有重抓：抓書源的結果照舊。
     await _loadSource();
+    if (_disposed) return;
+    // 書源改了類型，書跟著換類別（ADR 0053）：書架上的書資料庫已經換了，
+    // 還沒加入書架的照同一條規則換；開書、閱讀還是收聽都照新的類別。
+    final source = _currentSource;
+    final kind = source == null
+        ? null
+        : BookSourceDao.kindsToFollow([source])[source.bookSourceUrl];
+    if (kind != null && kind != _book.bookKind) {
+      _book.type = kind.bookType;
+      await _refreshCacheStatus(notify: false);
+      if (_disposed) return;
+    }
     notifyListeners();
   }
 
@@ -903,10 +916,13 @@ class BookDetailProvider extends ChangeNotifier {
         // 閱讀統計照書名記，改名要一起搬，不然會分成兩筆。搬失敗不擋存檔：
         // 書的資訊已經存好，統計只是留在舊名字下。
         try {
-          await _readRecordDao?.renameBook(
-            from: previousName,
-            to: next.recordName,
-          );
+          if (_readRecordDao case final dao?) {
+            await ReadStatsSync.renameBook(
+              dao,
+              from: previousName,
+              to: next.recordName,
+            );
+          }
         } catch (error) {
           AppLog.e('改書名時搬閱讀統計失敗: $error', error: error);
         }
@@ -941,14 +957,26 @@ class BookDetailProvider extends ChangeNotifier {
     }
   }
 
+  /// 第幾次換封面：存封面要等下載，先選的晚到時不蓋掉後選的。
+  int _coverEdit = 0;
+
   Future<BookDetailOperationResult> updateCover(String url) async {
+    final edit = ++_coverEdit;
     final next = Book.fromJson(Map<String, dynamic>.from(_book.toJson()));
     next.customCoverUrl = url.trim();
     next.customCoverLocalPath = null;
     try {
       await _coverStorage.ensureDisplayCoverStored(next);
+      // 等的時候又換了一次封面，或換源換成了另一本：這次的結果不要了。
+      if (edit != _coverEdit || _book.bookUrl != next.bookUrl) {
+        return BookDetailOperationResult.success('封面已更新');
+      }
       await _bookDao.saveCover(next);
-      _book = next;
+      // 只換封面：等的時候改過的其他資訊（自動檢查更新、書名）照手上的。
+      _book
+        ..customCoverUrl = next.customCoverUrl
+        ..customCoverLocalPath = next.customCoverLocalPath
+        ..coverLocalPath = next.coverLocalPath;
       AppEventBus().fire(AppEventBus.upBookshelf);
       notifyListeners();
       return BookDetailOperationResult.success('封面已更新');

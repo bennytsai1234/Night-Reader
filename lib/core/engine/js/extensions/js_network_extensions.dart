@@ -251,8 +251,10 @@ extension JsNetworkExtensions on JsExtensions {
   }
 
   /// 書源的標頭（含登入標頭）。
-  Map<String, String> _sourceHeaders() =>
-      source?.getHeaderMapSync() ?? const {};
+  Map<String, String> _sourceHeaders() {
+    final source = this.source;
+    return source == null ? const {} : AnalyzeUrl.sourceHeaders(source);
+  }
 
   String _backstage(
     List<dynamic> payload, {
@@ -268,6 +270,8 @@ extension JsNetworkExtensions on JsExtensions {
           sourceRegex: sourceRegex,
           overrideUrlRegex: overrideUrlRegex,
           tag: source?.getKey(),
+          // 同 Legado：書源的標頭含登入標頭（`getHeaderMap(true)`）。
+          headerMap: _sourceHeaders(),
         ),
       ) as String;
     } catch (e) {

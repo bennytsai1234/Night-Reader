@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
+import 'package:night_reader/core/models/source/lenient_json.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/app_cache.dart';
 import 'package:night_reader/core/utils/encoder_utils.dart';
@@ -150,10 +151,20 @@ class ExploreUrlParser {
     return trimmed.startsWith('{') && trimmed.endsWith('}');
   }
 
+  /// 先照標準 JSON 讀，讀不了再照 Legado 用 Gson 的寬鬆模式讀（多的逗號、
+  /// 單引號、不加引號的名稱）。
+  static Object? _decodeJson(String jsonStr) {
+    try {
+      return jsonDecode(jsonStr);
+    } on FormatException {
+      return decodeLenientJson(jsonStr);
+    }
+  }
+
   /// 解析 JSON 陣列格式的 exploreUrl
   static List<ExploreKind> _parseJsonArray(String jsonStr) {
     try {
-      final decoded = jsonDecode(_sanitizeRelaxedJson(jsonStr));
+      final decoded = _decodeJson(jsonStr);
       if (decoded is! List) return [];
       return decoded
           .whereType<Map>()
@@ -167,7 +178,7 @@ class ExploreUrlParser {
 
   static List<ExploreKind> _parseJsonObject(String jsonStr) {
     try {
-      final decoded = jsonDecode(_sanitizeRelaxedJson(jsonStr));
+      final decoded = _decodeJson(jsonStr);
       if (decoded is! Map) return [];
       return [ExploreKind.fromJson(Map<String, dynamic>.from(decoded))];
     } catch (e) {
@@ -217,10 +228,6 @@ class ExploreUrlParser {
         ? 'ERROR:${trimmed.substring('JS_ERROR:'.length).trim()}'
         : 'ERROR:$trimmed';
     return <ExploreKind>[ExploreKind(title: title, url: trimmed)];
-  }
-
-  static String _sanitizeRelaxedJson(String raw) {
-    return raw.replaceAllMapped(RegExp(r',(?=\s*[\]}])'), (_) => '');
   }
 
   static bool _canPersistResolvedValue(dynamic value, List<ExploreKind> kinds) {

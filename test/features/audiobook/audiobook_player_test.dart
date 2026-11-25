@@ -27,6 +27,33 @@ import 'audiobook_test_doubles.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// 存進度等 [gates]：有排著的閘門時，每次存進度等下一個打開。
+class _GatedBookDao extends BookDao {
+  _GatedBookDao(super.db);
+
+  final List<Completer<void>> gates = [];
+
+  @override
+  Future<int?> updateProgress(
+    String bookUrl,
+    int chapterIndex,
+    String chapterTitle,
+    int pos, {
+    double visualOffsetPx = 0.0,
+    String? readerAnchorJson,
+  }) async {
+    if (gates.isNotEmpty) await gates.removeAt(0).future;
+    return super.updateProgress(
+      bookUrl,
+      chapterIndex,
+      chapterTitle,
+      pos,
+      visualOffsetPx: visualOffsetPx,
+      readerAnchorJson: readerAnchorJson,
+    );
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -331,6 +358,59 @@ void main() {
     expect(engine.playing, isTrue);
   });
 
+  // 暫停時換集不用等上一集停聲；兩次選集都卡在存進度，先存好的不能把後選的
+  // 那一次當成過期丟掉。
+  for (final firstDone in [true, false]) {
+    test('暫停中在目錄連選兩集、${firstDone ? '先選的' : '後選的'}先存好：播的是後選的那一集', () async {
+      final gated = _GatedBookDao(db);
+      final picker = AudiobookPlayer(
+        engine: () => engine,
+        bookDao: gated,
+        chapterDao: ChapterDao(db),
+        sourceDao: BookSourceDao(db),
+        sourceService: source,
+        sync: sync,
+        playback: playback,
+        random: Random(1),
+      );
+      addTearDown(picker.dispose);
+      await picker.open(book, chapterIndex: 1);
+      await picker.pause();
+      final first = Completer<void>();
+      final second = Completer<void>();
+      gated.gates.addAll([first, second]);
+
+      final pickB = picker.playChapter(2);
+      await pumpEventQueue();
+      final pickC = picker.playChapter(3);
+      await pumpEventQueue();
+      (firstDone ? first : second).complete();
+      await pumpEventQueue();
+      (firstDone ? second : first).complete();
+      await Future.wait([pickB, pickC]);
+      await pumpEventQueue();
+
+      expect(picker.chapterIndex, 3);
+      expect(engine.opened.last.$1.toString(), 'https://audio.test/ep3.mp3');
+    });
+  }
+
+  test('開書還在等上次聽到哪時選了別集：播選的那集，這本書照樣登記為開著', () async {
+    final ready = Completer<void>();
+    sync.ready = ready.future;
+    final opening = player.open(book);
+    await pumpEventQueue();
+
+    await player.playChapter(3);
+    ready.complete();
+    await opening;
+    await pumpEventQueue();
+
+    expect(player.chapterIndex, 3);
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/ep3.mp3');
+    expect(sync.opened, [book.bookUrl]);
+  });
+
   test('按了下一集、上一集還沒停聲時停止：換集不再往下做', () async {
     await player.open(book, chapterIndex: 1);
     await pumpEventQueue();
@@ -506,6 +586,45 @@ void main() {
     expect(saved.chapterIndex, 2);
     expect(saved.durChapterTitle, '第 2 集');
     expect(saved.charOffset, 187000);
+  });
+
+  test('聽的時候檢查更新在前面插了一集：存的是這一集在新目錄的序號，重開接回同一集', () async {
+    await player.open(book);
+    // 書架檢查更新換上新目錄：第 1 集前面多了番外，第 2 集變成序號 3。
+    await ChapterDao(db).replaceByBook(book.bookUrl, [
+      BookChapter(
+        url: 'https://audio.test/vol',
+        title: '第一卷',
+        isVolume: true,
+        bookUrl: book.bookUrl,
+        index: 0,
+      ),
+      BookChapter(
+        url: 'https://audio.test/extra',
+        title: '番外',
+        bookUrl: book.bookUrl,
+        index: 1,
+      ),
+      for (var i = 1; i <= 3; i++)
+        BookChapter(
+          url: 'https://audio.test/ep$i',
+          title: '第 $i 集',
+          bookUrl: book.bookUrl,
+          index: i + 1,
+        ),
+    ]);
+    engine.advance(const Duration(seconds: 30));
+    await player.pause();
+
+    final saved = await stored();
+    expect(saved.chapterIndex, 3);
+    expect(saved.durChapterTitle, '第 2 集');
+    expect(saved.charOffset, 30000);
+
+    await player.stop();
+    await player.open(book);
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/ep2.mp3');
+    expect(engine.opened.last.$2, const Duration(seconds: 30));
   });
 
   test('一集播完接著播下一集，最後一集播完停在結尾', () async {

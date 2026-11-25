@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../utils/big5.dart';
 import '../utils/encoding_detect.dart';
+import '../utils/gb18030.dart';
 
 /// TxtParser - 高性能 TXT 解析器
 /// 深度還原 Android model/localBook/TextFile.kt 的物理位移邏輯
@@ -356,10 +357,14 @@ class TxtParser {
     if (normalized == 'GBK' ||
         normalized == 'GB2312' ||
         normalized == 'GB18030') {
+      final fourBytes = normalized == 'GB18030';
       while (index < bytes.length) {
         final first = bytes[index];
         if (first <= 0x7F || index + 1 >= bytes.length) {
           advance(1, 1);
+        } else if (fourBytes && Gb18030.isFourByteAt(bytes, index)) {
+          // 四位元組的字：0x90 以後是補充平面（emoji 這類），佔兩個 UTF-16。
+          advance(4, first >= 0x90 ? 2 : 1);
         } else {
           advance(2, 1);
         }

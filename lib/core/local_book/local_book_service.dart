@@ -99,7 +99,10 @@ class LocalBookService {
           same.first;
     }
 
-    final storedPath = await storeInLibrary(path, bookDao: bookDao);
+    final (path: storedPath, :created) = await storeInLibrary(
+      path,
+      bookDao: bookDao,
+    );
     final existing = await bookDao.getByUrl('local://$storedPath');
     if (existing != null && existing.isInBookshelf) return existing;
     try {
@@ -109,7 +112,7 @@ class LocalBookService {
         charset: charset,
       );
       if (result == null) {
-        await _discardUnusedCopy(storedPath, existing == null);
+        await _discardUnusedCopy(storedPath, created);
         return null;
       }
       final book = result.book
@@ -136,7 +139,7 @@ class LocalBookService {
       return book;
     } catch (e) {
       AppLog.e('匯入本地書籍失敗: $e', error: e);
-      await _discardUnusedCopy(storedPath, existing == null);
+      await _discardUnusedCopy(storedPath, created);
       rethrow;
     }
   }
@@ -174,11 +177,15 @@ class LocalBookService {
     required BookDao bookDao,
     required ChapterDao chapterDao,
   }) async {
-    final source = await storeInLibrary(path, bookDao: bookDao);
+    // 只刪這次複製出來的：同名同內容的檔已經在本地書資料夾時直接用那份，
+    // 它可能是書架上另一本書的原檔。
+    final (path: source, created: sourceCreated) = await storeInLibrary(
+      path,
+      bookDao: bookDao,
+    );
     if (!await File(source).exists()) {
       throw FileSystemException('原檔不見了，無法放回書架', path);
     }
-    final sourceCreated = !p.equals(source, path);
     final prepared = <_PreparedMove>[];
     final createdFiles = <String>[];
     final createdDirs = <Directory>[];
@@ -356,8 +363,8 @@ class LocalBookService {
   }
 
   /// 匯入失敗時，沒有任何書指著的那份複本刪掉，不留在本地書資料夾。
-  static Future<void> _discardUnusedCopy(String path, bool unused) async {
-    if (!unused) return;
+  static Future<void> _discardUnusedCopy(String path, bool created) async {
+    if (!created) return;
     try {
       await File(path).delete();
     } on FileSystemException catch (e) {
@@ -365,13 +372,19 @@ class LocalBookService {
     }
   }
 
-  /// 把 [path] 複製進 App 自己的本地書資料夾，回傳複製後的路徑。
+  /// 把 [path] 複製進 App 自己的本地書資料夾，回傳複製後的路徑，以及是不是
+  /// 這次才複製出來的（[created]；失敗時只能刪這種）。
   ///
   /// 選檔器與分享給的檔案在暫存區，系統清暫存後書就打不開。同名同內容的
   /// 檔案視為同一本、不再複製；同名不同內容的另取「書名 (2)」。
-  Future<String> storeInLibrary(String path, {required BookDao bookDao}) async {
+  Future<({String path, bool created})> storeInLibrary(
+    String path, {
+    required BookDao bookDao,
+  }) async {
     final dir = await AppStoragePaths.localBooksDir(ensureExists: true);
-    if (p.equals(p.dirname(path), dir.path)) return path;
+    if (p.equals(p.dirname(path), dir.path)) {
+      return (path: path, created: false);
+    }
 
     final source = File(path);
     final name = p.basenameWithoutExtension(path);
@@ -381,9 +394,11 @@ class LocalBookService {
       if (!await target.exists()) {
         if (await _shelfBookAt(target.path, bookDao)) continue;
         await source.copy(target.path);
-        return target.path;
+        return (path: target.path, created: true);
       }
-      if (await _sameContent(source, target)) return target.path;
+      if (await _sameContent(source, target)) {
+        return (path: target.path, created: false);
+      }
     }
   }
 
@@ -857,11 +872,13 @@ class LocalBookService {
   /// 獲取本地書籍章節內容
   Future<String> getContent(Book book, BookChapter chapter) async {
     final path = filePathOf(book);
-    if (!await File(path).exists()) return '檔案不存在: $path';
+    if (!await File(path).exists()) {
+      throw LocalBookContentException('檔案不存在: $path');
+    }
 
     final ext = localBookExtensionFromPath(path);
     if (!isSupportedLocalBookExtension(ext)) {
-      return '不支援的本地格式: $ext，請使用 TXT 或 EPUB 檔案';
+      throw LocalBookContentException('不支援的本地格式: $ext，請使用 TXT 或 EPUB 檔案');
     }
     final textPath = ext == 'epub' ? await epubTextPath(book) : path;
     final file = File(textPath);
@@ -869,7 +886,7 @@ class LocalBookService {
       try {
         await EpubParser.convert(path, textPath);
       } on EpubFormatException catch (error) {
-        return '讀取本地書籍失敗: ${error.message}';
+        throw LocalBookContentException('讀取本地書籍失敗: ${error.message}');
       }
     }
     // 根據章節索引 (start, end) 指標讀取部分內容 (對標 Android ReadLocalBook.kt)
@@ -881,7 +898,7 @@ class LocalBookService {
           end <= start ||
           start >= fileLength ||
           end > fileLength) {
-        return '本地書索引無效，請重新匯入';
+        throw LocalBookContentException('本地書索引無效，請重新匯入');
       }
       return _queueTxtRead(() async {
         final accessFile = await _getTxtAccessFile(file, textPath);
@@ -894,7 +911,7 @@ class LocalBookService {
       });
     }
     AppLog.d('LocalBookService: Missing offsets for chapter ${chapter.title}');
-    return '本地書索引缺失，請重新匯入';
+    throw LocalBookContentException('本地書索引缺失，請重新匯入');
   }
 
   /// 關掉讀章時留著的檔案；Windows 上開著的檔案刪不掉。

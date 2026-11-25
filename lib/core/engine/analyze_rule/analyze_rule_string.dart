@@ -30,21 +30,19 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     if (input != null && ruleList.isNotEmpty) {
       result = input;
       for (final sourceRule in ruleList) {
+        // 同 Legado `putRule`：先存這一段的 @put（取到空的也存，蓋掉上一次
+        // 存的值），再看上一段有沒有結果。
+        if (sourceRule.putMap.isNotEmpty) {
+          sourceRule.putMap.forEach(
+            (key, valueRule) => put(key, getString(valueRule)),
+          );
+        }
         result = coerceNullInterimResult(result, sourceRule);
         if (result == null) {
           break;
         }
 
         try {
-          if (sourceRule.putMap.isNotEmpty) {
-            sourceRule.putMap.forEach((key, valueRule) {
-              final val = getString(valueRule);
-              if (val.isNotEmpty) {
-                put(key, val);
-              }
-            });
-          }
-
           final made = sourceRule.makeUp(result, this);
           final rule = made.rule;
 
@@ -147,46 +145,49 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     if (input != null && ruleList.isNotEmpty) {
       result = input;
       for (final sourceRule in ruleList) {
+        // 同 Legado `putRule`：先存這一段的 @put（取到空的也存，蓋掉上一次
+        // 存的值），再看上一段有沒有結果。
+        if (sourceRule.putMap.isNotEmpty) {
+          sourceRule.putMap.forEach(
+            (key, valueRule) => put(key, getString(valueRule)),
+          );
+        }
         result = coerceNullInterimResult(result, sourceRule);
         if (result == null) {
           break;
         }
 
         try {
-          if (sourceRule.putMap.isNotEmpty) {
-            sourceRule.putMap.forEach((key, valueRule) {
-              final val = getString(valueRule);
-              if (val.isNotEmpty) {
-                put(key, val);
-              }
-            });
-          }
-
           final made = sourceRule.makeUp(result, this);
           final rule = made.rule;
-          final currentInput = result;
-
-          switch (made.mode) {
-            case Mode.js:
-              result = evalJS(rule, result);
-              break;
-            case Mode.json:
-              result = sourceRule
-                  .getAnalyzeByJSonPath(this, result)
-                  .getStringList(rule);
-              break;
-            case Mode.xpath:
-              result = sourceRule
-                  .getAnalyzeByXPath(this, result)
-                  .getStringList(rule);
-              break;
-            case Mode.regex:
-              result = [rule];
-              break;
-            default:
-              result = sourceRule
-                  .getAnalyzeByJSoup(this, currentInput)
-                  .getStringList(rule);
+          // 同 Legado：規則是空的（只有 `##取代`）時拿目前的內容去取代；組字
+          // 的規則（正則模式）組好就是文字，最後照換行切成一筆筆。組字的
+          // 結果是空的（最後一頁沒有下一頁連結）就是沒有結果，不拿整頁內容。
+          if (rule.isEmpty && sourceRule.isDynamic) {
+            result = '';
+          } else if (rule.isNotEmpty) {
+            switch (made.mode) {
+              case Mode.js:
+                result = evalJS(rule, result);
+                break;
+              case Mode.json:
+                result = sourceRule
+                    .getAnalyzeByJSonPath(this, result)
+                    .getStringList(rule);
+                break;
+              case Mode.xpath:
+                result = sourceRule
+                    .getAnalyzeByXPath(this, result)
+                    .getStringList(rule);
+                break;
+              case Mode.regex:
+                result = rule;
+                break;
+              default:
+                result = sourceRule
+                    .getAnalyzeByJSoup(this, result)
+                    .getStringList(rule);
+            }
           }
 
           if (made.replaceRegex.isNotEmpty) {

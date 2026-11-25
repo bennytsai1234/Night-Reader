@@ -919,6 +919,109 @@ void main() {
       expect((await b.localBooks().plan()).isEmpty, isTrue);
     });
 
+    // 同一個檔在書架上有兩筆（還原了另一台的舊備份）：最近讀過的舊那筆排
+    // 在前面，整組的判斷不能只看它。
+    group('two shelf books with the same file', () {
+      late Book fresh;
+      late String oldUrl;
+
+      /// [fresh] 剛匯入、還沒讀；另加一筆同一個檔、舊備份帶回來的書，
+      /// 最近讀過（排在前面）、加進書架的時間是 [oldAdded]，原檔
+      /// [oldHasFile] 時在這台。
+      Future<void> twoBooks({
+        required int oldAdded,
+        bool oldHasFile = false,
+      }) async {
+        fresh = await a.import('夜航.txt', _novel);
+        await a.books.upsert(
+          (await a.books.getByUrl(fresh.bookUrl))!
+              .copyWith(syncTime: 3000, durChapterTime: 0),
+        );
+        final oldPath = oldHasFile
+            ? p.join(a.root.path, 'docs', 'InkpageBooks', '夜航（舊）.txt')
+            : p.join(a.root.path, 'gone', '夜航.txt');
+        if (oldHasFile) await File(oldPath).writeAsString(_novel);
+        oldUrl = 'local://$oldPath';
+        final chapters = await a.chapters.getByBook(fresh.bookUrl);
+        await a.books.upsert(
+          fresh.copyWith(
+            bookUrl: oldUrl,
+            syncTime: oldAdded,
+            durChapterTime: 9000,
+          ),
+        );
+        await a.chapters.insertChapters([
+          for (final chapter in chapters)
+            chapter.copyWith(bookUrl: oldUrl, url: '$oldUrl#${chapter.index}'),
+        ]);
+        expect((await a.shelf()).first.bookUrl, oldUrl, reason: '舊那筆排前面');
+      }
+
+      void deletedInCloudAt(int time) {
+        store.files[LocalBookSync.fileName] = (
+          SyncDocument({
+            fresh.fileFingerprint!: SyncRecord(
+              time: time,
+              data: const {},
+              deleted: true,
+            ),
+          }).encode(),
+          1,
+        );
+      }
+
+      test('a book added again after the cloud removal is uploaded, not '
+          'removed', () async {
+        await twoBooks(oldAdded: 1000);
+        deletedInCloudAt(2000);
+
+        final plan = await a.localBooks().plan();
+
+        expect(plan.of(LocalBookAction.removeHere), isEmpty);
+        expect(plan.of(LocalBookAction.upload), hasLength(1));
+      });
+
+      test('the same holds when both files are here', () async {
+        await twoBooks(oldAdded: 1000, oldHasFile: true);
+        deletedInCloudAt(2000);
+
+        final plan = await a.localBooks().plan();
+
+        expect(plan.of(LocalBookAction.removeHere), isEmpty);
+        expect(plan.of(LocalBookAction.upload), hasLength(1));
+      });
+
+      test('the one whose file is missing still gets it back from the '
+          'cloud', () async {
+        await twoBooks(oldAdded: 1000);
+        store.files[LocalBookSync.fileName] = (
+          SyncDocument({
+            fresh.fileFingerprint!: SyncRecord(
+              time: 2000,
+              data: {'name': '夜航', 'author': '', 'ext': 'txt', 'size': 10},
+            ),
+          }).encode(),
+          1,
+        );
+
+        final plan = await a.localBooks().plan();
+
+        expect(plan.of(LocalBookAction.download), hasLength(1));
+      });
+
+      test('the file that is here is uploaded when the other one is '
+          'missing', () async {
+        await twoBooks(oldAdded: 1000);
+
+        final upload = (await a.localBooks().plan())
+            .of(LocalBookAction.upload)
+            .single;
+
+        expect(upload.path, LocalBookService.filePathOf(fresh));
+        expect(upload.bookUrls, unorderedEquals([fresh.bookUrl, oldUrl]));
+      });
+    });
+
     test('a phone that never pressed the button does not show the book, and '
         'importing the same file there picks up the progress', () async {
       final mine = await a.import('夜航.txt', _novel);
@@ -1170,6 +1273,64 @@ void main() {
         p.join(a.root.path, 'docs', 'InkpageBooks', '夜航 (再匯入).txt'),
       );
       expect(copied.existsSync(), isFalse);
+    });
+
+    // 這台有一本好好的「夜航」，又還原了另一台的備份帶回同一個檔的另一筆
+    // （原檔在那台的路徑、寫不回去）。再選一次同名同內容的檔補那一筆時，
+    // 本地書資料夾裡那份是好的那本在用的，不是這次複製的，不能刪。
+    group('repairing a book whose original sits where another book already '
+        'keeps the same file', () {
+      late Book kept;
+      late String keptPath;
+      late String lostUrl;
+
+      setUp(() async {
+        kept = await a.import('夜航.txt', _novel);
+        keptPath = LocalBookService.filePathOf(kept);
+        final blocked = File(p.join(a.root.path, 'blocked'));
+        await blocked.writeAsString('不是資料夾');
+        lostUrl = 'local://${p.join(blocked.path, '夜航.txt')}';
+        final chapters = await a.chapters.getByBook(kept.bookUrl);
+        await a.books.upsert(kept.copyWith(bookUrl: lostUrl));
+        await a.chapters.insertChapters([
+          for (final chapter in chapters)
+            chapter.copyWith(
+              bookUrl: lostUrl,
+              url: '$lostUrl#${chapter.index}',
+            ),
+        ]);
+      });
+
+      test('keeps that file when the repair succeeds', () async {
+        await a.import('夜航.txt', _novel);
+
+        expect(File(keptPath).readAsStringSync(), _novel);
+        expect(await a.books.getByUrl(kept.bookUrl), isNotNull);
+        final shelf = await a.shelf();
+        expect(shelf, hasLength(2));
+        for (final book in shelf) {
+          final path = LocalBookService.filePathOf(book);
+          expect(File(path).readAsStringSync(), _novel, reason: path);
+        }
+      });
+
+      test('keeps that file when the repair fails', () async {
+        final picked = File(p.join(a.root.path, 'picked', '夜航.txt'));
+        await picked.parent.create(recursive: true);
+        await picked.writeAsString(_novel);
+
+        await expectLater(
+          LocalBookService().addToShelf(
+            picked.path,
+            bookDao: a.books,
+            chapterDao: _FailingChapterDao(a.db),
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        expect(File(keptPath).readAsStringSync(), _novel);
+        expect(await a.books.getByUrl(lostUrl), isNotNull);
+      });
     });
 
     test('removing one of two books that share an original keeps the '

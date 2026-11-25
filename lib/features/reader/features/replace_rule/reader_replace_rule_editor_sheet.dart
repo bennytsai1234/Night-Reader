@@ -29,14 +29,18 @@ class ReaderReplaceRuleEditorSheet extends StatefulWidget {
   final String? testSample;
   final Future<void> Function(ReplaceRule rule) onSave;
 
+  /// 打開編輯畫面，關掉之後才完成。按了「儲存」、還沒存好就被關掉（返回鍵、
+  /// 點遮罩、往下拉）時，等存好（或存不進去）才完成：呼叫的一方關掉之後看
+  /// 存了沒、要不要重載正文，看到的是真的結果。
   static Future<void> show(
     BuildContext context, {
     ReplaceRule? rule,
     String? testSample,
     required Future<void> Function(ReplaceRule rule) onSave,
     BoxConstraints? constraints,
-  }) {
-    return AppBottomSheet.showCustom<void>(
+  }) async {
+    Future<void>? saving;
+    await AppBottomSheet.showCustom<void>(
       context: context,
       // 從閱讀器打開時對齊正文（ReaderMenuSheet.constraintsFor）。
       constraints: constraints,
@@ -44,9 +48,11 @@ class ReaderReplaceRuleEditorSheet extends StatefulWidget {
       builder: (_) => ReaderReplaceRuleEditorSheet(
         rule: rule,
         testSample: testSample,
-        onSave: onSave,
+        onSave: (rule) => saving = onSave(rule),
       ),
     );
+    // 存不進去的錯誤由編輯畫面提示（還開著時）；這裡只等它結束。
+    await saving?.catchError((Object _) {});
   }
 
   @override

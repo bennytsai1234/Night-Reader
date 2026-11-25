@@ -55,6 +55,9 @@ class AnalyzeByXPath {
       }
     } else if (doc is Element) {
       _initFromElement(doc);
+    } else if (doc is Document) {
+      // 整份網頁照網頁讀，`/html/body/…` 這種絕對路徑才查得到。
+      _initFromHtml(_prepareHtml(doc.outerHtml));
     } else if (doc is List) {
       // 上一條規則找到的一組元素：只有一個時從它查，多個時接成一份網頁。
       final single = elementsListSingle(doc);
@@ -160,10 +163,6 @@ class AnalyzeByXPath {
   /// (原 Android 的) strToJXDocument，處理表格標籤補全
   String _prepareHtml(String html) {
     var h = html.trim();
-    h = h.replaceAllMapped(
-      RegExp(r'""(?=\s+[a-zA-Z_:][-a-zA-Z0-9_:.]*=)'),
-      (_) => '"',
-    );
     if (h.endsWith('</td>')) {
       h = '<tr>$h</tr>';
     }

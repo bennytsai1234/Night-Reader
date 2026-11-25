@@ -14,6 +14,9 @@ abstract class AnalyzeByCssBase {
     final htmlLike = _extractHtmlLikeContent(doc);
     if (doc is Element) {
       element = doc;
+    } else if (doc is Document && doc.documentElement != null) {
+      // 規則 JS 交來的整份網頁（Jsoup 的 Document 也是 Element）。
+      element = doc.documentElement!;
     } else if (doc is XPathNode) {
       // XPath 找到的節點交給 CSS 規則時直接用裡面的元素，同 Legado
       // `AnalyzeByJSoup.parse` 的 `doc.asElement()`；`toString()` 只有標籤名稱。
