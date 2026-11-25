@@ -43,6 +43,7 @@ import 'package:night_reader/core/network/concurrent_rate_limiter.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/features/search/search_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:night_reader/core/storage/moved_chapters.dart';
 
 import '../../test_helper.dart';
 
@@ -1310,6 +1311,60 @@ void main() {
     final chapters = await ChapterDao(db).getByBook(book.bookUrl);
     expect(chapters.map((c) => c.title), ['第一章', '第二章', '第三章']);
     expect((await BookDao(db).getByUrl(book.bookUrl))!.totalChapterNum, 3);
+  });
+
+  test('檢查更新認出書源換了網址的章，畫面執行緒存進度照它找到同一章', () async {
+    addTearDown(MovedChapters.clear);
+    await BookSourceDao(db).upsert(
+      BookSource.fromJson({
+        'bookSourceUrl': baseUrl,
+        'bookSourceName': '本機',
+        'ruleBookInfo': {'name': 'tag.h1@text', 'author': 'class.author@text'},
+        'ruleToc': {
+          'chapterList': 'class.list@a',
+          'chapterName': 'a@text',
+          'chapterUrl': 'a@href',
+        },
+      }),
+    );
+    final book = Book(
+      bookUrl: '$baseUrl/book/1',
+      origin: baseUrl,
+      name: '夜讀',
+      author: '作者',
+      isInBookshelf: true,
+      totalChapterNum: 2,
+    );
+    await BookDao(db).upsert(book);
+    // 存著的目錄裡第二章是舊網址；書源現在給 /c/2。
+    await ChapterDao(db).replaceByBook(book.bookUrl, [
+      BookChapter(
+        url: '$baseUrl/c/1',
+        title: '第一章',
+        bookUrl: book.bookUrl,
+        index: 0,
+      ),
+      BookChapter(
+        url: '$baseUrl/old/2',
+        title: '第二章',
+        bookUrl: book.bookUrl,
+        index: 1,
+      ),
+    ]);
+
+    final result = await BookUpdateService(
+      keepDownloaded: (url, {hasNewChapters = false}) async {},
+    ).check(book);
+
+    expect(result.error, isNull);
+    expect(
+      await MovedChapters.indexOf(
+        ChapterDao(db),
+        book.bookUrl,
+        '$baseUrl/old/2',
+      ),
+      1,
+    );
   });
 
   group('BookSourceService work goes through the source isolate', () {

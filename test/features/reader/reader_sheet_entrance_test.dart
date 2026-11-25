@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/features/reader/chapter/reader_content_transformer.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
@@ -256,7 +257,14 @@ void main() {
     await openReaderOn(tester, longSample: true);
     await expectSteadyEntrance(tester, '替換規則');
     final field = tester.widget<TextField>(find.byType(TextField));
-    expect(field.controller!.text, longParagraph);
+    // 測試原文是規則看到的寫法：轉過繁簡（預設簡轉繁，ADR 0084）。
+    final converted = await tester.runAsync(
+      () => ReaderContentTransformer.sourceParagraphs(
+        rawContent: longParagraph,
+        chineseConvertType: 1,
+      ),
+    );
+    expect(field.controller!.text, converted!.single);
     expect((field.minLines, field.maxLines), (3, 3));
     await closePanel(tester);
     await finish(tester);

@@ -7,6 +7,7 @@ import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/session/reader_open_target.dart';
+import 'package:night_reader/core/storage/moved_chapters.dart';
 
 class ReaderSessionFacade {
   const ReaderSessionFacade();
@@ -44,7 +45,8 @@ class ReaderSessionFacade {
       );
       final index = location.chapterIndex;
       if (!storedChapters && index >= 0 && index < chapters.length) {
-        final moved = await chapterDao.indexOfUrl(
+        final moved = await MovedChapters.indexOf(
+          chapterDao,
           book.bookUrl,
           chapters[index].url,
         );

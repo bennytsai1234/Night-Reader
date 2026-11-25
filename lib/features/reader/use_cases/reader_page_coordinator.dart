@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
@@ -12,7 +11,6 @@ import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/features/reader/features/highlight/reader_highlights.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
-import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
 import 'package:night_reader/features/reader/chapter/reader_content_transformer.dart';
 import 'package:night_reader/features/reader/features/replace_rule/selection_source_text.dart';
 import 'package:night_reader/features/reader/text_view/overlay/selection_service.dart';
@@ -360,6 +358,8 @@ class ReaderPageCoordinator {
                 book.name,
                 book.origin,
               ),
+              chineseConvertType: runtime.repository.currentChineseConvert(),
+              onRuleTimedOut: runtime.repository.disableTimedOutRule,
             );
       final found = stage == null ? null : selectionSourceOf(selection, stage);
       if (found == null) {
@@ -588,34 +588,32 @@ class ReaderPageCoordinator {
     }
   }
 
-  /// 替換規則即時測試的預設文字：畫面頂端那一段的原文（套用替換規則之前，
-  /// 規則才測得出效果）。原文存在手機裡才有；取不到時回傳 null。
+  /// 替換規則即時測試的預設文字：畫面頂端那一段的原文（轉過繁簡、套用替換
+  /// 規則之前，規則才測得出效果）。用畫面上這一份正文排版時的原文
+  /// （[ReaderChapterRepository.rawContentOf]，同選字找原文）：存著的正文換過
+  /// （單章借源、重新取得本章）而畫面還沒換時，不拿新的原文對舊的段落。
+  /// 取不到時回傳 null。
   Future<String?> _replaceTestSample() async {
     final runtime = _host.runtime;
-    final contentDao = _host.dependencies.readerChapterContentDao;
-    if (runtime == null || contentDao == null) return null;
+    if (runtime == null) return null;
     final location = runtime.state.visibleLocation;
     final chapter = runtime.chapterAt(location.chapterIndex);
-    if (chapter == null) return null;
-    final String? raw;
-    try {
-      raw = await ReaderChapterContentStore(
-        chapterDao: _host.dependencies.chapterDao,
-        contentDao: contentDao,
-      ).getRawContent(book: _host.book, chapter: chapter);
-    } catch (error, stack) {
-      AppLog.e('讀取替換規則測試文字失敗: $error', error: error, stackTrace: stack);
-      return null;
-    }
-    if (raw == null) return null;
-    // 讀到時面板常還在滑入：整章切段落與段落修復在另一個 isolate 做，不算
-    // 整章的雜湊。
-    final paragraphs = await _sourceParagraphsInBackground(raw);
-    if (paragraphs.isEmpty) return null;
     final shown = runtime.repository.cachedContent(location.chapterIndex);
-    final index = shown == null
-        ? 0
-        : paragraphIndexAt(shown, location.charOffset);
+    if (chapter == null || shown == null) return null;
+    final raw = runtime.repository.rawContentOf(
+      location.chapterIndex,
+      shown.contentHash,
+    );
+    if (raw == null) return null;
+    // 讀到時面板常還在滑入：整章切段落、段落修復與繁簡轉換在另一個
+    // isolate 做，不算整章的雜湊。
+    final convertType = runtime.repository.currentChineseConvert();
+    final paragraphs = await ReaderContentTransformer.sourceParagraphs(
+      rawContent: raw,
+      chineseConvertType: convertType,
+    );
+    if (paragraphs.isEmpty) return null;
+    final index = paragraphIndexAt(shown, location.charOffset);
     // 畫面上的第幾段是替換規則套用之後的：規則整段刪掉（「隱藏」）、合併或
     // 拆開段落時，和原文的第幾段對不上，照規則套用後的段落對回原文。
     final book = _host.book;
@@ -632,6 +630,8 @@ class ReaderPageCoordinator {
           book.name,
           book.origin,
         ),
+        chineseConvertType: convertType,
+        onRuleTimedOut: runtime.repository.disableTimedOutRule,
       );
       return sourceParagraphAt(paragraphs, stage.paragraphs, index);
     } catch (error, stack) {
@@ -639,10 +639,6 @@ class ReaderPageCoordinator {
       return paragraphs[index.clamp(0, paragraphs.length - 1)];
     }
   }
-
-  /// 靜態函式建立的閉包只帶著 [raw] 進另一個 isolate，不帶這個協調器。
-  static Future<List<String>> _sourceParagraphsInBackground(String raw) =>
-      Isolate.run(() => ReaderContent.sourceParagraphsOf(raw));
 
   /// 音量鍵翻頁：音量下是下一頁、音量上是上一頁。
   Future<void> movePage({required bool forward}) => _movePage(forward: forward);

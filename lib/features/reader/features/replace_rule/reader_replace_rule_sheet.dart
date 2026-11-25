@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -194,7 +195,11 @@ class _ReaderReplaceRuleSheetState extends State<ReaderReplaceRuleSheet> {
       if (!mounted) return;
       // 規則在另一個 isolate 跑，逾時就停（[ReplaceRulePreview]）；面板關掉
       // 時作廢，傳回 null。
-      final result = await _preview.run(rules, text);
+      final result = await _preview.run(
+        rules,
+        text,
+        chineseConvertType: ChineseDisplay.mode.value,
+      );
       if (!mounted || result == null) return;
       // 規則跑出來的字照原文，逾時這類 App 的說明照介面語言（ADR 0066）。
       setState(

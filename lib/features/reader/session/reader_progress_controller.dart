@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/storage/moved_chapters.dart';
 import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
 
 import 'reader_location.dart';
@@ -13,7 +14,11 @@ class ReaderProgressController {
     required this.repository,
     required this.bookDao,
     this.debounce = const Duration(milliseconds: 400),
-  });
+  }) {
+    _moves = MovedChapters.recorded
+        .where((bookUrl) => bookUrl == book.bookUrl)
+        .listen((_) => _rewriteLast());
+  }
 
   final Book book;
   final ReaderChapterRepository repository;
@@ -25,6 +30,8 @@ class ReaderProgressController {
   Future<void>? _activeFlush;
   bool _disposed = false;
   bool _retired = false;
+  ReaderLocation? _lastWritten;
+  late final StreamSubscription<String> _moves;
 
   /// 目錄要換掉之前（改編碼）：不再排進度、不再寫；已經排著的那筆丟掉，
   /// 換好的進度由 [LocalBookService.changeCharset] 寫。
@@ -78,7 +85,18 @@ class ReaderProgressController {
     }
   }
 
+  /// 檢查更新換了這本書的目錄、傳回換了網址的章時：上一筆進度可能是在
+  /// 資料庫換好目錄、對應還沒傳回來的那一下存的，照舊序號寫了，重存一次。
+  void _rewriteLast() {
+    final last = _lastWritten;
+    if (_disposed || _retired || last == null || _pendingLocation != null) {
+      return;
+    }
+    unawaited(saveImmediately(last));
+  }
+
   Future<void> _write(ReaderLocation location) async {
+    _lastWritten = location;
     final normalized = location.normalized(
       chapterCount: repository.chapterCount,
     );
@@ -96,8 +114,9 @@ class ReaderProgressController {
     final anchorJson = jsonEncode(persisted.toJson());
     // 閱讀器開著時，檢查更新可能已換上新目錄、章節重新編號（書源在中間
     // 插入或刪除章節）；閱讀器手上仍是開書時的目錄。寫進資料庫的序號依
-    // 章節網址換成目前目錄的，下次開書才落在同一章。目錄裡已經沒有這一章
-    // 時照閱讀器的序號寫。查序號與寫進度在同一個交易裡，中間不會被換目錄。
+    // 章節網址換成目前目錄的（書源換了網址的章照換目錄時記下的新網址，
+    // [MovedChapters]），下次開書才落在同一章。目錄裡已經沒有這一章時照
+    // 閱讀器的序號寫。查序號與寫進度在同一個交易裡，中間不會被換目錄。
     final chapter = repository.chapterAt(normalized.chapterIndex);
     book.chapterIndex = normalized.chapterIndex;
     book.charOffset = normalized.charOffset;
@@ -109,7 +128,7 @@ class ReaderProgressController {
     await chapterDao.transaction(() async {
       final storedIndex = chapter == null
           ? null
-          : await chapterDao.indexOfUrl(book.bookUrl, chapter.url);
+          : await MovedChapters.indexOf(chapterDao, book.bookUrl, chapter.url);
       final persistedIndex = storedIndex ?? normalized.chapterIndex;
       movedAt = await bookDao.updateProgress(
         book.bookUrl,
@@ -134,6 +153,7 @@ class ReaderProgressController {
 
   void dispose() {
     _disposed = true;
+    unawaited(_moves.cancel());
     _timer?.cancel();
     _timer = null;
     // debounce 中的進度不能跟著 dispose 一起丟——閱讀器關閉時把最後一筆
