@@ -221,11 +221,13 @@ class BookDetailProvider extends ChangeNotifier {
   bool get supportsBackgroundDownload => !_book.isLocal;
   DownloadService get _resolvedDownloadService =>
       _downloadService ??= DownloadService();
+
+  /// 書源狀態照校驗結果寫（同讀書這一側，不看「啟用」：停用只管搜尋，在
+  /// 書源管理看得到）。
   String get sourceStatusLabel {
     if (_book.isLocal) return '本地';
     final source = _currentSource;
     if (source == null) return '找不到書源';
-    if (!source.enabled) return '停用';
     return source.runtimeHealth.label;
   }
 
@@ -233,14 +235,12 @@ class BookDetailProvider extends ChangeNotifier {
     if (_book.isLocal) return '本地書籍不依賴線上書源';
     final source = _currentSource;
     if (source == null) return '目前找不到這本書對應的書源';
-    if (!source.enabled) return '書源已停用';
     return source.runtimeHealth.description;
   }
 
   bool get sourceStatusIsHealthy =>
       _book.isLocal ||
       (_currentSource != null &&
-          _currentSource!.enabled &&
           _currentSource!.runtimeHealth.category ==
               SourceHealthCategory.healthy);
 

@@ -300,8 +300,7 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
   /// 只先篩開關與發現網址；哪幾類能進發現由
   /// [BookSourceLogic.canParticipateInDiscovery] 判斷。
   static const String _discoveryWhereClause = '''
-      WHERE enabled = 1
-        AND enabledExplore = 1
+      WHERE enabledExplore = 1
         AND COALESCE(TRIM(exploreUrl), '') <> ?
       ''';
 

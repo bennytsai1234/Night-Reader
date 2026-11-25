@@ -26,10 +26,15 @@ abstract class ReaderTtsSheetController extends Listenable {
   double get pitch;
   SleepTimer get sleepTimer;
 
+  /// 正在念一句或暫停在那句：上一句、下一句按得動。
+  bool get canSkipSentence;
+
   Future<void> toggle();
   Future<void> stop();
   Future<void> setRate(double value);
   Future<void> setPitch(double value);
+  Future<void> skipToPreviousSentence();
+  Future<void> skipToNextSentence();
 }
 
 /// 閱讀器內的朗讀面板內容；由 ReaderMenuSheet 以選單配色開啟。
@@ -65,6 +70,26 @@ class ReaderTtsPanel extends StatelessWidget {
                   },
                   showChevron: false,
                   onTap: () => unawaited(tts.toggle()),
+                ),
+                GroupedRow(
+                  leading: const GroupedIconTile(
+                    Icons.skip_previous_rounded,
+                    tint: AppTint.azurite,
+                  ),
+                  title: '上一句',
+                  showChevron: false,
+                  enabled: tts.canSkipSentence,
+                  onTap: () => unawaited(tts.skipToPreviousSentence()),
+                ),
+                GroupedRow(
+                  leading: const GroupedIconTile(
+                    Icons.skip_next_rounded,
+                    tint: AppTint.azurite,
+                  ),
+                  title: '下一句',
+                  showChevron: false,
+                  enabled: tts.canSkipSentence,
+                  onTap: () => unawaited(tts.skipToNextSentence()),
                 ),
                 GroupedRow(
                   leading: const GroupedIconTile(
