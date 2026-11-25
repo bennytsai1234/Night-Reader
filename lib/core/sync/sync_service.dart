@@ -777,6 +777,7 @@ class SyncService {
         fingerprint: fingerprint,
         hasOwnTime: kind.hasOwnTime,
         syncsDeletion: kind.syncsDeletion,
+        addedTimeOf: kind.addedTimeOf,
       );
       final plan = await planSyncMergeOn(
         _runner,

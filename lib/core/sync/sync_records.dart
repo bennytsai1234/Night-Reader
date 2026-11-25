@@ -110,6 +110,10 @@ class SyncBaseEntry {
 /// 一筆的內容指紋怎麼算。
 typedef SyncFingerprint = String Function(SyncRecord record);
 
+/// 一筆內容裡記著的加入時間（書架的加入書架時間）；從沒同步過、雲端那筆
+/// 是刪除紀錄時拿來和刪掉的時間比。沒有這種時間的種類不給，雲端的刪除贏。
+typedef SyncAddedTime = int? Function(SyncRecord record);
+
 String defaultSyncFingerprint(SyncRecord record) => record.fingerprint;
 
 /// 讀到雲端之後，拿掉已經不算數的筆。

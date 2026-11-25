@@ -226,6 +226,7 @@ class _Phone {
     int chapterIndex = 0,
     int charOffset = 0,
     int time = 0,
+    int addedTime = 0,
     String name = '夜航',
     String author = '某人',
     int type = 0,
@@ -244,6 +245,7 @@ class _Phone {
         durChapterTitle: toc[chapterIndex],
         durChapterTime: time,
         progressTime: time,
+        syncTime: addedTime,
       ),
     );
     await chapters.insertChapters([
@@ -1267,6 +1269,62 @@ void main() {
       expect(await a.books.getInBookshelf(), isEmpty);
     });
 
+    test('a book added after the other phone removed it stays on a phone '
+        'syncing for the first time and goes up', () async {
+      // A 把「夜航」移出書架，雲端只剩刪除紀錄；B 之後才自己把同一本加進
+      // 書架。B 第一次同步不該照雲端刪掉，雲端這筆改成 B 這本（ADR 0039）。
+      await a.addBook('a-src', toc: toc, time: 100);
+      await a.sync.syncAll();
+      await a.books.deleteByUrl('a-src');
+      await a.sync.syncAll();
+      final removed = SyncDocument.decode(store.files['bookshelf.json']!.$1)
+          .records['夜航\t某人']!;
+      expect(removed.deleted, isTrue);
+
+      await b.addBook(
+        'b-src',
+        toc: toc,
+        time: 50,
+        addedTime: removed.time + 1000,
+      );
+      await b.sync.syncAll();
+
+      expect(b.discarded, isEmpty);
+      expect((await b.book('b-src')).isInBookshelf, isTrue);
+      final cloud = SyncDocument.decode(store.files['bookshelf.json']!.$1)
+          .records['夜航\t某人']!;
+      expect(cloud.deleted, isFalse);
+      expect(cloud.data['bookUrl'], 'b-src');
+    });
+
+    test('a book added before the other phone removed it is removed on a '
+        'phone syncing for the first time', () async {
+      // B 先加了這本書，A 之後才移出書架：雲端那筆刪除比較新，照雲端刪。
+      await a.addBook('a-src', toc: toc, time: 100);
+      await a.sync.syncAll();
+      await a.books.deleteByUrl('a-src');
+      await a.sync.syncAll();
+      final removed = SyncDocument.decode(store.files['bookshelf.json']!.$1)
+          .records['夜航\t某人']!;
+
+      await b.addBook(
+        'b-src',
+        toc: toc,
+        time: 50,
+        addedTime: removed.time - 1000,
+      );
+      await b.sync.syncAll();
+
+      expect(b.discarded, ['b-src']);
+      expect(await b.books.getByUrl('b-src'), isNull);
+      expect(
+        SyncDocument.decode(store.files['bookshelf.json']!.$1)
+            .records['夜航\t某人']!
+            .deleted,
+        isTrue,
+      );
+    });
+
     test('local books stay out of the shelf sync; one an older version sent '
         'is not added elsewhere and does not remove the other phone\'s '
         'book', () async {
@@ -2027,6 +2085,21 @@ void main() {
 
       await a.sources.deleteByUrl('https://src.example');
       await a.sync.syncAll();
+      await b.sync.syncAll();
+
+      expect(await b.sources.getByUrl('https://src.example'), isNull);
+    });
+
+    test('a source on a phone syncing for the first time is still deleted '
+        'when the other phone removed it', () async {
+      // 書源沒有加入時間：從沒同步過的這台遇到雲端的刪除紀錄照雲端刪
+      // （ADR 0039）。
+      await a.sources.upsert(source('書源'));
+      await a.sync.syncAll();
+      await a.sources.deleteByUrl('https://src.example');
+      await a.sync.syncAll();
+
+      await b.sources.upsert(source('書源'));
       await b.sync.syncAll();
 
       expect(await b.sources.getByUrl('https://src.example'), isNull);

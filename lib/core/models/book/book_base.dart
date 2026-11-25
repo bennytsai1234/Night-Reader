@@ -47,7 +47,7 @@ class BookBase {
   int originOrder; // 書源排序
   String? variable; // 自定義變量
   ReadConfig? readConfig; // 閱讀設置
-  int syncTime; // 同步時間
+  int syncTime; // 加入書架的時間；書架照它排序，同步比雲端的刪除紀錄（ADR 0039）
   bool isInBookshelf; // 是否在書架上 (iOS 特有標記)
 
   /// 本地書原檔內容的指紋（SHA-256）：多台手機用它認同一本本地書，對上閱讀
