@@ -157,6 +157,36 @@ final class ReaderTextSelection {
   /// 朗讀的分句、在開頭所在的那一段裡切。位置和閱讀進度同一套（章內第幾
   /// 個字，綁上這一章正文的身分與前後原文）。
   SelectionBookmark get asBookmark {
+    final sentence = _sentenceAtStart;
+    final start = sentence.start;
+    final end = math.max(range.end, sentence.end);
+    return (
+      location: ReaderLocation(chapterIndex: chapterIndex, charOffset: start)
+          .withContentIdentity(
+            contentHash: blocks.contentHash,
+            displayText: blocks.displayText,
+          ),
+      chapterTitle: blocks.title,
+      excerpt: blocks.displayText.substring(start, end).trim(),
+    );
+  }
+
+  /// 選字「朗讀」的起點：選取開頭那一句的句首。分句與書籤 [asBookmark]
+  /// 同一套（朗讀的分句，在開頭所在的那一段裡切）。
+  ReaderLocation get asSpeechStart {
+    final sentence = _sentenceAtStart;
+    return ReaderLocation(
+      chapterIndex: chapterIndex,
+      charOffset: sentence.start,
+    ).withContentIdentity(
+      contentHash: blocks.contentHash,
+      displayText: blocks.displayText,
+    );
+  }
+
+  /// 選取開頭所在那一句在 displayText 的範圍；開頭那一句切不出來時是空的
+  /// 選取範圍。
+  ChapterTextRange get _sentenceAtStart {
     final paragraph =
         blocks.sourceParagraphRange(
           blocks.blockForCharOffset(range.start).key,
@@ -167,8 +197,6 @@ final class ReaderTextSelection {
       paragraph.end,
     );
     final local = range.start - paragraph.start;
-    var start = range.start;
-    var end = range.end;
     for (final sentence in const ReaderTtsSegmenter().segment(
       text: paragraphText,
       chapterIndex: chapterIndex,
@@ -176,20 +204,13 @@ final class ReaderTextSelection {
     )) {
       if (sentence.startCharOffset > local) break;
       if (local < sentence.endCharOffset) {
-        start = paragraph.start + sentence.startCharOffset;
-        end = math.max(end, paragraph.start + sentence.endCharOffset);
-        break;
+        return ChapterTextRange(
+          paragraph.start + sentence.startCharOffset,
+          paragraph.start + sentence.endCharOffset,
+        );
       }
     }
-    return (
-      location: ReaderLocation(chapterIndex: chapterIndex, charOffset: start)
-          .withContentIdentity(
-            contentHash: blocks.contentHash,
-            displayText: blocks.displayText,
-          ),
-      chapterTitle: blocks.title,
-      excerpt: blocks.displayText.substring(start, end).trim(),
-    );
+    return ChapterTextRange(range.start, range.start);
   }
 
   /// 把選到的字畫上標註：從選取開頭畫到結尾，頭尾的空白不算（全是空白時
