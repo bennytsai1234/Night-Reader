@@ -93,8 +93,7 @@ class SyncSettings {
   Future<void> disable() async {
     final prefs = await _ensure();
     await prefs.setString(_spaceKey, 'none');
-    await prefs.remove(lastSyncKey);
-    await prefs.remove(lastSyncSpaceKey);
+    await _forgetLastSync(prefs);
   }
 
   /// 這台手機的名字，第一次用到時隨機產生。
@@ -109,6 +108,14 @@ class SyncSettings {
     ].join();
     await prefs.setString(deviceIdKey, id);
     return id;
+  }
+
+  /// 換了同步空間：上一個空間的時間不留（升級前存的沒記空間，靠這裡清）。
+  Future<void> forgetLastSync() async => _forgetLastSync(await _ensure());
+
+  static Future<void> _forgetLastSync(SharedPreferences prefs) async {
+    await prefs.remove(lastSyncKey);
+    await prefs.remove(lastSyncSpaceKey);
   }
 
   /// 現在這個同步空間上次全面同步做完的時間；沒做完過、或記的是別的空間

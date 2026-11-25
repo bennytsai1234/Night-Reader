@@ -350,6 +350,8 @@ class SyncService {
     _settled.clear();
     await _bases.clear();
     await _bases.writeJson(_ownerFile, {'space': identity});
+    await _settings.forgetLastSync();
+    status.value = status.value.copyWith(clearLastSyncAt: true);
     return true;
   }
 
