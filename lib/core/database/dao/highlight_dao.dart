@@ -94,6 +94,21 @@ class HighlightDao extends DatabaseAccessor<AppDatabase>
         );
   }
 
+  /// 這本書的目錄要翻過來：還沒記方向的標註記成翻之前的方向（同
+  /// [BookmarkDao.recordTocDirection]）。
+  Future<void> recordTocDirection({
+    required String bookName,
+    required String bookAuthor,
+    required bool reversed,
+  }) =>
+      (update(highlights)..where(
+            (t) =>
+                t.bookName.equals(bookName) &
+                t.bookAuthor.equals(bookAuthor) &
+                t.tocReversed.isNull(),
+          ))
+          .write(HighlightsCompanion(tocReversed: Value(reversed)));
+
   /// 一本書換了書源：標註跟著搬到新書源那本，每個對到新目錄裡的同一章
   /// （同 [BookmarkDao.moveToSource]）。
   Future<void> moveToSource({
@@ -102,6 +117,8 @@ class HighlightDao extends DatabaseAccessor<AppDatabase>
     required String toName,
     required String toAuthor,
     required int oldTotalCount,
+    required bool fromReversed,
+    required bool toReversed,
     required List<BookChapter> chapters,
   }) async {
     final items =
@@ -110,12 +127,25 @@ class HighlightDao extends DatabaseAccessor<AppDatabase>
                   t.bookName.equals(fromName) & t.bookAuthor.equals(fromAuthor),
             ))
             .get();
+    // 記下的序號換成舊書目錄（[fromReversed]）裡的序號：記下時的方向不同
+    // 就從另一頭數。
+    int oldTocIndex(int index, bool? counted) =>
+        counted != null &&
+            counted != fromReversed &&
+            index >= 0 &&
+            index < oldTotalCount
+        ? oldTotalCount - 1 - index
+        : index;
     final moved = <Highlight>[];
     for (final item in items) {
-      var next = item.copyWith(bookName: toName, bookAuthor: toAuthor);
+      var next = item.copyWith(
+        bookName: toName,
+        bookAuthor: toAuthor,
+        tocReversed: item.tocReversed ?? fromReversed,
+      );
       if (chapters.isNotEmpty) {
         final index = alignChapterIndex(
-          oldIndex: item.chapterIndex,
+          oldIndex: oldTocIndex(item.chapterIndex, item.tocReversed),
           oldTitle: item.chapterTitle,
           oldTotalCount: oldTotalCount,
           newChapters: chapters,
@@ -123,12 +153,14 @@ class HighlightDao extends DatabaseAccessor<AppDatabase>
         next = next.copyWith(
           chapterIndex: index,
           chapterTitle: chapters[index].title,
+          tocReversed: toReversed,
         );
       }
       if (next.bookName == item.bookName &&
           next.bookAuthor == item.bookAuthor &&
           next.chapterIndex == item.chapterIndex &&
-          next.chapterTitle == item.chapterTitle) {
+          next.chapterTitle == item.chapterTitle &&
+          next.tocReversed == item.tocReversed) {
         continue;
       }
       moved.add(next);

@@ -91,16 +91,36 @@ class BookmarkDao extends DatabaseAccessor<AppDatabase>
         );
   }
 
+  /// 這本書（書名加作者）的目錄要翻過來（反轉目錄）：還沒記方向的書籤
+  /// 記成翻之前的方向 [reversed]，序號不動，之後照記下的方向數
+  /// （`chapterIndexByTitle`，ADR 0085）。已經記了的不動：同名同作者好幾個
+  /// 書源共用的書籤，翻哪一本、翻幾本都只記一次。
+  Future<void> recordTocDirection({
+    required String bookName,
+    required String bookAuthor,
+    required bool reversed,
+  }) =>
+      (update(bookmarks)..where(
+            (t) =>
+                t.bookName.equals(bookName) &
+                t.bookAuthor.equals(bookAuthor) &
+                t.tocReversed.isNull(),
+          ))
+          .write(BookmarksCompanion(tocReversed: Value(reversed)));
+
   /// 一本書換了書源：書籤跟著搬到新書源那本（書名、作者照新書源的寫法），
   /// 每個書籤對到新目錄裡的同一章（同換源時的閱讀進度：先找同名的章，再照
-  /// 章號與比例估）。章內第幾個字照舊，跳回時由閱讀器照錨點的前後原文在
-  /// 新的正文裡找回同一句。
+  /// 章號與比例估），記下新書的目錄方向 [toReversed]（[fromReversed] 是舊書
+  /// 的）。章內第幾個字照舊，跳回時由閱讀器照錨點的前後原文在新的正文裡
+  /// 找回同一句。
   Future<void> moveToSource({
     required String fromName,
     required String fromAuthor,
     required String toName,
     required String toAuthor,
     required int oldTotalCount,
+    required bool fromReversed,
+    required bool toReversed,
     required List<BookChapter> chapters,
   }) async {
     final items =
@@ -109,12 +129,25 @@ class BookmarkDao extends DatabaseAccessor<AppDatabase>
                   t.bookName.equals(fromName) & t.bookAuthor.equals(fromAuthor),
             ))
             .get();
+    // 記下的序號換成舊書目錄（[fromReversed]）裡的序號：記下時的方向不同
+    // 就從另一頭數。
+    int oldTocIndex(int index, bool? counted) =>
+        counted != null &&
+            counted != fromReversed &&
+            index >= 0 &&
+            index < oldTotalCount
+        ? oldTotalCount - 1 - index
+        : index;
     final moved = <Bookmark>[];
     for (final item in items) {
-      var next = item.copyWith(bookName: toName, bookAuthor: toAuthor);
+      var next = item.copyWith(
+        bookName: toName,
+        bookAuthor: toAuthor,
+        tocReversed: item.tocReversed ?? fromReversed,
+      );
       if (chapters.isNotEmpty) {
         final index = alignChapterIndex(
-          oldIndex: item.chapterIndex,
+          oldIndex: oldTocIndex(item.chapterIndex, item.tocReversed),
           oldTitle: item.chapterTitle,
           oldTotalCount: oldTotalCount,
           newChapters: chapters,
@@ -122,12 +155,14 @@ class BookmarkDao extends DatabaseAccessor<AppDatabase>
         next = next.copyWith(
           chapterIndex: index,
           chapterTitle: chapters[index].title,
+          tocReversed: toReversed,
         );
       }
       if (next.bookName == item.bookName &&
           next.bookAuthor == item.bookAuthor &&
           next.chapterIndex == item.chapterIndex &&
-          next.chapterTitle == item.chapterTitle) {
+          next.chapterTitle == item.chapterTitle &&
+          next.tocReversed == item.tocReversed) {
         continue;
       }
       moved.add(next);

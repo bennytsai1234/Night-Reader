@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:async';
 
 import 'package:dio/dio.dart';
@@ -52,7 +53,8 @@ Future<Set<String>> chaptersWithUntriedIllustrations(Book book) async {
 
 /// [task] 的範圍在目前的目錄 [chapters]（依序號排好）裡要下載的章節；分卷
 /// 標題沒有正文、付費還沒買的只會抓到付費提示，都不算。起點或終點那一章
-/// 已經不在目錄裡時回傳 null。
+/// 已經不在目錄裡時回傳 null。排進來之後目錄反轉了（[BookTocReverser]）時
+/// 起點排到終點後面，範圍照舊是這兩章之間。
 List<BookChapter>? chaptersInDownloadScope(
   List<BookChapter> chapters,
   DownloadTask task,
@@ -64,7 +66,7 @@ List<BookChapter>? chaptersInDownloadScope(
   final end = endUrl == null ? chapters.length - 1 : find(endUrl);
   if (start < 0 || end < 0) return null;
   return [
-    for (var i = start; i <= end; i++)
+    for (var i = math.min(start, end); i <= math.max(start, end); i++)
       if (chapterIsDownloadable(chapters[i])) chapters[i],
   ];
 }

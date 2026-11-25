@@ -11,6 +11,7 @@ import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/models/reading/bookmark.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/models/book/chapter_alignment.dart';
 import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/core/backup/bookmark_highlight_export.dart';
@@ -54,9 +55,9 @@ class BookmarksPage extends StatefulWidget {
   final List<Bookmark> initial;
   final List<Highlight> initialHighlights;
 
-  /// 每本書（[keyOf]）在這台的目錄；手機上沒有這本書或還沒抓目錄時沒有，
-  /// 那本書的書籤與標註照記下的章節序號排。
-  final Map<String, List<BookChapter>> tocs;
+  /// 每本書（[keyOf]）在這台的目錄與它反轉了沒；手機上沒有這本書或還沒
+  /// 抓目錄時沒有，那本書的書籤與標註照記下的章節序號排。
+  final Map<String, BookmarksToc> tocs;
 
   /// 推入前讀好的統計；沒給時點「統計」才讀。
   final ReadingStatsMemory? stats;
@@ -70,7 +71,7 @@ class BookmarksPage extends StatefulWidget {
     final statsLoaded = stats.load();
     final items = await getIt<BookmarkDao>().getAll();
     final highlights = await getIt<HighlightDao>().getAll();
-    final tocs = <String, List<BookChapter>>{};
+    final tocs = <String, BookmarksToc>{};
     for (final (name, author) in [
       for (final bookmark in items) (bookmark.bookName, bookmark.bookAuthor),
       for (final highlight in highlights)
@@ -80,8 +81,11 @@ class BookmarksPage extends StatefulWidget {
       if (tocs.containsKey(key)) continue;
       final book = await _findBook(name, author);
       tocs[key] = book == null
-          ? const []
-          : await getIt<ChapterDao>().getByBook(book.bookUrl);
+          ? (chapters: const [], reversed: false)
+          : (
+              chapters: await getIt<ChapterDao>().getByBook(book.bookUrl),
+              reversed: book.getReverseToc(),
+            );
     }
     await statsLoaded;
     if (!context.mounted) return;
@@ -128,8 +132,12 @@ typedef _Entry = ({
   String bookAuthor,
   int chapterIndex,
   String chapterTitle,
+  bool? tocReversed,
   int charOffset,
 });
+
+/// 一本書在這台的目錄，與這本書反轉了沒（反轉目錄，ADR 0085）。
+typedef BookmarksToc = ({List<BookChapter> chapters, bool reversed});
 
 class _BookmarksPageState extends State<BookmarksPage> {
   static const double _tabsHeight = GlassSegmented.trackHeight;
@@ -165,6 +173,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
     bookAuthor: b.bookAuthor,
     chapterIndex: b.chapterIndex,
     chapterTitle: b.chapterTitle,
+    tocReversed: b.tocReversed,
     charOffset: b.charOffset,
   );
 
@@ -174,6 +183,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
     bookAuthor: h.bookAuthor,
     chapterIndex: h.chapterIndex,
     chapterTitle: h.chapterTitle,
+    tocReversed: h.tocReversed,
     charOffset: h.charOffset,
   );
 
@@ -192,13 +202,17 @@ class _BookmarksPageState extends State<BookmarksPage> {
         group.map((item) => entryOf(item).id).reduce((a, b) => a > b ? a : b);
     return [
       for (final MapEntry(:key, value: group) in books.entries)
-        _inReadingOrder(group, widget.tocs[key] ?? const [], entryOf),
+        _inReadingOrder(
+          group,
+          widget.tocs[key] ?? (chapters: const [], reversed: false),
+          entryOf,
+        ),
     ]..sort((a, b) => latest(b).compareTo(latest(a)));
   }
 
   static List<T> _inReadingOrder<T>(
     List<T> group,
-    List<BookChapter> toc,
+    BookmarksToc toc,
     _Entry Function(T item) entryOf,
   ) {
     final chapterOf = {
@@ -206,7 +220,9 @@ class _BookmarksPageState extends State<BookmarksPage> {
         entryOf(item).id: chapterIndexByTitle(
           chapterIndex: entryOf(item).chapterIndex,
           chapterTitle: entryOf(item).chapterTitle,
-          chapters: toc,
+          countedReversed: entryOf(item).tocReversed,
+          reversed: toc.reversed,
+          chapters: toc.chapters,
         ),
     };
     return group..sort((x, y) {
@@ -256,6 +272,8 @@ class _BookmarksPageState extends State<BookmarksPage> {
             chapterIndexByTitle(
               chapterIndex: entry.chapterIndex,
               chapterTitle: entry.chapterTitle,
+              countedReversed: entry.tocReversed,
+              reversed: book.getReverseToc(),
               chapters: chapters,
             ),
           ),
@@ -342,7 +360,8 @@ class _BookmarksPageState extends State<BookmarksPage> {
       items: bookmarkHighlightExportItems(
         bookmarks: bookmarks,
         highlights: highlights,
-        toc: widget.tocs[key] ?? const [],
+        toc: widget.tocs[key]?.chapters ?? const [],
+        reversed: widget.tocs[key]?.reversed ?? false,
       ),
     );
   }
