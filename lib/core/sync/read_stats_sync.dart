@@ -240,6 +240,9 @@ class RestoredStats {
     final devices = _mutable(read(prefs) ?? none);
     final replacedBooks = {for (final record in records) record.bookName};
     for (final device in devices.values) {
+      // 舊版記的每天秒數沒分書（書名空白）：那台的書這次被換掉了，就一起
+      // 清掉，不然當天一直多扣。
+      if (replacedBooks.any(device.books.containsKey)) device.days.remove('');
       for (final book in replacedBooks) {
         device.books.remove(book);
         device.days.remove(book);

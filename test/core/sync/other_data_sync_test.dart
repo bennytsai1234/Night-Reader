@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/sync_store_blobs.dart';
 
+import 'package:night_reader/core/models/reading/read_record.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/cookie_dao.dart';
@@ -312,6 +313,30 @@ void main() {
 
       expect(total.books, {'夜航': 600});
       expect(total.days, {today: 600});
+    });
+
+    test('restoring again after upgrading replaces the older version\'s '
+        'daily seconds for that phone', () async {
+      final prefs = await prefsOf({
+        RestoredStats.prefKey: jsonEncode({
+          'from': 'phone-a',
+          'books': {'夜航': 600},
+          'days': {today: 600},
+        }),
+      });
+
+      await RestoredStats.remember(
+        prefs,
+        from: 'phone-b',
+        records: [
+          ReadRecord(bookName: '夜航', deviceId: '', readTime: 900, lastRead: 1),
+        ],
+        days: [ReadDay(bookName: '夜航', day: today, seconds: 900)],
+      );
+
+      final total = RestoredStats.read(prefs)!.total(except: 'phone-c');
+      expect(total.books, {'夜航': 900});
+      expect(total.days, {today: 900});
     });
 
     test('renaming a restored book keeps it from being sent again', () async {
