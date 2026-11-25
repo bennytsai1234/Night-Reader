@@ -173,7 +173,7 @@
 | 發現頁往下載入下一頁 | 一樣 | 捲到底頁碼加一，同網址去重，沒有新書就停（`N:lib/features/explore/explore_show_provider.dart:131`）。 |
 | 沒寫發現規則時用搜尋規則 | 一樣 | 發現的書單規則空著時整套用搜尋規則（`N:lib/core/engine/web_book/book_list_parser.dart:245-252`）。 |
 | 發現篩選（`exploreScreen`） | 一樣 | 兩邊都只存著，見「書源的欄位」。 |
-| 發現的書源分組與啟用發現 | 結果不對 | 分組與名稱篩選一樣；停用的書源開著「啟用發現」時 Legado 照列，夜讀不列，見 R20。夜讀另外照類型分開（ADR 0051）。 |
+| 發現的書源分組與啟用發現 | 結果不對 | 分組與名稱篩選一樣；停用的書源開著「啟用發現」時 Legado 照列，夜讀不列，見 R20。夜讀另外照類型分開（ADR 0051）。已修（#638）。 |
 | 發現書源的選單（編輯、置頂、登入、搜尋、重新整理、刪除） | 少一個選項 | 編輯、置頂、搜尋、重新整理、刪除都有；有登入網址的書源 Legado 多一項「登入」（`L:ui/main/explore/ExploreAdapter.kt:159-165`），夜讀沒有（`N:lib/features/explore/explore_page.dart:467-494`）。 |
 
 ### 登入

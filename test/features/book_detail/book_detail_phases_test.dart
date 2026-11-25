@@ -580,6 +580,15 @@ void main() {
       expect(service.chapterListCalls, 1);
     });
 
+    // 停用只管搜尋：書源狀態照校驗結果寫，不寫成「停用」。
+    test('the source status follows its health, not the switch', () async {
+      await storeSource(enabled: false);
+      final provider = await open();
+      expect(provider.sourceStatusIsHealthy, isTrue);
+      expect(provider.sourceStatusLabel, isNot('停用'));
+      expect(provider.sourceStatusDescription, isNot('書源已停用'));
+    });
+
     test('checking for updates still runs', () async {
       await storeSource(enabled: false);
       final updates = _Updates(db);
