@@ -17,14 +17,18 @@ import 'package:night_reader/features/settings/sync_space_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _Store with SyncStoreBlobs implements SyncStore {
-  _Store({this.fail, this.beforeRead, this.readError});
+  _Store({this.fail, this.beforeRead, this.readError, this.beforeCheck});
 
   final String? fail;
+  final Future<void>? beforeCheck;
+  int checks = 0;
   final Future<void>? beforeRead;
   final String? readError;
 
   @override
   Future<void> check() async {
+    checks++;
+    if (beforeCheck != null) await beforeCheck;
     if (fail != null) throw SyncStoreException(fail!);
   }
 
@@ -132,6 +136,27 @@ void main() {
 
     expect(find.text('帳號或密碼不對'), findsOneWidget);
     expect(await SyncSettings().space(), SyncSpace.none);
+  });
+
+  testWidgets('連線中在密碼欄按鍵盤的完成，不會再送出一次', (tester) async {
+    final gate = Completer<void>();
+    final store = _Store(fail: '連不上', beforeCheck: gate.future);
+    await pump(tester, store);
+    await tester.enterText(find.byType(TextField).at(0), 'https://a.example');
+    await tester.tap(find.text('連線並開始全面同步'));
+    await tester.pump();
+    expect(find.text('連線中…'), findsOneWidget);
+
+    // 等的時候改填另一個網址，在密碼欄按完成。
+    await tester.enterText(find.byType(TextField).at(0), 'https://b.example');
+    await tester.showKeyboard(find.byType(TextField).at(2));
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(store.checks, 1);
+
+    gate.complete();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('WebDAV returns to sync space, and the first full sync covers '

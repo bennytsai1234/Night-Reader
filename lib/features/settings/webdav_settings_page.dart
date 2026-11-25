@@ -71,6 +71,9 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   }
 
   Future<void> _connect() async {
+    // 按鈕連線中會停用，密碼欄按鍵盤的完成也走這裡：一次只連一個，晚回來的
+    // 舊連線才不會把剛選好的同步空間改回去。
+    if (_connecting) return;
     final url = _url.text.trim();
     if (url.isEmpty) {
       _say('先填 WebDAV 的網址');
