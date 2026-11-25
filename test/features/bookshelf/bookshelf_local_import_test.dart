@@ -134,7 +134,7 @@ void main() {
             onPressed: () async => answers.add(
               await askLocalBookUpdate(
                 context,
-                Book(bookUrl: 'local://連載.txt', name: '連載'),
+                Book(bookUrl: 'local://連載.txt', name: '連載', author: '某人'),
               ),
             ),
             child: const Text('匯入'),
@@ -147,6 +147,8 @@ void main() {
       await tester.tap(find.text('匯入'));
       await tester.pumpAndSettle();
       expect(find.text('更新《連載》？'), findsOneWidget);
+      // 同名的只會有一本（多本時不問），寫上作者分得出是哪一本。
+      expect(find.textContaining('作者：某人'), findsOneWidget);
       await tester.tap(find.text(label));
       await tester.pumpAndSettle();
     }

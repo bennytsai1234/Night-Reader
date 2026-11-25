@@ -521,6 +521,83 @@ void main() {
     );
   });
 
+  test('更新成新版的 EPUB：同一個路徑的插圖換成新圖；換到一半被關掉時退回舊圖', () async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    addTearDown(() => LocalBookService.debugUpdateStep = null);
+    final oldPng = Uint8List.fromList([..._png, 1]);
+    final newPng = Uint8List.fromList([..._png, 2]);
+    Map<String, Object> edition(String text, Uint8List png) => _simple(
+      {
+        'Text/one.xhtml': _xhtml(
+          '<h1>第一章</h1><p>$text</p><p><img src="../Images/a.png"/></p>',
+        ),
+      },
+      [('第一章', 'Text/one.xhtml')],
+    )..['OEBPS/Images/a.png'] = png;
+    Future<String> pick(Map<String, Object> entries) async {
+      final picked = Directory(p.join(dir.path, 'picked'))..createSync();
+      final archive = Archive();
+      entries.forEach((path, content) {
+        archive.addFile(
+          ArchiveFile.bytes(
+            path,
+            content is String ? utf8.encode(content) : content as List<int>,
+          ),
+        );
+      });
+      final file = File(p.join(picked.path, '插圖.epub'));
+      await file.writeAsBytes(ZipEncoder().encodeBytes(archive));
+      return file.path;
+    }
+
+    final book = (await LocalBookService().addToShelf(
+      await pick(edition('舊版', oldPng)),
+      bookDao: db.bookDao,
+      chapterDao: db.chapterDao,
+    ))!;
+    final image = File(
+      BookIllustrationStorage.pathFor(
+        p.join(
+          p.dirname(await LocalBookService.epubTextPath(book)),
+          BookIllustrationStorage.folderName,
+        ),
+        'OEBPS/Images/a.png',
+      ),
+    );
+    expect(await image.readAsBytes(), oldPng);
+    Future<String> firstChapter() async => LocalBookService().getContent(
+      (await db.bookDao.getByUrl(book.bookUrl))!,
+      (await db.chapterDao.getByBook(book.bookUrl)).first,
+    );
+
+    LocalBookService.debugUpdateStep = (step) async {
+      if (step == 'swapped') throw LocalBookUpdateInterrupted();
+    };
+    await expectLater(
+      LocalBookService().addToShelf(
+        await pick(edition('新版', newPng)),
+        bookDao: db.bookDao,
+        chapterDao: db.chapterDao,
+        askUpdate: (_) async => true,
+      ),
+      throwsA(isA<LocalBookUpdateInterrupted>()),
+    );
+    LocalBookService.debugUpdateStep = null;
+    await LocalBookService.recoverInterruptedUpdates(db.bookDao);
+    expect(await image.readAsBytes(), oldPng);
+    expect(await firstChapter(), contains('舊版'));
+
+    await LocalBookService().addToShelf(
+      await pick(edition('新版', newPng)),
+      bookDao: db.bookDao,
+      chapterDao: db.chapterDao,
+      askUpdate: (_) async => true,
+    );
+    expect(await image.readAsBytes(), newPng);
+    expect(await firstChapter(), contains('新版'));
+  });
+
   test('LocalBookService 匯入 EPUB 後依章節索引讀出正文', () async {
     final path = await write('service.epub', _epub3());
     final result = await LocalBookService().importBook(path);

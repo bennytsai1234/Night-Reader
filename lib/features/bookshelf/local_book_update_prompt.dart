@@ -9,7 +9,9 @@ Future<bool> askLocalBookUpdate(BuildContext context, Book existing) async {
   final update = await showAppAlert<bool>(
     context: context,
     title: '更新《${existing.name}》？',
-    message: '書架上已經有同名的書。更新會換成這次選的檔、重新分章，閱讀進度、書籤與標註留著。',
+    message:
+        '書架上已經有同名的書（作者：${existing.author}）。'
+        '更新會換成這次選的檔、重新分章，閱讀進度、書籤與標註留著。',
     actions: const [
       AppAlertAction(label: '更新', value: true, isDefault: true),
       AppAlertAction(label: '另加一本', value: false),

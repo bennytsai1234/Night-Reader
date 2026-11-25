@@ -290,6 +290,7 @@ class SyncService {
       run: _runner,
       clock: _clock,
       isOpen: isBookOpen,
+      syncProgress: _requestProgress,
     );
   }
 

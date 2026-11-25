@@ -478,6 +478,72 @@ void main() {
       expect((await b.localBooks().plan()).isEmpty, isTrue);
     });
 
+    // L12：讀者在一台把書更新成新版的檔，書還是同一本，指紋換成新檔的。
+    Future<Book> updateOn(_Phone phone, String content) async {
+      phone.use();
+      final picked = File(p.join(phone.root.path, 'picked', '夜航.txt'));
+      await picked.writeAsString(content);
+      return (await LocalBookService().addToShelf(
+        picked.path,
+        bookDao: phone.books,
+        chapterDao: phone.chapters,
+        askUpdate: (_) async => true,
+      ))!;
+    }
+
+    const updatedNovel = '序言一段。\n$_novel第四章 歸港\n天亮了。\n';
+
+    test('a book updated here reaches the other phone at the position this '
+        'phone reads it', () async {
+      final mine = await a.import('夜航.txt', _novel);
+      expect((await a.syncLocalBooks()).failures, isEmpty);
+      expect((await b.syncLocalBooks()).failures, isEmpty);
+      await a.books.updateProgress(mine.bookUrl, 2, '第三章 燈塔', 1);
+      final updated = await updateOn(a, updatedNovel);
+      expect(updated.durChapterTitle, '第三章 燈塔');
+
+      // 這台按「同步本地書」（走同步服務，同「備份與同步」的按鈕）。
+      a.use();
+      final session = (await a.sync.localBooks())!;
+      expect((await session.run(await session.plan())).failures, isEmpty);
+      expect((await b.syncLocalBooks()).failures, isEmpty);
+      b.use();
+      await b.sync.syncAll();
+
+      final shelf = await b.shelf();
+      expect(shelf.single.fileFingerprint, updated.fileFingerprint);
+      expect(shelf.single.durChapterTitle, '第三章 燈塔');
+      expect(shelf.single.charOffset, 1);
+    });
+
+    test('the old file stays in the cloud until the new one is up', () async {
+      final mine = await a.import('夜航.txt', _novel);
+      expect((await a.syncLocalBooks()).failures, isEmpty);
+      final updated = await updateOn(a, updatedNovel);
+      final newName = LocalBookSync.originalName(
+        updated.fileFingerprint!,
+        'txt',
+      );
+      final oldName = LocalBookSync.originalName(mine.fileFingerprint!, 'txt');
+      store.failingBlobs[newName] = const SyncStoreException.file('傳不上去');
+
+      final failed = await a.syncLocalBooks();
+
+      expect(failed.failures.map((f) => f.task.action), [
+        LocalBookAction.upload,
+      ]);
+      expect(store.records[mine.fileFingerprint]!.deleted, isFalse);
+      expect(store.blobs.keys, contains(oldName));
+      // 另一台這時按，舊的那本留著。
+      expect((await b.syncLocalBooks()).failures, isEmpty);
+      expect((await b.shelf()).single.fileFingerprint, mine.fileFingerprint);
+
+      store.failingBlobs.clear();
+      expect((await a.syncLocalBooks()).failures, isEmpty);
+      expect(store.records[mine.fileFingerprint]!.deleted, isTrue);
+      expect(store.blobs.keys, [newName]);
+    });
+
     test('TXT 的編碼跟著小紀錄到另一台，下載後照它解碼、分章', () async {
       final mine = await a.import('夜航.txt', _novel);
       a.use();

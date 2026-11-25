@@ -8,11 +8,13 @@ import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/local_book/txt_parser.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/reading/bookmark.dart';
 import 'package:night_reader/core/models/reading/highlight.dart';
+import 'package:night_reader/core/storage/books_in_use.dart';
 import 'package:night_reader/core/utils/encoding_detect.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -249,6 +251,193 @@ void main() {
 
       expect(asked, 0);
       expect(await bookDao.getInBookshelf(), hasLength(2));
+    });
+
+    Future<Book> addV1({String name = '連載.txt', String? content}) async =>
+        (await LocalBookService().addToShelf(
+          await pick(name, content ?? v1),
+          bookDao: bookDao,
+          chapterDao: chapterDao,
+        ))!;
+
+    Future<Book?> update(String content, {String name = '連載.txt'}) async =>
+        LocalBookService().addToShelf(
+          await pick(name, content),
+          bookDao: bookDao,
+          chapterDao: chapterDao,
+          askUpdate: (_) async => true,
+        );
+
+    test('換到一半 App 被關掉：資料庫還沒寫的退回舊檔，寫好了的收尾成新檔', () async {
+      for (final (step, committed) in [
+        ('prepared', false),
+        ('swapped', false),
+        ('committed', true),
+      ]) {
+        // 每一輪的內容不同：同一份內容是同一本書（原檔指紋相同）。
+        final old = '$v1$step\n';
+        final next = '$v2$step\n';
+        final first = await addV1(name: '$step.txt', content: old);
+        final target = LocalBookService.filePathOf(first);
+        LocalBookService.debugUpdateStep = (at) async {
+          if (at == step) throw LocalBookUpdateInterrupted();
+        };
+        addTearDown(() => LocalBookService.debugUpdateStep = null);
+
+        await expectLater(
+          update(next, name: '$step.txt'),
+          throwsA(isA<LocalBookUpdateInterrupted>()),
+        );
+        LocalBookService.debugUpdateStep = null;
+        await LocalBookService.recoverInterruptedUpdates(bookDao);
+
+        final saved = (await bookDao.getByUrl(first.bookUrl))!;
+        final chapters = await chapterDao.getByBook(first.bookUrl);
+        expect(
+          await File(target).readAsString(),
+          committed ? next : old,
+          reason: step,
+        );
+        expect(chapters, hasLength(committed ? 4 : 2), reason: step);
+        expect(
+          saved.fileFingerprint == first.fileFingerprint,
+          !committed,
+          reason: step,
+        );
+        // 讀得出來的就是資料庫記的那一章。
+        expect(
+          await LocalBookService().getContent(saved, chapters.last),
+          startsWith(chapters.last.title),
+          reason: step,
+        );
+        final leftovers = Directory(p.dirname(target))
+            .listSync()
+            .map((f) => p.basename(f.path))
+            .where(
+              (name) =>
+                  name.startsWith(p.basename(target)) &&
+                  name != p.basename(target),
+            );
+        expect(leftovers, isEmpty, reason: '$step：暫存的新舊檔與紀錄都清掉');
+      }
+    });
+
+    test('這本書正開著時不更新、也不問，提示先關掉', () async {
+      final first = await addV1();
+      final open = BooksInUse.hold(first.bookUrl);
+      addTearDown(open.release);
+      var asked = false;
+
+      await expectLater(
+        LocalBookService().addToShelf(
+          await pick('連載.txt', v2),
+          bookDao: bookDao,
+          chapterDao: chapterDao,
+          askUpdate: (_) async => asked = true,
+        ),
+        throwsA(
+          isA<LocalBookContentException>().having(
+            (e) => e.message,
+            'message',
+            '《連載》正開著，關掉後再加入一次',
+          ),
+        ),
+      );
+      expect(asked, isFalse);
+      expect(await File(LocalBookService.filePathOf(first)).readAsString(), v1);
+    });
+
+    test('讀者手動改過編碼的，新檔照那個編碼讀；沒改過的照新檔自動偵測', () async {
+      String text(String extra) =>
+          '第一章 開始\n${body('甲')}第二章 中間\n${body('乙')}$extra';
+      Future<String> pickBytes(String name, List<int> bytes) async {
+        final file = File(p.join(picked.path, name));
+        await file.writeAsBytes(bytes);
+        return file.path;
+      }
+
+      // 手動改過：沒有 BOM 的 UTF-16LE 自動偵測會認成大端，讀者改成 UTF-16LE。
+      final manual = (await LocalBookService().addToShelf(
+        await pickBytes(
+          '手動.txt',
+          EncodingDetect.encodeWithCharset(text(''), 'UTF-16LE'),
+        ),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+      ))!;
+      expect(manual.charset, 'UTF-16BE');
+      await LocalBookService().changeCharset(
+        manual,
+        'UTF-16LE',
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+      );
+      final manualUpdated = await LocalBookService().addToShelf(
+        await pickBytes(
+          '手動.txt',
+          EncodingDetect.encodeWithCharset(
+            text('第三章 新的\n${body('丙')}'),
+            'UTF-16LE',
+          ),
+        ),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+        askUpdate: (_) async => true,
+      );
+      expect(manualUpdated!.charset, 'UTF-16LE');
+      expect((await chapterDao.getByBook(manual.bookUrl)).map((c) => c.title), [
+        '第一章 開始',
+        '第二章 中間',
+        '第三章 新的',
+      ]);
+
+      // 沒改過：舊檔 GBK、新檔換成 UTF-8，照新檔偵測。
+      final auto = (await LocalBookService().addToShelf(
+        await pickBytes(
+          '自動.txt',
+          EncodingDetect.encodeWithCharset(text(''), 'GBK'),
+        ),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+      ))!;
+      final autoUpdated = await LocalBookService().addToShelf(
+        await pick('自動.txt', text('第三章 新的\n${body('丙')}')),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+        askUpdate: (_) async => true,
+      );
+      expect(autoUpdated!.charset, isNot(auto.charset));
+      expect((await chapterDao.getByBook(auto.bookUrl)).map((c) => c.title), [
+        '第一章 開始',
+        '第二章 中間',
+        '第三章 新的',
+      ]);
+    });
+
+    test('書架上有兩本同名同格式的書時不問，照舊另加一本', () async {
+      await addV1();
+      await LocalBookService().addToShelf(
+        await pick('連載.txt', '第一章 別本\n${body('丁')}'),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+      );
+      // 第二本是「連載 (2)」；改名成同名，模擬讀者自己改過。
+      final second = (await bookDao.getInBookshelf()).firstWhere(
+        (b) => b.name != '連載',
+      );
+      await bookDao.upsert(second.copyWith(name: '連載'));
+      var asked = false;
+
+      final third = await LocalBookService().addToShelf(
+        await pick('連載.txt', v2),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+        askUpdate: (_) async => asked = true,
+      );
+
+      expect(asked, isFalse);
+      expect(await bookDao.getInBookshelf(), hasLength(3));
+      expect(third!.name, '連載 (3)');
     });
   });
 

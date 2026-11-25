@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -11,11 +12,14 @@ import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/local_book/local_book_fingerprint.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/engine/book/book_help.dart';
 import 'package:night_reader/core/storage/book_cover_storage_service.dart';
+import 'package:night_reader/core/storage/book_illustration_storage.dart';
+import 'package:night_reader/core/storage/books_in_use.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:path/path.dart' as p;
 
@@ -86,6 +90,7 @@ class LocalBookService {
     String? charset,
     Future<bool> Function(Book existing)? askUpdate,
   }) async {
+    await recoverOnce(bookDao);
     final print = fingerprint ?? await localBookFingerprint(path);
     // 這一版以前匯入的書先補上指紋，才認得出是不是同一本。
     await fillLocalBookFingerprints(bookDao);
@@ -107,6 +112,10 @@ class LocalBookService {
     }
     if (askUpdate != null) {
       final existing = await _sameNamedShelfBook(path, bookDao);
+      // 開著的書不換檔：閱讀器還拿著舊的章節範圍，關掉時也會把舊位置寫回去。
+      if (existing != null && BooksInUse.bookUrls.contains(existing.bookUrl)) {
+        throw LocalBookContentException('《${existing.name}》正開著，關掉後再加入一次');
+      }
       if (existing != null && await askUpdate(existing)) {
         return _updateOriginal(
           existing,
@@ -165,30 +174,47 @@ class LocalBookService {
   }
 
   /// 書架上和 [path] 同名、同格式的本地書：書名照匯入時的取法（TXT 從檔名
-  /// 拆，EPUB 是書裡寫的書名）。沒有時是 null。
+  /// 拆，EPUB 是書裡寫的書名）。不只一本時分不出是哪一本，當成沒有（照舊
+  /// 另加一本）。
   Future<Book?> _sameNamedShelfBook(String path, BookDao bookDao) async {
     final extension = localBookExtensionFromPath(path);
     final fileName = p.basenameWithoutExtension(path);
     final name = extension == 'epub'
         ? await EpubParser.readTitle(path) ?? fileName
         : nameAndAuthorFromFileName(fileName).name;
-    for (final book in await bookDao.getInBookshelf()) {
-      if (book.isLocal &&
-          book.name == name &&
-          localBookExtensionFromPath(book.bookUrl) == extension) {
-        return book;
-      }
-    }
-    return null;
+    final same = [
+      for (final book in await bookDao.getInBookshelf())
+        if (book.isLocal &&
+            book.name == name &&
+            localBookExtensionFromPath(book.bookUrl) == extension)
+          book,
+    ];
+    return same.length == 1 ? same.single : null;
   }
 
-  /// 讀者選了更新 [existing]：原檔原地換成 [path]，照新檔重新分章（同
-  /// Legado 再匯入同一個檔），書名、作者、分組與讀者改過的資訊不動。閱讀
-  /// 進度照章名對到新目錄的同一章（序號會因為前面多了章而變），對不到時
-  /// 照比例估、從章首讀；書籤與標註本來就照章名對。舊檔讀過的正文清掉。
-  /// 指紋換成新檔的：「同步本地書」照它傳新檔、刪雲端的舊檔。
+  /// 測試用：更新原檔做到 [step]（`prepared` 新檔與轉好的資料都準備好、
+  /// `swapped` 檔案換好、`committed` 資料庫寫好）時呼叫，丟出
+  /// [LocalBookUpdateInterrupted] 模擬 App 在那一步被關掉。
+  @visibleForTesting
+  static Future<void> Function(String step)? debugUpdateStep;
+
+  /// 換原檔時跟著換的、EPUB 轉好的資料（在這本書的資料夾裡）。
+  static const _epubAssets = [
+    'epub-text.txt',
+    'epub-chapters.json',
+    BookIllustrationStorage.folderName,
+  ];
+
+  /// 讀者選了更新 [existing]：原檔換成 [path]，照新檔重新分章（同 Legado
+  /// 再匯入同一個檔），書名、作者、分組與讀者改過的資訊不動。閱讀進度照
+  /// 章名對到新目錄的同一章（序號會因為前面多了章而變），對不到時照比例
+  /// 估、從章首讀；書籤與標註本來就照章名對。舊檔讀過的正文清掉。指紋換成
+  /// 新檔的：「同步本地書」照它傳新檔、刪雲端的舊檔。
   ///
-  /// 新檔解析失敗時放回舊檔，書與目錄都不動，錯誤往外丟。
+  /// 新檔（`原檔.new`）與 EPUB 轉好的資料（書的資料夾裡的 `.update/`）先在
+  /// 旁邊準備齊全，記下這次換檔（`原檔.update.json`），再一次換上、寫資料庫。
+  /// 中途失敗就退回舊檔；App 在中途被關掉的，下次照資料庫裡的指紋收尾或
+  /// 退回（[recoverInterruptedUpdates]）。
   Future<Book?> _updateOriginal(
     Book existing,
     String path,
@@ -198,24 +224,66 @@ class LocalBookService {
     ReaderChapterContentDao? contentDao,
   }) async {
     final target = filePathOf(existing);
-    final incoming = File('$target.new');
-    final previous = File('$target.old');
-    await incoming.parent.create(recursive: true);
-    await File(path).copy(incoming.path);
-    // 讀章時開著的舊檔要先關掉，Windows 上才換得掉。
-    await closeOpenFile();
-    final hadOriginal = await File(target).exists();
-    if (hadOriginal) await File(target).rename(previous.path);
-    await incoming.rename(target);
-    final ({Book book, LocalBookImportResult result}) updated;
+    final isEpub = localBookExtensionFromPath(target) == 'epub';
+    final assets = isEpub ? p.dirname(await epubTextPath(existing)) : null;
+    final journal = File(_journalPathOf(target));
+    var committed = false;
+    final ({List<BookChapter> chapters, String charset}) parsed;
+    ({Uint8List bytes, String extension})? cover;
     try {
-      final result = await importBook(target);
-      if (result == null || result.chapters.isEmpty) {
-        throw LocalBookContentException('分不出章節');
+      await _removeQuietly('$target.new');
+      if (assets != null) await _removeQuietly(p.join(assets, _stagingName));
+      await File(path).copy('$target.new');
+      if (isEpub) {
+        final info = await EpubParser.convert(
+          '$target.new',
+          p.join(assets!, _stagingName, 'epub-text.txt'),
+        );
+        parsed = (
+          chapters: _chapters(existing, info.chapters),
+          charset: 'utf-8',
+        );
+        if (info.cover case final bytes?) {
+          cover = (bytes: bytes, extension: info.coverExtension ?? '');
+        }
+      } else {
+        final split = await _splitTxt(
+          File('$target.new'),
+          charset: await _keptCharset(existing, target),
+        );
+        parsed = (
+          chapters: _chapters(existing, [
+            for (final (i, chapter) in split.chapters.indexed)
+              (
+                title: chapter['title'] as String? ?? '第 $i 章',
+                start: chapter['start'] as int,
+                end: chapter['end'] as int,
+              ),
+          ]),
+          charset: split.charset,
+        );
+        for (final (i, chapter) in split.chapters.indexed) {
+          parsed.chapters[i].isVolume = chapter['isVolume'] == true;
+        }
       }
+      if (parsed.chapters.isEmpty) throw LocalBookContentException('分不出章節');
+      await journal.writeAsString(
+        jsonEncode({
+          'bookUrl': existing.bookUrl,
+          'fingerprint': fingerprint,
+          'assets': ?assets,
+        }),
+        flush: true,
+      );
+      await debugUpdateStep?.call('prepared');
+      // 讀章時開著的舊檔要先關掉，Windows 上才換得掉。
+      await closeOpenFile();
+      await _swapIn(target, assets);
+      await debugUpdateStep?.call('swapped');
+
       final current = await bookDao.getByUrl(existing.bookUrl) ?? existing;
       final oldChapters = await chapterDao.getByBook(existing.bookUrl);
-      final chapters = result.chapters;
+      final chapters = parsed.chapters;
       final oldTitle =
           current.durChapterTitle ??
           oldChapters
@@ -229,12 +297,14 @@ class LocalBookService {
         newChapters: chapters,
       );
       final index = found.index.clamp(0, chapters.length - 1);
+      // 指紋和目錄在同一個交易裡寫：中途被關掉時，下次照資料庫裡的指紋
+      // 判斷這次換檔算不算數（[recoverInterruptedUpdates]）。
       await bookDao.transaction(() async {
         await bookDao.writeFields(
           current,
           BooksCompanion(
             fileFingerprint: Value(fingerprint),
-            charset: Value(result.book.charset),
+            charset: Value(parsed.charset),
             chapterIndex: Value(index),
             durChapterTitle: Value(chapters[index].title),
             charOffset: Value(found.matched ? current.charOffset : 0),
@@ -247,23 +317,154 @@ class LocalBookService {
         await chapterDao.replaceByBook(existing.bookUrl, chapters);
         await contentDao?.deleteByBook(existing.origin, existing.bookUrl);
       });
-      updated = (book: current, result: result);
-    } catch (_) {
-      await closeOpenFile();
-      await _removeFileQuietly(target);
-      if (hadOriginal) await previous.rename(target);
+      committed = true;
+      await debugUpdateStep?.call('committed');
+    } on LocalBookUpdateInterrupted {
       rethrow;
+    } catch (_) {
+      if (!committed) {
+        await closeOpenFile();
+        await _rollBack(target, assets);
+        await _removeQuietly(journal.path);
+        rethrow;
+      }
     }
-    final cover = updated.result.cover;
+    await _finish(target, assets);
+    await _removeQuietly(journal.path);
     if (cover != null) {
       await BookCoverStorageService().storeEmbeddedCover(
-        updated.book,
-        cover,
-        extension: updated.result.coverExtension ?? '',
+        existing,
+        cover.bytes,
+        extension: cover.extension,
       );
     }
-    if (hadOriginal) await _removeFileQuietly(previous.path);
     return bookDao.getByUrl(existing.bookUrl);
+  }
+
+  /// 更新 TXT 時用的編碼：讀者手動改過（書上記的和舊檔自動偵測的不同）就
+  /// 照讀者改的讀新檔；沒改過時照新檔自動偵測，新版換了編碼也讀得對。
+  Future<String?> _keptCharset(Book book, String original) async {
+    final stored = book.charset;
+    if (stored == null || !await File(original).exists()) return null;
+    final detected = await compute(
+      (String path) => EncodingDetect.getEncode(File(path).readAsBytesSync()),
+      original,
+    );
+    return detected.toLowerCase() == stored.toLowerCase() ? null : stored;
+  }
+
+  /// EPUB 轉好的新資料在書的資料夾裡的暫存處。
+  static const _stagingName = '.update';
+
+  static String _journalPathOf(String target) => '$target.update.json';
+
+  /// 換上準備好的新檔與轉好的資料，舊的改名成 `.old` 留著。
+  static Future<void> _swapIn(String target, String? assets) async {
+    if (await _existsAnything(target)) await _renameAny(target, '$target.old');
+    await File('$target.new').rename(target);
+    if (assets == null) return;
+    for (final name in _epubAssets) {
+      final live = p.join(assets, name);
+      final staged = p.join(assets, _stagingName, name);
+      if (await _existsAnything(live)) await _renameAny(live, '$live.old');
+      if (await _existsAnything(staged)) await _renameAny(staged, live);
+    }
+  }
+
+  /// 這次換檔不算數：放回 `.old` 留著的舊檔與舊資料，丟掉準備好的新的。
+  static Future<void> _rollBack(String target, String? assets) async {
+    if (await _existsAnything('$target.old')) {
+      await _removeQuietly(target);
+      await _renameAny('$target.old', target);
+    }
+    await _removeQuietly('$target.new');
+    if (assets == null) return;
+    for (final name in _epubAssets) {
+      final live = p.join(assets, name);
+      if (!await _existsAnything('$live.old')) continue;
+      await _removeQuietly(live);
+      await _renameAny('$live.old', live);
+    }
+    await _removeQuietly(p.join(assets, _stagingName));
+  }
+
+  /// 這次換檔算數：刪掉留著的舊檔、舊資料與暫存處。
+  static Future<void> _finish(String target, String? assets) async {
+    await _removeQuietly('$target.old');
+    await _removeQuietly('$target.new');
+    if (assets == null) return;
+    for (final name in _epubAssets) {
+      await _removeQuietly(p.join(assets, '$name.old'));
+    }
+    await _removeQuietly(p.join(assets, _stagingName));
+  }
+
+  static Future<void> _renameAny(String from, String to) async {
+    if (await FileSystemEntity.isDirectory(from)) {
+      await Directory(from).rename(to);
+    } else {
+      await File(from).rename(to);
+    }
+  }
+
+  static Future<void> _removeQuietly(String path) async {
+    try {
+      if (await FileSystemEntity.isDirectory(path)) {
+        await Directory(path).delete(recursive: true);
+      } else if (await File(path).exists()) {
+        await File(path).delete();
+      }
+    } on FileSystemException catch (error) {
+      AppLog.w('刪除更新原檔留下的檔案失敗：$error');
+    }
+  }
+
+  static Future<void>? _recovery;
+
+  /// 這次開 App 第一次讀本地書之前跑一次 [recoverInterruptedUpdates]；之後
+  /// 再呼叫都等同一次。
+  static Future<void> recoverOnce(BookDao bookDao) =>
+      _recovery ??= recoverInterruptedUpdates(bookDao);
+
+  /// 更新原檔（[_updateOriginal]）做到一半 App 被關掉時留下的：照資料庫裡
+  /// 這本書的指紋決定，已經是新檔的就收尾（刪掉舊檔），還不是就退回舊檔。
+  static Future<void> recoverInterruptedUpdates(BookDao bookDao) async {
+    final dir = await AppStoragePaths.localBooksDir();
+    if (!await dir.exists()) return;
+    final journals = [
+      await for (final entity in dir.list())
+        if (entity is File && entity.path.endsWith('.update.json')) entity,
+    ];
+    for (final journal in journals) {
+      final target = journal.path.substring(
+        0,
+        journal.path.length - '.update.json'.length,
+      );
+      try {
+        String? bookUrl;
+        String? fingerprint;
+        String? assets;
+        try {
+          final json = jsonDecode(await journal.readAsString());
+          if (json is Map) {
+            bookUrl = json['bookUrl'] as String?;
+            fingerprint = json['fingerprint'] as String?;
+            assets = json['assets'] as String?;
+          }
+        } on FormatException {
+          // 紀錄沒寫完：資料庫一定還沒寫，退回。
+        }
+        final book = bookUrl == null ? null : await bookDao.getByUrl(bookUrl);
+        if (fingerprint != null && book?.fileFingerprint == fingerprint) {
+          await _finish(target, assets);
+        } else {
+          await _rollBack(target, assets);
+        }
+        await _removeQuietly(journal.path);
+      } catch (error, stackTrace) {
+        AppLog.e('復原沒做完的本地書更新失敗', error: error, stackTrace: stackTrace);
+      }
+    }
   }
 
   /// 書架上已有同一個檔的書，但原檔不見了（例如還原備份帶回了書、沒帶回
@@ -582,6 +783,7 @@ class LocalBookService {
   Future<List<({String title, int start, int end})>?> currentEpubChapters(
     Book book,
   ) async {
+    await _recoverBeforeReading();
     final path = filePathOf(book);
     if (localBookExtensionFromPath(path) != 'epub') return null;
     final textPath = await epubTextPath(book);
@@ -991,8 +1193,15 @@ class LocalBookService {
     ];
   }
 
+  /// 讀本地書之前，先把上次 App 被關掉時沒做完的原檔更新收掉
+  /// （[recoverOnce]）。
+  static Future<void> _recoverBeforeReading() async {
+    if (getIt.isRegistered<BookDao>()) await recoverOnce(getIt<BookDao>());
+  }
+
   /// 獲取本地書籍章節內容
   Future<String> getContent(Book book, BookChapter chapter) async {
+    await _recoverBeforeReading();
     final path = filePathOf(book);
     if (!await File(path).exists()) {
       throw LocalBookContentException('檔案不存在: $path');
@@ -1070,6 +1279,11 @@ class LocalBookService {
     return _txtAccessFile!;
   }
 }
+
+/// 測試用：模擬更新原檔途中 App 被關掉（[LocalBookService.debugUpdateStep]），
+/// 丟出時什麼都不收拾。
+@visibleForTesting
+class LocalBookUpdateInterrupted implements Exception {}
 
 /// 搬一本本地書到新路徑時先準備好的內容；交易還沒提交前都還不算數。
 class _PreparedMove {
