@@ -33,77 +33,82 @@ const _bookSourceLink =
     'https://www.yckceo.com/yuedu/shuyuan/json/id/7720.json';
 
 void main() {
-  group('detectImportContentKind', () {
-    test('源倉庫的漫畫書源是書源', () {
-      expect(
-        detectImportContentKind(_comicSource),
-        ImportContentKind.bookSource,
-      );
+  group('detectImportContent', () {
+    Future<ImportContentKind?> kindOf(String text) async =>
+        (await detectImportContent(text))?.kind;
+
+    test('源倉庫的漫畫書源是書源', () async {
+      expect(await kindOf(_comicSource), ImportContentKind.bookSource);
     });
 
-    test('單一物件、帶 BOM 與前後空白的書源也是書源', () {
+    test('單一物件、帶 BOM 與前後空白的書源也是書源', () async {
       expect(
-        detectImportContentKind(
+        await kindOf(
           '﻿ \n{"bookSourceUrl":"https://a.com","bookSourceName":"A"}\n',
         ),
         ImportContentKind.bookSource,
       );
     });
 
-    test('訂閱源、替換規則、主題照 Legado 的欄位分辨', () {
-      expect(detectImportContentKind(_rssSource), ImportContentKind.rssSource);
+    test('訂閱源、替換規則、主題照 Legado 的欄位分辨', () async {
+      expect(await kindOf(_rssSource), ImportContentKind.rssSource);
       expect(
-        detectImportContentKind('[{"name":"去廣告","pattern":"廣告"}]'),
+        await kindOf('[{"name":"去廣告","pattern":"廣告"}]'),
         ImportContentKind.replaceRule,
       );
       expect(
-        detectImportContentKind('{"themeName":"夜","isNightTheme":true}'),
+        await kindOf('{"themeName":"夜","isNightTheme":true}'),
         ImportContentKind.theme,
       );
     });
 
-    test('替換規則的 regex 別名也是替換規則', () {
+    test('替換規則的 regex 別名也是替換規則', () async {
       expect(
-        detectImportContentKind('[{"name":"去廣告","regex":"廣告"}]'),
+        await kindOf('[{"name":"去廣告","regex":"廣告"}]'),
         ImportContentKind.replaceRule,
       );
     });
 
-    test('陣列前面的空項目略過，看第一個認得的', () {
+    test('陣列前面的空項目略過，看第一個認得的', () async {
       const source = '{"bookSourceName":"A","bookSourceUrl":"https://a.com"}';
-      expect(
-        detectImportContentKind('[null,$source]'),
-        ImportContentKind.bookSource,
-      );
-      expect(
-        detectImportContentKind('[{},$source]'),
-        ImportContentKind.bookSource,
-      );
+      expect(await kindOf('[null,$source]'), ImportContentKind.bookSource);
+      expect(await kindOf('[{},$source]'), ImportContentKind.bookSource);
     });
 
-    test('夜讀的書架匯出與書籍陣列是書架資料', () {
+    test('夜讀的書架匯出與 Legado 的書架是書架資料，交給書架匯入不用再解析', () async {
       expect(
-        detectImportContentKind(
+        await kindOf(
           '{"kind":"night_reader.bookshelf","version":1,"books":[]}',
         ),
         ImportContentKind.bookshelf,
       );
       expect(
-        detectImportContentKind('[{"bookUrl":"https://a.com/1","name":"書"}]'),
-        ImportContentKind.bookshelf,
-      ); // Legado 匯出的書架：只有書名、作者、簡介。
-      expect(
-        detectImportContentKind('[{"name":"書","author":"某人","intro":""}]'),
+        await kindOf('[{"bookUrl":"https://a.com/1","name":"書","author":""}]'),
         ImportContentKind.bookshelf,
       );
+      // Legado 匯出的書架：只有書名、作者、簡介。
+      final legado = await detectImportContent(
+        '[{"name":"書","author":"某人","intro":""}]',
+      );
+      expect(legado?.kind, ImportContentKind.bookshelf);
+      expect(legado?.bookshelf?.legado, [(name: '書', author: '某人')]);
     });
 
-    test('網頁、空內容、認不出的 JSON 回 null', () {
-      expect(detectImportContentKind('<!DOCTYPE html><html></html>'), isNull);
-      expect(detectImportContentKind(''), isNull);
-      expect(detectImportContentKind('[]'), isNull);
-      expect(detectImportContentKind('[1,2]'), isNull);
-      expect(detectImportContentKind('{"foo":1}'), isNull);
+    test('和書架匯入同一個判斷：缺作者、夾了別的東西的不是書架', () async {
+      expect(
+        await kindOf('[{"bookUrl":"https://a.com/1","name":"書"}]'),
+        isNull,
+      );
+      expect(await kindOf('[{"name":"書","intro":""}]'), isNull);
+      expect(await kindOf('[{"name":"書","author":"某人"},{"foo":1}]'), isNull);
+    });
+
+    test('網頁、空內容、認不出的 JSON 回 null', () async {
+      expect(await kindOf('<!DOCTYPE html><html></html>'), isNull);
+      expect(await kindOf(''), isNull);
+      expect(await kindOf('[]'), isNull);
+      expect(await kindOf('[1,2]'), isNull);
+      expect(await kindOf('{"foo":1}'), isNull);
     });
   });
 

@@ -11,6 +11,7 @@ import 'association_base.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_rule_import_sheet.dart';
+import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_import_flow.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/features/source_manager/widgets/import_preview_sheet.dart';
@@ -41,34 +42,50 @@ mixin AssociationDialogHelper on AssociationBase {
       return;
     }
     if (!context.mounted) return;
-    importContent(context, url, text);
+    await importContent(context, url, text);
   }
 
   @override
-  void importContent(BuildContext context, String label, String text) {
-    final kind = detectImportContentKind(text);
-    if (kind == null) {
-      showAppAlert<void>(
-        context: context,
-        title: '無法辨識',
-        message: '「$label」不是夜讀能匯入的格式。',
-        actions: const [
-          AppAlertAction(label: '關閉', value: null, isDefault: true),
-        ],
+  Future<void> importContent(
+    BuildContext context,
+    String label,
+    String text,
+  ) async {
+    final detected = await detectImportContent(text);
+    if (!context.mounted) return;
+    if (detected == null) {
+      unawaited(
+        showAppAlert<void>(
+          context: context,
+          title: '無法辨識',
+          message: '「$label」不是夜讀能匯入的格式。',
+          actions: const [
+            AppAlertAction(label: '關閉', value: null, isDefault: true),
+          ],
+        ),
       );
       return;
     }
-    unawaited(_runImportDialog(context, kind, label, text: text));
+    unawaited(
+      _runImportDialog(
+        context,
+        detected.kind,
+        label,
+        text: text,
+        bookshelf: detected.bookshelf,
+      ),
+    );
   }
 
   /// 問要不要匯入，按下後才匯入。[text] 是已經拿到的內容；沒有時（類型寫在
-  /// 連結上）按下才從 [url] 下載。
+  /// 連結上）按下才從 [url] 下載。[bookshelf] 是判斷類型時已經解析好的書架檔。
   Future<void> _runImportDialog(
     BuildContext context,
     ImportContentKind kind,
     String label, {
     String? url,
     String? text,
+    BookshelfFile? bookshelf,
   }) async {
     final action = switch (kind) {
       ImportContentKind.bookSource => '匯入書源',
@@ -104,7 +121,10 @@ mixin AssociationDialogHelper on AssociationBase {
           return;
         case ImportContentKind.bookshelf:
           if (!context.mounted) return;
-          message = await importBookshelfText(context, content);
+          final file =
+              bookshelf ?? await BookshelfExchangeService.parse(content);
+          if (!context.mounted) return;
+          message = await importBookshelfFile(context, file);
           if (!context.mounted) return;
           await context.read<BookshelfProvider>().loadBooks();
         case ImportContentKind.replaceRule:

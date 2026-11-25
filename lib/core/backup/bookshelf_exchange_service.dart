@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -64,15 +65,20 @@ class BookshelfImportResult {
 /// 書架的匯出與匯入，格式和 Legado 互通。
 ///
 /// 匯出是一個陣列、一本一筆（同 Legado `exportBookshelf`）：Legado 匯入時
-/// 每一筆只讀 `name`、`author`，照書名與作者在它啟用的書源裡找；夜讀這一筆
-/// 是整本書的欄位，另外帶著這本的目錄（`chapters`）、存好的正文
-/// （`chapterContents`）與它用的書源（`source`），夜讀匯回來不用再找。
+/// 每一筆只讀 `name`、`author`，照書名與作者在它啟用的書源裡找。本地書照
+/// Legado 只有書名、作者、簡介；網路書是可以分享的書的欄位
+/// （[_sharedBookFields]，不帶本機的封面檔與書、章節的變數），另外帶著這本的
+/// 目錄（`chapters`）、存好的正文（`chapterContents`）與它用的書源
+/// （`source`，同一個書源只跟著第一本），夜讀匯回來不用再找。
 ///
 /// 匯入認得：這個陣列、2026-11 以前的物件格式（`{kind, books, chapters,
-/// chapterContents, sources}`）、書籍或章節或書源的陣列，與 Legado 的
-/// `[{name, author, intro}]`。後者沒有書的網址，照 Legado
+/// chapterContents, sources}`）、一本書的物件、章節的陣列，與 Legado 的
+/// `[{name, author, intro}]`。陣列的每一筆都要是書架的一筆或都是章節
+/// （[BookshelfFile.fromDecoded]），不然整份不是書架檔、什麼都不匯入：替換
+/// 規則、書源與其他 JSON 不會被當成書架。Legado 的書架沒有書的網址，照 Legado
 /// `importBookshelfByJson`：書架上已有同名同作者的略過，其他的照書源排序在
-/// 啟用的書源裡精確搜尋（書名、作者都一樣），加第一個找到的。
+/// 啟用的書源裡精確搜尋（書名、作者都一樣），加第一個找到的。檔案在背景
+/// isolate 解析一次（[parse]），匯出也在那裡編碼、寫檔。
 class BookshelfExchangeService {
   BookshelfExchangeService({BookSourceService? sourceService})
     : _givenSourceService = sourceService;
@@ -83,6 +89,66 @@ class BookshelfExchangeService {
 
   /// 一本書同時問幾個書源（同自動換源）。
   static const int _searchBatch = 6;
+
+  /// 網路書匯出的欄位：書架上看得到的與閱讀進度。不帶只屬於這台的：本機
+  /// 封面檔（`coverLocalPath`、`customCoverLocalPath`）、書的變數
+  /// （`variable`）與本地書原檔指紋；從相簿選的封面網址另外濾掉
+  /// （[_sharedCoverUrl]）。
+  static const List<String> _sharedBookFields = [
+    'bookUrl',
+    'tocUrl',
+    'origin',
+    'originName',
+    'name',
+    'author',
+    'kind',
+    'customTag',
+    'coverUrl',
+    'intro',
+    'customIntro',
+    'charset',
+    'type',
+    'group',
+    'latestChapterTitle',
+    'latestChapterTime',
+    'lastCheckTime',
+    'lastCheckCount',
+    'totalChapterNum',
+    'durChapterTitle',
+    'chapterIndex',
+    'charOffset',
+    'visualOffsetPx',
+    'readerAnchorJson',
+    'durChapterTime',
+    'progressTime',
+    'wordCount',
+    'canUpdate',
+    'order',
+    'originOrder',
+    'readConfig',
+    'syncTime',
+    'isInBookshelf',
+  ];
+
+  /// 章節匯出的欄位：不帶章節的變數（`variable`）與正文（正文另外放在
+  /// `chapterContents`）。
+  static const List<String> _sharedChapterFields = [
+    'url',
+    'title',
+    'isVolume',
+    'baseUrl',
+    'bookUrl',
+    'index',
+    'isVip',
+    'isPay',
+    'resourceUrl',
+    'tag',
+    'wordCount',
+    'start',
+    'end',
+    'startFragmentId',
+    'endFragmentId',
+  ];
 
   final BookDao _bookDao = getIt<BookDao>();
   final ChapterDao _chapterDao = getIt<ChapterDao>();
@@ -100,16 +166,28 @@ class BookshelfExchangeService {
     final shelfBooks = books ?? await _bookDao.getInBookshelf();
     final contentDao = _contentDao;
     final payload = <Map<String, dynamic>>[];
+    final exportedSources = <String>{};
     for (final book in shelfBooks) {
-      final source = book.origin.isNotEmpty && !book.isLocal
+      if (book.isLocal) {
+        // 同 Legado：本地書只有書名、作者與顯示的簡介，原檔在這台。
+        final intro = book.getDisplayIntro();
+        payload.add({
+          'name': book.name,
+          'author': book.author,
+          'intro': ?intro,
+        });
+        continue;
+      }
+      final source = book.origin.isNotEmpty && exportedSources.add(book.origin)
           ? await _sourceDao.getByUrl(book.origin)
           : null;
       payload.add({
-        // Legado 照這兩欄找書；書名與作者是書的欄位，一定是字串。
-        ...book.toJson(),
+        // Legado 照 name、author 找書；書名與作者是書的欄位，一定是字串。
+        ..._pick(book.toJson(), _sharedBookFields),
+        'customCoverUrl': _sharedCoverUrl(book.customCoverUrl),
         'chapters': [
           for (final chapter in await _chapterDao.getByBook(book.bookUrl))
-            chapter.toJson(),
+            _pick(chapter.toJson(), _sharedChapterFields),
         ],
         // 只帶存好的正文、而且是這本書現在用的書源的（同備份）。
         'chapterContents': [
@@ -124,11 +202,30 @@ class BookshelfExchangeService {
     }
 
     final file = await AppStoragePaths.shareExportFile(fileName);
-    await file.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(payload),
-    );
+    await _writeJson(file.path, payload);
     return file;
   }
+
+  static Map<String, dynamic> _pick(
+    Map<String, dynamic> json,
+    List<String> keys,
+  ) => {for (final key in keys) key: json[key]};
+
+  /// 從相簿選的封面網址是這台的檔（`file://`，見 `Book.getDisplayCover`），
+  /// 不帶出去。
+  static String? _sharedCoverUrl(String? url) =>
+      url == null || url.startsWith('file://') || url.startsWith('/')
+      ? null
+      : url;
+
+  /// 在背景 isolate 編碼、寫檔（只帶路徑與內容過去，不帶這個物件的 DAO）。
+  static Future<void> _writeJson(
+    String path,
+    List<Map<String, dynamic>> payload,
+  ) => Isolate.run(
+    () => File(path)
+        .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(payload)),
+  );
 
   Future<void> shareBookshelf({List<Book>? books, String? fileName}) async {
     final file = await exportBookshelf(
@@ -149,97 +246,40 @@ class BookshelfExchangeService {
     return response.data ?? '';
   }
 
-  /// [text] 裡要在書源裡搜尋的書（Legado 的書架，只有書名、作者）有幾本；
-  /// 有的話匯入會花一段時間，呼叫端先開進度框。不是書架檔時是 0。
-  static int searchCountOf(String text) {
-    try {
-      return _legadoEntries(jsonDecode(text)).length;
-    } on FormatException {
-      return 0;
-    }
-  }
+  /// 在背景 isolate 解析書架檔 [text]（只帶字串過去，不帶這個物件的
+  /// DAO）；不是書架檔時是 null。
+  static Future<BookshelfFile?> parse(String text) =>
+      Isolate.run(() => BookshelfFile.parse(text));
 
-  /// 匯入書架檔（格式見 [BookshelfExchangeService]）。Legado 的書架要一本
-  /// 一本在書源裡搜：每找完一本（找到、找不到都算）呼叫 [onSearchProgress]；
-  /// [cancelToken] 取消時停在兩本之間，找到的留著。
+  /// 解析（[parse]）並匯入書架檔 [text]，見 [importFile]。
   Future<BookshelfImportResult> importFromText(
     String text, {
     void Function(int done, int total)? onSearchProgress,
     CancelToken? cancelToken,
+  }) async => importFile(
+    await parse(text),
+    onSearchProgress: onSearchProgress,
+    cancelToken: cancelToken,
+  );
+
+  /// 匯入解析好的書架檔（格式見 [BookshelfExchangeService]）；不是書架檔
+  /// （[file] 是 null）時什麼都不寫，結果的 [BookshelfImportResult.summary]
+  /// 是 null。Legado 的書架要
+  /// 一本一本在書源裡搜：開始找之前以（0, 實際要找的本數）呼叫一次
+  /// [onSearchProgress]（書架上已有的不算），之後每找完一本（找到、找不到
+  /// 都算）呼叫一次；沒有要找的就不呼叫。[cancelToken] 取消時停在兩本之間，
+  /// 找到的留著。
+  Future<BookshelfImportResult> importFile(
+    BookshelfFile? file, {
+    void Function(int done, int total)? onSearchProgress,
+    CancelToken? cancelToken,
   }) async {
-    final decoded = jsonDecode(text);
-
-    final books = <Book>[];
-    final chapters = <BookChapter>[];
-    final sources = <BookSource>[];
-    final chapterContents = <ReaderChapterContentEntry>[];
-    final legado = _legadoEntries(decoded);
-
-    if (decoded is Map<String, dynamic>) {
-      if (decoded['books'] is List) {
-        books.addAll(_parseBooks(decoded['books'] as List<dynamic>));
-      } else if (_looksLikeBook(decoded)) {
-        books.add(Book.fromJson(decoded));
-      }
-      if (decoded['chapters'] is List) {
-        chapters.addAll(_parseChapters(decoded['chapters'] as List<dynamic>));
-      }
-      if (decoded['sources'] is List) {
-        sources.addAll(_parseSources(decoded['sources'] as List<dynamic>));
-      }
-      if (decoded['chapterContents'] is List) {
-        chapterContents.addAll(
-          _parseChapterContents(decoded['chapterContents'] as List<dynamic>),
-        );
-      }
-    } else if (decoded is List) {
-      Map<String, dynamic>? first;
-      for (final item in decoded) {
-        if (item is Map<String, dynamic> &&
-            (_looksLikeBook(item) ||
-                _looksLikeChapter(item) ||
-                _looksLikeSource(item))) {
-          first = item;
-          break;
-        }
-      }
-      if (first != null) {
-        if (_looksLikeBook(first)) {
-          // 夜讀的匯出：每一本帶著自己的目錄、正文與書源。
-          for (final item in decoded.whereType<Map<String, dynamic>>()) {
-            if (!_looksLikeBook(item)) continue;
-            books.add(Book.fromJson(item));
-            if (item['chapters'] case final List<dynamic> list) {
-              chapters.addAll(_parseChapters(list));
-            }
-            if (item['chapterContents'] case final List<dynamic> list) {
-              chapterContents.addAll(_parseChapterContents(list));
-            }
-            if (item['source'] case final Map<String, dynamic> source) {
-              sources.addAll(_parseSources([source]));
-            }
-          }
-        } else if (_looksLikeChapter(first)) {
-          chapters.addAll(
-            _parseChapters(
-              decoded
-                  .whereType<Map<String, dynamic>>()
-                  .where(_looksLikeChapter)
-                  .toList(growable: false),
-            ),
-          );
-        } else if (_looksLikeSource(first)) {
-          sources.addAll(
-            _parseSources(
-              decoded
-                  .whereType<Map<String, dynamic>>()
-                  .where(_looksLikeSource)
-                  .toList(growable: false),
-            ),
-          );
-        }
-      }
+    if (file == null) {
+      return const BookshelfImportResult(books: 0, chapters: 0, sources: 0);
     }
+    final books = file.books;
+    final chapters = file.chapters;
+    final sources = file.sources;
 
     // 匯入書架檔是「加入這些書」：這台書架上已經有的書（同一個網址）照這台
     // 的，閱讀進度、分組、封面、目錄與已下載的正文都不拿檔裡的舊資料蓋掉。
@@ -250,16 +290,12 @@ class BookshelfExchangeService {
     };
     for (final book in books) {
       if (kept.contains(book.bookUrl)) continue;
-      final normalized =
-          book.copyWith(
-            isInBookshelf: true,
-            syncTime: book.syncTime == 0
-                ? DateTime.now().millisecondsSinceEpoch
-                : book.syncTime,
-          )..fillChapterTitle([
-            for (final chapter in chapters)
-              if (chapter.bookUrl == book.bookUrl) chapter,
-          ]);
+      final normalized = book.copyWith(
+        isInBookshelf: true,
+        syncTime: book.syncTime == 0
+            ? DateTime.now().millisecondsSinceEpoch
+            : book.syncTime,
+      )..fillChapterTitle(file.chaptersByBook[book.bookUrl] ?? const []);
       // 書架檔多半是別台匯出的：那台存好的封面檔這台沒有，改用網址。
       await BookCoverStorageService.dropMissingCoverFiles(normalized);
       await _bookDao.upsert(normalized);
@@ -287,7 +323,7 @@ class BookshelfExchangeService {
     var contents = 0;
     final contentDao = _contentDao;
     if (contentDao != null) {
-      for (final content in chapterContents) {
+      for (final content in file.contents) {
         if (!content.isReady) continue;
         if (await contentDao.fillContent(
           contentKey: content.contentKey,
@@ -304,7 +340,7 @@ class BookshelfExchangeService {
       }
     }
     final found = await _addFromSources(
-      legado,
+      file.legado,
       onProgress: onSearchProgress,
       cancelToken: cancelToken,
     );
@@ -328,7 +364,7 @@ class BookshelfExchangeService {
     );
   }
 
-  /// Legado 的書架（[_legadoEntries]）一本一本照書名、作者在啟用的書源裡找，
+  /// Legado 的書架（[BookshelfFile.legado]）一本一本照書名、作者在啟用的書源裡找，
   /// 找到的加進書架；書架上已有同名同作者的略過（同 Legado）。
   Future<({List<Book> added, int alreadyOnShelf, List<String> notFound})>
   _addFromSources(
@@ -440,66 +476,165 @@ class BookshelfExchangeService {
             sourceRuntimeStatusTags.contains(tag) ||
             tag == aiUnfixableSourceGroupTag,
       );
+}
 
-  /// Legado 匯出的書架裡的書：沒有書的網址、有書名的每一筆（書名空的略過，
-  /// 同 Legado）。夜讀的書架檔與其他內容是空的。
-  static List<({String name, String author})> _legadoEntries(Object? decoded) {
-    if (decoded is! List) return const [];
-    return [
-      for (final item in decoded)
-        if (item is Map<String, dynamic> &&
-            _looksLikeLegadoBook(item) &&
-            (item['name'] as String).trim().isNotEmpty)
-          (
-            name: (item['name'] as String).trim(),
-            author: item['author'] is String
-                ? (item['author'] as String).trim()
-                : '',
-          ),
-    ];
+/// 解析好的書架檔（[BookshelfExchangeService.parse]）。書架匯入與外部匯入
+/// 判斷類型（`detectImportContent`）都用 [fromDecoded] 判斷是不是書架檔。
+class BookshelfFile {
+  BookshelfFile({
+    required this.books,
+    required this.chapters,
+    required this.sources,
+    required this.contents,
+    required this.legado,
+  }) : chaptersByBook = _groupByBook(chapters);
+
+  final List<Book> books;
+  final List<BookChapter> chapters;
+
+  /// 不重複的書源（同一個書源網址只留第一份）：舊版匯出的檔每本書都帶一份。
+  final List<BookSource> sources;
+  final List<ReaderChapterContentEntry> contents;
+
+  /// Legado 匯出的書架裡要在書源裡找的書（書名空的略過，同 Legado）。
+  final List<({String name, String author})> legado;
+
+  final Map<String, List<BookChapter>> chaptersByBook;
+
+  static Map<String, List<BookChapter>> _groupByBook(
+    List<BookChapter> chapters,
+  ) {
+    final byBook = <String, List<BookChapter>>{};
+    for (final chapter in chapters) {
+      (byBook[chapter.bookUrl] ??= []).add(chapter);
+    }
+    return byBook;
   }
 
-  /// Legado `exportBookshelf` 的一筆：`{name, author, intro}`。
-  static bool _looksLikeLegadoBook(Map<String, dynamic> json) =>
+  /// 解析 [text]；不是 JSON 或不是書架檔時是 null。在呼叫端的 isolate 跑，
+  /// 主 isolate 用 [BookshelfExchangeService.parse]。
+  static BookshelfFile? parse(String text) {
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(text);
+    } on FormatException {
+      return null;
+    }
+    return fromDecoded(decoded);
+  }
+
+  /// 已經解開的 JSON [decoded] 是書架檔時解析它，不是時是 null（規則見
+  /// [BookshelfExchangeService]）。
+  static BookshelfFile? fromDecoded(Object? decoded) {
+    final books = <Book>[];
+    final chapters = <BookChapter>[];
+    final sources = <String, BookSource>{};
+    final contents = <ReaderChapterContentEntry>[];
+    final legado = <({String name, String author})>[];
+
+    void addSource(Object? json) {
+      if (json is! Map<String, dynamic> || !_looksLikeSource(json)) return;
+      final source = BookSource.fromJson(json)..prepareIncoming();
+      sources.putIfAbsent(source.bookSourceUrl, () => source);
+    }
+
+    void addChapters(Object? list) {
+      if (list is! List) return;
+      for (final json in list.whereType<Map<String, dynamic>>()) {
+        chapters.add(BookChapter.fromJson(json)..content = null);
+      }
+    }
+
+    void addContents(Object? list) {
+      if (list is! List) return;
+      for (final json in list.whereType<Map<String, dynamic>>()) {
+        final entry = ReaderChapterContentEntry.fromJson(json);
+        if (entry.contentKey.isNotEmpty) contents.add(entry);
+      }
+    }
+
+    if (decoded is Map<String, dynamic>) {
+      if (decoded['books'] case final List<dynamic> list) {
+        // 2026-11 以前的物件格式：每一本都要是書。
+        final rows = list.whereType<Map<String, dynamic>>().toList();
+        if (rows.length != list.length || !rows.every(_isBookRow)) return null;
+        books.addAll(rows.map(Book.fromJson));
+        addChapters(decoded['chapters']);
+        if (decoded['sources'] case final List<dynamic> list) {
+          list.forEach(addSource);
+        }
+        addContents(decoded['chapterContents']);
+      } else if (_isBookRow(decoded)) {
+        books.add(Book.fromJson(decoded));
+      } else {
+        return null;
+      }
+    } else if (decoded is List) {
+      // 和其他匯入一樣略過空項目；其他不是物件的不是書架檔。
+      final rows = <Map<String, dynamic>>[];
+      for (final item in decoded) {
+        if (item == null) continue;
+        if (item is! Map<String, dynamic>) return null;
+        rows.add(item);
+      }
+      if (rows.isEmpty) return null;
+      if (rows.every((row) => _isBookRow(row) || _isLegadoRow(row))) {
+        for (final row in rows) {
+          if (_isBookRow(row)) {
+            // 夜讀匯出的網路書：帶著自己的目錄、正文與書源。
+            books.add(Book.fromJson(row));
+            addChapters(row['chapters']);
+            addContents(row['chapterContents']);
+            addSource(row['source']);
+          } else {
+            final name = (row['name'] as String).trim();
+            if (name.isEmpty) continue;
+            legado.add((name: name, author: (row['author'] as String).trim()));
+          }
+        }
+      } else if (rows.every(_looksLikeChapter)) {
+        addChapters(rows);
+      } else {
+        return null;
+      }
+    } else {
+      return null;
+    }
+    return BookshelfFile(
+      books: books,
+      chapters: chapters,
+      sources: sources.values.toList(),
+      contents: contents,
+      legado: legado,
+    );
+  }
+
+  /// 書架的一筆：夜讀匯出的一本書，或 Legado `exportBookshelf` 的
+  /// `{name, author, intro}`。一定有書名與作者，而且不是替換規則
+  /// （`pattern`、`regex`）、書源（`bookSourceUrl`）或章節（`title`）。
+  static bool _isShelfRow(Map<String, dynamic> json) =>
       json['name'] is String &&
-      !json.containsKey('bookUrl') &&
+      json['author'] is String &&
+      !json.containsKey('pattern') &&
+      !json.containsKey('regex') &&
       !json.containsKey('bookSourceUrl') &&
       !json.containsKey('title');
 
-  List<Book> _parseBooks(List<dynamic> raw) {
-    return raw.whereType<Map<String, dynamic>>().map(Book.fromJson).toList();
-  }
+  /// 夜讀匯出的一本書：書架的一筆，帶著書的網址。
+  static bool _isBookRow(Map<String, dynamic> json) =>
+      _isShelfRow(json) &&
+      json['bookUrl'] is String &&
+      (json['bookUrl'] as String).isNotEmpty;
 
-  List<BookChapter> _parseChapters(List<dynamic> raw) {
-    return raw
-        .whereType<Map<String, dynamic>>()
-        .map((json) => BookChapter.fromJson(json)..content = null)
-        .toList();
-  }
+  /// Legado 匯出的一本書：書架的一筆，沒有書的網址。
+  static bool _isLegadoRow(Map<String, dynamic> json) =>
+      _isShelfRow(json) && !json.containsKey('bookUrl');
 
-  List<BookSource> _parseSources(List<dynamic> raw) {
-    return raw
-        .whereType<Map<String, dynamic>>()
-        .map((json) => BookSource.fromJson(json)..prepareIncoming())
-        .toList();
-  }
-
-  List<ReaderChapterContentEntry> _parseChapterContents(List<dynamic> raw) {
-    return raw
-        .whereType<Map<String, dynamic>>()
-        .map(ReaderChapterContentEntry.fromJson)
-        .where((entry) => entry.contentKey.isNotEmpty)
-        .toList();
-  }
-
-  bool _looksLikeBook(Map<String, dynamic> json) =>
-      json.containsKey('bookUrl') && json.containsKey('name');
-
-  bool _looksLikeChapter(Map<String, dynamic> json) =>
+  static bool _looksLikeChapter(Map<String, dynamic> json) =>
       json.containsKey('bookUrl') &&
       json.containsKey('title') &&
       json.containsKey('index');
 
-  bool _looksLikeSource(Map<String, dynamic> json) =>
+  static bool _looksLikeSource(Map<String, dynamic> json) =>
       json.containsKey('bookSourceUrl') && json.containsKey('bookSourceName');
 }

@@ -762,9 +762,11 @@ class _BookshelfPageState extends State<BookshelfPage>
     final trimmed = url?.trim() ?? '';
     if (trimmed.isEmpty || !context.mounted) return;
     try {
-      final text = await BookshelfExchangeService().fetchText(trimmed);
+      final file = await BookshelfExchangeService.parse(
+        await BookshelfExchangeService().fetchText(trimmed),
+      );
       if (!context.mounted) return;
-      final message = await importBookshelfText(context, text);
+      final message = await importBookshelfFile(context, file);
       await provider.loadBooks();
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
@@ -781,9 +783,11 @@ class _BookshelfPageState extends State<BookshelfPage>
         .pickBookshelfImportPath();
     if (path == null || !context.mounted) return;
     try {
-      final text = await File(path).readAsString();
+      final file = await BookshelfExchangeService.parse(
+        await File(path).readAsString(),
+      );
       if (!context.mounted) return;
-      final message = await importBookshelfText(context, text);
+      final message = await importBookshelfFile(context, file);
       if (!context.mounted) return;
       unawaited(context.read<BookshelfProvider>().loadBooks());
       ScaffoldMessenger.of(context)

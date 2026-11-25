@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:isolate';
 
+import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 
 /// 外部匯入的內容類型。
@@ -16,13 +18,29 @@ enum ImportContentKind {
   final String description;
 }
 
-/// 依內容判斷外部匯入的類型；不是 JSON 或認不出來時回 `null`。
+/// 判斷好的外部匯入內容（[detectImportContent]）。
+class DetectedImport {
+  const DetectedImport(this.kind, {this.bookshelf});
+
+  final ImportContentKind kind;
+
+  /// 書架檔解析好的內容，只有 [ImportContentKind.bookshelf] 有：交給書架匯入
+  /// 不用再解析一次。
+  final BookshelfFile? bookshelf;
+}
+
+/// 依內容判斷外部匯入的類型；不是 JSON 或認不出來時回 `null`。在背景
+/// isolate 解析一次（分享的檔可能很大）。
 ///
 /// 分享的檔案、分享的文字、沒帶類型的匯入連結（`legado://import/auto`）都用
 /// 這一個判斷，同一份內容不會一處說是書源、另一處說無法辨識。欄位與順序對照
 /// Legado 的 `BaseAssociationViewModel.importJson`；陣列看第一個認得的項目，
-/// 和各匯入器一樣略過前面的空項目。書架最後才看。
-ImportContentKind? detectImportContentKind(String text) {
+/// 和各匯入器一樣略過前面的空項目。都不是書源、訂閱源、替換規則、主題時，
+/// 照書架匯入同一個判斷（[BookshelfFile.fromDecoded]）看是不是書架檔。
+Future<DetectedImport?> detectImportContent(String text) =>
+    Isolate.run(() => _detect(text));
+
+DetectedImport? _detect(String text) {
   final Object? decoded;
   try {
     decoded = jsonDecode(normalizeImportJson(text));
@@ -33,9 +51,12 @@ ImportContentKind? detectImportContentKind(String text) {
   for (final entry in entries) {
     if (entry is! Map) continue;
     final kind = _kindOfEntry(entry);
-    if (kind != null) return kind;
+    if (kind != null) return DetectedImport(kind);
   }
-  return null;
+  final bookshelf = BookshelfFile.fromDecoded(decoded);
+  return bookshelf == null
+      ? null
+      : DetectedImport(ImportContentKind.bookshelf, bookshelf: bookshelf);
 }
 
 ImportContentKind? _kindOfEntry(Map<dynamic, dynamic> entry) {
@@ -46,12 +67,5 @@ ImportContentKind? _kindOfEntry(Map<dynamic, dynamic> entry) {
     return ImportContentKind.replaceRule;
   }
   if (entry.containsKey('themeName')) return ImportContentKind.theme;
-  // 夜讀的書架匯出（一本一筆的陣列，或舊的 {kind, books, chapters, sources}）、
-  // 書籍與章節物件，或 Legado 匯出的書架（`[{name, author, intro}]`）。
-  if (entry['books'] is List ||
-      entry.containsKey('bookUrl') ||
-      (entry['name'] is String && entry.containsKey('author'))) {
-    return ImportContentKind.bookshelf;
-  }
   return null;
 }

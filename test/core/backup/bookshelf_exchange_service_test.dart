@@ -462,5 +462,184 @@ void main() {
       expect(result.books, 1);
       expect((await BookDao(db).getInBookshelf()).map((b) => b.name), ['一']);
     });
+
+    // 從別處拿到的檔：替換規則、書源與其他 JSON 不當成書架，什麼都不寫。
+    for (final (label, rows) in [
+      (
+        '替換規則',
+        [
+          {'name': '去廣告', 'pattern': '廣告', 'replacement': ''},
+        ],
+      ),
+      (
+        '有作者的替換規則',
+        [
+          {'name': '去廣告', 'author': '某人', 'regex': '廣告'},
+        ],
+      ),
+      (
+        '書源',
+        [
+          {'bookSourceUrl': 'https://s.example', 'bookSourceName': '某站'},
+        ],
+      ),
+      (
+        '有書名、作者的書源',
+        [
+          {'name': '夜航', 'author': '某人', 'bookSourceUrl': 'https://s.example'},
+        ],
+      ),
+      (
+        '夾了一筆替換規則的書架',
+        [
+          {'name': '夜航', 'author': '某人', 'intro': ''},
+          {'name': '去廣告', 'author': '', 'pattern': '廣告'},
+        ],
+      ),
+      (
+        '舊物件格式裡夾了替換規則',
+        {
+          'books': [
+            {'bookUrl': 'https://s.example/1', 'name': '夜航', 'author': ''},
+            {'name': '去廣告', 'author': '', 'pattern': '廣告'},
+          ],
+        },
+      ),
+      (
+        '書的網址是空的',
+        [
+          {'bookUrl': null, 'name': '夜航', 'author': '某人'},
+        ],
+      ),
+      (
+        '沒有作者欄位',
+        [
+          {'name': '夜航', 'intro': ''},
+        ],
+      ),
+    ]) {
+      test('$label不是書架檔，什麼都不匯入', () async {
+        await BookSourceDao(db).upsert(source('https://a.example'));
+        final library = _Library({
+          'https://a.example': [('夜航', '某人'), ('去廣告', ''), ('去廣告', '某人')],
+        });
+
+        final result = await BookshelfExchangeService(sourceService: library)
+            .importFromText(jsonEncode(rows));
+
+        expect(result.summary, isNull);
+        expect(library.searched, isEmpty);
+        expect(await BookDao(db).getInBookshelf(), isEmpty);
+        expect(await BookSourceDao(db).getByUrl('https://s.example'), isNull);
+      });
+    }
+
+    test('匯出不帶這台的東西：本地書只有書名、作者、簡介，網路書不帶本機封面'
+        '路徑與書、章節的變數', () async {
+      await BookSourceDao(db).upsert(source(origin));
+      await BookDao(db).upsert(
+        Book(
+          bookUrl: url,
+          origin: origin,
+          name: '夜航',
+          author: '某人',
+          isInBookshelf: true,
+          coverUrl: 'https://img.example/c.jpg',
+          coverLocalPath: '/data/本機封面.jpg',
+          customCoverUrl: 'file:///sdcard/相簿封面.jpg',
+          customCoverLocalPath: '/data/本機自訂封面.jpg',
+          variable: '{"書的變數":"1"}',
+        ),
+      );
+      await ChapterDao(db).insertChapters([
+        BookChapter(
+          url: '$url/0',
+          title: '序',
+          bookUrl: url,
+          variable: '{"章節的變數":"1"}',
+        ),
+      ]);
+      await BookDao(db).upsert(
+        Book(
+          bookUrl: '/sdcard/本機檔.txt',
+          origin: 'local',
+          name: '本地',
+          author: '某人',
+          intro: '原簡介',
+          customIntro: '自己寫的簡介',
+          isInBookshelf: true,
+          coverLocalPath: '/data/本地封面.jpg',
+          fileFingerprint: 'abc',
+        ),
+      );
+      final root = await Directory.systemTemp.createTemp('shelf_export');
+      addTearDown(() => root.delete(recursive: true));
+      AppStoragePaths.useRoots((
+        documents: root.path,
+        support: root.path,
+        temporary: root.path,
+      ));
+
+      final file = await BookshelfExchangeService().exportBookshelf();
+      final text = await file.readAsString();
+
+      for (final local in [
+        '本機封面',
+        '相簿封面',
+        '本機自訂封面',
+        '書的變數',
+        '章節的變數',
+        '本機檔',
+        '本地封面',
+        'fileFingerprint',
+      ]) {
+        expect(text, isNot(contains(local)), reason: local);
+      }
+      final rows = (jsonDecode(text) as List).cast<Map<String, dynamic>>();
+      final localRow = rows.singleWhere((row) => row['name'] == '本地');
+      // 同 Legado `exportBookshelf`：簡介是顯示的那一份。
+      expect(localRow, {'name': '本地', 'author': '某人', 'intro': '自己寫的簡介'});
+      final webRow = rows.singleWhere((row) => row['name'] == '夜航');
+      expect(webRow['coverUrl'], 'https://img.example/c.jpg');
+      expect(webRow['bookUrl'], url);
+      expect((webRow['chapters'] as List).single['title'], '序');
+    });
+
+    test('同一個書源只匯出一份，匯入時算不重複的書源', () async {
+      await BookSourceDao(db).upsert(source(origin));
+      for (final i in [1, 2]) {
+        await BookDao(db).upsert(
+          Book(
+            bookUrl: '$origin/book/$i',
+            origin: origin,
+            name: '書$i',
+            isInBookshelf: true,
+          ),
+        );
+      }
+      final root = await Directory.systemTemp.createTemp('shelf_export');
+      addTearDown(() => root.delete(recursive: true));
+      AppStoragePaths.useRoots((
+        documents: root.path,
+        support: root.path,
+        temporary: root.path,
+      ));
+
+      final file = await BookshelfExchangeService().exportBookshelf();
+      final rows = (jsonDecode(await file.readAsString()) as List)
+          .cast<Map<String, dynamic>>();
+
+      expect(rows.where((row) => row['source'] != null), hasLength(1));
+
+      // 舊版匯出的檔每本都帶一份同樣的書源。
+      final old = [
+        for (final row in rows) {...row, 'source': source(origin).toJson()},
+      ];
+      final result = await BookshelfExchangeService().importFromText(
+        jsonEncode(old),
+      );
+      expect(result.sources, 1);
+      expect(result.summary, contains('1 個書源'));
+    });
   });
 }
