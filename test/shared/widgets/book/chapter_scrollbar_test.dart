@@ -11,6 +11,7 @@ void main() {
   Future<ScrollController> pumpList(WidgetTester tester, int count) async {
     final controller = ScrollController();
     addTearDown(controller.dispose);
+    final labels = [for (var i = 0; i < count; i++) '第 $i 章'];
     (int, int)? visibleRange() {
       if (!controller.hasClients) return null;
       final p = controller.position;
@@ -28,7 +29,8 @@ void main() {
             onJumpTo: (index) => controller.jumpTo(
               (index * extent).clamp(0.0, controller.position.maxScrollExtent),
             ),
-            labelFor: (index) => '第 $index 章',
+            // 和書籍詳情一樣直接取清單：序號超出就丟例外。
+            labelFor: (index) => labels[index],
             child: ListView.builder(
               controller: controller,
               itemExtent: extent,
@@ -114,6 +116,30 @@ void main() {
     expect(bubble().right, closeTo(rest.right, 0.5));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.byType(GlassSurface), findsNothing);
+  });
+
+  testWidgets('按住拖曳時目錄變短：泡泡不取超出的序號、跳的也在新目錄裡', (tester) async {
+    await pumpList(tester, 500);
+    await tester.drag(find.byType(ListView), const Offset(0, -300));
+    await tester.pump();
+    final gesture = await tester.startGesture(tester.getCenter(thumb()));
+    await gesture.moveBy(const Offset(0, 20));
+    await gesture.moveBy(const Offset(0, 2000));
+    await tester.pump();
+    expect(find.textContaining('第 4'), findsOneWidget);
+
+    // 檢查更新拿掉了後面的章，手指還按著、沒有再移動。
+    final controller = await pumpList(tester, 200);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.text('第 199 章'), findsWidgets);
+
+    await gesture.moveBy(const Offset(0, 5));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(controller.offset, controller.position.maxScrollExtent);
+    await gesture.up();
+    await tester.pumpAndSettle(const Duration(seconds: 2));
   });
 
   testWidgets('a short list never shows the thumb', (tester) async {
