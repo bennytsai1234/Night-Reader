@@ -573,7 +573,7 @@ void main() {
     expect(find.textContaining('書源0'), findsOneWidget);
   });
 
-  testWidgets('篩選「需要登入」只留有登入網址的書源', (tester) async {
+  testWidgets('篩選「可以登入」只留有登入網址的書源', (tester) async {
     final dao = GetIt.instance<BookSourceDao>();
     await tester.runAsync(() async {
       await dao.upsert(
@@ -604,12 +604,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('分組與篩選'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('需要登入'));
+    await tester.tap(find.text('可以登入'));
     await tester.pumpAndSettle();
 
     expect(find.text('有登入網址'), findsOneWidget);
     expect(find.text('沒有登入網址'), findsNothing);
-    expect(provider.filterGroup, '需要登入');
+    expect(provider.filterGroup, '可以登入');
   });
 
   testWidgets('名稱旁的分組只列使用者的分組，校驗結果只在狀態標籤出現一次', (tester) async {
