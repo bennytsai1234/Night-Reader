@@ -179,6 +179,25 @@ void main() {
     }, skip: skip);
   });
 
+  test('setContent 交整份網頁，正則與 ## 取代拿到的是網頁的 HTML', () {
+    const page = "'<html><body><p>正文</p></body></html>'";
+    expect(
+      run(
+        'java.setContent(org.jsoup.Jsoup.parse($page)); '
+        // `##` 寫在外層規則裡會被當成取代，拆開來接。
+        r"java.getString(['', '<p>(.+?)</p>', '$1', ''].join('#' + '#') + '#')",
+      ),
+      '正文',
+    );
+    expect(
+      run(
+        'java.setContent(org.jsoup.Jsoup.parse($page)); '
+        "java.getString('\$1', java.getElement(':<p>(.+?)</p>'))",
+      ),
+      contains('正文'),
+    );
+  }, skip: skip);
+
   test('bytesToStr 收 Java 有正負的位元組', () {
     expect(run("java.bytesToStr([-42, -48], 'GBK')"), '中');
   }, skip: skip);
