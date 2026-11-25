@@ -9,13 +9,24 @@ import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/sync/settings_sync.dart';
 
 import '../platform/app_permission_service.dart';
+import 'audio_focus.dart';
 import 'system_playback.dart';
 import 'tts_speech_coordinator.dart';
 
+/// 念一段沒念出來的原因（[TTSService.failures]）。
+enum TtsFailure {
+  /// 引擎沒開好、不收這句、念的途中出錯。
+  engine,
+
+  /// 系統不給音訊焦點（例如通話中），沒有開始念。
+  noAudioFocus,
+}
+
 /// TTSService - 系統 TTS 朗讀服務（單例），對應 Legado 的 TTSReadAloudService。
 ///
-/// 整個 App 只有一個 FlutterTts 引擎。這裡只管念與朗讀參數；通知欄、鎖定
-/// 畫面這些系統播放資訊由念的那一方（閱讀器的朗讀）交給 [SystemPlayback]。
+/// 整個 App 只有一個 FlutterTts 引擎。這裡只管念、朗讀參數與音訊焦點；通知
+/// 欄、鎖定畫面這些系統播放資訊由念的那一方（閱讀器的朗讀）交給
+/// [SystemPlayback]。
 class TTSService extends ChangeNotifier {
   static final TTSService _instance = TTSService._internal();
   factory TTSService() => _instance;
@@ -27,6 +38,31 @@ class TTSService extends ChangeNotifier {
   final FlutterTts _flutterTts = FlutterTts();
   final AppPermissionService _permissionService = AppPermissionService();
   final TtsSpeechCoordinator _speechCoordinator = TtsSpeechCoordinator();
+
+  late AudioFocus _audioFocus;
+  late StreamSubscription<AudioFocusChange> _audioFocusSubscription;
+
+  /// 下一次念之前要先要音訊焦點：每次開始念（停了之後的第一句）與被打斷
+  /// 之後要一次，句與句之間不再要（每次要都是一趟主執行緒上的系統呼叫）。
+  bool _needsAudioFocus = true;
+
+  @visibleForTesting
+  set audioFocus(AudioFocus focus) {
+    unawaited(_audioFocusSubscription.cancel());
+    _useAudioFocus(focus);
+  }
+
+  void _useAudioFocus(AudioFocus focus) {
+    _audioFocus = focus;
+    _needsAudioFocus = true;
+    _audioFocusSubscription = focus.changes.listen((change) {
+      if (change != AudioFocusChange.regained) _needsAudioFocus = true;
+    });
+  }
+
+  /// 被打斷、打斷結束、拔耳機（[AudioFocusChange]）。焦點整個 App 一份，
+  /// 有聲書在播時也會收到；閱讀器的朗讀只在自己念著時照它停。
+  Stream<AudioFocusChange> get audioFocusChanges => _audioFocus.changes;
 
   bool _isPlaying = false;
   double _pitch = defaultPitch;
@@ -75,6 +111,7 @@ class TTSService extends ChangeNotifier {
   int currentWordEnd = 0;
 
   TTSService._internal() {
+    _useAudioFocus(AudioFocus());
     SettingsSync.applied.addListener(_reloadSyncedParams);
   }
 
@@ -207,21 +244,9 @@ class TTSService extends ChangeNotifier {
     }
   }
 
+  /// iOS 的音訊類別不在這裡設：要焦點時由 `audio_session` 設成和有聲書
+  /// 一樣的（[AudioFocus]），整個 App 一份，誰先播都一樣。
   Future<void> _initTts() async {
-    try {
-      await _flutterTts.setIosAudioCategory(
-        IosTextToSpeechAudioCategory.playback,
-        [
-          IosTextToSpeechAudioCategoryOptions.allowBluetooth,
-          IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
-          IosTextToSpeechAudioCategoryOptions.duckOthers,
-        ],
-        IosTextToSpeechAudioMode.voicePrompt,
-      );
-    } catch (e) {
-      AppLog.e('TTSService: iOS audio category setup failed: $e', error: e);
-    }
-
     _flutterTts.setStartHandler(() {
       _isPlaying = true;
       notifyListeners();
@@ -239,7 +264,7 @@ class TTSService extends ChangeNotifier {
 
     _flutterTts.setErrorHandler((msg) {
       AppLog.e('TTSService: TTS error: $msg');
-      _reportFailure();
+      _reportFailure(TtsFailure.engine);
     });
 
     _flutterTts.setProgressHandler((
@@ -276,7 +301,7 @@ class TTSService extends ChangeNotifier {
       prepare: () async {
         await init();
         if (!_isInitialized) {
-          _reportFailure();
+          _reportFailure(TtsFailure.engine);
           return false;
         }
         if (!_notificationPermissionChecked) {
@@ -284,7 +309,16 @@ class TTSService extends ChangeNotifier {
           await _permissionService.requestNotification();
           await SystemPlayback.instance.start();
         }
-        return _isInitialized;
+        // 每次開始念先要音訊焦點，要不到不念（同 Legado）：別的 App 的聲音
+        // 停下或壓低，來電與拔耳機時才收得到消息。
+        if (_needsAudioFocus) {
+          if (!await _audioFocus.request()) {
+            _reportFailure(TtsFailure.noAudioFocus);
+            return false;
+          }
+          _needsAudioFocus = false;
+        }
+        return true;
       },
       speak: () async {
         currentSpokenText = text;
@@ -294,12 +328,15 @@ class TTSService extends ChangeNotifier {
         _isPlaying = true;
         notifyListeners();
         // 引擎連著但不收這句時回 0（`third_party/flutter_tts`）。
-        if (await _flutterTts.speak(text) == 0) _reportFailure();
+        if (await _flutterTts.speak(text) == 0) {
+          _reportFailure(TtsFailure.engine);
+        }
       },
     );
   }
 
   Future<void> stop() async {
+    _needsAudioFocus = true;
     await _speechCoordinator.stop(
       stop: () async {
         // 引擎還沒開就沒有在念的東西；不為了停止去開它。
@@ -537,17 +574,18 @@ class TTSService extends ChangeNotifier {
   final StreamController<void> _completions =
       StreamController<void>.broadcast();
 
-  /// 念一段沒念出來時送出一次：引擎沒開好、不收這句、念的途中出錯。閱讀器
-  /// 的朗讀聽它停在這句，不一直停在「朗讀中」。
-  Stream<void> get failures => _failures.stream;
-  final StreamController<void> _failures = StreamController<void>.broadcast();
+  /// 念一段沒念出來時送出一次，帶著原因（[TtsFailure]）。閱讀器的朗讀聽它
+  /// 停在這句，不一直停在「朗讀中」。
+  Stream<TtsFailure> get failures => _failures.stream;
+  final StreamController<TtsFailure> _failures =
+      StreamController<TtsFailure>.broadcast();
 
-  void _reportFailure() {
+  void _reportFailure(TtsFailure reason) {
     _isPlaying = false;
     currentSpokenText = '';
     currentWordStart = -1;
     currentWordEnd = -1;
-    _failures.add(null);
+    _failures.add(reason);
     notifyListeners();
   }
 
