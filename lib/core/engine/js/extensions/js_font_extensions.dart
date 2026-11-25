@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:crypto/crypto.dart';
 
+import '../../analyze_url.dart';
 import '../js_extensions_base.dart';
 import '../query_ttf.dart';
 import 'js_blocking_tasks.dart';
@@ -37,11 +38,10 @@ extension JsFontExtensions on JsExtensionsBase {
         final buffer =
             bytes ??
             (dataStr.startsWith('http')
+                // 照書源的請求抓（標頭、登入、網址選項），同 Legado 經書源的
+                // AnalyzeUrl。
                 ? BlockingCall.run(
-                    plainBytes(
-                      dataStr,
-                      cookieJar: source?.enabledCookieJar == true,
-                    ),
+                    responseBytes(AnalyzeUrl(dataStr, source: source)),
                   ) as Uint8List
                 : EncodeUtilsBase64.decodeAndroid(dataStr));
         final qTTF = QueryTTF(buffer);
@@ -52,6 +52,22 @@ extension JsFontExtensions on JsExtensionsBase {
         AppLog.e('queryTTF error: $e', error: e);
       }
       return null;
+    });
+
+    // queryTTF 交回的字型物件的查詢方法（Legado 的 QueryTTF 公開方法）。
+    runtime.onMessage('_ttfCall', (dynamic args) {
+      final ttf = JsExtensionsBase.ttfCache[args[0]?.toString()];
+      final arg = args[2];
+      final Object? result = switch (args[1]) {
+        _ when ttf == null => null,
+        'getGlyfIdByUnicode' => ttf.getGlyfIdByUnicode((arg as num).toInt()),
+        'getGlyfByUnicode' => ttf.getGlyfByUnicode((arg as num).toInt()),
+        'getGlyfById' => ttf.getGlyfById((arg as num).toInt()),
+        'getUnicodeByGlyf' => ttf.getUnicodeByGlyf(arg as String?),
+        'isBlankUnicode' => ttf.isBlankUnicode((arg as num).toInt()),
+        _ => null,
+      };
+      return jsonEncode(result);
     });
 
     runtime.onMessage('replaceFont', (dynamic args) {

@@ -580,7 +580,28 @@ class ReaderPageCoordinator {
     final index = shown == null
         ? 0
         : paragraphIndexAt(shown, location.charOffset);
-    return paragraphs[index.clamp(0, paragraphs.length - 1)];
+    // 畫面上的第幾段是替換規則套用之後的：規則整段刪掉（「隱藏」）、合併或
+    // 拆開段落時，和原文的第幾段對不上，照規則套用後的段落對回原文。
+    final book = _host.book;
+    final replaceDao = _host.dependencies.replaceDao;
+    if (!book.getUseReplaceRule() || replaceDao == null) {
+      return paragraphs[index.clamp(0, paragraphs.length - 1)];
+    }
+    try {
+      final stage = await ReaderContentTransformer.ruleStageParagraphs(
+        book: book,
+        chapter: chapter,
+        rawContent: raw,
+        enabledRules: await replaceDao.getEnabledForBook(
+          book.name,
+          book.origin,
+        ),
+      );
+      return sourceParagraphAt(paragraphs, stage.paragraphs, index);
+    } catch (error, stack) {
+      AppLog.e('對齊替換規則測試文字失敗: $error', error: error, stackTrace: stack);
+      return paragraphs[index.clamp(0, paragraphs.length - 1)];
+    }
   }
 
   /// 靜態函式建立的閉包只帶著 [raw] 進另一個 isolate，不帶這個協調器。

@@ -7,6 +7,9 @@ import 'package:night_reader/features/reader/features/settings/reader_settings_g
 import 'package:night_reader/features/reader/screen/reader_device_channel.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:provider/provider.dart';
+
+import 'settings_provider.dart';
 
 /// 閱讀偏好：完整的排版、版面、頁首頁尾、翻頁、自動翻頁、繁簡、點擊區域、
 /// 音量鍵、朗讀與螢幕設定。和閱讀器內「外觀與排版」面板（精簡版）用同一組區塊與同一個
@@ -64,6 +67,7 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
             _groups.autoPage(),
             _groups.chineseConvert(),
             _groups.illustrations(),
+            _replaceRuleDefault(),
             _groups.clickActions(),
             if (ReaderDeviceChannel.supportsVolumeKeys) _groups.volumeKey(),
             _groups.tts(),
@@ -75,4 +79,19 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
       ),
     );
   }
+
+  /// 新書預設套不套替換規則（R14）：每本書的「本書套用替換規則」沒動過時
+  /// 照這一列，設定跟著多台手機同步。
+  Widget _replaceRuleDefault() => GroupedSection(
+    children: [
+      Selector<SettingsProvider, bool>(
+        selector: (_, settings) => settings.replaceEnableDefault,
+        builder: (context, value, _) => GroupedSwitchRow(
+          title: '新書預設套用替換規則',
+          value: value,
+          onChanged: context.read<SettingsProvider>().setReplaceEnableDefault,
+        ),
+      ),
+    ],
+  );
 }

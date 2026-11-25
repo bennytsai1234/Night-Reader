@@ -26,15 +26,13 @@ final class AudioUrlResolver {
     BookChapter chapter, {
     CancelToken? cancelToken,
   }) async {
-    final rule = source.ruleContent?.content;
-    final content = rule == null || rule.trim().isEmpty
-        ? chapter.getAbsoluteURL()
-        : await CompleteContentFetcher.fetch(
-            source,
-            book,
-            chapter,
-            cancelToken: cancelToken,
-          );
+    // 正文規則空白時抓到的就是章節網址（[CompleteContentFetcher.fetch]）。
+    final content = await CompleteContentFetcher.fetch(
+      source,
+      book,
+      chapter,
+      cancelToken: cancelToken,
+    );
     final raw = firstUrl(content);
     if (raw.isEmpty) {
       throw SourceException('沒有取得音訊網址', sourceUrl: chapter.url);
@@ -44,6 +42,7 @@ final class AudioUrlResolver {
       baseUrl: chapter.getAbsoluteURL(),
       source: source,
       ruleData: book,
+      chapter: chapter,
     ).playbackRequest();
     return AudioRequest(url: request.url, headers: request.headers);
   }

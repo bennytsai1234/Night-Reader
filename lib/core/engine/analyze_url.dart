@@ -44,6 +44,10 @@ class AnalyzeUrl {
   final String baseUrl;
   final BaseSource? source;
   final dynamic ruleData;
+
+  /// 這個請求是哪一章的（同 Legado `AnalyzeUrl.chapter`）：抓正文、播音訊時
+  /// 給。網址裡的規則讀 `title` 是它的章名，`java.put` 先存進它。
+  final dynamic chapter;
   final String? speakText;
   final int? speakSpeed;
 
@@ -92,7 +96,9 @@ class AnalyzeUrl {
     this.baseUrl = '',
     this.source,
     this.ruleData,
+    this.chapter,
     Map<String, String>? headers,
+    bool loginHeaders = true,
   }) {
     final optionStart = _paramPattern.firstMatch(baseUrl);
     _givenBaseUrl = optionStart == null
@@ -109,13 +115,27 @@ class AnalyzeUrl {
           ..remove('proxy');
       } else {
         _initSourceHeaders();
-        _initLoginHeaders();
+        if (loginHeaders) _initLoginHeaders();
       }
       initUrl();
     } finally {
       _releaseJsRule();
     }
   }
+
+  /// 書源的標頭，和送出請求時同一套（Legado `getHeaderMap`）：標頭是 JS 時
+  /// 先跑、照 Gson 寬鬆讀、不送 `proxy`；[loginHeaders] 時加上登入標頭。給
+  /// 規則 JS 的 `source.getHeaderMap()` 與用網頁抓（`java.webView`）用。
+  static Map<String, String> sourceHeaders(
+    BaseSource source, {
+    bool loginHeaders = true,
+  }) => Map.of(
+    AnalyzeUrl(
+      source.getKey(),
+      source: source,
+      loginHeaders: loginHeaders,
+    ).headerMap,
+  );
 
   /// 網址選項的開頭：網址之後第一個「逗號接 `{`」。
   static final RegExp _paramPattern = RegExp(r'\s*,\s*(?=\{)');
@@ -147,6 +167,7 @@ class AnalyzeUrl {
       ruleData: ruleData,
     );
     rule
+      ..chapter = chapter
       ..key = key
       ..page = page ?? 1
       ..baseUrl = _jsBaseUrl

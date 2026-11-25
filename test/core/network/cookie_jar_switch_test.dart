@@ -97,9 +97,11 @@ void main() {
   });
 
   test('規則抓快取檔（java.cacheFile、importScript）也照書源的 Cookie 罐開關存', () async {
-    await cachedText('$baseUrl/set?v=6', 0, cookieJar: false)();
+    Future<void> cache(String url, BookSource source) =>
+        cachedText(url, AnalyzeUrl(url, source: source), 0)();
+    await cache('$baseUrl/set?v=6', source(jar: false));
     expect(await get('/echo', source(jar: true)), 'cookie=');
-    await cachedText('$baseUrl/set?v=7', 0, cookieJar: true)();
+    await cache('$baseUrl/set?v=7', source(jar: true));
     expect(await get('/echo', source(jar: true)), 'cookie=last=7');
   });
 

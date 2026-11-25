@@ -11,6 +11,7 @@ import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.da
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/network/backstage_webview.dart';
 import 'package:night_reader/core/utils/cache_manager.dart';
+import 'package:night_reader/core/utils/encoding_detect.dart';
 import 'package:night_reader/core/network/cookie_store.dart';
 import 'package:night_reader/core/network/http_client.dart';
 import 'package:night_reader/core/network/network_service.dart';
@@ -141,7 +142,8 @@ BlockingTask rawResponse({
 }) => () async {
   try {
     if (cookieJar) await _mergeStoredCookies(url, headers);
-    final response = await HttpClient().client.fetch<dynamic>(
+    final client = HttpClient().client;
+    final response = await client.fetch<List<int>>(
       RequestOptions(
         method: method,
         path: url,
@@ -151,7 +153,13 @@ BlockingTask rawResponse({
         followRedirects: false,
         maxRedirects: 0,
         validateStatus: (_) => true,
-        responseType: ResponseType.plain,
+        // `fetch` 不併網路的預設設定，逾時要自己帶，網站接上不回時才會停。
+        connectTimeout: client.options.connectTimeout,
+        sendTimeout: client.options.sendTimeout,
+        receiveTimeout: client.options.receiveTimeout,
+        // 收原始位元組：`bodyAsBytes()` 要網站給的原文（GBK、加密的正文），
+        // 文字另外照回應標頭的字元集解（同 Jsoup `Response.body()`）。
+        responseType: ResponseType.bytes,
         extra: <String, dynamic>{
           AppInterceptor.disableManualRedirectHandlingKey: true,
           ...LenientCookieManager.sourceExtra(cookieJar),
@@ -159,8 +167,10 @@ BlockingTask rawResponse({
         cancelToken: currentSourceCancelToken,
       ),
     );
+    final bytes = Uint8List.fromList(response.data ?? const <int>[]);
     return {
-      'body': response.data?.toString() ?? '',
+      'body': _decodeBody(bytes, response.headers.value('content-type')),
+      'bodyBase64': base64Encode(bytes),
       'url': response.realUri.toString(),
       'requestUrl': url,
       'code': response.statusCode,
@@ -173,6 +183,18 @@ BlockingTask rawResponse({
     return failedResponse(url, e);
   }
 };
+
+/// Jsoup `Response.body()`：照回應標頭的字元集解，沒寫是 UTF-8。
+String _decodeBody(Uint8List bytes, String? contentType) {
+  final charset = contentType == null
+      ? null
+      : RegExp(
+          r'''charset\s*=\s*["']?([^;\s"']+)''',
+          caseSensitive: false,
+        ).firstMatch(contentType)?.group(1);
+  if (charset == null) return utf8.decode(bytes, allowMalformed: true);
+  return EncodingDetect.decodeWithCharset(bytes, charset);
+}
 
 Future<void> _mergeStoredCookies(
   String url,
@@ -217,49 +239,30 @@ List<String> _redirectsOf(Response<dynamic> response) {
 BlockingTask responseBytes(AnalyzeUrl url) =>
     () => url.getByteArray();
 
-/// [url] 的位元組，不經書源設定（字型這類資源）；網站回的 Cookie 照書源的
-/// Cookie 罐開關 [cookieJar] 存（同 Legado `queryTTF` 經書源的 AnalyzeUrl）。
-BlockingTask plainBytes(String url, {required bool cookieJar}) => () async {
-  final response = await HttpClient().client.get<List<int>>(
-    url,
-    options: Options(
-      responseType: ResponseType.bytes,
-      extra: LenientCookieManager.sourceExtra(cookieJar),
-    ),
-    cancelToken: currentSourceCancelToken,
-  );
-  return Uint8List.fromList(response.data ?? const []);
-};
-
-/// `java.cacheFile`：快取裡有就用，沒有就抓回來存進快取。存的時候不等它
-/// 寫完：停住的書源 isolate 手上若有交易，寫入要等它，它又在等這裡。網站
-/// 回的 Cookie 照書源的 Cookie 罐開關 [cookieJar] 存（同 Legado
-/// `downloadFile` 經書源的 AnalyzeUrl）。
-BlockingTask cachedText(
-  String url,
-  int saveTimeSeconds, {
-  required bool cookieJar,
-}) => () async {
-  final key = JsEncodeUtils.md5Encode16(url);
-  final cached = await CacheManager().get(key);
-  if (cached != null) return cached;
-  try {
-    final response = await HttpClient().client.get<String>(
-      url,
-      options: Options(extra: LenientCookieManager.sourceExtra(cookieJar)),
-      cancelToken: currentSourceCancelToken,
-    );
-    final content = response.data.toString();
-    if (content.isNotEmpty) {
-      unawaited(
-        CacheManager().put(key, content, saveTimeSeconds: saveTimeSeconds),
-      );
-    }
-    return content;
-  } catch (_) {
-    return '';
-  }
-};
+/// `java.cacheFile`：快取裡有就用，沒有就照書源的請求（標頭、登入、網址
+/// 選項，同 Legado `downloadFile` 經書源的 AnalyzeUrl）抓回來存進快取。存的
+/// 時候不等它寫完：停住的書源 isolate 手上若有交易，寫入要等它，它又在等
+/// 這裡。[url] 是快取的鍵（規則給的網址原文）。
+BlockingTask cachedText(String url, AnalyzeUrl request, int saveTimeSeconds) =>
+    () async {
+      final key = JsEncodeUtils.md5Encode16(url);
+      final cached = await CacheManager().get(key);
+      if (cached != null) return cached;
+      try {
+        final content = utf8.decode(
+          await request.getByteArray(),
+          allowMalformed: true,
+        );
+        if (content.isNotEmpty) {
+          unawaited(
+            CacheManager().put(key, content, saveTimeSeconds: saveTimeSeconds),
+          );
+        }
+        return content;
+      } catch (_) {
+        return '';
+      }
+    };
 
 /// 書源 jsLib 的網址片段（Legado `SharedJsScope`）：抓過的存在快取，不會
 /// 過期，之後網站慢或離線照樣用得到；快取沒有又抓不到時丟出錯誤。存的時候
@@ -293,11 +296,13 @@ BlockingTask backstagePage({
   String? sourceRegex,
   String? overrideUrlRegex,
   String? tag,
+  Map<String, String>? headerMap,
 }) => () async {
   final webView = BackstageWebView(
     html: html,
     url: url,
     javaScript: javaScript,
+    headerMap: headerMap,
     sourceRegex: sourceRegex,
     overrideUrlRegex: overrideUrlRegex,
     tag: tag,

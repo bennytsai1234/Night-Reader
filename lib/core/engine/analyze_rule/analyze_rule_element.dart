@@ -53,7 +53,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
             // 讀的就是它）。
             case Mode.regex:
               tempResult = AnalyzeByRegex.getElement(
-                result.toString(),
+                stringifyRuleResult(result),
                 rule.split('&&').where((s) => s.isNotEmpty).toList(),
               );
               break;
@@ -130,7 +130,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           switch (made.mode) {
             case Mode.regex:
               tempResult = AnalyzeByRegex.getElements(
-                result.toString(),
+                stringifyRuleResult(result),
                 rule.split('&&').where((s) => s.isNotEmpty).toList(),
               );
               break;

@@ -6,6 +6,8 @@ import '../diagnostics/app_log_service.dart';
 
 import 'package:fast_gbk/fast_gbk.dart';
 
+import 'gb18030.dart';
+
 import 'big5.dart';
 
 /// EncodingDetect - 簡易編碼偵測工具
@@ -31,9 +33,17 @@ class EncodingDetect {
       if (normalized == 'UTF-16BE' || normalized == 'UTF16BE') {
         return _decodeUtf16(data, Endian.big);
       }
-      if (normalized == 'GBK' ||
-          normalized == 'GB2312' ||
-          normalized == 'GB18030') {
+      if (normalized == 'UTF-16' ||
+          normalized == 'UTF16' ||
+          normalized == 'UNICODE') {
+        // Java 的 UTF-16：有 BOM 照 BOM，沒有時當大端序。
+        return _decodeUtf16(
+          data,
+          _hasUtf16LeBom(data) ? Endian.little : Endian.big,
+        );
+      }
+      if (normalized == 'GB18030') return Gb18030.decode(data);
+      if (normalized == 'GBK' || normalized == 'GB2312') {
         return decodeGbk(data);
       }
       if (Big5.names.contains(normalized)) return Big5.decode(data);
@@ -87,9 +97,14 @@ class EncodingDetect {
     if (normalized == 'UTF-16BE' || normalized == 'UTF16BE') {
       return _encodeUtf16(text, Endian.big);
     }
-    if (normalized == 'GBK' ||
-        normalized == 'GB2312' ||
-        normalized == 'GB18030') {
+    if (normalized == 'UTF-16' ||
+        normalized == 'UTF16' ||
+        normalized == 'UNICODE') {
+      // 位置換算不算 BOM：兩端的長度一樣。
+      return _encodeUtf16(text, Endian.big);
+    }
+    if (normalized == 'GB18030') return Gb18030.encode(text);
+    if (normalized == 'GBK' || normalized == 'GB2312') {
       return Uint8List.fromList(gbk.encode(text));
     }
     if (Big5.names.contains(normalized)) return Big5.encode(text);
@@ -100,6 +115,40 @@ class EncodingDetect {
     if (_hasUtf8Bom(bytes)) return 3;
     if (_hasUtf16LeBom(bytes) || _hasUtf16BeBom(bytes)) return 2;
     return 0;
+  }
+
+  /// 照 [charset] 解碼時要跳過的 BOM 長度：只跳過這個編碼認得的 BOM；
+  /// 選錯編碼時 BOM 位元組照常解碼，章節位移才對得上正文。
+  static int bomLengthFor(Uint8List bytes, String charset) {
+    final normalized = charset.trim().toUpperCase().replaceAll('_', '-');
+    if (normalized == 'UTF-8' || normalized == 'UTF8') {
+      return _hasUtf8Bom(bytes) ? 3 : 0;
+    }
+    if (normalized == 'UTF-16LE' || normalized == 'UTF16LE') {
+      return _hasUtf16LeBom(bytes) ? 2 : 0;
+    }
+    if (normalized == 'UTF-16BE' || normalized == 'UTF16BE') {
+      return _hasUtf16BeBom(bytes) ? 2 : 0;
+    }
+    if (normalized == 'UTF-16' ||
+        normalized == 'UTF16' ||
+        normalized == 'UNICODE') {
+      return _hasUtf16LeBom(bytes) || _hasUtf16BeBom(bytes) ? 2 : 0;
+    }
+    return 0;
+  }
+
+  /// 讀者選的編碼 [charset] 換成實際解碼用的名字：只寫 UTF-16 時照檔案的
+  /// BOM 決定 UTF-16LE／UTF-16BE（沒有 BOM 時當大端序，同 Java 的 UTF-16）；
+  /// 其他編碼照原樣。章節切片沒有 BOM，存著小端／大端才解得對。
+  static String resolveCharset(Uint8List bytes, String charset) {
+    final normalized = charset.trim().toUpperCase().replaceAll('_', '-');
+    if (normalized == 'UTF-16' ||
+        normalized == 'UTF16' ||
+        normalized == 'UNICODE') {
+      return _hasUtf16LeBom(bytes) ? 'UTF-16LE' : 'UTF-16BE';
+    }
+    return charset.trim();
   }
 
   /// 針對 HTML 內容偵測編碼
@@ -140,8 +189,8 @@ class EncodingDetect {
 
   /// 偵測位元組陣列的編碼。有 BOM 照 BOM；沒有時照 Legado 用的 ICU
   /// `CharsetDetector` 裡的五個辨識器（[_IcuGuess]），在 UTF-8、沒有 BOM 的
-  /// UTF-16、GB18030 與 Big5 之間挑信心最高的。GB18030 回傳 `GBK`（同一套
-  /// 解法）。
+  /// UTF-16、GB18030 與 Big5 之間挑信心最高的。名稱照辨識器（同 Legado），
+  /// GB18030 的四位元組字（emoji、少見漢字）才解得出來。
   static String getEncode(Uint8List bytes) {
     if (bytes.isEmpty) return 'UTF-8';
 
@@ -234,10 +283,10 @@ class _IcuGuess {
       ('UTF-16BE', _utf16(bigEndian: true)),
       ('UTF-16LE', _utf16(bigEndian: false)),
       // 同分時排在後面的贏。ICU 是 Big5 在後；夜讀讓 GBK 贏：10 個字以內的
-      // 短文字兩邊都是 10 分、分不出來，照改用 ICU 之前的判斷當 GBK（Legado
+      // 短文字兩邊都是 10 分、分不出來，照改用 ICU 之前的判斷當 GB18030（Legado
       // 在這種情況也常判錯）。
       ('Big5', _mbcs(_big5Next, _big5Common)),
-      ('GBK', _mbcs(_gb18030Next, _gb18030Common)),
+      ('GB18030', _mbcs(_gb18030Next, _gb18030Common)),
     ];
     var best = 'UTF-8';
     var confidence = 0;

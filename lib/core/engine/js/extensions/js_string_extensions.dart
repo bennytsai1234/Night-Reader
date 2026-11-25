@@ -122,7 +122,10 @@ extension JsStringExtensions on JsExtensions {
       final bytesSource = payload is List && payload.isNotEmpty
           ? payload[0]
           : payload;
-      final bytes = List<int>.from(bytesSource as List);
+      // Java 的 byte 有正負（-42 就是 0xD6）。
+      final bytes = [
+        for (final b in bytesSource as List) (b as num).toInt() & 0xFF,
+      ];
       final charset = payload is List && payload.length > 1
           ? payload[1]?.toString()
           : null;

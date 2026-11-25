@@ -10,6 +10,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
@@ -105,5 +106,34 @@ void main() {
 
     expect(shared, hasLength(1));
     expect(await BookIllustrationStorage.isUnfetched(book), isTrue);
+  });
+
+  // 本地書的原檔不在這台（例如匯入了別台的書架檔）：匯出要說失敗，不能把
+  // 「檔案不存在」當成正文寫進檔案、還說建立好了。
+  test('a local book whose original is missing fails to export instead of '
+      'writing the error as text', () async {
+    final missing = '${root.path}/gone/夜航.txt';
+    final book = Book(
+      bookUrl: 'local://$missing',
+      origin: 'local',
+      name: '夜航',
+      isInBookshelf: true,
+    );
+    await ChapterDao(db).insertChapters([
+      BookChapter(
+        url: '${book.bookUrl}#0',
+        title: '一',
+        bookUrl: book.bookUrl,
+        index: 0,
+        start: 0,
+        end: 10,
+      ),
+    ]);
+
+    await expectLater(
+      ExportBookService().exportToTxt(book, present: present),
+      throwsA(isA<LocalBookContentException>()),
+    );
+    expect(shared, isEmpty);
   });
 }

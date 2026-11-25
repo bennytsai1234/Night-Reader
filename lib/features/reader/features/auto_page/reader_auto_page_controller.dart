@@ -150,8 +150,12 @@ class ReaderAutoPageController extends ChangeNotifier {
       if (scrollBy != null && await scrollBy(delta)) return true;
     }
     if (!current()) return false;
+    // 翻頁可能要等下一章排好：等的期間暫停或停了就不翻（選單打開時的位置
+    // 不被等到的這一下帶走）。
     final moveToNextPage = _viewportController?.moveToNextPage;
-    if (moveToNextPage != null && await moveToNextPage()) return true;
+    if (moveToNextPage != null && await moveToNextPage(isWanted: current)) {
+      return true;
+    }
     return false;
   }
 

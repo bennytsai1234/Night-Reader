@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
@@ -85,7 +86,11 @@ class NetworkComicPageSource implements ComicPageSource {
   }
 
   @override
-  Future<Uint8List> bytesOf(int chapterIndex, ComicPage page) async {
+  Future<Uint8List> bytesOf(
+    int chapterIndex,
+    ComicPage page, {
+    bool refresh = false,
+  }) async {
     if (_cbz[chapterIndex] case final cbz?) {
       final bytes = await cbz.read(page.name);
       if (bytes == null) throw StateError('這張圖不見了：${page.name}');
@@ -95,6 +100,22 @@ class NetworkComicPageSource implements ComicPageSource {
     final index = urls.indexOf(page.name);
     if (index < 0) throw StateError('這一話沒有這張圖');
     if (await _packedPage(chapterIndex, index) case final bytes?) return bytes;
+    if (refresh) {
+      // 「重試」：之前抓下來暫存的那張可能是壞的（網站回了不完整的圖），
+      // 刪掉照書源重抓。
+      final dir = await ComicChapterDownload.partialDirFor(
+        book,
+        chapters[chapterIndex],
+      );
+      final stale = ComicChapterDownload.pageFileIn(dir, index);
+      if (stale != null) {
+        try {
+          await stale.delete();
+        } on FileSystemException {
+          // 已經不在（書架自動下載剛打包好、刪了暫存資料夾）。
+        }
+      }
+    }
     return _service.getComicPage(
       source,
       book,

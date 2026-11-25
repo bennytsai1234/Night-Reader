@@ -38,7 +38,7 @@ class AssociationHandlerService extends AssociationBase
 
     // 1. Deep Link (legado://、yuedu://)：app_links 6 起這個串流也會送出開啟
     // App 的那個連結，不另外呼叫 getInitialLink()，否則冷啟動會跳兩次匯入。
-    // 開著「解鎖才能打開」時，解鎖、鎖的畫面收掉之後才處理（ADR 0083）：
+    // 「離開時」選了會解鎖的選項時，解鎖、鎖的畫面收掉之後才處理（ADR 0083）：
     // 分享進來的書不在解鎖前就加進書架。
     linkSubscription = appLinks.uriLinkStream.listen((uri) async {
       await AppLock.instance.whenOpen();

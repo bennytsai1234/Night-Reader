@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/local_book/txt_parser.dart';
 import 'package:night_reader/core/utils/big5.dart';
+import 'package:night_reader/core/utils/gb18030.dart';
 
 /// 段落之間夠遠（Legado 挑規則時，相隔不到 1000 字的只算一處）。
 String _body(String marker) => '　　$marker${'正文內容。' * 300}\n';
@@ -216,9 +217,88 @@ void main() {
     });
   });
 
+  group('繁體的章名與全形數字（L7）', () {
+    test('繁體的節、兩、萬、貳與全形數字都分得出', () {
+      final content = [
+        '第一節 開端\n${_body('a')}',
+        '第兩百章 遠遠的路\n${_body('b')}',
+        '第一萬章 終點\n${_body('c')}',
+        '第貳章 舊事\n${_body('d')}',
+        '第１章 全形數字\n${_body('e')}',
+        '第２章 再一次\n${_body('f')}',
+      ].join();
+      expect(_titles(content), [
+        '第一節 開端',
+        '第兩百章 遠遠的路',
+        '第一萬章 終點',
+        '第貳章 舊事',
+        '第１章 全形數字',
+        '第２章 再一次',
+      ]);
+    });
+
+    test('簡體與半形的章名照樣分得出', () {
+      final content = [
+        '第一章 开始\n${_body('a')}',
+        '第2章 中间\n${_body('b')}',
+        '第三节 结尾\n${_body('c')}',
+        '第4节 再说一次\n${_body('d')}',
+      ].join();
+      expect(_titles(content), ['第一章 开始', '第2章 中间', '第三节 结尾', '第4节 再说一次']);
+    });
+
+    test('繁體與全形的章名匯入後也分得出章', () async {
+      final dir = await Directory.systemTemp.createTemp('txt_traditional_');
+      addTearDown(() async {
+        await LocalBookService().closeOpenFile();
+        await dir.delete(recursive: true);
+      });
+      final file = File('${dir.path}/書.txt');
+      await file.writeAsString(
+        '第一節 開端\n${_body('a')}第兩百章 遠遠的路\n${_body('b')}第１章 全形\n${_body('c')}',
+      );
+      final result = await LocalBookService().importBook(file.path);
+      expect(result!.chapters.map((c) => c.title), [
+        '第一節 開端',
+        '第兩百章 遠遠的路',
+        '第１章 全形',
+      ]);
+    });
+  });
+
+  group('手動指定編碼（L6）', () {
+    test('照指定的編碼重新解碼，同一份檔案用不同編碼分出的章不一樣', () async {
+      final dir = await Directory.systemTemp.createTemp('txt_forced_charset_');
+      addTearDown(() async {
+        await LocalBookService().closeOpenFile();
+        await dir.delete(recursive: true);
+      });
+      final file = File('${dir.path}/書.txt');
+      String body(String marker) => '　　$marker${'正文內容。' * 300}\n';
+      await file.writeAsBytes(
+        Big5.encode('第一章 開始\n${body('甲')}第二章 結束\n${body('乙')}'),
+      );
+
+      final big5 = await TxtParser(file).splitChapters(charset: 'Big5');
+      expect(big5.charset, 'Big5');
+      expect(big5.chapters.map((c) => c['title']), ['第一章 開始', '第二章 結束']);
+
+      final gbk = await TxtParser(file).splitChapters(charset: 'GBK');
+      expect(gbk.charset, 'GBK');
+      expect(
+        gbk.chapters.map((c) => c['title']),
+        isNot(['第一章 開始', '第二章 結束']),
+        reason: '指定錯的編碼時章名是亂碼，挑不出真正的章',
+      );
+    });
+  });
+
   test('Big5 的 TXT 認得出編碼，章名與正文都不是亂碼（L5）', () async {
     final dir = await Directory.systemTemp.createTemp('txt_big5_');
-    addTearDown(() => dir.delete(recursive: true));
+    addTearDown(() async {
+      await LocalBookService().closeOpenFile();
+      await dir.delete(recursive: true);
+    });
     final file = File('${dir.path}/書.txt');
     String body(String marker) => '　　$marker他說：「我們走吧。」她點了點頭，沒有說話。\n' * 40;
     await file.writeAsBytes(
@@ -234,7 +314,10 @@ void main() {
 
   test('Big5 的 TXT 有表裡沒有的字（造字）時，後面的章照樣從對的地方讀', () async {
     final dir = await Directory.systemTemp.createTemp('txt_big5_pua_');
-    addTearDown(() => dir.delete(recursive: true));
+    addTearDown(() async {
+      await LocalBookService().closeOpenFile();
+      await dir.delete(recursive: true);
+    });
     final file = File('${dir.path}/書.txt');
     String body(String marker) => '　　$marker他說：「我們走吧。」她點了點頭，沒有說話。\n' * 40;
     await file.writeAsBytes([
@@ -247,5 +330,28 @@ void main() {
     expect(result.book.charset, 'Big5');
     final content = await service.getContent(result.book, result.chapters[1]);
     expect(content, startsWith('第二章 結束'));
+  });
+
+  // GB18030 的 TXT 有 GBK 沒有的字（emoji、擴充區漢字）時是四位元組，照
+  // Legado 認成 GB18030；分章照四位元組數，後面的章從對的地方讀。
+  test('GB18030 的 TXT 有四位元組的字時，章名與正文不是亂碼、分章位置對', () async {
+    final dir = await Directory.systemTemp.createTemp('txt_gb18030_');
+    addTearDown(() async {
+      await LocalBookService().closeOpenFile();
+      await dir.delete(recursive: true);
+    });
+    final file = File('${dir.path}/書.txt');
+    String body(String marker) =>
+        '　　$marker他笑了😀，走向𠀀村，价格¥5。她点了点头，没有说话。\n' * 40;
+    await file.writeAsBytes(
+      Gb18030.encode('第一章 开始\n${body('甲')}第二章 结束\n${body('乙')}'),
+    );
+    final service = LocalBookService();
+    final result = (await service.importBook(file.path))!;
+    expect(result.book.charset, 'GB18030');
+    expect(result.chapters.map((c) => c.title), ['第一章 开始', '第二章 结束']);
+    final content = await service.getContent(result.book, result.chapters[1]);
+    expect(content, startsWith('第二章 结束'));
+    expect(content, contains('乙他笑了😀，走向𠀀村，价格¥5。'));
   });
 }

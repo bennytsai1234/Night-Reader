@@ -15,8 +15,23 @@ int alignChapterIndex({
   required String? oldTitle,
   required int oldTotalCount,
   required List<BookChapter> newChapters,
+}) => alignChapter(
+  oldIndex: oldIndex,
+  oldTitle: oldTitle,
+  oldTotalCount: oldTotalCount,
+  newChapters: newChapters,
+).index;
+
+/// 同 [alignChapterIndex]，另說這一章是不是真的找到（同名、去掉章號的章名
+/// 或章號）；都不是、只照比例估時 `matched` 是 false。書籤與標註換目錄時
+/// 拿它判斷「對不到舊目錄就跳過」。
+({int index, bool matched}) alignChapter({
+  required int oldIndex,
+  required String? oldTitle,
+  required int oldTotalCount,
+  required List<BookChapter> newChapters,
 }) {
-  if (newChapters.isEmpty) return oldIndex;
+  if (newChapters.isEmpty) return (index: oldIndex, matched: false);
 
   final newSize = newChapters.length;
   var estimatedIndex = oldIndex;
@@ -38,10 +53,10 @@ int alignChapterIndex({
 
   if (oldTitle != null && oldTitle.isNotEmpty) {
     final exact = nearest((chapter) => chapter.title == oldTitle);
-    if (exact != null) return exact;
+    if (exact != null) return (index: exact, matched: true);
     final oldKey = _titleKey(oldTitle);
     final converted = nearest((chapter) => _titleKey(chapter.title) == oldKey);
-    if (converted != null) return converted;
+    if (converted != null) return (index: converted, matched: true);
   }
 
   // 同 Legado：估計位置與原本的位置前後 10 章裡，比去掉章號與括號的章名。
@@ -79,17 +94,17 @@ int alignChapterIndex({
         bestSameNumber = sameNumber;
       }
     }
-    if (best != null) return best;
+    if (best != null) return (index: best, matched: true);
   }
 
   if (oldChapterNumber != null) {
     final numbered = nearest(
       (chapter) => _extractChapterNumber(chapter.title) == oldChapterNumber,
     );
-    if (numbered != null) return numbered;
+    if (numbered != null) return (index: numbered, matched: true);
   }
 
-  return estimatedIndex.clamp(0, newSize - 1);
+  return (index: estimatedIndex.clamp(0, newSize - 1), matched: false);
 }
 
 /// 兩個章名算不算同一章：繁簡不同（繁體站換簡體站）、空白不同也算。

@@ -125,9 +125,13 @@ class ComicPageImages {
 
   /// 載不到的 [key] 再試一次（「重試」、登入回來）。
   void retry(ComicImageKey key) {
-    _failed.remove(key);
+    if (_failed.remove(key) != null) _refresh.add(key);
     want(key);
   }
+
+  /// 按了「重試」、下一次讀圖要重新抓的那幾張（[ComicPageSource.bytesOf]
+  /// 的 `refresh`）。
+  final Set<ComicImageKey> _refresh = {};
 
   /// [key] 現在在畫面上（最近一次 [demand] 的前 visibleCount 張）。在畫面
   /// 外解碼好的圖不淡入：沒有人看到它的骨架。
@@ -213,7 +217,11 @@ class ComicPageImages {
   }
 
   Future<ui.Image> _decode(ComicImageKey key) async {
-    final bytes = await source.bytesOf(key.chapterIndex, key.page);
+    final bytes = await source.bytesOf(
+      key.chapterIndex,
+      key.page,
+      refresh: _refresh.remove(key),
+    );
     // 緩衝交給 instantiateImageCodecWithSize 之後由它釋放。
     final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
     final codec = await ui.instantiateImageCodecWithSize(

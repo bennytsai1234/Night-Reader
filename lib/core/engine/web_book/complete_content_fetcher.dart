@@ -36,6 +36,12 @@ final class CompleteContentFetcher {
     int? pageConcurrency,
     CancelToken? cancelToken,
   }) async {
+    // 同 Legado `WebBook.getContentAwait`：正文規則空白時正文就是章節網址
+    // （有聲書的章節網址本身是音訊），不抓。文字書照舊沒有正文：Legado 把
+    // 網址顯示出來但不存，夜讀存成正文的話，下載會把整本記成下載好了。
+    if ((source.ruleContent?.content ?? '').trim().isEmpty) {
+      return book.bookKind == BookSourceKind.novel ? '' : chapter.url;
+    }
     final stopAt = (nextChapterUrl == null || nextChapterUrl.isEmpty)
         ? await _storedNextChapterUrl(book, chapter)
         : nextChapterUrl;
@@ -79,6 +85,9 @@ final class CompleteContentFetcher {
       fetchedPages += pages.length;
       for (final page in pages) {
         if (page.content.isNotEmpty) contentParts.add(page.content);
+        // 同 Legado `BookContent`：第一頁轉址後的網址也算抓過，後面的頁連回
+        // 它時不再抓一次（不然正文整段重複）。
+        if (firstRedirectUrl == null) queuedUrls.add(page.baseUrl);
         firstRedirectUrl ??= page.baseUrl;
         title ??= page.title;
         for (final nextUrl in page.nextUrls) {
@@ -160,11 +169,17 @@ final class CompleteContentFetcher {
     CancelToken? cancelToken,
   }) async {
     // 同 Legado `WebBook.getContentAwait`：章節網址那一頁照正文規則的
-    // `webJs`、`sourceRegex` 抓（網址開了 webView 才用得到），也從它取章名
-    // （`title`，見 [fetch]）；下一頁照一般的請求抓。
+    // `webJs`、`sourceRegex` 抓（網址開了 webView 才用得到），請求帶著這一章
+    // （網址裡的規則讀得到章名、存進這一章），也從它取章名（`title`，見
+    // [fetch]）；下一頁照一般的請求抓。
     final firstPage = url == chapter.url;
     final contentRule = source.ruleContent;
-    final analyzeUrl = AnalyzeUrl(url, source: source, ruleData: book);
+    final analyzeUrl = AnalyzeUrl(
+      url,
+      source: source,
+      ruleData: book,
+      chapter: firstPage ? chapter : null,
+    );
     var response = await analyzeUrl.getStrResponse(
       cancelToken: cancelToken,
       jsStr: firstPage ? contentRule?.webJs : null,

@@ -643,12 +643,51 @@ class ReaderPrefsRepository {
 
   /// 寫入一個設定；寫不進去時丟出錯誤，由控制器還原成最後落地的值。
   /// 存的是呼叫當下的值：清單在等偏好設定的期間又被改也不影響。
+  ///
+  /// [SharedPreferences] 先改記憶體裡的那份、再寫進手機，寫不進去時不會自己
+  /// 改回來，之後的 [load] 會讀到沒存進去的值。寫不進去時把記憶體裡的那份
+  /// 改回寫之前的值；這段期間已經有更新的寫入就不動，留給那一次。
   Future<void> save<T>(ReaderSetting<T> setting, T value) async {
     final write = setting.prepare(value);
     final prefs = await SharedPreferences.getInstance();
-    if (!await write(prefs)) {
-      throw StateError('SharedPreferences rejected ${setting.key}');
+    final key = setting.key;
+    final previous = prefs.get(key);
+    final pending = write(prefs);
+    final written = prefs.get(key);
+    Object? error;
+    StackTrace? stack;
+    var saved = false;
+    try {
+      saved = await pending;
+    } catch (e, s) {
+      error = e;
+      stack = s;
     }
+    if (saved) return;
+    if (identical(prefs.get(key), written)) {
+      _restoreCached(prefs, key, previous);
+    }
+    if (error != null) Error.throwWithStackTrace(error, stack!);
+    throw StateError('SharedPreferences rejected $key');
+  }
+
+  /// 記憶體裡的 [key] 改回 [value]（寫之前沒有就拿掉）。也會再寫一次手機，
+  /// 手機裡本來就是這個值，寫不寫得進去都不影響。
+  static void _restoreCached(
+    SharedPreferences prefs,
+    String key,
+    Object? value,
+  ) {
+    final Future<bool> restoring = switch (value) {
+      null => prefs.remove(key),
+      final bool v => prefs.setBool(key, v),
+      final int v => prefs.setInt(key, v),
+      final double v => prefs.setDouble(key, v),
+      final String v => prefs.setString(key, v),
+      final List<String> v => prefs.setStringList(key, v),
+      _ => Future.value(false),
+    };
+    unawaited(restoring.then<void>((_) {}, onError: (Object _) {}));
   }
 
   static int normalizePageTurnOverlap(int value) =>

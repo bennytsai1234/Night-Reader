@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -12,6 +13,7 @@ import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:night_reader/core/source/source_dedupe.dart';
 import 'package:night_reader/core/network/network_service.dart';
+import 'package:night_reader/core/network/source_tls.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/sync/source_sync.dart';
@@ -108,9 +110,49 @@ class SourceImportService {
     return parseSourcesDetailed(jsonStr).allSources;
   }
 
+  /// 解析匯入的內容，同 Legado `ImportBookSourceViewModel.importSource`：
+  /// 一個物件裡列著 `sourceUrls`（書源檔的網址）時逐一下載，每一份照書源
+  /// 陣列解析後接起來。
   Future<ParsedSourceImportResult> parseSourcesDetailedAsync(
     String jsonStr,
   ) async {
+    final urls = _listedSourceUrls(jsonStr);
+    if (urls == null) return _parseSourcesAsync(jsonStr);
+    final importable = <BookSource>[];
+    final unsupported = <BookSource>[];
+    for (final url in urls) {
+      final parsed = await _parseSourcesAsync(
+        await fetchImportTextFromUrl(url),
+      );
+      importable.addAll(parsed.importableSources);
+      unsupported.addAll(parsed.unsupportedSources);
+    }
+    return ParsedSourceImportResult(
+      importableSources: importable,
+      unsupportedSources: unsupported,
+    );
+  }
+
+  /// `{"sourceUrls": [網址…]}` 裡的網址；不是這種物件時是 null。內容可能很
+  /// 大，先看字樣再解析，書源本身留給背景 isolate 解析。
+  static List<String>? _listedSourceUrls(String jsonStr) {
+    final normalized = normalizeImportJson(jsonStr);
+    if (!normalized.startsWith('{') || !normalized.contains('"sourceUrls"')) {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(normalized);
+      if (decoded case {'sourceUrls': final List<dynamic> urls}
+          when urls.every((url) => url is String)) {
+        return urls.cast<String>();
+      }
+    } on FormatException {
+      // 交給一般的解析回報格式錯誤。
+    }
+    return null;
+  }
+
+  Future<ParsedSourceImportResult> _parseSourcesAsync(String jsonStr) async {
     final payload = await compute(_parseSourcesPayloadForIsolate, jsonStr);
     List<BookSource> decodeList(String key) {
       final rawList = payload[key] ?? const <Map<String, dynamic>>[];
@@ -192,14 +234,24 @@ class SourceImportService {
     return (imported: preparedSources.length, merged: merged);
   }
 
+  /// 下載匯入內容。網址結尾是 `#requestWithoutUA` 時拿掉它、下載時不送
+  /// 瀏覽器標識（同 Legado `importSourceUrl`）。
   Future<String> fetchImportTextFromUrl(String url) async {
-    final trimmedUrl = url.trim();
+    var trimmedUrl = url.trim();
+    final withoutUserAgent = trimmedUrl.endsWith(_withoutUserAgentSuffix);
+    if (withoutUserAgent) {
+      trimmedUrl = trimmedUrl.substring(
+        0,
+        trimmedUrl.length - _withoutUserAgentSuffix.length,
+      );
+    }
     final uri = Uri.tryParse(trimmedUrl);
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
       throw FormatException('無效的匯入網址', url);
     }
 
-    final response = await _network.dio.getUri<dynamic>(
+    final dio = withoutUserAgent ? _withoutUserAgentDio() : _network.dio;
+    final response = await dio.getUri<dynamic>(
       uri,
       options: Options(responseType: ResponseType.plain),
     );
@@ -209,6 +261,21 @@ class SourceImportService {
     }
     return _importPayloadToText(response.data);
   }
+
+  static const _withoutUserAgentSuffix = '#requestWithoutUA';
+
+  /// 不送瀏覽器標識的連線：書源的連線（[sourceHttpClient]）拿掉預設標識，
+  /// 不經補上標識的攔截器。
+  static Dio _withoutUserAgentDio() =>
+      Dio(
+          BaseOptions(
+            connectTimeout: const Duration(seconds: 15),
+            receiveTimeout: const Duration(seconds: 15),
+          ),
+        )
+        ..httpClientAdapter = IOHttpClientAdapter(
+          createHttpClient: () => sourceHttpClient()..userAgent = null,
+        );
 
   Future<List<BookSource>> _prepareImportSources(
     List<BookSource> sources,
@@ -1218,9 +1285,7 @@ class SourceManagerProvider with ChangeNotifier {
       final full = await _dao.getByUrl(url);
       if (full != null) selectedFullSources.add(full);
     }
-    final json = jsonEncode(
-      selectedFullSources.map((s) => s.toJson()).toList(),
-    );
+    final json = encodeBookSources(selectedFullSources);
     // Android Binder IPC 上限約 1 MB；超過時改走檔案分享。
     const clipboardSafeBytes = 512 * 1024;
     if (_shouldShareExportPayload(json, limitBytes: clipboardSafeBytes)) {

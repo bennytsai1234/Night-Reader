@@ -94,7 +94,11 @@ class FakeComicSource implements ComicPageSource {
   }
 
   @override
-  Future<Uint8List> bytesOf(int chapterIndex, ComicPage page) async {
+  Future<Uint8List> bytesOf(
+    int chapterIndex,
+    ComicPage page, {
+    bool refresh = false,
+  }) async {
     final index = int.parse(page.name.split('-').last.split('.').first);
     await pageGates[(chapterIndex, index)]?.future;
     if (pageLatency > Duration.zero) await Future<void>.delayed(pageLatency);
