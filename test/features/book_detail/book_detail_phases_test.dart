@@ -27,6 +27,7 @@ class _Source extends BookSourceService {
   bool infoFails = false;
   _Toc toc = _Toc.ok;
   int chapterListCalls = 0;
+  int infoCalls = 0;
 
   /// 給了就等它才回目錄（照開始抓時的 [toc]）。
   Completer<void>? tocGate;
@@ -40,6 +41,7 @@ class _Source extends BookSourceService {
     Book book, {
     CancelToken? cancelToken,
   }) async {
+    infoCalls++;
     if (infoFails) throw Exception('連不上');
     final gate = infoGate;
     if (gate == null) return book;
@@ -550,20 +552,41 @@ void main() {
     });
   });
 
-  group('書源停用之後', () {
+  group('書源不能讀之後', () {
     test('downloading and checking for updates say the source cannot be '
         'read, not the old TOC problem', () async {
       await storeSource(login: true);
       service.toc = _Toc.needsLogin;
       final provider = await open(updates: _Updates(db));
 
-      await storeSource(login: true, enabled: false);
+      await storeSource(login: true, group: paidSourceGroupTag);
       await provider.reloadSource();
       final download = await provider.queueDownloadAll();
-      expect(download.message, '目前來源無法提供正文，請先換源後再試。');
+      expect(download.message, paidSourceHealth.description);
       final update = await provider.checkForUpdates();
       expect(update.success, isFalse);
-      expect(update.message, '檢查更新失敗：找不到可閱讀書源');
+      expect(update.message, '檢查更新失敗：${paidSourceHealth.description}');
+    });
+  });
+
+  // 同 Legado：「啟用」只管搜尋，書籍詳情、目錄、檢查更新照常（從發現頁
+  // 打開停用書源的書、書架上停用書源的書）。
+  group('書源停用了', () {
+    test('the book info and the TOC still load', () async {
+      await storeSource(enabled: false);
+      final provider = await open();
+      expect(provider.totalChapterCount, 3);
+      expect(service.infoCalls, 1);
+      expect(service.chapterListCalls, 1);
+    });
+
+    test('checking for updates still runs', () async {
+      await storeSource(enabled: false);
+      final updates = _Updates(db);
+      final provider = await open(updates: updates);
+      final update = await provider.checkForUpdates();
+      expect(update.success, isTrue);
+      expect(updates.checks, 1);
     });
   });
 

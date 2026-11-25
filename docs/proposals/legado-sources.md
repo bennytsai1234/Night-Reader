@@ -392,6 +392,7 @@
 - 讀者會碰到：讀者把某個書源停用（不想讓它出現在搜尋），但留著「啟用發現」看它的排行與分類。Legado 的「啟用」與「啟用發現」各管各的，發現頁照列；夜讀停用就整個從發現頁消失，「啟用發現」開著也沒用。
 - Legado：`L:data/dao/BookSourceDao.kt:84-88`，發現頁只看 `enabledExplore = 1 and hasExploreUrl = 1`，不看 `enabled`。
 - 夜讀：`N:lib/core/models/source/book_source_logic.dart:551-556`，`canParticipateInDiscovery` 要 `enabled && enabledExplore && hasExploreUrl`，另外要校驗沒擋下；沒有 ADR 記這個決定。
+- 同一個原因（#638 一起修）：夜讀的「啟用」也管讀書（`isReadingEnabledByRuntime`），停用書源的書在書籍詳情不抓資訊與目錄，書架也不檢查更新、不下載；Legado 的「啟用」只管搜尋，書籍詳情、閱讀、檢查更新、快取都只要書源在（`L:ui/book/info/BookInfoViewModel.kt:104`、`L:model/ReadBook.kt:167`、`L:ui/main/MainViewModel.kt:151`、`L:model/CacheBook.kt:52`）。
 
 ### R21 匯入列出好幾個書源檔網址的 `{"sourceUrls": […]}` 時什麼都沒匯入（少數寫法才碰到）
 

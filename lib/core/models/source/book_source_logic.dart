@@ -721,7 +721,7 @@ extension BookSourceLogic on BookSourceBase {
     return SourceRuntimeHealth.healthy;
   }
 
-  /// 一般搜尋放行打得開的書源（[isOpenableSource]）；同名不同類的結果分成
+  /// 一般搜尋放行啟用、打得開的書源（[isOpenableSource]）；同名不同類的結果分成
   /// 不同的卡（ADR 0053）。
   bool get isSearchEnabledByRuntime =>
       enabled && isOpenableSource && runtimeHealth.allowsSearch;
@@ -735,8 +735,12 @@ extension BookSourceLogic on BookSourceBase {
       (sourceKind == kind ||
           (includeAggregates && isOpenableSource && isAggregateSource));
 
+  /// 能不能拿來讀書：書籍詳情、目錄、正文、檢查更新、下載與匯出。同 Legado
+  /// 不看「啟用」（[enabled] 只管搜尋，`BookInfoViewModel`、`ReadBook`、
+  /// `MainViewModel`、`CacheBook` 都只要書源在），只看夜讀打不打得開、校驗
+  /// 有沒有擋下。
   bool get isReadingEnabledByRuntime =>
-      enabled && isOpenableSource && runtimeHealth.allowsReading;
+      isOpenableSource && runtimeHealth.allowsReading;
 
   bool get isCleanupCandidate => runtimeHealth.cleanupCandidate;
 

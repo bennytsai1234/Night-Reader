@@ -33,4 +33,13 @@ void main() {
     ];
     expect(listed, unorderedEquals(['on', 'disabled']));
   });
+
+  // 同 Legado：「啟用」只管搜尋。停用的書源照常讀（書籍詳情、目錄、正文、
+  // 檢查更新、下載），搜尋與換源不用它。
+  test('a disabled source reads but is not searched', () {
+    final disabled = source('disabled', enabled: false);
+    expect(disabled.isReadingEnabledByRuntime, isTrue);
+    expect(disabled.isSearchEnabledByRuntime, isFalse);
+    expect(disabled.isSearchableFor(BookSourceKind.novel), isFalse);
+  });
 }
