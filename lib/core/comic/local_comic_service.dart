@@ -7,6 +7,7 @@ import 'local_comic_library.dart';
 import '../constant/book_type.dart';
 import '../database/dao/book_dao.dart';
 import '../database/dao/chapter_dao.dart';
+import '../diagnostics/app_log_service.dart';
 import '../local_book/local_book_fingerprint.dart';
 import '../models/book/book.dart';
 import '../models/book/book_chapter.dart';
@@ -19,9 +20,10 @@ import '../local_book/local_book_service.dart';
 /// `<章指紋>.cbz`。
 ///
 /// 書的身分是章指紋的集合：這次匯入的任何一話已經在書架上某本本地漫畫
-/// 裡，新的話就併進那本（補新章不變成另一本），已有的話不重複存。書的
-/// 原檔指紋（兩台之間認書的鍵）起初記第一話的章指紋；兩台記成不同的鍵時，
-/// 「同步本地書」統一成同一個（`adoptComicKeys`，ADR 0039、0052）。
+/// 裡，新的話就併進那本（補新章不變成另一本），已有的話不重複存。章名相同
+/// 但章指紋不同的一話（舊版匯入漏了頁、重新匯入）換成新的那份，不並存。
+/// 書的原檔指紋（兩台之間認書的鍵）起初記第一話的章指紋；兩台記成不同的
+/// 鍵時，「同步本地書」統一成同一個（`adoptComicKeys`，ADR 0039、0052）。
 class LocalComicService {
   LocalComicService({
     required this.bookDao,
@@ -63,22 +65,53 @@ class LocalComicService {
         ? <BookChapter>[]
         : await chapterDao.getByBook(book.bookUrl);
     final knownPrints = {for (final chapter in known) chapter.url};
+    // 重新匯入時同一話（同一個檔或資料夾）認的是章名：舊版漏了頁的那一話
+    // 章指紋變了，才不會被當成新的一話、和舊的並存。下載回來的章（[titles]
+    // 有給章名）不比對：同步的章名可以重複，換掉會少一話。
+    final titlesOfSources = [
+      for (var i = 0; i < sources.length; i++)
+        titles[prints[i]] ?? sources[i].title,
+    ];
+    final titleCounts = <String, int>{};
+    for (final title in titlesOfSources) {
+      titleCounts[title] = (titleCounts[title] ?? 0) + 1;
+    }
+    final allPrints = prints.toSet();
+    final replacedBy = <String, String>{};
+    final stale = <String>{};
 
     final added = <LocalComicChapter>[];
     for (var i = 0; i < sources.length; i++) {
+      final source = sources[i];
+      final print = prints[i];
+      final title = titlesOfSources[i];
+      // 章名相同、章指紋不同的一話可能是同一話更新過（例如補上舊版漏掉
+      // 的頁）：存好這次的之後換掉舊的。同一話只有一個來源、書裡也只有
+      // 這一話時才算；舊的內容還在這次匯入的別的來源、或這一話是下載回來
+      // 的（同步的章名可以重複）時不算。
+      final same = !titles.containsKey(print) && titleCounts[title] == 1
+          ? [
+              for (final chapter in known)
+                if (chapter.title == title && !stale.contains(chapter.url))
+                  chapter,
+            ]
+          : const <BookChapter>[];
       // 目錄裡有、檔案不見了（還原備份沒帶回檔案）的那一話也重新存。
       final missing =
-          knownPrints.contains(prints[i]) &&
+          knownPrints.contains(print) &&
           !await File(
-            p.join(
-              bookDir,
-              '${prints[i]}${LocalComicLibrary.chapterExtension}',
-            ),
+            p.join(bookDir, '$print${LocalComicLibrary.chapterExtension}'),
           ).exists();
-      if (!knownPrints.contains(prints[i]) || missing) {
-        final stored = await _storeOn(run, sources[i], bookDir);
+      if (!knownPrints.contains(print) || missing) {
+        final stored = await _storeOn(run, source, bookDir);
         if (stored != null && knownPrints.add(stored.fingerprint)) {
           added.add(stored);
+          if (same.length == 1 &&
+              same.single.url != stored.fingerprint &&
+              !allPrints.contains(same.single.url)) {
+            stale.add(same.single.url);
+            replacedBy[same.single.url] = stored.fingerprint;
+          }
         }
       }
       onProgress?.call(i + 1, sources.length);
@@ -89,7 +122,8 @@ class LocalComicService {
     }
 
     final names = <String, String>{
-      for (final chapter in known) chapter.url: chapter.title,
+      for (final chapter in known)
+        if (!stale.contains(chapter.url)) chapter.url: chapter.title,
       for (final chapter in added)
         chapter.fingerprint: titles[chapter.fingerprint] ?? chapter.title,
     };
@@ -105,11 +139,16 @@ class LocalComicService {
         ),
     ];
     // 補進更前面的話時序號會往後移：照讀到的那一話的章指紋找回它的新序號，
-    // 第幾張不變。
+    // 第幾張不變。那一話這次換掉了就照換掉的章指紋找。
     if (known.isNotEmpty) {
       final reading = known[book.chapterIndex.clamp(0, known.length - 1)].url;
       final moved = ordered.indexOf(reading);
-      if (moved >= 0) book.chapterIndex = moved;
+      if (moved >= 0) {
+        book.chapterIndex = moved;
+      } else if (replacedBy[reading] case final print?) {
+        final index = ordered.indexOf(print);
+        if (index >= 0) book.chapterIndex = index;
+      }
     }
     book
       ..fileFingerprint ??= fingerprint ?? chapters.first.url
@@ -121,6 +160,13 @@ class LocalComicService {
       await chapterDao.deleteByBook(book.bookUrl);
       await chapterDao.insertChapters(chapters);
     });
+    // 換掉的舊章節檔在目錄寫好之後才刪：中途失敗時書裡的章節與檔案都還在。
+    final obsolete = [
+      for (final print in stale)
+        if (!names.containsKey(print))
+          p.join(bookDir, '$print${LocalComicLibrary.chapterExtension}'),
+    ];
+    if (obsolete.isNotEmpty) await _deleteOn(run, obsolete);
     return book;
   }
 
@@ -202,3 +248,16 @@ Future<LocalComicChapter?> _storeOn(
   LocalComicSource source,
   String bookDir,
 ) => run(() => LocalComicLibrary.store(source, bookDir));
+
+/// 換掉、不再用的章節檔；刪不掉只記下來，不留著擋匯入。
+Future<void> _deleteOn(LocalBookWorkRunner run, List<String> paths) =>
+    run(() async {
+      for (final path in paths) {
+        try {
+          final file = File(path);
+          if (await file.exists()) await file.delete();
+        } on FileSystemException catch (error) {
+          AppLog.w('舊的漫畫章節檔刪不掉 $path: $error');
+        }
+      }
+    });
