@@ -97,8 +97,14 @@ class _FakeChapterDao extends Fake implements ChapterDao {
 
 class _FakeSourceDao extends Fake implements BookSourceDao {}
 
+/// 釋放 [runtime]；已經釋放過就不再釋放。
+void _disposeRuntime(ReaderRuntime runtime) {
+  if (!runtime.disposed) runtime.dispose();
+}
+
 /// 跟閱讀頁一樣由畫面擁有 runtime：樹拆掉時釋放，排著的進度在測試框架
-/// 檢查有沒有剩下的計時器之前寫完。
+/// 檢查有沒有剩下的計時器之前寫完。測試中途失敗時框架不拆樹，另外在
+/// teardown 補釋放一次。
 class _RuntimeOwner extends StatefulWidget {
   const _RuntimeOwner({required this.runtime, required this.child});
 
@@ -112,7 +118,7 @@ class _RuntimeOwner extends StatefulWidget {
 class _RuntimeOwnerState extends State<_RuntimeOwner> {
   @override
   void dispose() {
-    widget.runtime.dispose();
+    _disposeRuntime(widget.runtime);
     super.dispose();
   }
 
@@ -222,7 +228,8 @@ void main() {
     tester.view.physicalSize = _viewport;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    runtime = customRuntime ?? _makeRuntime();
+    final owned = runtime = customRuntime ?? _makeRuntime();
+    addTearDown(() => _disposeRuntime(owned));
     viewport = ReaderViewportController();
     taps = <TapUpDetails>[];
     onTap = null;
@@ -1536,6 +1543,8 @@ void main() {
         visualOffsetPx: 120,
       ),
     );
+    final owned = runtime;
+    addTearDown(() => _disposeRuntime(owned));
     final outside = <double>[];
     await tester.pumpWidget(
       MaterialApp(
