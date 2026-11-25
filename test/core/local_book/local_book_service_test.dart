@@ -151,6 +151,7 @@ void main() {
           title: chapter['title'] as String,
           start: chapter['start'] as int,
           end: chapter['end'] as int,
+          isVolume: false,
         ),
     ]);
     await bookDao.upsert(book);
@@ -259,6 +260,48 @@ void main() {
     expect(savedHighlight.anchor, isNull);
   });
 
+  test('改編碼後「前言」當成的簡介照新編碼重讀', () async {
+    final file = File(p.join(picked.path, '簡介.txt'));
+    await file.writeAsBytes(
+      EncodingDetect.encodeWithCharset(
+        '一段簡介。\n第一章 開始\n${'正文。' * 100}\n',
+        'UTF-16LE',
+      ),
+    );
+    final wrong = await TxtParser(file).splitChapters(charset: 'UTF-16BE');
+    final book = Book(
+      bookUrl: 'local://${file.path}',
+      origin: 'local',
+      originName: '本地',
+      name: '簡介',
+      author: '本地',
+      isInBookshelf: true,
+      charset: 'UTF-16BE',
+      intro: wrong.intro,
+    );
+    await bookDao.upsert(book);
+    await chapterDao.insertChapters(
+      LocalBookService().chaptersOf(book, [
+        for (final chapter in wrong.chapters)
+          (
+            title: chapter['title'] as String,
+            start: chapter['start'] as int,
+            end: chapter['end'] as int,
+            isVolume: false,
+          ),
+      ]),
+    );
+
+    final updated = await LocalBookService().changeCharset(
+      book,
+      'UTF-16LE',
+      bookDao: bookDao,
+      chapterDao: chapterDao,
+    );
+
+    expect(updated!.intro, '一段簡介。');
+  });
+
   test('改編碼後章內位置照新章裡的位元組位置重算，不會用舊章的比例跳到一半', () async {
     final dir = await Directory.systemTemp.createTemp(
       'local_book_charset_ratio',
@@ -312,6 +355,7 @@ void main() {
         title: wrong.chapters.single['title'] as String,
         start: wrong.chapters.single['start'] as int,
         end: wrong.chapters.single['end'] as int,
+        isVolume: false,
       ),
     ]);
     await bookDao.upsert(book);
@@ -392,6 +436,7 @@ void main() {
           title: chapter['title'] as String,
           start: chapter['start'] as int,
           end: chapter['end'] as int,
+          isVolume: false,
         ),
     ]);
     await bookDao.upsert(book);

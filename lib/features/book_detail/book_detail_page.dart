@@ -731,6 +731,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
           .showSnackBar(SnackBar(content: UiText(failureMessage('匯出', e))));
     } finally {
       if (mounted) setState(() => _exportProgress = null);
+      // 本地 EPUB 匯出前可能重轉、換了目錄與進度（匯出失敗也可能已經換
+      // 了）：照資料庫重讀，之後開閱讀器才帶新目錄。
+      if (mounted && provider.book.isLocal) {
+        await provider.reloadAfterReading();
+      }
     }
   }
 

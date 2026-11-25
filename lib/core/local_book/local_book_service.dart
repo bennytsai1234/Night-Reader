@@ -456,10 +456,8 @@ class LocalBookService {
 
   /// [book]（EPUB）現在轉好的文字的章節範圍。轉法改過（[EpubParser.textVersion]
   /// 不同）或轉好的文字不見了就先重轉；不是 EPUB、原檔不在或重轉失敗時
-  /// 回傳 null。閱讀器開書時拿它對資料庫裡的章節（ADR 0050）。
-  Future<List<({String title, int start, int end})>?> currentEpubChapters(
-    Book book,
-  ) async {
+  /// 回傳 null。拿它對資料庫裡的章節（[syncEpubChapters]，ADR 0050）。
+  Future<List<LocalChapterRange>?> currentEpubChapters(Book book) async {
     final path = filePathOf(book);
     if (localBookExtensionFromPath(path) != 'epub') return null;
     final textPath = await epubTextPath(book);
@@ -478,16 +476,18 @@ class LocalBookService {
     }
   }
 
-  /// [book] 的章節（資料庫裡的）對上 [ranges]：章名與位元組範圍都一樣。
+  /// [book] 的章節（資料庫裡的）對上 [ranges]：章名、位元組範圍與是不是分卷
+  /// 都一樣。
   static bool chaptersMatch(
     List<BookChapter> chapters,
-    List<({String title, int start, int end})> ranges,
+    List<LocalChapterRange> ranges,
   ) {
     if (chapters.length != ranges.length) return false;
     for (var i = 0; i < ranges.length; i += 1) {
       if (chapters[i].title != ranges[i].title ||
           chapters[i].start != ranges[i].start ||
-          chapters[i].end != ranges[i].end) {
+          chapters[i].end != ranges[i].end ||
+          chapters[i].isVolume != ranges[i].isVolume) {
         return false;
       }
     }
@@ -495,10 +495,64 @@ class LocalBookService {
   }
 
   /// [ranges] 換成存進資料庫的章節。
-  List<BookChapter> chaptersOf(
+  List<BookChapter> chaptersOf(Book book, List<LocalChapterRange> ranges) =>
+      _chapters(book, ranges);
+
+  /// 本地 EPUB 轉法改過（例如開始留插圖，ADR 0050；標出分卷）或轉好的文字
+  /// 不見了時重轉（[currentEpubChapters]），資料庫裡的目錄 [chapters] 對不上
+  /// 新的章節範圍就換掉，存著的舊正文清掉。每章的字不變；章數變了（多了
+  /// 只有卷名的分卷）時閱讀進度照章名對到新目錄的同一章，和目錄一起寫回
+  /// 去。閱讀器開書與匯出全書前都先跑這一次。
+  ///
+  /// 回傳現在的目錄；換過時 `replaced` 是換掉的舊目錄（閱讀器拿來把開書的
+  /// 位置對過去），沒換時是 null。不是 EPUB 時照原樣回傳；讀不到檔案時丟出
+  /// [FileSystemException]。
+  Future<({List<BookChapter> chapters, List<BookChapter>? replaced})>
+  syncEpubChapters(
     Book book,
-    List<({String title, int start, int end})> ranges,
-  ) => _chapters(book, ranges);
+    List<BookChapter> chapters, {
+    required BookDao bookDao,
+    required ChapterDao chapterDao,
+    ReaderChapterContentDao? contentDao,
+  }) async {
+    final ranges = await currentEpubChapters(book);
+    if (ranges == null || chaptersMatch(chapters, ranges)) {
+      return (chapters: chapters, replaced: null);
+    }
+    final refreshed = _chapters(book, ranges);
+    if (refreshed.isEmpty) return (chapters: chapters, replaced: null);
+    final int index;
+    if (chapters.isEmpty) {
+      index = book.chapterIndex.clamp(0, refreshed.length - 1);
+    } else {
+      final old = book.chapterIndex.clamp(0, chapters.length - 1);
+      index = alignChapterIndex(
+        oldIndex: old,
+        oldTitle: chapters[old].title,
+        oldTotalCount: chapters.length,
+        newChapters: refreshed,
+      );
+    }
+    await bookDao.transaction(() async {
+      await chapterDao.replaceByBook(book.bookUrl, refreshed);
+      if (index != book.chapterIndex || refreshed.length != chapters.length) {
+        await bookDao.writeFields(
+          book,
+          BooksCompanion(
+            chapterIndex: Value(index),
+            durChapterTitle: Value(refreshed[index].title),
+            totalChapterNum: Value(refreshed.length),
+          ),
+        );
+      }
+    });
+    book
+      ..chapterIndex = index
+      ..durChapterTitle = refreshed[index].title
+      ..totalChapterNum = refreshed.length;
+    await contentDao?.deleteByBook(book.origin, book.bookUrl);
+    return (chapters: refreshed, replaced: chapters);
+  }
 
   /// 解析本地書籍並回傳 Book + chapters（不做持久化）。書名與作者從
   /// [pickedName]（使用者選的檔名，不含副檔名；沒給時用 [path] 的）拆，見
@@ -529,28 +583,30 @@ class LocalBookService {
     final result = await _splitTxt(file, charset: charset);
     final book = _localBook(file.path, pickedName)
       ..charset = result.charset
+      ..intro = result.intro
       ..totalChapterNum = result.chapters.length;
-    final chapters = _chapters(book, [
-      for (final (i, chapter) in result.chapters.indexed)
-        (
-          title: chapter['title'] as String? ?? '第 $i 章',
-          start: chapter['start'] as int,
-          end: chapter['end'] as int,
-        ),
-    ]);
-    for (final (i, chapter) in result.chapters.indexed) {
-      chapters[i].isVolume = chapter['isVolume'] == true;
-    }
-    return LocalBookImportResult(book: book, chapters: chapters);
+    return LocalBookImportResult(
+      book: book,
+      chapters: _chapters(book, _txtRanges(result.chapters)),
+    );
   }
+
+  static List<LocalChapterRange> _txtRanges(
+    List<Map<String, dynamic>> chapters,
+  ) => [
+    for (final (i, chapter) in chapters.indexed)
+      (
+        title: chapter['title'] as String? ?? '第 $i 章',
+        start: chapter['start'] as int,
+        end: chapter['end'] as int,
+        isVolume: chapter['isVolume'] == true,
+      ),
+  ];
 
   /// 在背景 isolate 解碼 [file] 並分章；[charset] 是讀者手動指定、或另一台
   /// 同步來的編碼，沒給時照偵測。給了就照它解，只寫 UTF-16 時先照檔案 BOM
   /// 換成大端或小端（章節切片沒有 BOM）。
-  Future<({List<Map<String, dynamic>> chapters, String charset})> _splitTxt(
-    File file, {
-    String? charset,
-  }) {
+  Future<TxtSplitResult> _splitTxt(File file, {String? charset}) {
     return compute((({File file, String? charset}) args) async {
       if (args.charset == null) {
         return await TxtParser(args.file).splitChapters();
@@ -591,17 +647,7 @@ class LocalBookService {
     final parsed = await _splitTxt(file, charset: charsetName);
     if (parsed.chapters.isEmpty) return null;
 
-    final chapters = _chapters(current, [
-      for (final (i, chapter) in parsed.chapters.indexed)
-        (
-          title: chapter['title'] as String? ?? '第 $i 章',
-          start: chapter['start'] as int,
-          end: chapter['end'] as int,
-        ),
-    ]);
-    for (final (i, chapter) in parsed.chapters.indexed) {
-      chapters[i].isVolume = chapter['isVolume'] == true;
-    }
+    final chapters = _chapters(current, _txtRanges(parsed.chapters));
 
     final oldChapters = await chapterDao.getByBook(current.bookUrl);
     final oldCharset = current.charset ?? EncodingDetect.getEncode(bytes);
@@ -685,6 +731,8 @@ class LocalBookService {
         current,
         BooksCompanion(
           charset: Value(charsetName),
+          // 「前言」當成的簡介是照舊編碼解的，跟著換。
+          intro: Value(parsed.intro),
           chapterIndex: Value(progress.index),
           durChapterTitle: Value(chapters[progress.index].title),
           charOffset: Value(progress.charOffset),
@@ -792,7 +840,8 @@ class LocalBookService {
     // 書名照 Legado：書裡沒寫時用檔名，不拆。
     book
       ..name = info.title ?? p.basenameWithoutExtension(path)
-      ..author = info.author ?? book.author;
+      ..author = info.author ?? book.author
+      ..intro = info.intro;
     return LocalBookImportResult(
       book: book,
       chapters: _chapters(book, info.chapters),
@@ -852,10 +901,7 @@ class LocalBookService {
     return (name: name, author: author.length == fileName.length ? '' : author);
   }
 
-  List<BookChapter> _chapters(
-    Book book,
-    List<({String title, int start, int end})> ranges,
-  ) {
+  List<BookChapter> _chapters(Book book, List<LocalChapterRange> ranges) {
     return [
       for (final (i, range) in ranges.indexed)
         BookChapter(
@@ -865,6 +911,7 @@ class LocalBookService {
           index: i,
           start: range.start,
           end: range.end,
+          isVolume: range.isVolume,
         ),
     ];
   }
@@ -883,11 +930,24 @@ class LocalBookService {
     final textPath = ext == 'epub' ? await epubTextPath(book) : path;
     final file = File(textPath);
     if (ext == 'epub' && !await file.exists()) {
+      final List<LocalChapterRange> ranges;
       try {
-        await EpubParser.convert(path, textPath);
+        // 讀章時開著的舊文字檔要先關掉，Windows 上才換得掉。
+        await closeOpenFile();
+        ranges = (await EpubParser.convert(path, textPath)).chapters;
       } on EpubFormatException catch (error) {
         throw LocalBookContentException('讀取本地書籍失敗: ${error.message}');
       }
+      // 這次照現在的轉法轉，章節範圍可能和資料庫裡舊轉法的不同（例如多了
+      // 分卷）：照章名找新範圍裡的同一章，不拿舊範圍讀新檔。
+      final aligned = alignChapter(
+        oldIndex: chapter.index,
+        oldTitle: chapter.title,
+        oldTotalCount: 0,
+        newChapters: _chapters(book, ranges),
+      );
+      final range = ranges[aligned.index.clamp(0, ranges.length - 1)];
+      chapter = chapter.copyWith(start: range.start, end: range.end);
     }
     // 根據章節索引 (start, end) 指標讀取部分內容 (對標 Android ReadLocalBook.kt)
     if (chapter.start != null && chapter.end != null) {
