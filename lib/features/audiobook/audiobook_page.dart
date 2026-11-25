@@ -1179,6 +1179,8 @@ class _Controls extends StatelessWidget {
           // 接著聽一律叫「繼續」，同朗讀與下載。
           label: context.ui(player.playing ? '暫停' : '繼續'),
           excludeSemantics: true,
+          // 排除子語意也排除了 PressScale 的點擊：讀屏的點擊接在這裡。
+          onTap: () => unawaited(player.toggle()),
           child: PressScale(
             onTap: () => unawaited(player.toggle()),
             child: Container(
