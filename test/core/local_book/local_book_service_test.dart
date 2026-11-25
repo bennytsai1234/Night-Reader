@@ -106,6 +106,152 @@ void main() {
     expect(await add('第一章 乙\n內容'), 'The Hobbit (2)／Tolkien');
   });
 
+  group('再匯入同名、同格式、內容不同的檔（L12）', () {
+    String body(String marker) => '　　$marker${'正文內容。' * 300}\n';
+    final v1 = '第一章 開始\n${body('甲')}第二章 中間\n${body('乙')}';
+    final v2 =
+        '序\n第一章 開始\n${body('甲')}第二章 中間\n${body('乙')}'
+        '第三章 新的\n${body('丙')}';
+
+    test('問了選更新：更新同一本，目錄換新、閱讀進度照章名留在同一章', () async {
+      final first = (await LocalBookService().addToShelf(
+        await pick('連載.txt', v1),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+      ))!;
+      await bookDao.updateProgress(first.bookUrl, 1, '第二章 中間', 42);
+      await contentDao.saveContent(
+        contentKey: ReaderChapterContentDao.contentKey(
+          origin: first.origin,
+          bookUrl: first.bookUrl,
+          chapterUrl: '${first.bookUrl}#1',
+        ),
+        origin: first.origin,
+        bookUrl: first.bookUrl,
+        chapterUrl: '${first.bookUrl}#1',
+        chapterIndex: 1,
+        content: '舊的正文',
+        updatedAt: 1,
+      );
+      Book? asked;
+
+      final updated = await LocalBookService().addToShelf(
+        await pick('連載.txt', v2),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+        contentDao: contentDao,
+        askUpdate: (existing) async {
+          asked = existing;
+          return true;
+        },
+      );
+
+      expect(asked?.bookUrl, first.bookUrl);
+      expect(updated!.bookUrl, first.bookUrl);
+      expect(await bookDao.getInBookshelf(), hasLength(1));
+      final chapters = await chapterDao.getByBook(first.bookUrl);
+      expect(chapters.map((c) => c.title), [
+        '前言',
+        '第一章 開始',
+        '第二章 中間',
+        '第三章 新的',
+      ]);
+      final saved = (await bookDao.getByUrl(first.bookUrl))!;
+      expect(saved.name, first.name);
+      expect(saved.chapterIndex, 2);
+      expect(saved.durChapterTitle, '第二章 中間');
+      expect(saved.charOffset, 42);
+      expect(saved.totalChapterNum, 4);
+      expect(saved.fileFingerprint, isNot(first.fileFingerprint));
+      expect(
+        await LocalBookService().getContent(saved, chapters.last),
+        startsWith('第三章 新的'),
+      );
+      expect(
+        await contentDao.getStoredChapterUrls(
+          origin: first.origin,
+          bookUrl: first.bookUrl,
+        ),
+        isEmpty,
+        reason: '舊檔存著的正文要清掉',
+      );
+    });
+
+    test('選另加一本：照舊多一本「書名 (2)」', () async {
+      await LocalBookService().addToShelf(
+        await pick('連載.txt', v1),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+      );
+      final other = await LocalBookService().addToShelf(
+        await pick('連載.txt', v2),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+        askUpdate: (_) async => false,
+      );
+
+      expect(other!.name, '連載 (2)');
+      expect(await bookDao.getInBookshelf(), hasLength(2));
+    });
+
+    test('新檔分不出章時放回舊檔，書與目錄都不動', () async {
+      final first = (await LocalBookService().addToShelf(
+        await pick('連載.txt', v1),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+      ))!;
+
+      await expectLater(
+        LocalBookService().addToShelf(
+          await pick('連載.txt', ''),
+          bookDao: bookDao,
+          chapterDao: chapterDao,
+          askUpdate: (_) async => true,
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      expect(await File(LocalBookService.filePathOf(first)).readAsString(), v1);
+      expect((await chapterDao.getByBook(first.bookUrl)).map((c) => c.title), [
+        '第一章 開始',
+        '第二章 中間',
+      ]);
+      expect(
+        (await bookDao.getByUrl(first.bookUrl))!.fileFingerprint,
+        first.fileFingerprint,
+      );
+    });
+
+    test('書名不同、格式不同或同一個檔都不問', () async {
+      var asked = 0;
+      Future<bool> ask(Book _) async {
+        asked += 1;
+        return true;
+      }
+
+      await LocalBookService().addToShelf(
+        await pick('連載.txt', v1),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+      );
+      await LocalBookService().addToShelf(
+        await pick('連載.txt', v1),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+        askUpdate: ask,
+      );
+      await LocalBookService().addToShelf(
+        await pick('另一本.txt', v2),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+        askUpdate: ask,
+      );
+
+      expect(asked, 0);
+      expect(await bookDao.getInBookshelf(), hasLength(2));
+    });
+  });
+
   test('匯入本地 TXT 時寫入總章數，書卡的進度線算得出來', () async {
     final source = await pick('書.txt', '第一章 開始\n內容\n第二章 結束\n內容');
     final book = await LocalBookService().addToShelf(

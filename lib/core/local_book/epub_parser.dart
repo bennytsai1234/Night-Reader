@@ -83,6 +83,15 @@ class EpubParser {
   /// 同一處的卷名）不列。目錄太粗、一章超過 [TxtParser.maxChapterChars]
   /// 字時（由 TXT 轉成的 EPUB 常只有「封面」一條），那一章照 TXT 的章名
   /// 規則再切。
+  /// [epubPath] 書裡寫的書名；沒寫或讀不出來時是 null。
+  static Future<String?> readTitle(String epubPath) => Isolate.run(() {
+    try {
+      return _withArchive(epubPath, (archive) => _Package.read(archive).title);
+    } on EpubFormatException {
+      return null;
+    }
+  });
+
   static Future<EpubBookInfo> convert(String epubPath, String textPath) =>
       Isolate.run(
         () => _withArchive(epubPath, (archive) => _convert(archive, textPath)),

@@ -70,14 +70,21 @@ class LocalBookService {
   /// （指紋相同，檔名不同也算）就傳回那本，不再加一次。否則複製進本地書
   /// 資料夾、解析、連同章節寫進資料庫。[name]、[author] 給了就用它們（同步
   /// 本地書從雲端下載的照另一台的書名）。
+  ///
+  /// 給了 [askUpdate]：書架上已經有同名、同格式、內容不同的本地書（多半是
+  /// 連載下載的新版）時先問它；傳回 true 就更新那本（[_updateOriginal]），
+  /// 不另加一本。夜讀照原檔指紋認書，分不出新檔是不是舊檔的新版，只能照
+  /// 書名猜，所以由讀者決定。
   Future<Book?> addToShelf(
     String path, {
     required BookDao bookDao,
     required ChapterDao chapterDao,
+    ReaderChapterContentDao? contentDao,
     String? fingerprint,
     String? name,
     String? author,
     String? charset,
+    Future<bool> Function(Book existing)? askUpdate,
   }) async {
     final print = fingerprint ?? await localBookFingerprint(path);
     // 這一版以前匯入的書先補上指紋，才認得出是不是同一本。
@@ -97,6 +104,19 @@ class LocalBookService {
             chapterDao: chapterDao,
           ) ??
           same.first;
+    }
+    if (askUpdate != null) {
+      final existing = await _sameNamedShelfBook(path, bookDao);
+      if (existing != null && await askUpdate(existing)) {
+        return _updateOriginal(
+          existing,
+          path,
+          print,
+          bookDao: bookDao,
+          chapterDao: chapterDao,
+          contentDao: contentDao,
+        );
+      }
     }
 
     final (path: storedPath, :created) = await storeInLibrary(
@@ -142,6 +162,108 @@ class LocalBookService {
       await _discardUnusedCopy(storedPath, created);
       rethrow;
     }
+  }
+
+  /// 書架上和 [path] 同名、同格式的本地書：書名照匯入時的取法（TXT 從檔名
+  /// 拆，EPUB 是書裡寫的書名）。沒有時是 null。
+  Future<Book?> _sameNamedShelfBook(String path, BookDao bookDao) async {
+    final extension = localBookExtensionFromPath(path);
+    final fileName = p.basenameWithoutExtension(path);
+    final name = extension == 'epub'
+        ? await EpubParser.readTitle(path) ?? fileName
+        : nameAndAuthorFromFileName(fileName).name;
+    for (final book in await bookDao.getInBookshelf()) {
+      if (book.isLocal &&
+          book.name == name &&
+          localBookExtensionFromPath(book.bookUrl) == extension) {
+        return book;
+      }
+    }
+    return null;
+  }
+
+  /// 讀者選了更新 [existing]：原檔原地換成 [path]，照新檔重新分章（同
+  /// Legado 再匯入同一個檔），書名、作者、分組與讀者改過的資訊不動。閱讀
+  /// 進度照章名對到新目錄的同一章（序號會因為前面多了章而變），對不到時
+  /// 照比例估、從章首讀；書籤與標註本來就照章名對。舊檔讀過的正文清掉。
+  /// 指紋換成新檔的：「同步本地書」照它傳新檔、刪雲端的舊檔。
+  ///
+  /// 新檔解析失敗時放回舊檔，書與目錄都不動，錯誤往外丟。
+  Future<Book?> _updateOriginal(
+    Book existing,
+    String path,
+    String fingerprint, {
+    required BookDao bookDao,
+    required ChapterDao chapterDao,
+    ReaderChapterContentDao? contentDao,
+  }) async {
+    final target = filePathOf(existing);
+    final incoming = File('$target.new');
+    final previous = File('$target.old');
+    await incoming.parent.create(recursive: true);
+    await File(path).copy(incoming.path);
+    // 讀章時開著的舊檔要先關掉，Windows 上才換得掉。
+    await closeOpenFile();
+    final hadOriginal = await File(target).exists();
+    if (hadOriginal) await File(target).rename(previous.path);
+    await incoming.rename(target);
+    final ({Book book, LocalBookImportResult result}) updated;
+    try {
+      final result = await importBook(target);
+      if (result == null || result.chapters.isEmpty) {
+        throw LocalBookContentException('分不出章節');
+      }
+      final current = await bookDao.getByUrl(existing.bookUrl) ?? existing;
+      final oldChapters = await chapterDao.getByBook(existing.bookUrl);
+      final chapters = result.chapters;
+      final oldTitle =
+          current.durChapterTitle ??
+          oldChapters
+              .where((c) => c.index == current.chapterIndex)
+              .firstOrNull
+              ?.title;
+      final found = alignChapter(
+        oldIndex: current.chapterIndex,
+        oldTitle: oldTitle,
+        oldTotalCount: oldChapters.length,
+        newChapters: chapters,
+      );
+      final index = found.index.clamp(0, chapters.length - 1);
+      await bookDao.transaction(() async {
+        await bookDao.writeFields(
+          current,
+          BooksCompanion(
+            fileFingerprint: Value(fingerprint),
+            charset: Value(result.book.charset),
+            chapterIndex: Value(index),
+            durChapterTitle: Value(chapters[index].title),
+            charOffset: Value(found.matched ? current.charOffset : 0),
+            visualOffsetPx: const Value(0.0),
+            // 錨點綁的是舊檔的正文與章節序號，換了檔不再適用。
+            readerAnchorJson: const Value(null),
+            totalChapterNum: Value(chapters.length),
+          ),
+        );
+        await chapterDao.replaceByBook(existing.bookUrl, chapters);
+        await contentDao?.deleteByBook(existing.origin, existing.bookUrl);
+      });
+      updated = (book: current, result: result);
+    } catch (_) {
+      await closeOpenFile();
+      await _removeFileQuietly(target);
+      if (hadOriginal) await previous.rename(target);
+      rethrow;
+    }
+    final cover = updated.result.cover;
+    if (cover != null) {
+      await BookCoverStorageService().storeEmbeddedCover(
+        updated.book,
+        cover,
+        extension: updated.result.coverExtension ?? '',
+      );
+    }
+    if (hadOriginal) await _removeFileQuietly(previous.path);
+    return bookDao.getByUrl(existing.bookUrl);
   }
 
   /// 書架上已有同一個檔的書，但原檔不見了（例如還原備份帶回了書、沒帶回

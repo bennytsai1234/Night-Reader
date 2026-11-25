@@ -333,6 +333,31 @@ void main() {
       ]);
     });
 
+    // 讀者在這台把書更新成新版的檔（L12）：書還是同一本，指紋換成新檔的。
+    test('a book updated to a new file here sends the new file and deletes '
+        'the old one; the other phone swaps its copy for the new one', () {
+      final here = planLocalBookSync(
+        local: {'new': shelfBook},
+        remote: {'old': alive(50)},
+        base: {'old': synced(50)},
+      );
+      expect(tasksOf(here), [
+        (LocalBookAction.upload, 'new'),
+        (LocalBookAction.deleteRemote, 'old'),
+      ]);
+
+      // 另一台：舊檔 100 加入書架，這台 120 同步時刪掉雲端的舊檔、傳了新檔。
+      final there = planLocalBookSync(
+        local: {'old': shelfBook},
+        remote: {'old': gone(120), 'new': alive(120)},
+        base: {'old': synced(50)},
+      );
+      expect(tasksOf(there), [
+        (LocalBookAction.download, 'new'),
+        (LocalBookAction.removeHere, 'old'),
+      ]);
+    });
+
     test('a book added again here after this phone deleted it from the cloud '
         'goes up again', () {
       final plan = planLocalBookSync(

@@ -19,6 +19,7 @@ import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
 import 'package:night_reader/shared/widgets/book/book_cover_widget.dart';
 import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/features/bookshelf/local_book_update_prompt.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_motion.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_skeleton.dart';
@@ -710,6 +711,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     try {
       final result = await provider.importLocalBookPaths(
         paths,
+        askUpdate: (existing) => askLocalBookUpdate(context, existing),
         onProgress: (done, total) => progress.value = (
           label: '第 $done／$total 本',
           value: total <= 0 ? null : done / total,
