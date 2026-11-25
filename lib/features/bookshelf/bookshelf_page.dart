@@ -18,6 +18,7 @@ import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
 import 'package:night_reader/shared/widgets/book/book_cover_widget.dart';
 import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_import_flow.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_motion.dart';
@@ -761,10 +762,15 @@ class _BookshelfPageState extends State<BookshelfPage>
     final trimmed = url?.trim() ?? '';
     if (trimmed.isEmpty || !context.mounted) return;
     try {
-      await provider.importBookshelfFromUrl(trimmed);
+      final file = await BookshelfExchangeService.parse(
+        await BookshelfExchangeService().fetchText(trimmed),
+      );
+      if (!context.mounted) return;
+      final message = await importBookshelfFile(context, file);
+      await provider.loadBooks();
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: UiText('書架網址匯入完成')));
+          .showSnackBar(SnackBar(content: UiText(message)));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
@@ -777,19 +783,15 @@ class _BookshelfPageState extends State<BookshelfPage>
         .pickBookshelfImportPath();
     if (path == null || !context.mounted) return;
     try {
-      final imported = await BookshelfExchangeService().importFromFile(
-        File(path),
+      final file = await BookshelfExchangeService.parse(
+        await File(path).readAsString(),
       );
       if (!context.mounted) return;
-      final summary = imported.summary;
-      if (summary == null) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: UiText('未找到可匯入的書架資料')));
-        return;
-      }
+      final message = await importBookshelfFile(context, file);
+      if (!context.mounted) return;
       unawaited(context.read<BookshelfProvider>().loadBooks());
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: UiText(summary)));
+          .showSnackBar(SnackBar(content: UiText(message)));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)

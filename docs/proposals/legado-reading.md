@@ -154,7 +154,7 @@
 | K8 | Legado 備份裡的設定（`config.xml`）與排版 | 少一個選項 | 夜讀不讀 `config.xml`；同名的設定有一百多個，但數值的意思不一定一樣；排版不在這一份的範圍 |
 | K9 | 還原時略過某幾項 | 少一個選項，已做（#632） | Legado 還原前可以勾略過閱讀界面、主題、封面、書架樣式、本地書等；夜讀全部還原 |
 | K10 | 自動備份（每天一次） | 少一個選項 | Legado 每天第一次開 App 或離開閱讀器時自動備份到資料夾與 WebDAV；夜讀只有手動，同步不留過去的版本 |
-| K11 | 匯出書架、從檔案或網址匯入書架 | 結果不對 | Legado 匯出的書架夜讀匯不進來，夜讀匯出的 Legado 也匯不進去 |
+| K11 | 匯出書架、從檔案或網址匯入書架 | 結果不對，已修（#651） | Legado 匯出的書架夜讀匯不進來，夜讀匯出的 Legado 也匯不進去 |
 | K12 | 匯出書（TXT、EPUB；套不套替換規則、含不含章名、章節範圍） | 結果不對，已修（#561） | Legado 匯出預設套替換規則，夜讀匯出原文；EPUB、章節範圍、不含章名、編碼夜讀都沒有 |
 | K13 | 夜讀匯出的替換規則給 Legado 讀 | 結果不對，已修（#561） | 夜讀備份的開關寫成 1／0：Legado 還原時書架與替換規則整份讀不進去，書源只剩名稱與網址、規則全空，還蓋掉 Legado 裡同網址的書源 |
 | K14 | `legado://` 匯入連結（替換規則、加入書架） | 結果不對 | `legado://import/addToBookshelf` 在 Legado 是一本書的網址，夜讀當成書架檔下載，加不進書架 |
@@ -282,6 +282,7 @@
 
 - Legado 匯出書架是 `[{name, author, intro}]`，匯入時每本照書名、作者在啟用的書源裡精準搜尋、加第一個搜到的（`legado:ui/main/bookshelf/BookshelfViewModel.kt:102-123`、`156-186`）。
 - 夜讀匯入書架要每筆有 `bookUrl`（`lib/core/backup/bookshelf_exchange_service.dart:247-248`），Legado 匯出的檔回「未找到可匯入的書架資料」；夜讀匯出的是一個物件 `{kind, books, chapters, …}`（同檔 `64-75`），Legado 只收陣列，回「格式不对」。
+- 已修（#651）：匯出是一本一筆的陣列，Legado 照書名、作者讀（巢狀的欄位它讀成字串、不報錯，`legado:utils/GsonExtensions.kt:135-146`）。本地書照 Legado 只有書名、作者、簡介；網路書是可以分享的書的欄位（不帶本機封面檔與書、章節的變數），加上這本的目錄、存好的正文，與它用的書源（同一個書源只跟著第一本）。Legado 的書架照它的做法在啟用的書源裡精確搜尋，找的時候開可以取消的進度框，分母是實際要找的本數。替換規則、書源與其他 JSON 不當成書架匯入。Legado 讀得懂是讀原始碼推論，沒有實跑。
 
 #### K5　Legado 的閱讀時長還原後變成 1000 倍（資料少了或錯了）
 
@@ -327,8 +328,8 @@
 
 ### 目錄
 
-- [x] **T3　每本書把目錄翻過來（已定）**：有些書源給的目錄是新到舊，Legado 在目錄選單「倒序目錄」把這本書存著的目錄整個翻過來、之後抓的也照翻（`legado:ui/book/toc/TocViewModel.kt:55-69`）。夜讀抓目錄時已經照這本書的這個值翻（`lib/core/engine/web_book/web_book_service.dart:329-333`），但沒有任何地方能把它打開；書籍詳情目錄的「倒序」只是倒著顯示（`lib/features/book_detail/book_detail_provider.dart:657`），閱讀的上一章、下一章仍是反的。要補的話放閱讀器「更多」，和「重新分段」一樣是這本書的開關，預設關。
-- [x] **T2　閱讀器的目錄搜尋（已定）**：Legado 從閱讀器打開的目錄頁可以搜章名（`legado:ui/book/toc/TocActivity.kt:73-81`）。夜讀只有書籍詳情的目錄能搜（`lib/features/book_detail/widgets/book_info_toc_bar.dart:79-90`），閱讀器左側的目錄面板沒有（`lib/features/reader/screen/reader_chapters_drawer.dart`），上千章的書只能拖捲動條找。要補的話照書籍詳情那一套。
+- [x] **T3　每本書把目錄翻過來（已做，#650，ADR 0085）**：有些書源給的目錄是新到舊，Legado 在目錄選單「倒序目錄」把這本書存著的目錄整個翻過來、之後抓的也照翻（`legado:ui/book/toc/TocViewModel.kt:55-69`）。夜讀抓目錄時已經照這本書的這個值翻（`lib/core/engine/web_book/web_book_service.dart:329-333`），但沒有任何地方能把它打開；書籍詳情目錄的「倒序」只是倒著顯示（`lib/features/book_detail/book_detail_provider.dart:657`），閱讀的上一章、下一章仍是反的。要補的話放閱讀器「更多」，和「重新分段」一樣是這本書的開關，預設關。
+- [x] **T2　閱讀器的目錄搜尋（已做，#650）**：Legado 從閱讀器打開的目錄頁可以搜章名（`legado:ui/book/toc/TocActivity.kt:73-81`）。夜讀只有書籍詳情的目錄能搜（`lib/features/book_detail/widgets/book_info_toc_bar.dart:79-90`），閱讀器左側的目錄面板沒有（`lib/features/reader/screen/reader_chapters_drawer.dart`），上千章的書只能拖捲動條找。要補的話照書籍詳情那一套。
 - [ ] **T1、T5　目錄列顯示書源給的附加資訊與字數（不做）**：Legado 目錄每列在章名下顯示書源規則抓到的附加資訊（多半是更新時間）與本章字數（字數可關），沒下載的章畫一個雲（`legado:ui/book/toc/ChapterListAdapter.kt:146-168`）。夜讀把這兩個欄位抓下來存著（`lib/core/models/book/book_chapter.dart:22-23`），目錄不顯示。已下載的標記用處較小：書架上的書整本自動下載（ADR 0008）。要補的話只補附加資訊，字數預設不顯示。
 - [ ] **T4　目錄的章名套標題規則（不做）**：Legado 目錄選單「使用替換」打開才套（`legado:help/config/AppConfig.kt:380-384`，預設關）。夜讀目錄一律原章名，和 Legado 的預設一樣。R8 修好後頁首與目錄會不一樣，要補的話預設關。
 

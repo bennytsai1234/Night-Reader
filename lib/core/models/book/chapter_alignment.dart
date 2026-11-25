@@ -18,6 +18,33 @@ int alignChapterIndex({
   newChapters: newChapters,
 ).index;
 
+/// 記下的章（章名與序號）在 [chapters] 裡是第幾章：先找同名的章（繁簡
+/// 不同也算，好幾章同名時取離序號最近的），再照章號；目錄還沒讀出來時照
+/// 記下的序號。書籤與標註共用。
+///
+/// 序號是照記下時的目錄方向數的（[countedReversed]，null 是沒記，當成和
+/// 這本書現在一樣）：和現在的方向（[reversed]）不同時從目錄的另一頭數，
+/// 同名的章（好幾個「番外」）才對得到同一章（反轉目錄，ADR 0085）。
+int chapterIndexByTitle({
+  required int chapterIndex,
+  required String chapterTitle,
+  required bool? countedReversed,
+  required bool reversed,
+  required List<BookChapter> chapters,
+}) {
+  final flipped =
+      countedReversed != null &&
+      countedReversed != reversed &&
+      chapterIndex >= 0 &&
+      chapterIndex < chapters.length;
+  return alignChapterIndex(
+    oldIndex: flipped ? chapters.length - 1 - chapterIndex : chapterIndex,
+    oldTitle: chapterTitle,
+    oldTotalCount: 0,
+    newChapters: chapters,
+  );
+}
+
 /// 同 [alignChapterIndex]，另說這一章是不是真的找到（同名、去掉章號的章名
 /// 或章號）；都不是、只照比例估時 `matched` 是 false。書籤與標註換目錄時
 /// 拿它判斷「對不到舊目錄就跳過」。

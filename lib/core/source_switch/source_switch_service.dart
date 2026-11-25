@@ -12,6 +12,7 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/chapter_alignment.dart';
+import 'package:night_reader/core/storage/book_toc_reverser.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
@@ -291,24 +292,36 @@ class SourceSwitchService {
     final title = targetChapterTitle ?? latest.durChapterTitle;
     if (title == null) return null;
     final alignment = latest.copyWith(durChapterTitle: title);
-    final migrated = _migrate(
-      alignment,
-      prepared.migratedBook,
-      prepared.chapters,
-    );
-    if (migrated.index != prepared.targetChapterIndex ||
-        !sameChapterTitle(prepared.chapters[migrated.index].title, title)) {
+    // 準備的途中切了反轉目錄（另一台同步來的）：準備好的目錄照最新的開關
+    // 翻過來再對章，存下的目錄方向才和開關一致（[BookTocReverser]）。
+    final reverse =
+        _migratedReverseToc(latest, prepared.migratedBook) !=
+        prepared.migratedBook.getReverseToc();
+    final chapters = reverse
+        ? reversedToc(prepared.chapters)
+        : prepared.chapters;
+    final target = reverse
+        ? chapters.length - 1 - prepared.targetChapterIndex
+        : prepared.targetChapterIndex;
+    final migrated = _migrate(alignment, prepared.migratedBook, chapters);
+    if (migrated.index != target ||
+        !sameChapterTitle(chapters[migrated.index].title, title)) {
       return null;
     }
     return PreparedSourceSwitch(
       searchBook: prepared.searchBook,
       source: prepared.source,
       migratedBook: migrated.book,
-      chapters: prepared.chapters,
+      chapters: chapters,
       targetChapterIndex: migrated.index,
       validatedContent: prepared.validatedContent,
     );
   }
+
+  /// [from] 搬到 [to] 之後（[Book.migrateTo]）這本書的反轉目錄：帶著 [from]
+  /// 的閱讀設定，[from] 沒有時留著 [to] 的。
+  static bool _migratedReverseToc(Book from, Book to) =>
+      (from.readConfig ?? to.readConfig)?.reverseToc ?? false;
 
   /// [from] 的閱讀進度與書架上的設定搬到新書源的 [to]（[Book.migrateTo]）；
   /// [index] 是讀到的那一章在 [chapters] 的位置。
@@ -365,7 +378,7 @@ class SourceSwitchService {
       chapterIndex: targetChapterIndex ?? currentBook.chapterIndex,
       durChapterTitle: targetChapterTitle ?? currentBook.durChapterTitle,
     );
-    final SourceToc(book: hydratedBook, :chapters) = toc == null
+    final SourceToc(book: hydratedBook, chapters: fetched) = toc == null
         ? await loadSourceToc(
             _service,
             source,
@@ -377,6 +390,14 @@ class SourceSwitchService {
         : SourceToc(toc.book, [
             for (final chapter in toc.chapters) chapter.copyWith(),
           ]);
+    // 換過去的書帶著這本書的閱讀設定（[Book.migrateTo]，同 Legado），存著的
+    // 目錄要照它的反轉目錄排（[BookTocReverser]）；新書源的目錄是照抓的那
+    // 一份的設定抓的。
+    final chapters =
+        _migratedReverseToc(currentBook, hydratedBook) ==
+            hydratedBook.getReverseToc()
+        ? fetched
+        : reversedToc(fetched);
 
     final migrated = _migrate(alignmentBook, hydratedBook, chapters);
     return _AlignedSwitch(
@@ -512,6 +533,8 @@ class SourceSwitchService {
           toName: migratedBook.recordName,
           toAuthor: migratedBook.author,
           oldTotalCount: oldBook.totalChapterNum,
+          fromReversed: oldBook.getReverseToc(),
+          toReversed: migratedBook.getReverseToc(),
           chapters: prepared.chapters,
         );
         await HighlightDao(db).moveToSource(
@@ -520,6 +543,8 @@ class SourceSwitchService {
           toName: migratedBook.recordName,
           toAuthor: migratedBook.author,
           oldTotalCount: oldBook.totalChapterNum,
+          fromReversed: oldBook.getReverseToc(),
+          toReversed: migratedBook.getReverseToc(),
           chapters: prepared.chapters,
         );
 

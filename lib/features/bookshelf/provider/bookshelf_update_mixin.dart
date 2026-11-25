@@ -6,7 +6,6 @@ import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/download/book_update_service.dart';
-import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
 
 import 'bookshelf_provider_base.dart';
 
@@ -195,17 +194,5 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
       if (book != null) selected.add(book);
     }
     return selected;
-  }
-
-  Future<void> importBookshelfFromUrl(String url) async {
-    isLoading = true;
-    notifyListeners();
-    try {
-      await BookshelfExchangeService().importFromUrl(url);
-      await loadBooks();
-    } finally {
-      isLoading = false;
-      notifyListeners();
-    }
   }
 }

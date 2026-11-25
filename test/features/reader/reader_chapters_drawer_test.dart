@@ -400,4 +400,85 @@ void main() {
       findsOneWidget,
     );
   });
+
+  group('目錄搜尋（照書籍詳情的目錄搜尋）', () {
+    final chapters = [
+      for (var i = 0; i < 40; i++)
+        BookChapter(
+          url: '/c/$i',
+          title: i == 7 || i == 31 ? '第${i + 1}章 風起' : '第${i + 1}章 雨落',
+        ),
+    ];
+
+    Future<({ValueNotifier<bool> shown, List<int> tapped})> pump(
+      WidgetTester tester,
+    ) async {
+      final shown = ValueNotifier(true);
+      final tapped = <int>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ReaderChaptersDrawer(
+              chapters: chapters,
+              currentChapter: ValueNotifier(20),
+              titleFor: (index) => chapters[index].title,
+              onChapterTap: tapped.add,
+              shown: shown,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return (shown: shown, tapped: tapped);
+    }
+
+    Future<void> search(WidgetTester tester, String query) async {
+      await tester.tap(find.byTooltip('搜尋目錄'));
+      await tester.pumpAndSettle();
+      expect(find.text('搜尋目錄'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), query);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('關閉'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('只列章名對得到的章，寫找到幾章；點了照樣跳過去', (tester) async {
+      final drawer = await pump(tester);
+      expect(find.text('共 40 章'), findsOneWidget);
+
+      await search(tester, '風起');
+
+      expect(find.text('第8章 風起'), findsOneWidget);
+      expect(find.text('第32章 風起'), findsOneWidget);
+      expect(find.textContaining('雨落'), findsNothing);
+      expect(find.text('2/40 章'), findsOneWidget);
+      await tester.tap(find.text('第32章 風起'));
+      expect(drawer.tapped, [31]);
+    });
+
+    testWidgets('搜尋字清空回到整份目錄；重新打開面板時搜尋也清掉', (tester) async {
+      final drawer = await pump(tester);
+      await search(tester, '風起');
+      await search(tester, '');
+      expect(find.text('共 40 章'), findsOneWidget);
+
+      await search(tester, '風起');
+      drawer.shown.value = false;
+      await tester.pumpAndSettle();
+      drawer.shown.value = true;
+      await tester.pumpAndSettle();
+      expect(find.text('共 40 章'), findsOneWidget);
+      expect(find.text('第21章 雨落'), findsOneWidget);
+    });
+
+    testWidgets('沒有對得到的章：寫「找不到相符章節」，可以清除搜尋', (tester) async {
+      await pump(tester);
+      await search(tester, '沒有這章');
+
+      expect(find.text('找不到相符章節'), findsOneWidget);
+      await tester.tap(find.text('清除搜尋'));
+      await tester.pumpAndSettle();
+      expect(find.text('共 40 章'), findsOneWidget);
+    });
+  });
 }

@@ -117,7 +117,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -245,6 +245,12 @@ class AppDatabase extends _$AppDatabase {
         ]) {
           await customStatement('DROP TABLE IF EXISTS $table');
         }
+      }
+      if (from < 22) {
+        // 書籤與標註記下章節序號時目錄的方向（反轉目錄，ADR 0085）；舊的留空，
+        // 當成和書現在一樣。
+        await _addColumnIfMissing(m, bookmarks, bookmarks.tocReversed);
+        await _addColumnIfMissing(m, highlights, highlights.tocReversed);
       }
     },
     beforeOpen: (_) async {

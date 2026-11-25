@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/storage/book_toc_reverser.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -38,7 +39,9 @@ class BookshelfSync extends SyncKind {
     void Function(String bookUrl)? download,
     BookRenames? renames,
     ReadRecordDao? readRecords,
+    BookTocReverser? tocReverser,
   }) : _bookDao = bookDao ?? getIt<BookDao>(),
+       _tocReverserOverride = tocReverser,
        _renamesStore = renames,
        _readRecords =
            readRecords ??
@@ -49,6 +52,9 @@ class BookshelfSync extends SyncKind {
        _download = download ?? _keepDownloaded;
 
   final BookDao _bookDao;
+  final BookTocReverser? _tocReverserOverride;
+  late final BookTocReverser _tocReverser =
+      _tocReverserOverride ?? BookTocReverser();
   final BookStorageService? _storage;
   final BookRenames? _renamesStore;
 
@@ -408,6 +414,12 @@ class BookshelfSync extends SyncKind {
   Future<void> _writeUserFields({required Book from, required Book to}) async {
     // 換了封面網址，存在這台的封面檔就不是它了（同書籍詳情換封面）。
     final coverChanged = to.customCoverUrl != from.customCoverUrl;
+    // 另一台切了反轉目錄：這台存著的目錄一起翻，進度、書籤、標註跟著換
+    // （[BookTocReverser]），不能只改開關。
+    final reversed = from.readConfig?.reverseToc ?? false;
+    if (reversed != (to.readConfig?.reverseToc ?? false)) {
+      await _tocReverser.setReversed(to, reversed);
+    }
     await _bookDao.updateUserFields(
       to.bookUrl,
       customTag: from.customTag,
