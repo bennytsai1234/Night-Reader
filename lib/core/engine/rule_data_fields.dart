@@ -189,7 +189,8 @@ final Map<String, RuleDataField<BookChapter>> chapterRuleFields = {
 
 /// `putVariable` 一次改一個鍵，同一本書常同時有好幾章在抓：只把這個工作增刪
 /// 的鍵合併進目前的值，不拿複本的整串蓋掉別的工作剛寫進的鍵。任一邊不是
-/// JSON 物件時（規則直接設成別的字串），照整串寫入。
+/// JSON 物件時（規則直接設成別的字串），照整串寫入。鍵刪光了就是空物件，
+/// 不退回複本的整串：那會把別的工作剛刪掉的鍵寫回來。
 Object? _mergeVariables(Object? current, Object? before, Object? after) {
   final was = _variableMap(before);
   final now = _variableMap(after);
@@ -201,7 +202,8 @@ Object? _mergeVariables(Object? current, Object? before, Object? after) {
   for (final MapEntry(:key, :value) in now.entries) {
     if (was[key] != value) merged[key] = value;
   }
-  return merged.isEmpty ? after : jsonEncode(merged);
+  if (merged.isEmpty && (after == null || after == '')) return after;
+  return jsonEncode(merged);
 }
 
 Map<String, Object?>? _variableMap(Object? value) {

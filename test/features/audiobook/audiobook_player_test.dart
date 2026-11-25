@@ -508,6 +508,45 @@ void main() {
     expect(saved.charOffset, 187000);
   });
 
+  test('聽的時候檢查更新在前面插了一集：存的是這一集在新目錄的序號，重開接回同一集', () async {
+    await player.open(book);
+    // 書架檢查更新換上新目錄：第 1 集前面多了番外，第 2 集變成序號 3。
+    await ChapterDao(db).replaceByBook(book.bookUrl, [
+      BookChapter(
+        url: 'https://audio.test/vol',
+        title: '第一卷',
+        isVolume: true,
+        bookUrl: book.bookUrl,
+        index: 0,
+      ),
+      BookChapter(
+        url: 'https://audio.test/extra',
+        title: '番外',
+        bookUrl: book.bookUrl,
+        index: 1,
+      ),
+      for (var i = 1; i <= 3; i++)
+        BookChapter(
+          url: 'https://audio.test/ep$i',
+          title: '第 $i 集',
+          bookUrl: book.bookUrl,
+          index: i + 1,
+        ),
+    ]);
+    engine.advance(const Duration(seconds: 30));
+    await player.pause();
+
+    final saved = await stored();
+    expect(saved.chapterIndex, 3);
+    expect(saved.durChapterTitle, '第 2 集');
+    expect(saved.charOffset, 30000);
+
+    await player.stop();
+    await player.open(book);
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/ep2.mp3');
+    expect(engine.opened.last.$2, const Duration(seconds: 30));
+  });
+
   test('一集播完接著播下一集，最後一集播完停在結尾', () async {
     await player.open(book);
     final opening = engine.nextOpen;

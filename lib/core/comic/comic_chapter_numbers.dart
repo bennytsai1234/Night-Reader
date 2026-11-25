@@ -1,3 +1,5 @@
+import 'package:night_reader/core/utils/string_utils.dart';
+
 /// 從章名認出第幾話，換章分隔用它提醒中間缺了幾話（照 Mihon 的
 /// `calculateChapterGap`；Mihon 的章號由書源或章名辨識給）。
 abstract final class ComicChapterNumbers {
@@ -36,44 +38,11 @@ abstract final class ComicChapterNumbers {
     final ascii = String.fromCharCodes(
       text.runes.map((r) => r >= 0xFF10 && r <= 0xFF19 ? r - 0xFF10 + 0x30 : r),
     );
-    return double.tryParse(ascii) ?? _chinese(ascii)?.toDouble();
-  }
-
-  static const Map<String, int> _digits = {
-    '零': 0,
-    '〇': 0,
-    '一': 1,
-    '二': 2,
-    '兩': 2,
-    '两': 2,
-    '三': 3,
-    '四': 4,
-    '五': 5,
-    '六': 6,
-    '七': 7,
-    '八': 8,
-    '九': 9,
-  };
-  static const Map<String, int> _units = {'十': 10, '百': 100, '千': 1000};
-
-  /// 一千以內的中文數字（「十二」「一百零五」「二十」）。
-  static int? _chinese(String text) {
-    var total = 0;
-    var digit = 0;
-    var seenAny = false;
-    for (final char in text.split('')) {
-      if (_digits[char] case final value?) {
-        digit = value;
-        seenAny = true;
-      } else if (_units[char] case final unit?) {
-        // 「十二」的十前面沒有數字，算一十。
-        total += (digit == 0 ? 1 : digit) * unit;
-        digit = 0;
-        seenAny = true;
-      } else {
-        return null;
-      }
-    }
-    return seenAny ? total + digit : null;
+    final direct = double.tryParse(ascii);
+    if (direct != null) return direct;
+    // 中文數字照 Legado（`StringUtils.chineseNumToInt`）：「一〇〇」「一一五」
+    // 這種逐字寫的位數也認得。
+    final chinese = StringUtils.chineseNumToInt(ascii);
+    return chinese < 0 ? null : chinese.toDouble();
   }
 }

@@ -12,7 +12,8 @@ import java.util.Locale
  * Access Framework）選了一個資料夾，App 沒有儲存權限、讀不到它的路徑，
  * 這裡經 ContentResolver 把裡面的漫畫檔複製到 App 自己的資料夾，Dart 那邊
  * 再照一般檔案匯入。只複製兩層：作品資料夾裡的 CBZ／ZIP 與圖，以及每個
- * 子資料夾（一話）裡的圖；更深的資料夾、其他檔案、隱藏檔都不複製。
+ * 子資料夾（一話）裡的圖（沒有副檔名的也算，照檔頭認）；更深的資料夾、
+ * 其他檔案、隱藏檔都不複製。
  */
 object ComicFolderCopy {
     private val archiveExtensions = setOf("cbz", "zip")
@@ -80,7 +81,9 @@ object ComicFolderCopy {
                     continue
                 }
                 val extension = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
-                val wanted = extension in imageExtensions ||
+                // 沒有副檔名的也複製：可能是圖，Dart 那邊照檔頭認（同 Mihon），
+                // 不是圖的不會進漫畫。
+                val wanted = extension in imageExtensions || extension.isEmpty() ||
                     (depth == 0 && extension in archiveExtensions)
                 if (wanted) out.add(id to file)
             }
