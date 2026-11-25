@@ -54,6 +54,22 @@ extension JsFontExtensions on JsExtensionsBase {
       return null;
     });
 
+    // queryTTF 交回的字型物件的查詢方法（Legado 的 QueryTTF 公開方法）。
+    runtime.onMessage('_ttfCall', (dynamic args) {
+      final ttf = JsExtensionsBase.ttfCache[args[0]?.toString()];
+      final arg = args[2];
+      final Object? result = switch (args[1]) {
+        _ when ttf == null => null,
+        'getGlyfIdByUnicode' => ttf.getGlyfIdByUnicode((arg as num).toInt()),
+        'getGlyfByUnicode' => ttf.getGlyfByUnicode((arg as num).toInt()),
+        'getGlyfById' => ttf.getGlyfById((arg as num).toInt()),
+        'getUnicodeByGlyf' => ttf.getUnicodeByGlyf(arg as String?),
+        'isBlankUnicode' => ttf.isBlankUnicode((arg as num).toInt()),
+        _ => null,
+      };
+      return jsonEncode(result);
+    });
+
     runtime.onMessage('replaceFont', (dynamic args) {
       try {
         final text = args[0]?.toString() ?? '';

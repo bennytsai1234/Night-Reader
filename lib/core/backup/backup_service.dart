@@ -22,14 +22,19 @@ import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/backup/login_data_backup.dart';
+import 'package:night_reader/core/sync/read_stats_sync.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 
 class BackupService {
   /// 只屬於這台手機的設定：不寫進備份，還原時也不套用（舊的備份可能帶著）。
-  /// 這台在同步裡的名字、下載佇列的「暫停全部」、找過沒有書源的書，與離開
-  /// 時蓋住畫面、解鎖才能打開（另一台不一定有指紋，ADR 0083）。
+  /// 這台在同步裡的名字與從別台還原進來的閱讀時間、下載佇列的「暫停全部」、
+  /// 找過沒有書源的書，與離開時蓋住畫面、解鎖才能打開（另一台不一定有指紋，
+  /// ADR 0083）。
   static final Set<String> deviceOnlyKeys = {
     SyncSettings.deviceIdKey,
+    RestoredStats.prefKey,
+    SyncSettings.lastSyncKey,
+    SyncSettings.lastSyncSpaceKey,
     PreferKey.downloadsPausedAll,
     PreferKey.orphanedBooksSwitched,
     PreferKey.appCoverOnLeave,

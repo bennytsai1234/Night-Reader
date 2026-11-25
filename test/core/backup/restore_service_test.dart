@@ -337,9 +337,11 @@ void main() {
     await RestoreService().restoreFromZip(zip);
 
     final restored = RestoredStats.read(await SharedPreferences.getInstance());
-    expect(restored!.from, 'phone-a');
-    expect(restored.books, {'丁': 900});
-    expect(restored.days, {'2026-10-20': 900});
+    expect(restored!.devices.keys, ['phone-a']);
+    expect(restored.devices['phone-a']!.books, {'丁': 900});
+    expect(restored.devices['phone-a']!.days, {
+      '丁': {'2026-10-20': 900},
+    });
   });
 
   test('books off the shelf in an old backup are not restored, and chapters '

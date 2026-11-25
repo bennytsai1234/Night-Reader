@@ -46,6 +46,12 @@ class EpubFormatException extends AppException {
   EpubFormatException(super.message);
 }
 
+/// 本地書這一章讀不出來（原檔不在、格式不支援、EPUB 轉不出文字、章節位置
+/// 不對）：[message] 是給讀者看的原因，閱讀器照它顯示、匯出全書照它失敗。
+class LocalBookContentException extends AppException {
+  LocalBookContentException(super.message);
+}
+
 /// NoBooksDirException - 找不到書籍目錄 (對標 NoBooksDirException.kt)
 class NoBooksDirException extends AppException {
   NoBooksDirException(super.message);

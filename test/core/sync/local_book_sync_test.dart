@@ -823,6 +823,109 @@ void main() {
       expect((await b.localBooks().plan()).isEmpty, isTrue);
     });
 
+    // 同一個檔在書架上有兩筆（還原了另一台的舊備份）：最近讀過的舊那筆排
+    // 在前面，整組的判斷不能只看它。
+    group('two shelf books with the same file', () {
+      late Book fresh;
+      late String oldUrl;
+
+      /// [fresh] 剛匯入、還沒讀；另加一筆同一個檔、舊備份帶回來的書，
+      /// 最近讀過（排在前面）、加進書架的時間是 [oldAdded]，原檔
+      /// [oldHasFile] 時在這台。
+      Future<void> twoBooks({
+        required int oldAdded,
+        bool oldHasFile = false,
+      }) async {
+        fresh = await a.import('夜航.txt', _novel);
+        await a.books.upsert(
+          (await a.books.getByUrl(fresh.bookUrl))!
+              .copyWith(syncTime: 3000, durChapterTime: 0),
+        );
+        final oldPath = oldHasFile
+            ? p.join(a.root.path, 'docs', 'InkpageBooks', '夜航（舊）.txt')
+            : p.join(a.root.path, 'gone', '夜航.txt');
+        if (oldHasFile) await File(oldPath).writeAsString(_novel);
+        oldUrl = 'local://$oldPath';
+        final chapters = await a.chapters.getByBook(fresh.bookUrl);
+        await a.books.upsert(
+          fresh.copyWith(
+            bookUrl: oldUrl,
+            syncTime: oldAdded,
+            durChapterTime: 9000,
+          ),
+        );
+        await a.chapters.insertChapters([
+          for (final chapter in chapters)
+            chapter.copyWith(bookUrl: oldUrl, url: '$oldUrl#${chapter.index}'),
+        ]);
+        expect((await a.shelf()).first.bookUrl, oldUrl, reason: '舊那筆排前面');
+      }
+
+      void deletedInCloudAt(int time) {
+        store.files[LocalBookSync.fileName] = (
+          SyncDocument({
+            fresh.fileFingerprint!: SyncRecord(
+              time: time,
+              data: const {},
+              deleted: true,
+            ),
+          }).encode(),
+          1,
+        );
+      }
+
+      test('a book added again after the cloud removal is uploaded, not '
+          'removed', () async {
+        await twoBooks(oldAdded: 1000);
+        deletedInCloudAt(2000);
+
+        final plan = await a.localBooks().plan();
+
+        expect(plan.of(LocalBookAction.removeHere), isEmpty);
+        expect(plan.of(LocalBookAction.upload), hasLength(1));
+      });
+
+      test('the same holds when both files are here', () async {
+        await twoBooks(oldAdded: 1000, oldHasFile: true);
+        deletedInCloudAt(2000);
+
+        final plan = await a.localBooks().plan();
+
+        expect(plan.of(LocalBookAction.removeHere), isEmpty);
+        expect(plan.of(LocalBookAction.upload), hasLength(1));
+      });
+
+      test('the one whose file is missing still gets it back from the '
+          'cloud', () async {
+        await twoBooks(oldAdded: 1000);
+        store.files[LocalBookSync.fileName] = (
+          SyncDocument({
+            fresh.fileFingerprint!: SyncRecord(
+              time: 2000,
+              data: {'name': '夜航', 'author': '', 'ext': 'txt', 'size': 10},
+            ),
+          }).encode(),
+          1,
+        );
+
+        final plan = await a.localBooks().plan();
+
+        expect(plan.of(LocalBookAction.download), hasLength(1));
+      });
+
+      test('the file that is here is uploaded when the other one is '
+          'missing', () async {
+        await twoBooks(oldAdded: 1000);
+
+        final upload = (await a.localBooks().plan())
+            .of(LocalBookAction.upload)
+            .single;
+
+        expect(upload.path, LocalBookService.filePathOf(fresh));
+        expect(upload.bookUrls, unorderedEquals([fresh.bookUrl, oldUrl]));
+      });
+    });
+
     test('a phone that never pressed the button does not show the book, and '
         'importing the same file there picks up the progress', () async {
       final mine = await a.import('夜航.txt', _novel);

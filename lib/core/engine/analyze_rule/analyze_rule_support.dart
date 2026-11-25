@@ -324,7 +324,12 @@ String stringifyRuleResult(dynamic value) {
   if (htmlLike != null) {
     return htmlLike;
   }
+  // Jsoup 的元素、整份網頁轉成文字是它們的 HTML（規則 JS 用
+  // `java.setContent(Jsoup.parse(…))` 交來的整份網頁也是）。
   if (value is Element) {
+    return value.outerHtml;
+  }
+  if (value is Document) {
     return value.outerHtml;
   }
   // XPath 找到的節點：元素交出 HTML（`toString()` 只有標籤名稱）。

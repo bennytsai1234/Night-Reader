@@ -174,7 +174,10 @@ class JsExtensions extends JsExtensionsBase {
           final nextBaseUrl = payload.length > 1
               ? payload[1]?.toString()
               : null;
-          ruleContext.setContent(payload[0], baseUrl: nextBaseUrl);
+          ruleContext.setContent(
+            _fromJsRuleValue(payload[0]),
+            baseUrl: nextBaseUrl,
+          );
         } catch (_) {}
       }
       return null;

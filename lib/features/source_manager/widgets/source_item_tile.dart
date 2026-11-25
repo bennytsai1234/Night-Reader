@@ -11,7 +11,9 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/lists/selection_circle.dart';
 import 'package:night_reader/shared/widgets/lists/swipe_actions.dart';
+import 'package:night_reader/shared/widgets/lists/trailing_swap.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 
 import '../source_manager_provider.dart';
@@ -342,7 +344,7 @@ class _SourceRowContent extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   minWidth: _kCheckSlotWidth,
                   maxWidth: _kCheckSlotWidth,
-                  child: _SelectionCircle(selected: isSelected),
+                  child: SelectionCircle(selected: isSelected),
                 ),
               ),
             ),
@@ -426,7 +428,7 @@ class _SourceRowContent extends StatelessWidget {
               ],
             ),
           ),
-          _TrailingSwap(
+          TrailingSwap(
             child: trailing == null
                 ? const SizedBox.shrink()
                 : Padding(
@@ -573,66 +575,6 @@ class _SourceRowContent extends StatelessWidget {
   String? get _errorLine => sourceErrorLine(source);
 }
 
-/// 列尾的開關、排序把手（或什麼都沒有）互換：兩者交叉淡換，佔的寬度跟著
-/// 同一段時間與曲線連續變化。原本 [AnimatedSwitcher] 淡換期間佔兩者中較寬
-/// 的那個，淡完那一幀才縮成新的寬度，文字區（長網址的「…」）會跳一下。
-class _TrailingSwap extends StatelessWidget {
-  const _TrailingSwap({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    if (MediaQuery.disableAnimationsOf(context)) return child;
-    // 淡出中的那個比新寬度寬時往左伸出，只在左右方向裁掉，不蓋到文字；
-    // 上下照原樣（開關比列尾的空位高也不裁）。
-    return ClipRect(
-      clipper: const _HorizontalClipper(),
-      child: AnimatedSize(
-        duration: AppMotion.fade,
-        curve: AppMotion.fadeCurve,
-        alignment: Alignment.centerRight,
-        clipBehavior: Clip.none,
-        child: AnimatedSwitcher(
-          duration: AppMotion.fade,
-          switchInCurve: AppMotion.fadeCurve,
-          switchOutCurve: AppMotion.fadeCurve,
-          layoutBuilder: _layout,
-          child: child,
-        ),
-      ),
-    );
-  }
-
-  /// 大小只取新的那個，寬度由外層 [AnimatedSize] 從舊寬度接續；淡出中的
-  /// 靠右對齊疊在上面，不撐大版面。
-  static Widget _layout(Widget? current, List<Widget> previous) {
-    return Stack(
-      alignment: Alignment.centerRight,
-      clipBehavior: Clip.none,
-      children: [
-        for (final child in previous) Positioned(right: 0, child: child),
-        ?current,
-      ],
-    );
-  }
-}
-
-class _HorizontalClipper extends CustomClipper<Rect> {
-  const _HorizontalClipper();
-
-  /// 淡出中的那個以新的那個的中線為準上下置中，最高是一列的最小高度
-  /// （排序把手），上下各留這麼多就不會被裁到。
-  static const double _overhang = AppGrouped.rowMinHeight;
-
-  @override
-  Rect getClip(Size size) =>
-      Rect.fromLTRB(0, -_overhang, size.width, size.height + _overhang);
-
-  @override
-  bool shouldReclip(_HorizontalClipper oldClipper) => false;
-}
-
 /// 書源名稱旁的分組名稱，取代原本的「[分組]」括號字。
 class _GroupCapsule extends StatelessWidget {
   const _GroupCapsule(this.label);
@@ -665,39 +607,6 @@ class _GroupCapsule extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// Telegram 編輯模式的圓形勾選：選中為主色實心圈加白勾，未選為髮絲空心圈。
-class _SelectionCircle extends StatelessWidget {
-  const _SelectionCircle({required this.selected});
-
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final chrome = AppChrome.of(context);
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: AnimatedContainer(
-        duration: AppMotion.menu,
-        curve: AppMotion.menuCurve,
-        width: 22,
-        height: 22,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: selected ? scheme.primary : Colors.transparent,
-          border: Border.all(
-            color: selected ? scheme.primary : chrome.sectionText,
-            width: 1.5,
-          ),
-        ),
-        child: selected
-            ? Icon(Icons.check_rounded, size: 16, color: scheme.onPrimary)
-            : null,
       ),
     );
   }

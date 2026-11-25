@@ -267,6 +267,9 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
     // 預覽：必要時往上推，讓預覽＋選單都放得下。
     Rect previewRect = anchor;
     double menuTop;
+    // 開在錨點上方時對齊下緣：實際比估的高（字放大換行）時往上長，不壓到
+    // 錨點、也不畫出螢幕下緣。
+    double? menuBottom;
     bool menuBelow;
     var menuMaxHeight = maxMenuHeight;
     if (hasPreview) {
@@ -304,6 +307,21 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
           screen.height - safe.bottom - edge - clampedMenuHeight,
         ),
       );
+      // 位置照估的高度算；實際的列可能比估的高（字放大後標籤換成兩行），
+      // 選單的上限要照放好的位置剩下的空間，放不下的捲動。
+      if (menuBelow) {
+        menuMaxHeight = math.max(
+          screen.height - safe.bottom - edge - menuTop,
+          AppGlass.menuRowHeight,
+        );
+      } else {
+        final bottom = menuTop + clampedMenuHeight;
+        menuBottom = screen.height - bottom;
+        menuMaxHeight = math.max(
+          bottom - safe.top - edge,
+          AppGlass.menuRowHeight,
+        );
+      }
     }
 
     final curved = CurvedAnimation(
@@ -405,7 +423,8 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
           ),
         Positioned(
           left: menuLeft,
-          top: menuTop,
+          top: menuBottom == null ? menuTop : null,
+          bottom: menuBottom,
           // 從靠錨點的那個角展開，不淡（ADR 0022）：選單是玻璃，淡入時模糊
           // 到最後一幀才突然糊上去。選單一開始就是最終大小，只有圓角的
           // 裁切框由小長大，字不縮放，不必每一幀重建字的貼圖。陰影沿著

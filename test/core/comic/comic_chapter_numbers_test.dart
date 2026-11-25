@@ -8,6 +8,9 @@ void main() {
     expect(ComicChapterNumbers.of('第十二話'), 12);
     expect(ComicChapterNumbers.of('第一百零五回'), 105);
     expect(ComicChapterNumbers.of('第二十章'), 20);
+    // 逐字寫的位數（同 Legado 的 StringUtils.chineseNumToInt）。
+    expect(ComicChapterNumbers.of('第一〇〇話'), 100);
+    expect(ComicChapterNumbers.of('第一一五话'), 115);
     expect(ComicChapterNumbers.of('Vol.2 Ch.33.5 Title'), 33.5);
     expect(ComicChapterNumbers.of('12 標題'), 12);
     expect(ComicChapterNumbers.of('第3卷'), isNull);
@@ -20,5 +23,7 @@ void main() {
     expect(ComicChapterNumbers.gapBetween('第12.5話', '第13話'), 0);
     expect(ComicChapterNumbers.gapBetween('番外', '第13話'), 0);
     expect(ComicChapterNumbers.gapBetween('第13話', '第12話'), 0);
+    expect(ComicChapterNumbers.gapBetween('第一〇〇話', '第101話'), 0);
+    expect(ComicChapterNumbers.gapBetween('第一〇一話', '第一一五話'), 13);
   });
 }

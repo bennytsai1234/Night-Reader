@@ -12,7 +12,8 @@ import java.util.Locale
  * Access Framework）選了一個資料夾，App 沒有儲存權限、讀不到它的路徑，
  * 這裡經 ContentResolver 把裡面的漫畫檔複製到 App 自己的資料夾，Dart 那邊
  * 再照一般檔案匯入。只複製兩層：作品資料夾裡的 CBZ／ZIP 與圖，以及每個
- * 子資料夾（一話）裡的圖；更深的資料夾、其他檔案、隱藏檔都不複製。
+ * 子資料夾（一話）裡的圖（沒有副檔名的也算，照檔頭認）；更深的資料夾、
+ * 其他檔案、隱藏檔都不複製。
  */
 object ComicFolderCopy {
     private val archiveExtensions = setOf("cbz", "zip")
@@ -68,23 +69,45 @@ object ComicFolderCopy {
             Document.COLUMN_DISPLAY_NAME,
             Document.COLUMN_MIME_TYPE,
         )
+        // 換掉符號後同名的兩個（例如「第1話:開場」與「第1話_開場」）各放各的，
+        // 不然兩話的圖併進同一個資料夾、變成一話。
+        val used = mutableSetOf<String>()
         resolver.query(children, columns, null, null, null)?.use { cursor ->
             while (cursor.moveToNext()) {
                 val id = cursor.getString(0)
                 val name = cursor.getString(1) ?: continue
                 val mime = cursor.getString(2)
                 if (name.startsWith(".")) continue
-                val file = File(dir, safeName(name))
-                if (mime == Document.MIME_TYPE_DIR) {
+                val isDir = mime == Document.MIME_TYPE_DIR
+                val file = File(dir, uniqueName(safeName(name), isDir, used))
+                if (isDir) {
                     if (depth == 0) collect(resolver, tree, id, file, depth + 1, out)
                     continue
                 }
                 val extension = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
-                val wanted = extension in imageExtensions ||
+                // 沒有副檔名的也複製：可能是圖，Dart 那邊照檔頭認（同 Mihon），
+                // 不是圖的不會進漫畫。
+                val wanted = extension in imageExtensions || extension.isEmpty() ||
                     (depth == 0 && extension in archiveExtensions)
                 if (wanted) out.add(id to file)
             }
         }
+    }
+
+    /**
+     * [name] 在同一層還沒用過就用它，用過了接「 (2)」「 (3)」：檔案接在副檔名
+     * 前，資料夾（[isDir]）接在最後。
+     */
+    private fun uniqueName(name: String, isDir: Boolean, used: MutableSet<String>): String {
+        val base = if (isDir) name else name.substringBeforeLast('.', name)
+        val extension = name.substring(base.length)
+        var candidate = name
+        var copy = 2
+        while (!used.add(candidate)) {
+            candidate = "$base ($copy)$extension"
+            copy++
+        }
+        return candidate
     }
 
     private fun safeName(name: String): String =

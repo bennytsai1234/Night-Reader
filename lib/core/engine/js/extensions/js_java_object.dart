@@ -792,7 +792,9 @@ extension JsJavaObject on JsExtensionsBase {
         // setRedirectUrl 傳回改完的網址（java.net.URL），data: 或不是網址時
         // 不改。
         setContent: function(content, baseUrl) {
-          sendMessage('ruleSetContent', JSON.stringify([content, baseUrl == null ? null : String(baseUrl)]));
+          // 和 getString 一樣先整理內容：Jsoup 的節點換成識別碼，JSON 會把
+          // 它們變成空物件。
+          sendMessage('ruleSetContent', JSON.stringify([__lrContentArg(content), baseUrl == null ? null : String(baseUrl)]));
           return java;
         },
         setBaseUrl: function(url) {
@@ -817,7 +819,19 @@ extension JsJavaObject on JsExtensionsBase {
         queryTTF: function(data, useCache) {
           if (Array.isArray(data) || ArrayBuffer.isView(data)) data = normalizeByteArray(data);
           var ttfId = sendMessage('queryTTF', JSON.stringify([data, useCache === undefined ? true : useCache]));
-          return ttfId ? { _ttfId: ttfId } : null;
+          if (!ttfId) return null;
+          // Legado 交回 QueryTTF，規則可以直接查輪廓與字碼。
+          function call(method, arg) {
+            return JSON.parse(sendMessage('_ttfCall', JSON.stringify([ttfId, method, arg])));
+          }
+          return {
+            _ttfId: ttfId,
+            getGlyfIdByUnicode: function(unicode) { return call('getGlyfIdByUnicode', Number(unicode)); },
+            getGlyfByUnicode: function(unicode) { return call('getGlyfByUnicode', Number(unicode)); },
+            getGlyfById: function(glyfId) { return call('getGlyfById', Number(glyfId)); },
+            getUnicodeByGlyf: function(glyph) { return call('getUnicodeByGlyf', glyph == null ? null : String(glyph)); },
+            isBlankUnicode: function(unicode) { return call('isBlankUnicode', Number(unicode)); }
+          };
         },
         // 第四個參數 filter：錯誤字型裡沒有輪廓的字刪掉（Legado）。
         replaceFont: function(text, errTTF, correctTTF, filter) {
@@ -1091,7 +1105,9 @@ extension JsJavaObject on JsExtensionsBase {
         for (var i = 0; i < arguments.length; i++) {
           var current = arguments[i] || {};
           for (var key in current) {
-            if (Object.prototype.hasOwnProperty.call(current, key)) {
+            // 同 Rhino：套件裡的類別只補全域沒有的名字，JS 本來的 String、
+            // Object 這些照舊（蓋掉的話 String(x) 變成 Java 的 String）。
+            if (Object.prototype.hasOwnProperty.call(current, key) && !(key in globalThis)) {
               globalThis[key] = current[key];
             }
           }
@@ -1163,11 +1179,14 @@ extension JsJavaObject on JsExtensionsBase {
         return [];
       }
 
-      function JavaString(value) {
+      /// Java 的 `new String(位元組, 編碼)`：沒給編碼是 UTF-8。用 JS 原本的
+      /// String（[__lrNativeString]）轉文字，規則換掉全域的 String 也不受影響。
+      var __lrNativeString = String;
+      function JavaString(value, charset) {
         if (value != null && (Array.isArray(value) || (typeof value === 'object' && typeof value.length === 'number'))) {
-          this._value = java.bytesToStr(normalizeByteArray(value), 'UTF-8');
+          this._value = java.bytesToStr(normalizeByteArray(value), charset == null ? 'UTF-8' : __lrNativeString(charset));
         } else {
-          this._value = globalThis.String(value == null ? '' : value);
+          this._value = __lrNativeString(value == null ? '' : value);
         }
       }
       JavaString.prototype.getBytes = function(charset) {

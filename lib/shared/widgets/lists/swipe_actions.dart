@@ -517,6 +517,8 @@ class _ActionButton extends StatelessWidget {
       button: true,
       label: UiLanguageText.convert(context, action.label),
       excludeSemantics: true,
+      // 排除子語意也排除了 GestureDetector 的點擊：讀屏的點擊接在這裡。
+      onTap: onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,

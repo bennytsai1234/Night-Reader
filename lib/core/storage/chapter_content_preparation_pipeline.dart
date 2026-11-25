@@ -264,12 +264,10 @@ class ChapterContentPreparationPipeline {
     try {
       if (book.isLocal) {
         final raw = await LocalBookService().getContent(book, chapter);
-        if (raw.trim().isNotEmpty && !_looksLikeLocalFailureMessage(raw)) {
+        if (raw.trim().isNotEmpty) {
           return ChapterContentPreparationResult.ready(raw);
         }
-        return ChapterContentPreparationResult.failed(
-          raw.isEmpty ? '章節內容為空 (可能解析規則有誤)' : raw,
-        );
+        return ChapterContentPreparationResult.failed('章節內容為空 (可能解析規則有誤)');
       }
 
       // 目錄給卷名的假網址（卷名＋序號，`ChapterListParser`）的分卷標題
@@ -328,6 +326,11 @@ class ChapterContentPreparationPipeline {
         '讀取本地書籍失敗: ${error.message}',
         cause: error,
       );
+    } on LocalBookContentException catch (error) {
+      return ChapterContentPreparationResult.failed(
+        error.message,
+        cause: error,
+      );
     } on LockedChapterException catch (error) {
       // 不是載入出錯：閱讀器在它前面停住、照這句說明（ADR 0057）。
       return ChapterContentPreparationResult.failed(
@@ -379,16 +382,5 @@ class ChapterContentPreparationPipeline {
       message: result.failureMessage ?? result.content,
       saveChapterMetadata: saveChapterMetadata,
     );
-  }
-
-  bool _looksLikeLocalFailureMessage(String content) {
-    final trimmed = content.trim();
-    return trimmed.startsWith('讀取本地書籍失敗') ||
-        trimmed.startsWith('本地書籍檔案不存在') ||
-        trimmed.startsWith('無法讀取本地書籍內容') ||
-        trimmed.startsWith('檔案不存在:') ||
-        trimmed.startsWith('本地書索引缺失') ||
-        trimmed.startsWith('本地書索引無效') ||
-        trimmed.startsWith('不支援的本地格式:');
   }
 }

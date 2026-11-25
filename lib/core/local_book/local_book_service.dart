@@ -621,11 +621,13 @@ class LocalBookService {
   /// 獲取本地書籍章節內容
   Future<String> getContent(Book book, BookChapter chapter) async {
     final path = filePathOf(book);
-    if (!await File(path).exists()) return '檔案不存在: $path';
+    if (!await File(path).exists()) {
+      throw LocalBookContentException('檔案不存在: $path');
+    }
 
     final ext = localBookExtensionFromPath(path);
     if (!isSupportedLocalBookExtension(ext)) {
-      return '不支援的本地格式: $ext，請使用 TXT 或 EPUB 檔案';
+      throw LocalBookContentException('不支援的本地格式: $ext，請使用 TXT 或 EPUB 檔案');
     }
     final textPath = ext == 'epub' ? await epubTextPath(book) : path;
     final file = File(textPath);
@@ -633,7 +635,7 @@ class LocalBookService {
       try {
         await EpubParser.convert(path, textPath);
       } on EpubFormatException catch (error) {
-        return '讀取本地書籍失敗: ${error.message}';
+        throw LocalBookContentException('讀取本地書籍失敗: ${error.message}');
       }
     }
     // 根據章節索引 (start, end) 指標讀取部分內容 (對標 Android ReadLocalBook.kt)
@@ -645,7 +647,7 @@ class LocalBookService {
           end <= start ||
           start >= fileLength ||
           end > fileLength) {
-        return '本地書索引無效，請重新匯入';
+        throw LocalBookContentException('本地書索引無效，請重新匯入');
       }
       return _queueTxtRead(() async {
         final accessFile = await _getTxtAccessFile(file, textPath);
@@ -658,7 +660,7 @@ class LocalBookService {
       });
     }
     AppLog.d('LocalBookService: Missing offsets for chapter ${chapter.title}');
-    return '本地書索引缺失，請重新匯入';
+    throw LocalBookContentException('本地書索引缺失，請重新匯入');
   }
 
   /// 關掉讀章時留著的檔案；Windows 上開著的檔案刪不掉。

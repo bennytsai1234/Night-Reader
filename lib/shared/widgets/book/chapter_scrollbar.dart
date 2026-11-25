@@ -79,6 +79,24 @@ class _ChapterScrollbarState extends State<ChapterScrollbar>
     reverseCurve: Curves.easeInCubic.flipped,
   );
 
+  /// 目錄換了（檢查更新拿掉了後面的章）時，按著或收回中的泡泡還照舊的
+  /// 序號取章名：夾進新目錄；目錄空了就收掉捲軸。
+  @override
+  void didUpdateWidget(ChapterScrollbar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.itemCount == oldWidget.itemCount) return;
+    if (widget.itemCount <= 1) {
+      _hideTimer?.cancel();
+      _long = false;
+      _visible = false;
+      _dragging = false;
+      _dragIndex = 0;
+      _bubble.value = 0;
+      return;
+    }
+    _dragIndex = _dragIndex.clamp(0, widget.itemCount - 1);
+  }
+
   @override
   void dispose() {
     _hideTimer?.cancel();

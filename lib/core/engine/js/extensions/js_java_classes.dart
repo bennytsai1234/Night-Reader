@@ -1041,7 +1041,7 @@ extension JsJavaClasses on JsExtensionsBase {
     org: global.org,
     java: {
       lang: {
-        String: function(value) { return new JavaString(value); },
+        String: function(value, charset) { return new JavaString(value, charset); },
         Integer: global.Integer,
         Thread: Thread,
         System: JavaSystem,

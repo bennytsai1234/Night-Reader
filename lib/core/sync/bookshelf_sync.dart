@@ -13,6 +13,7 @@ import 'package:night_reader/core/download/download_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'progress_sync.dart';
+import 'read_stats_sync.dart';
 import 'sync_kind.dart';
 import 'sync_records.dart';
 
@@ -381,10 +382,13 @@ class BookshelfSync extends SyncKind {
         shelf.remove(old);
         if (fromKind == incoming.bookKind && fromName != incoming.recordName) {
           try {
-            await _readRecords?.renameBook(
-              from: fromName,
-              to: incoming.recordName,
-            );
+            if (_readRecords case final dao?) {
+              await ReadStatsSync.renameBook(
+                dao,
+                from: fromName,
+                to: incoming.recordName,
+              );
+            }
           } catch (error, stackTrace) {
             AppLog.e('同步改書名時搬閱讀統計失敗', error: error, stackTrace: stackTrace);
           }
