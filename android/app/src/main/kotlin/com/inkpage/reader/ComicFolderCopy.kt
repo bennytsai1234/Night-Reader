@@ -69,14 +69,18 @@ object ComicFolderCopy {
             Document.COLUMN_DISPLAY_NAME,
             Document.COLUMN_MIME_TYPE,
         )
+        // 換掉符號後同名的兩個（例如「第1話:開場」與「第1話_開場」）各放各的，
+        // 不然兩話的圖併進同一個資料夾、變成一話。
+        val used = mutableSetOf<String>()
         resolver.query(children, columns, null, null, null)?.use { cursor ->
             while (cursor.moveToNext()) {
                 val id = cursor.getString(0)
                 val name = cursor.getString(1) ?: continue
                 val mime = cursor.getString(2)
                 if (name.startsWith(".")) continue
-                val file = File(dir, safeName(name))
-                if (mime == Document.MIME_TYPE_DIR) {
+                val isDir = mime == Document.MIME_TYPE_DIR
+                val file = File(dir, uniqueName(safeName(name), isDir, used))
+                if (isDir) {
                     if (depth == 0) collect(resolver, tree, id, file, depth + 1, out)
                     continue
                 }
@@ -88,6 +92,22 @@ object ComicFolderCopy {
                 if (wanted) out.add(id to file)
             }
         }
+    }
+
+    /**
+     * [name] 在同一層還沒用過就用它，用過了接「 (2)」「 (3)」：檔案接在副檔名
+     * 前，資料夾（[isDir]）接在最後。
+     */
+    private fun uniqueName(name: String, isDir: Boolean, used: MutableSet<String>): String {
+        val base = if (isDir) name else name.substringBeforeLast('.', name)
+        val extension = name.substring(base.length)
+        var candidate = name
+        var copy = 2
+        while (!used.add(candidate)) {
+            candidate = "$base ($copy)$extension"
+            copy++
+        }
+        return candidate
     }
 
     private fun safeName(name: String): String =
