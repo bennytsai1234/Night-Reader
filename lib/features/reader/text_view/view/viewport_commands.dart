@@ -242,25 +242,31 @@ final class ViewportCommands {
   Future<bool> _continuousScrollBy(double delta) =>
       _enqueueCommand((current) => _continuousScrollByNow(delta, current));
 
-  Future<bool> _moveToNextPage() => _movePage(forward: true);
+  Future<bool> _moveToNextPage({bool Function()? isWanted}) =>
+      _movePage(forward: true, isWanted: isWanted);
 
-  Future<bool> _moveToPrevPage() => _movePage(forward: false);
+  Future<bool> _moveToPrevPage({bool Function()? isWanted}) =>
+      _movePage(forward: false, isWanted: isWanted);
 
   /// 同方向的翻頁動畫還在跑時，這一下直接把目標再往後推一頁、從目前
   /// 位置接著捲，不等前一下停下來；推不了（正文還沒排好）才排隊。
   /// 翻頁後面已經有排隊的命令（例如反方向的一下）時也排隊，照點擊順序
   /// 執行。
-  Future<bool> _movePage({required bool forward}) {
+  Future<bool> _movePage({required bool forward, bool Function()? isWanted}) {
     final turn = _pageTurn;
     if (turn != null &&
         turn.forward == forward &&
         _commands.queued <= 1 &&
         turn.isCurrent() &&
+        (isWanted?.call() ?? true) &&
         _extendPageTurn(turn)) {
       return turn.finished.future;
     }
     return _enqueueCommand(
-      (current) => _movePageNow(forward: forward, isCurrent: current),
+      (current) => _movePageNow(
+        forward: forward,
+        isCurrent: isWanted == null ? current : () => current() && isWanted(),
+      ),
     );
   }
 
