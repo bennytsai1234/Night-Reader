@@ -1,0 +1,8 @@
+- 目標：PR #647 修好 CI，並用幀預算實測確認「捲動中每 2 秒存進度」不影響順暢；狀態機這次不做，收尾時在 PLAN.md 記一行（見 TODO.md 末項）。
+- 做到：CI 已全綠（2051941b、6a8b282b，正文測試改由畫面擁有並釋放閱讀器）；量測情境 4b04fb59（`test/frame_budget/reader_scroll_save_frame_budget_test.dart`、漫畫連甩加寫進度標記、`test/support/progress_writes.dart`）；佇列不塞的測試 f3bd24fa。
+- 改後試跑：連續拖動 6 秒寫 4 次（約每 2 秒一次）、寫進度那幾幀最重 7–14ms，和整段的重幀同一級；漫畫連甩寫 2 次；拖動中按返回到開始退出約 44ms。
+- 待查：正文連甩 8 下寫了 39 次（約每 7 幀一次，不是每 2 秒）；要看改前是不是也這樣，才知道是不是這個 PR 造成的。
+- 改前基準：本機分支 `measure/pr647-base`（不推）= 1c5ddc4c（PR 的分岔點）＋ cherry-pick 4b04fb59。換機器要重建：`git worktree add --detach <暫存> 1c5ddc4c`、`cherry-pick 4b04fb59`、`git branch --no-track measure/pr647-base <那個提交>`。
+- 下一步：`FRAME_REPEAT=3 bash tool/frame_budget_compare.sh measure/pr647-base test/frame_budget/reader_scroll_save_frame_budget_test.dart test/frame_budget/comic_fast_scroll_frame_budget_test.dart`，照 TODO.md 的判準比；中位數要先從完整輸出抄下來再刪資料夾。
+- 坑：測試裡等資料庫的 Future 或停止監聽資料表（`StreamSubscription.cancel`）一定要包在 `tester.runAsync` 裡，不然會在假時間裡永遠等不到；「按返回」的等待量的是真實毫秒，幀數沒有意義。
+- 要跟使用者更正：先前說換編碼可能用舊章節蓋掉進度，查過不會發生（存完才停寫，中間沒有空檔）；保存的判斷大多讀閱讀器既有的狀態，不是散開的標記。
