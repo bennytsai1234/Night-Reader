@@ -4,7 +4,7 @@ import 'package:night_reader/core/engine/js/replacement_js.dart';
 import 'dart:async';
 import 'dart:isolate';
 
-import 'package:night_reader/core/chinese/rule_script.dart';
+import 'package:night_reader/core/chinese/replace_rule_script.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 
 import 'replace_rule_deadline.dart';

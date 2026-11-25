@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/chinese/chinese_utils.dart';
-import 'package:night_reader/core/chinese/rule_script.dart';
+import 'package:night_reader/core/chinese/replace_rule_script.dart';
 import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 

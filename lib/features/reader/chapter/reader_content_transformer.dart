@@ -16,7 +16,7 @@ import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/chinese/chinese_utils.dart';
-import 'package:night_reader/core/chinese/rule_script.dart';
+import 'package:night_reader/core/chinese/replace_rule_script.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_deadline.dart';
 
 import 'content_re_segmenter.dart';
