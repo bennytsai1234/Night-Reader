@@ -126,9 +126,15 @@ mixin DownloadScheduler on DownloadBase {
     String? toUrl,
     required _DownloadTaskAdmissionIntent intent,
   }) async {
-    if (isTaskRetiring(bookUrl) || !_addingTaskUrls.add(bookUrl)) {
-      return false;
+    if (isTaskRetiring(bookUrl)) return false;
+    // 讀者剛從佇列刪掉這本、那一輪還在收尾：等它收完再排，這次要求才不會
+    // 被當成「已經在下載」丟掉。
+    if (activeTaskUrls.contains(bookUrl) &&
+        !tasks.any((t) => t.bookUrl == bookUrl)) {
+      await waitForTaskIdle(bookUrl);
+      if (isTaskRetiring(bookUrl)) return false;
     }
+    if (!_addingTaskUrls.add(bookUrl)) return false;
     beginTaskActivity(bookUrl);
     try {
       if (activeTaskUrls.contains(bookUrl)) return false;

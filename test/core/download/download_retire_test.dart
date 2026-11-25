@@ -348,6 +348,50 @@ void main() {
     );
   });
 
+  // 刪掉後那一輪還在收尾（例如規則 JS 還在跑）時又要求下載同一本：等它
+  // 收完再排，不能丟掉這次要求。
+  test('queueing a book again while its removed run is still finishing '
+      'waits for that run and then queues it', () async {
+    final book = Book(
+      bookUrl: '$base/book/finishing',
+      origin: '$base/source/finishing',
+      name: '刪掉後還在收尾的書',
+      isInBookshelf: true,
+    );
+    final chapters = [
+      BookChapter(
+        url: '$base/stall/finishing',
+        title: '一章',
+        index: 0,
+        bookUrl: book.bookUrl,
+      ),
+    ];
+    final service = DownloadService();
+    service.isPaused = true;
+    addTearDown(() {
+      service.isPaused = false;
+      service.tasks.removeWhere((t) => t.bookUrl == book.bookUrl);
+    });
+    // 那一輪還沒結束：佔著這本書、但已不在佇列裡。
+    service.beginTaskActivity(book.bookUrl);
+    service.activeTaskUrls.add(book.bookUrl);
+
+    var queued = false;
+    final adding = service
+        .addDownloadTask(book, chapters)
+        .then((_) => queued = true);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(queued, isFalse, reason: '舊的那一輪還沒收完');
+
+    service.activeTaskUrls.remove(book.bookUrl);
+    service.completeTaskActivity(book.bookUrl);
+    await adding.timeout(const Duration(seconds: 2));
+    expect(
+      service.tasks.where((t) => t.bookUrl == book.bookUrl && t.isWaiting),
+      hasLength(1),
+    );
+  });
+
   test('a chapter waiting to retry stops when cancelled', () async {
     final book = Book(
       bookUrl: '$base/book/retry',
