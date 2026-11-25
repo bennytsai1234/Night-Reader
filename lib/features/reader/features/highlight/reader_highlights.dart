@@ -55,6 +55,9 @@ class ReaderHighlights extends ValueNotifier<List<Highlight>> {
             ),
             // 段落分隔不算：分段和畫的時候不同也畫到同一段字的結尾。
             length: highlight.quote.replaceAll('\n', '').length,
+            // 沒有錨點的位置照 Legado 的算法記，原文也可能在 Legado 改過：
+            // 畫之前照原文核對（`ReaderMarkGeometry.highlightRangeIn`）。
+            unanchoredQuote: highlight.anchor == null ? highlight.quote : null,
             color: highlight.color,
             style: highlight.style,
           ),

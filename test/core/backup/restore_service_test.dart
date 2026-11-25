@@ -294,6 +294,11 @@ void main() {
         if (h.bookName == '舊書籤') h.quote,
     ];
     expect(order, ['那一句', '早一秒']);
+    // 資料庫各項測試共用：清掉這項加的，後面的標註還原測試才只看到自己的。
+    await HighlightDao(db).deleteByIds([
+      for (final h in all)
+        if (h.bookName == '舊書籤') h.id,
+    ]);
   });
 
   test('highlights are restored with their color and style', () async {

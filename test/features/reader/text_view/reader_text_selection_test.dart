@@ -850,13 +850,15 @@ void main() {
   });
 
   group('跨段的標註', () {
-    ReaderHighlightMark mark(int start, String quote) => (
-      id: 1,
-      location: ReaderLocation(chapterIndex: 0, charOffset: start),
-      length: quote.replaceAll('\n', '').length,
-      color: HighlightColor.amber,
-      style: HighlightStyle.fill,
-    );
+    ReaderHighlightMark mark(int start, String quote, {bool anchored = true}) =>
+        (
+          id: 1,
+          location: ReaderLocation(chapterIndex: 0, charOffset: start),
+          length: quote.replaceAll('\n', '').length,
+          unanchoredQuote: anchored ? null : quote,
+          color: HighlightColor.amber,
+          style: HighlightStyle.fill,
+        );
 
     ChapterBlocks chapterOf(List<String> paragraphs) {
       const title = '章';
@@ -887,7 +889,7 @@ void main() {
       final range = ReaderMarkGeometry.highlightRangeIn(
         mark(start, '乙丙\n\n丁'),
         blocks,
-      );
+      )!;
       expect(display.substring(range.start, range.end), '乙丙\n\n丁');
     });
 
@@ -898,18 +900,65 @@ void main() {
       final range = ReaderMarkGeometry.highlightRangeIn(
         mark(start, '乙丙\n\n丁'),
         joined,
-      );
+      )!;
       expect(joined.displayText.substring(range.start, range.end), '乙丙丁');
       // 畫的時候是一段，現在切成三段。
       final split = chapterOf(['甲乙', '丙', '丁戊']);
       final again = ReaderMarkGeometry.highlightRangeIn(
         mark(start, '乙丙丁'),
         split,
-      );
+      )!;
       expect(
         split.displayText.substring(again.start, again.end),
         '乙\n\n丙\n\n丁',
       );
+    });
+
+    // 從 Legado 備份轉來的標註沒有錨點：記下的位置照 Legado 的算法（算進章名
+    // 與段首縮排），原文可能被讀者在 Legado 改過。
+    group('沒有錨點的（從 Legado 轉來的）', () {
+      test('記下的位置上就是原文時照它畫', () {
+        final blocks = chapterOf(['甲乙丙', '丁戊']);
+        final display = blocks.displayText;
+        final range = ReaderMarkGeometry.highlightRangeIn(
+          mark(display.indexOf('乙'), '乙丙', anchored: false),
+          blocks,
+        )!;
+        expect(display.substring(range.start, range.end), '乙丙');
+      });
+
+      test('位置偏了時畫在附近同一段字上，段首縮排與換行不算', () {
+        final blocks = chapterOf(['甲乙丙', '丁戊己庚', '辛壬']);
+        final display = blocks.displayText;
+        // Legado 的位置多算了章名與每段的縮排，落在後面幾個字。
+        final range = ReaderMarkGeometry.highlightRangeIn(
+          mark(display.indexOf('己'), '丙\n　　丁戊', anchored: false),
+          blocks,
+        )!;
+        expect(display.substring(range.start, range.end), '丙\n\n丁戊');
+      });
+
+      test('同一段字出現好幾次時畫在離記下的位置最近的那一處', () {
+        final blocks = chapterOf(['甲乙', '丙甲乙', '丁戊甲乙']);
+        final display = blocks.displayText;
+        final near = display.indexOf('丁');
+        final range = ReaderMarkGeometry.highlightRangeIn(
+          mark(near, '甲乙', anchored: false),
+          blocks,
+        )!;
+        expect(range.start, display.lastIndexOf('甲乙'));
+      });
+
+      test('那一章找不到這段字時不畫', () {
+        final blocks = chapterOf(['甲乙丙', '丁戊']);
+        expect(
+          ReaderMarkGeometry.highlightRangeIn(
+            mark(3, '讀者改過的字', anchored: false),
+            blocks,
+          ),
+          isNull,
+        );
+      });
     });
   });
 

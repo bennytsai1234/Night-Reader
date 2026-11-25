@@ -449,7 +449,9 @@ class RestoreService {
           case 'bookmark.json':
           case 'bookmarks.json':
             // Legado 書籤的附註（`content`）在夜讀是標註的備忘（ADR 0044）：
-            // 有附註的轉成一筆帶備忘的標註，畫在書籤記的原文上。
+            // 有附註的轉成一筆帶備忘的標註，畫在書籤記的原文上。夜讀 2026-09
+            // 以前的備份書籤欄位同 Legado，`content` 一樣是讀者自己寫的話，
+            // 也照這樣轉。
             final noted = Highlight.fromLegadoBookmark(item);
             if (noted != null) {
               await _highlightDao.upsertAll([noted]);
