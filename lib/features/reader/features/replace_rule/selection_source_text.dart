@@ -168,3 +168,31 @@ final class _AlignmentKey {
 
   static final RegExp _hanPattern = RegExp(r'\p{Script=Han}', unicode: true);
 }
+
+/// 畫面上第 [index] 段（替換規則套用之後的第幾段，[shownParagraphs]）在
+/// 原文 [sourceParagraphs]（套用之前）裡是哪一段：規則整段刪掉、合併或拆開
+/// 段落時，兩邊的第幾段對不上。照順序對：規則沒改到的段兩邊字一樣，對到同
+/// 一段；改過的段落在前一個對上的段後面那一段。
+String sourceParagraphAt(
+  List<String> sourceParagraphs,
+  List<String> shownParagraphs,
+  int index,
+) {
+  if (sourceParagraphs.isEmpty) return '';
+  var next = 0;
+  var at = 0;
+  final last = index.clamp(0, shownParagraphs.length - 1).toInt();
+  for (var i = 0; i <= last && i < shownParagraphs.length; i += 1) {
+    final shown = shownParagraphs[i].trim();
+    var found = -1;
+    for (var j = next; j < sourceParagraphs.length; j += 1) {
+      if (sourceParagraphs[j].trim() == shown) {
+        found = j;
+        break;
+      }
+    }
+    at = found >= 0 ? found : next;
+    next = at + 1;
+  }
+  return sourceParagraphs[at.clamp(0, sourceParagraphs.length - 1).toInt()];
+}

@@ -366,4 +366,44 @@ void main() {
     );
     expect(sourceRangeOf(source: '甲乙', shown: '甲乙丙', start: 0, end: 1), isNull);
   });
+
+  group('替換規則的測試原文對到畫面上的那一段', () {
+    const raw = '本站網址：example.test\n城門即將關閉。\n天色漸暗。\n城外起了風。';
+
+    Future<String> sampleAt(int index, List<ReplaceRule> rules) async {
+      final stage = await ReaderContentTransformer.ruleStageParagraphs(
+        book: book,
+        chapter: BookChapter(url: 'c', title: '第一章'),
+        rawContent: raw,
+        enabledRules: rules,
+      );
+      return sourceParagraphAt(
+        ReaderContent.sourceParagraphsOf(raw),
+        stage.paragraphs,
+        index,
+      );
+    }
+
+    test('隱藏整段之後，畫面頂端那一段對到它自己的原文', () async {
+      final hidden = [
+        ReplaceRule(
+          id: 1,
+          pattern: '本站網址：example.test',
+          replacement: '',
+          isRegex: false,
+        ),
+      ];
+      expect(await sampleAt(0, hidden), '城門即將關閉。');
+      expect(await sampleAt(2, hidden), '城外起了風。');
+    });
+
+    test('規則改過的段對到同一個位置的原文；沒有規則時照第幾段', () async {
+      final changed = [
+        ReplaceRule(id: 1, pattern: '天色', replacement: '夜色', isRegex: false),
+      ];
+      expect(await sampleAt(2, changed), '天色漸暗。');
+      expect(await sampleAt(3, changed), '城外起了風。');
+      expect(await sampleAt(1, const []), '城門即將關閉。');
+    });
+  });
 }
