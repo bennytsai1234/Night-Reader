@@ -423,7 +423,7 @@
 - [ ] **O7 書源編輯頁的欄位（不做）**：夜讀沒列、改不到的有詳情頁網址規則（`bookUrlPattern`）、校驗關鍵字、併發率、自動存 Cookie、程式庫、變數說明、封面解密；搜尋與發現的簡介；詳情的 `canReName`、`downloadUrls`；目錄的卷名、付費、更新時間、`formatJs`、`preUpdateJs`；正文的章名、`webJs`、`sourceRegex`、`imageStyle`、`imageDecode`、`payAction`（`N:lib/features/source_manager/source_editor_page.dart` 的 `_controllers`）。匯入的值照存，只是不能在 App 裡改。
 - [x] **O8 除錯（已定，只做改關鍵字）**：從書源編輯進除錯時改關鍵字（Legado 有輸入框，「我的」「系統」、書源的校驗關鍵字與第一個發現分類可以點，`L:ui/book/source/debug/BookSourceDebugActivity.kt:94-107`；夜讀固定搜「我的世界」）；看搜尋、詳情、目錄、正文四步的原始網頁；重新整理發現分類。
 - [ ] **O9 換源（不做）**：搜到一半停止；結果長按選單（置頂、置底、編輯、停用、刪除書源），置頂置底會記住、下次照它排；載入字數（抓每個書源讀到的那一章，列出字數並照它排）。
-- [x] **O10 登入頁只刪登入標頭（已定）**：Legado 登入選單有「刪除登入標頭」，表單內容與 Cookie 留著；夜讀只有全部一起清的「清除登入資料」。
+- [x] **O10 登入頁只刪登入標頭（已定）**：Legado 登入選單有「刪除登入標頭」，刪標頭時連 Cookie 儲存裡這個書源的 Cookie 一起清，表單內容留著（`L:data/entities/BaseSource.kt:159-162`）；夜讀照做，另外還有全部一起清的「清除登入資料」。
 
 ## 有更好的做法
 

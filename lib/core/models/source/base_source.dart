@@ -254,8 +254,11 @@ abstract class BaseSource {
     return CacheManager().get(loginHeaderCacheKey);
   }
 
-  Future<void> removeLoginHeader() {
-    return CacheManager().delete(loginHeaderCacheKey);
+  /// 刪掉登入標頭，連夜讀存的網站 Cookie 一起清（同 Legado
+  /// `BaseSource.removeLoginHeader`）；表單內容留著。
+  Future<void> removeLoginHeader() async {
+    await CacheManager().delete(loginHeaderCacheKey);
+    await removeLoginCookies();
   }
 
   /// 這個書源存過任何登入資料：表單內容、登入標頭或網站的 Cookie。
@@ -272,7 +275,6 @@ abstract class BaseSource {
   Future<void> clearLoginData() async {
     await removeLoginInfo();
     await removeLoginHeader();
-    await removeLoginCookies();
   }
 
   /// 登入標頭解成的標頭；沒有或格式不對時是空的。

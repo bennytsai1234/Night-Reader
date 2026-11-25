@@ -505,12 +505,6 @@ class _SourceLoginPageState extends State<SourceLoginPage>
     if (_busy) return;
     setState(() => _deletingHeader = true);
     try {
-      final header = await widget.source.getLoginHeader() ?? '';
-      if (!mounted) return;
-      if (header.isEmpty) {
-        _showNotice('這個書源沒有登入標頭');
-        return;
-      }
       await widget.source.removeLoginHeader();
       _showNotice('已刪除登入標頭');
     } catch (error, stackTrace) {

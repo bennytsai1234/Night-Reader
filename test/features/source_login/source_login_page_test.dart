@@ -356,14 +356,14 @@ void main() {
       expect(row.enabled, isFalse);
     });
 
-    testWidgets('刪除登入標頭只刪標頭，表單內容與 Cookie 留著', (tester) async {
+    testWidgets('刪除登入標頭照 Legado 連 Cookie 一起清，表單內容留著', (tester) async {
       setupTestDI();
       await tester.runAsync(() async {
         await dao.upsert(source);
         // 前面的測試留下的，先換成本次要看的。
         await source.putLoginInfo('{"帳號":"舊帳號"}');
         await source.putLoginHeader('{"Authorization":"Bearer keep"}');
-        await CookieStore().setCookie(url, 'sid=keep');
+        await CookieStore().setCookie(url, 'sid=clear');
       });
       await openLogin(tester);
       await tester.ensureVisible(find.text('刪除登入標頭'));
@@ -379,12 +379,12 @@ void main() {
 
       expect(await tester.runAsync(() => source.getLoginHeader()), isNull);
       expect(
-        await tester.runAsync(() => source.getLoginInfo()),
-        '{"帳號":"舊帳號"}',
+        await tester.runAsync(() => CookieStore().getCookie(url)),
+        isEmpty,
       );
       expect(
-        await tester.runAsync(() => CookieStore().getCookie(url)),
-        'sid=keep',
+        await tester.runAsync(() => source.getLoginInfo()),
+        '{"帳號":"舊帳號"}',
       );
       expect(find.widgetWithText(TextField, '舊帳號'), findsOneWidget);
     });
