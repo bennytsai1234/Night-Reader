@@ -82,11 +82,12 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
     return ruleList;
   }
 
-  /// 規則的 `##正則##取代`，同 Legado `AnalyzeRule.replaceRegex`：
+  /// 規則的 `##正則##取代`，同 Legado `AnalyzeRule.replaceRegex`；取代式照
+  /// Java 展開（[javaReplacement]）：
   ///
   /// - `###`（[SourceRule.replaceFirst]）：找第一個對到的，只交出它換過的
-  ///   樣子，對不到是空字串；正則寫壞時交出取代式。
-  /// - `##`：每一處都換；正則寫壞時照純文字取代。
+  ///   樣子，對不到是空字串；正則或取代式寫壞時交出取代式。
+  /// - `##`：每一處都換；正則或取代式寫壞時照純文字取代。
   String replaceRegexLogic(String result, SourceRule rule) {
     if (rule.replaceRegex.isEmpty) {
       return result;
@@ -95,24 +96,24 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
     if (rule.replaceFirst) {
       if (regex == null) return rule.replacement;
       final match = regex.firstMatch(result);
-      return match == null ? '' : _expand(rule.replacement, match);
+      if (match == null) return '';
+      try {
+        return javaReplacement(rule.replacement, match);
+      } on FormatException {
+        return rule.replacement;
+      }
     }
-    if (regex == null) {
-      return result.replaceAll(rule.replaceRegex, rule.replacement);
+    if (regex != null) {
+      try {
+        return result.replaceAllMapped(
+          regex,
+          (match) => javaReplacement(rule.replacement, match as RegExpMatch),
+        );
+      } on FormatException {
+        // 同 Legado：取代式寫壞時退回純文字取代。
+      }
     }
-    return result.replaceAllMapped(
-      regex,
-      (match) => _expand(rule.replacement, match),
-    );
-  }
-
-  /// 取代式裡的 `$0`、`$1`…換成 [match] 的分組。
-  static String _expand(String replacement, Match match) {
-    var res = replacement;
-    for (var i = 0; i <= match.groupCount; i++) {
-      res = res.replaceAll('\$$i', match.group(i) ?? '');
-    }
-    return res;
+    return result.replaceAll(rule.replaceRegex, rule.replacement);
   }
 
   /// `##` 之後的正則，同 Legado `toRegex()`：照 Java 的預設與開頭旗標

@@ -547,3 +547,71 @@ bool _isJavaWhitespace(String char) =>
     char == '\r' ||
     char == '\f' ||
     char == '\u000B';
+
+/// 照 Java `Matcher.appendReplacement`（Legado 用的）展開取代式（替換規則的
+/// 「替換為」、書源規則 `##正則##取代` 的取代式）：`\` 讓下一個字照字面；
+/// `$n` 取第 n 組，後面的數字只在群組夠多時才併進編號（只有一組時 `$12`
+/// 是第 1 組接著「2」）；`${名稱}` 取具名群組；分組的內容照原樣放，不再
+/// 展開。沒有的群組、落單的 `\` 或 `$` 丟 [FormatException]。
+String javaReplacement(String replacement, RegExpMatch match) {
+  final out = StringBuffer();
+  var i = 0;
+  while (i < replacement.length) {
+    final char = replacement[i];
+    if (char == r'\') {
+      if (i + 1 >= replacement.length) {
+        throw const FormatException('character to be escaped is missing');
+      }
+      out.write(replacement[i + 1]);
+      i += 2;
+      continue;
+    }
+    if (char != r'$') {
+      out.write(char);
+      i += 1;
+      continue;
+    }
+    i += 1;
+    if (i >= replacement.length) {
+      throw const FormatException(
+        'Illegal group reference: group index is missing',
+      );
+    }
+    if (replacement[i] == '{') {
+      final close = replacement.indexOf('}', i);
+      if (close < 0) {
+        throw const FormatException(
+          "named capturing group is missing trailing '}'",
+        );
+      }
+      final name = replacement.substring(i + 1, close);
+      if (!match.groupNames.contains(name)) {
+        throw FormatException('No group with name {$name}');
+      }
+      out.write(match.namedGroup(name) ?? '');
+      i = close + 1;
+      continue;
+    }
+    var number = _digit(replacement, i);
+    if (number == null) {
+      throw const FormatException('Illegal group reference');
+    }
+    i += 1;
+    while (i < replacement.length) {
+      final next = _digit(replacement, i);
+      if (next == null || number! * 10 + next > match.groupCount) break;
+      number = number * 10 + next;
+      i += 1;
+    }
+    if (number! > match.groupCount) {
+      throw FormatException('No group $number');
+    }
+    out.write(match.group(number) ?? '');
+  }
+  return out.toString();
+}
+
+int? _digit(String text, int index) {
+  final unit = text.codeUnitAt(index);
+  return unit >= 0x30 && unit <= 0x39 ? unit - 0x30 : null;
+}

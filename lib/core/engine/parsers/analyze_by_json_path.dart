@@ -169,10 +169,27 @@ class AnalyzeByJsonPath {
     }
   }
 
-  /// Get a single object
+  /// 單一個值，同 Legado `getObject`（Jayway 的 `read`）：路徑對到的值照
+  /// 原樣交出，對到陣列就是整個陣列，不展開成一筆筆再取第一筆；對到好幾個
+  /// 時是它們的清單。組合規則（`||`、`&&`、`%%`）與內嵌的 `{$.…}` 照
+  /// [getElements] 取第一筆。
   dynamic getObject(String rule) {
-    final list = getElements(rule);
-    return list.isNotEmpty ? list.first : null;
+    rule = _preProcessRule(rule);
+    if (rule.isEmpty) return null;
+    if (rule.contains(r'{$.') ||
+        RuleAnalyzer(rule, isCode: true).splitRule(['&&', '||', '%%']).length >
+            1) {
+      final list = getElements(rule);
+      return list.isNotEmpty ? list.first : null;
+    }
+    try {
+      final matches = _compile(rule).read(_jsonData).toList();
+      if (matches.isEmpty) return null;
+      if (matches.length == 1) return matches.single.value;
+      return [for (final match in matches) match.value];
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Get a list of strings

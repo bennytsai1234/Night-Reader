@@ -37,12 +37,10 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
         try {
           if (sourceRule.putMap.isNotEmpty) {
-            sourceRule.putMap.forEach((key, valueRule) {
-              final val = getString(valueRule);
-              if (val.isNotEmpty) {
-                put(key, val);
-              }
-            });
+            // 同 Legado `putRule`：空的結果也存，蓋掉上一次存的值。
+            sourceRule.putMap.forEach(
+              (key, valueRule) => put(key, getString(valueRule)),
+            );
           }
 
           final made = sourceRule.makeUp(result, this);
@@ -154,39 +152,39 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
         try {
           if (sourceRule.putMap.isNotEmpty) {
-            sourceRule.putMap.forEach((key, valueRule) {
-              final val = getString(valueRule);
-              if (val.isNotEmpty) {
-                put(key, val);
-              }
-            });
+            // 同 Legado `putRule`：空的結果也存，蓋掉上一次存的值。
+            sourceRule.putMap.forEach(
+              (key, valueRule) => put(key, getString(valueRule)),
+            );
           }
 
           final made = sourceRule.makeUp(result, this);
           final rule = made.rule;
-          final currentInput = result;
-
-          switch (made.mode) {
-            case Mode.js:
-              result = evalJS(rule, result);
-              break;
-            case Mode.json:
-              result = sourceRule
-                  .getAnalyzeByJSonPath(this, result)
-                  .getStringList(rule);
-              break;
-            case Mode.xpath:
-              result = sourceRule
-                  .getAnalyzeByXPath(this, result)
-                  .getStringList(rule);
-              break;
-            case Mode.regex:
-              result = [rule];
-              break;
-            default:
-              result = sourceRule
-                  .getAnalyzeByJSoup(this, currentInput)
-                  .getStringList(rule);
+          // 同 Legado：規則是空的（只有 `##取代`）時拿目前的內容去取代；組字
+          // 的規則（正則模式）組好就是文字，最後照換行切成一筆筆。
+          if (rule.isNotEmpty) {
+            switch (made.mode) {
+              case Mode.js:
+                result = evalJS(rule, result);
+                break;
+              case Mode.json:
+                result = sourceRule
+                    .getAnalyzeByJSonPath(this, result)
+                    .getStringList(rule);
+                break;
+              case Mode.xpath:
+                result = sourceRule
+                    .getAnalyzeByXPath(this, result)
+                    .getStringList(rule);
+                break;
+              case Mode.regex:
+                result = rule;
+                break;
+              default:
+                result = sourceRule
+                    .getAnalyzeByJSoup(this, result)
+                    .getStringList(rule);
+            }
           }
 
           if (made.replaceRegex.isNotEmpty) {
