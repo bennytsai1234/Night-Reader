@@ -227,7 +227,11 @@ class AnalyzeUrl {
       final resolvedHeaderStr = _resolveMaybeJsString(headerStr);
       final headers = _decodeLooseObject(resolvedHeaderStr);
       if (headers != null) {
-        headers.forEach((k, v) => headerMap[k.toString()] = v.toString());
+        headers.forEach((k, v) {
+          // 同 Legado：`"proxy": null` 是沒有代理，不是叫 null 的代理。
+          if (v == null && k.toString() == 'proxy') return;
+          headerMap[k.toString()] = v.toString();
+        });
       }
     } catch (e) {
       AppLog.e('AnalyzeUrl source header parse error: $e', error: e);

@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:night_reader/core/network/str_response.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/network/network_service.dart';
 import 'package:night_reader/core/network/source_proxy.dart';
@@ -30,11 +32,14 @@ void main() {
 
   setUpAll(() => NetworkService().init(ephemeral: true));
 
-  BookSource source(String proxy) => BookSource(
+  BookSource source(Object? proxy) => BookSource(
     bookSourceUrl: 'http://site.test',
     bookSourceName: '代理',
     header: jsonEncode({'proxy': proxy, 'Referer': 'http://site.test/'}),
   );
+
+  Future<StrResponse> fetch(String url, Object? proxy) =>
+      AnalyzeUrl(url, source: source(proxy)).getStrResponse();
 
   group('parse like Legado', () {
     test('http with user and password', () {
@@ -54,89 +59,295 @@ void main() {
       expect(proxy.username, isNull);
     });
 
-    test('an unknown form fails the request', () {
-      expect(() => SourceProxy.parse('ftp://a:21'), throwsFormatException);
+    test('an unknown form fails without echoing the setting', () {
+      expect(
+        () => SourceProxy.parse('ftp://a:21@user@secret'),
+        throwsA(
+          isA<SourceProxyException>().having(
+            (e) => e.toString(),
+            'message',
+            isNot(contains('secret')),
+          ),
+        ),
+      );
     });
   });
 
-  test('the proxy header is taken out of the request headers', () {
-    final url = AnalyzeUrl(
-      'http://site.test/a',
-      source: source('http://127.0.0.1:1@u@p'),
-    );
-    expect(url.proxy, 'http://127.0.0.1:1@u@p');
-    expect(url.headerMap.containsKey('proxy'), isFalse);
-    expect(url.headerMap['Referer'], 'http://site.test/');
-  });
-
-  test('an http proxy gets the request and the credentials', () async {
-    final proxyServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(() => proxyServer.close(force: true));
-    String? requested;
-    String? authorization;
-    proxyServer.listen((request) async {
-      requested = request.uri.toString();
-      authorization = request.headers.value('proxy-authorization');
-      request.response.write('經過 HTTP 代理');
-      await request.response.close();
+  group('the proxy header', () {
+    test('is taken out of the request headers', () {
+      final url = AnalyzeUrl(
+        'http://site.test/a',
+        source: source('http://127.0.0.1:1@u@p'),
+      );
+      expect(url.proxy, 'http://127.0.0.1:1@u@p');
+      expect(url.headerMap.containsKey('proxy'), isFalse);
+      expect(url.headerMap['Referer'], 'http://site.test/');
     });
 
-    final response = await AnalyzeUrl(
-      'http://site.test/book/1',
-      source: source('http://127.0.0.1:${proxyServer.port}@user@pass'),
-    ).getStrResponse();
+    test('null means no proxy, like Legado', () {
+      final url = AnalyzeUrl('http://site.test/a', source: source(null));
+      expect(url.proxy, isNull);
+      expect(url.headerMap.containsKey('proxy'), isFalse);
+    });
 
-    expect(response.body, '經過 HTTP 代理');
-    expect(requested, 'http://site.test/book/1');
-    expect(authorization, 'Basic ${base64Encode(utf8.encode('user:pass'))}');
+    test('is not among the headers the login browser sends', () {
+      expect(
+        source('http://127.0.0.1:1@u@p').getHeaderMapSync().keys,
+        isNot(contains('proxy')),
+      );
+    });
   });
 
-  for (final version in [5, 4]) {
-    test('a socks$version proxy tunnels to the site by name', () async {
-      final socks = await _FakeSocks.start(version);
-      addTearDown(socks.close);
+  group('http proxy', () {
+    late HttpServer proxyServer;
+    final requested = <String>[];
+    final authorizations = <String?>[];
 
-      final response = await AnalyzeUrl(
+    setUp(() async {
+      requested.clear();
+      authorizations.clear();
+      proxyServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      proxyServer.listen((request) async {
+        requested.add('${request.method} ${request.uri}');
+        authorizations.add(request.headers.value('proxy-authorization'));
+        if (request.method == 'CONNECT') {
+          request.response.statusCode = HttpStatus.forbidden;
+        } else {
+          request.response.write('經過 HTTP 代理');
+        }
+        await request.response.close();
+      });
+    });
+    tearDown(() => proxyServer.close(force: true));
+
+    String basic(String user, String pass) =>
+        'Basic ${base64Encode(utf8.encode('$user:$pass'))}';
+
+    test('gets the request and the credentials', () async {
+      final port = proxyServer.port;
+      final response = await fetch(
         'http://site.test/book/1',
-        source: source('socks$version://127.0.0.1:${socks.port}'),
-      ).getStrResponse();
-
-      expect(response.body, '經過 SOCKS 代理');
-      expect(socks.target, 'site.test:80');
-      expect(socks.requestLine, 'GET /book/1 HTTP/1.1');
+        'http://127.0.0.1:$port@user@pa;ss',
+      );
+      expect(response.body, '經過 HTTP 代理');
+      expect(requested, ['GET http://site.test/book/1']);
+      expect(authorizations, [basic('user', 'pa;ss')]);
     });
-  }
+
+    test('an empty password sends no credentials, like Legado', () async {
+      final port = proxyServer.port;
+      final response = await fetch(
+        'http://site.test/book/1',
+        'http://127.0.0.1:$port@user@',
+      );
+      expect(response.body, '經過 HTTP 代理');
+      expect(authorizations, [null]);
+    });
+
+    test('https opens a tunnel with the credentials; a refusal is not '
+        'retried and says it is the proxy', () async {
+      final port = proxyServer.port;
+      await expectLater(
+        fetch('https://site.test/book/1', 'http://127.0.0.1:$port@user@pass'),
+        throwsA(
+          predicate(
+            (Object e) => userErrorReason(e).contains('HTTP 代理拒絕'),
+            '說是代理拒絕',
+          ),
+        ),
+      );
+      expect(requested, ['CONNECT site.test:443']);
+      expect(authorizations, [basic('user', 'pass')]);
+    });
+  });
+
+  group('socks proxy', () {
+    test('socks5 tunnels to the site by name', () async {
+      final socks = await _FakeSocks.start(version: 5);
+      addTearDown(socks.close);
+      final response = await fetch(
+        'http://site.test/book/1',
+        'socks5://127.0.0.1:${socks.port}',
+      );
+      expect(response.body, '經過 SOCKS 代理');
+      expect(socks.targets, ['name site.test:80']);
+      expect(socks.requestLines, ['GET /book/1 HTTP/1.1']);
+    });
+
+    test('socks5 sends IPv4 and IPv6 addresses as addresses', () async {
+      final socks = await _FakeSocks.start(version: 5);
+      addTearDown(socks.close);
+      await fetch('http://10.1.2.3/a', 'socks5://127.0.0.1:${socks.port}');
+      await fetch('http://[::1]:81/a', 'socks5://127.0.0.1:${socks.port}');
+      expect(socks.targets, ['ipv4 10.1.2.3:80', 'ipv6 0:0:0:0:0:0:0:1:81']);
+    });
+
+    test('socks4 sends IPv4 as an address and names as socks4a', () async {
+      final socks = await _FakeSocks.start(version: 4);
+      addTearDown(socks.close);
+      final port = socks.port;
+      await fetch('http://10.1.2.3/a', 'socks4://127.0.0.1:$port');
+      await fetch('http://site.test/a', 'socks4://127.0.0.1:$port');
+      expect(socks.targets, ['ipv4 10.1.2.3:80', 'name site.test:80']);
+    });
+
+    test('socks4 cannot reach IPv6; a long domain cannot go through socks5; '
+        'neither is retried', () async {
+      final socks = await _FakeSocks.start(version: 4);
+      addTearDown(socks.close);
+      await expectLater(
+        fetch('http://[::1]/a', 'socks4://127.0.0.1:${socks.port}'),
+        throwsA(
+          predicate((Object e) => userErrorReason(e).contains('IPv6'), 'IPv6'),
+        ),
+      );
+      expect(socks.connections, 1);
+
+      final socks5 = await _FakeSocks.start(version: 5);
+      addTearDown(socks5.close);
+      final longHost = '${'a.' * 130}test';
+      await expectLater(
+        fetch('http://$longHost/a', 'socks5://127.0.0.1:${socks5.port}'),
+        throwsA(
+          predicate((Object e) => userErrorReason(e).contains('網域太長'), '太長'),
+        ),
+      );
+      expect(socks5.connections, 1);
+    });
+
+    test('a reply that is not socks is refused, not retried', () async {
+      final socks = await _FakeSocks.start(version: 5, badVersion: true);
+      addTearDown(socks.close);
+      await expectLater(
+        fetch('http://site.test/a', 'socks5://127.0.0.1:${socks.port}'),
+        throwsA(
+          predicate((Object e) => userErrorReason(e).contains('SOCKS5'), '代理'),
+        ),
+      );
+      expect(socks.connections, 1);
+    });
+  });
+
+  // 等太久或不要了的連線，代理那頭不留連線（每個逾時的請求都留一條的話，
+  // 一次搜尋走慢代理就一直累積）。
+  group('connections left at the proxy', () {
+    Future<void> attempt(String proxy, String url) async {
+      final client = SourceProxy.parse(proxy)!.httpClient()
+        ..connectionTimeout = const Duration(milliseconds: 300);
+      try {
+        final request = await client.getUrl(Uri.parse(url));
+        await (await request.close()).drain<void>();
+      } catch (_) {
+        // 逾時或失敗是預期的。
+      } finally {
+        client.close(force: true);
+      }
+    }
+
+    Future<void> settle(_FakeSocks socks) async {
+      for (var i = 0; i < 50 && socks.open > 0; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    }
+
+    for (final (name, stall) in [
+      ('a proxy that never answers the greeting', _Stall.greeting),
+      ('a proxy that answers the greeting slowly', _Stall.slowGreeting),
+      ('a site that never answers the TLS handshake', _Stall.tls),
+    ]) {
+      test(name, () async {
+        final socks = await _FakeSocks.start(version: 5, stall: stall);
+        addTearDown(socks.close);
+        await attempt(
+          'socks5://127.0.0.1:${socks.port}',
+          '${stall == _Stall.tls ? 'https' : 'http'}://site.test/a',
+        );
+        await settle(socks);
+        expect(socks.connections, greaterThan(0));
+        expect(socks.open, 0);
+      });
+    }
+
+    test('a request given up before the proxy answers', () async {
+      final socks = await _FakeSocks.start(version: 5, stall: _Stall.greeting);
+      addTearDown(socks.close);
+      final client = SourceProxy.parse('socks5://127.0.0.1:${socks.port}')!
+          .httpClient();
+      final pending = client
+          .getUrl(Uri.parse('http://site.test/a'))
+          .then<Object?>((r) => r, onError: (Object e) => e);
+      for (var i = 0; i < 50 && socks.connections == 0; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      client.close(force: true);
+      await pending;
+      await settle(socks);
+      expect(socks.connections, 1);
+      expect(socks.open, 0);
+    });
+  });
 }
 
-/// 只收一條連線的 SOCKS 代理：握手後自己當網站回一頁。
+enum _Stall { none, greeting, slowGreeting, tls }
+
+/// 假的 SOCKS 代理：握手後自己當網站回一頁；記下連進來幾條、還開著幾條。
 final class _FakeSocks {
-  _FakeSocks._(this._server, this._version) {
+  _FakeSocks._(this._server, this._version, this._stall, this._badVersion) {
     _server.listen(_serve);
   }
 
-  static Future<_FakeSocks> start(int version) async => _FakeSocks._(
+  static Future<_FakeSocks> start({
+    required int version,
+    _Stall stall = _Stall.none,
+    bool badVersion = false,
+  }) async => _FakeSocks._(
     await ServerSocket.bind(InternetAddress.loopbackIPv4, 0),
     version,
+    stall,
+    badVersion,
   );
 
   final ServerSocket _server;
   final int _version;
-  String? target;
-  String? requestLine;
+  final _Stall _stall;
+  final bool _badVersion;
+  final List<String> targets = [];
+  final List<String> requestLines = [];
+  int connections = 0;
+  int open = 0;
+  final List<Socket> _sockets = [];
 
   int get port => _server.port;
 
-  Future<void> close() => _server.close();
+  Future<void> close() async {
+    for (final socket in _sockets) {
+      socket.destroy();
+    }
+    await _server.close();
+  }
 
   Future<void> _serve(Socket socket) async {
+    connections++;
+    open++;
+    _sockets.add(socket);
     final buffer = <int>[];
     final waiting = StreamController<void>.broadcast();
-    socket.listen((data) {
-      buffer.addAll(data);
-      waiting.add(null);
-    });
+    var closed = false;
+    socket.listen(
+      (data) {
+        buffer.addAll(data);
+        waiting.add(null);
+      },
+      onError: (Object _) {},
+      onDone: () {
+        if (!closed) open--;
+        closed = true;
+        waiting.add(null);
+      },
+    );
     Future<List<int>> take(int count) async {
       while (buffer.length < count) {
+        if (closed) throw StateError('closed');
         await waiting.stream.first;
       }
       final taken = buffer.sublist(0, count);
@@ -146,43 +357,74 @@ final class _FakeSocks {
 
     Future<List<int>> takeUntil(int byte) async {
       while (!buffer.contains(byte)) {
+        if (closed) throw StateError('closed');
         await waiting.stream.first;
       }
       return take(buffer.indexOf(byte) + 1);
     }
 
-    if (_version == 5) {
-      await take(3); // 5, 1, 0
-      socket.add([5, 0]);
-      final head = await take(5); // 5, 1, 0, 3, 長度
-      final host = String.fromCharCodes(await take(head[4]));
-      final port = await take(2);
-      target = '$host:${port[0] << 8 | port[1]}';
-      socket.add([5, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
-    } else {
-      final head = await take(8); // 4, 1, 埠, 0.0.0.1
-      await takeUntil(0); // 使用者
-      final host = await takeUntil(0);
-      target =
-          '${String.fromCharCodes(host.sublist(0, host.length - 1))}'
-          ':${head[2] << 8 | head[3]}';
-      socket.add([0, 0x5a, 0, 0, 0, 0, 0, 0]);
+    String address(List<int> bytes) => bytes.length == 4
+        ? bytes.join('.')
+        : [
+            for (var i = 0; i < 16; i += 2)
+              (bytes[i] << 8 | bytes[i + 1]).toRadixString(16),
+          ].join(':');
+
+    try {
+      if (_version == 5) {
+        await take(3); // 5, 1, 0
+        if (_stall == _Stall.greeting) return;
+        if (_stall == _Stall.slowGreeting) {
+          await Future<void>.delayed(const Duration(seconds: 2));
+        }
+        if (closed) return;
+        socket.add([_badVersion ? 4 : 5, 0]);
+        if (_badVersion) return;
+        final head = await take(4); // 5, 1, 0, 類型
+        final String host;
+        switch (head[3]) {
+          case 1:
+            host = 'ipv4 ${address(await take(4))}';
+          case 4:
+            host = 'ipv6 ${address(await take(16))}';
+          default:
+            final length = (await take(1))[0];
+            host = 'name ${String.fromCharCodes(await take(length))}';
+        }
+        final p = await take(2);
+        targets.add('$host:${p[0] << 8 | p[1]}');
+        socket.add([5, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+      } else {
+        final head = await take(8); // 4, 1, 埠, 位址
+        await takeUntil(0); // 使用者
+        final port = head[2] << 8 | head[3];
+        if (head[4] == 0 && head[5] == 0 && head[6] == 0 && head[7] != 0) {
+          final name = await takeUntil(0);
+          targets.add(
+            'name ${String.fromCharCodes(name.sublist(0, name.length - 1))}'
+            ':$port',
+          );
+        } else {
+          targets.add('ipv4 ${address(head.sublist(4, 8))}:$port');
+        }
+        socket.add([0, 0x5a, 0, 0, 0, 0, 0, 0]);
+      }
+      // 網站：https 的不回 TLS 握手；http 的回一頁。
+      if (_stall == _Stall.tls) return;
+      final line = await takeUntil(10);
+      requestLines.add(utf8.decode(line).trim());
+      while ((await takeUntil(10)).length > 2) {}
+      final body = utf8.encode('經過 SOCKS 代理');
+      socket
+        ..write(
+          'HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n'
+          'Content-Length: ${body.length}\r\nConnection: close\r\n\r\n',
+        )
+        ..add(body);
+      await socket.flush();
+      await socket.close();
+    } catch (_) {
+      // 用戶端先關了。
     }
-    final line = await takeUntil(10);
-    requestLine = utf8.decode(line).trim();
-    while (true) {
-      final header = await takeUntil(10);
-      if (header.length <= 2) break;
-    }
-    final body = Uint8List.fromList(utf8.encode('經過 SOCKS 代理'));
-    socket
-      ..write(
-        'HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n'
-        'Content-Length: ${body.length}\r\nConnection: close\r\n\r\n',
-      )
-      ..add(body);
-    await socket.flush();
-    await socket.close();
-    await waiting.close();
   }
 }
