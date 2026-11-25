@@ -118,6 +118,24 @@ BlockingTask jsoupExecute(Map<String, Object?> request) => () async {
       final cookie = cookieSet.join('; ');
       wire[key ?? 'Cookie'] = key == null ? cookie : '${wire[key]}; $cookie';
     }
+    // 書源自己寫的 Cookie 標頭也一樣：中文這類送不出去的那一條略過，不讓
+    // 整個請求失敗（[cookiePairFitsHeader]）。
+    final cookieKey = wire.keys
+        .where((k) => k.toLowerCase() == 'cookie')
+        .firstOrNull;
+    if (cookieKey != null) {
+      final kept = [
+        for (final raw in wire[cookieKey]!.split(';'))
+          if (raw.trim() case final pair
+              when pair.isNotEmpty && _cookiePairFits(pair))
+            pair,
+      ];
+      if (kept.isEmpty) {
+        wire.remove(cookieKey);
+      } else {
+        wire[cookieKey] = kept.join('; ');
+      }
+    }
     final payload = hasBody
         ? Charsets.encode(
             body ??
@@ -393,4 +411,15 @@ String _decode(Uint8List bytes, String charset) {
     } catch (_) {}
   }
   return EncodingDetect.decodeWithCharset(bytes, charset);
+}
+
+/// `名稱=值` 這一條放得進 HTTP 標頭（[cookiePairFitsHeader]）。
+bool _cookiePairFits(String pair) {
+  final index = pair.indexOf('=');
+  return index < 0
+      ? cookiePairFitsHeader(pair, '')
+      : cookiePairFitsHeader(
+          pair.substring(0, index),
+          pair.substring(index + 1),
+        );
 }
