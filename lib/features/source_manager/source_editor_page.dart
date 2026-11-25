@@ -41,7 +41,8 @@ class SourceEditorPage extends StatefulWidget {
 
   /// 存進資料庫一次就呼叫（含登入、搜尋前先存的那一次）。書源管理靠它
   /// 知道回來要重讀清單，就算使用者沒按「儲存」、這一頁不是用 true 關掉的。
-  final VoidCallback? onSaved;
+  /// 傳的是存下的網址：編輯時改了網址的話是新的那個。
+  final ValueChanged<String>? onSaved;
 
   const SourceEditorPage({super.key, this.source, this.onSaved});
 
@@ -353,7 +354,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
         Map<String, dynamic>.from(_editingSource.toJson()),
       );
       _resetDirtyBaseline();
-      widget.onSaved?.call();
+      widget.onSaved?.call(url);
       if (close) {
         Navigator.pop(context, true);
       }

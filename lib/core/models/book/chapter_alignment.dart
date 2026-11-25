@@ -91,6 +91,9 @@ class ChapterMatcher {
   late final Map<String, List<int>> _byKey = _group(
     (i) => _titleKey(chapters[i].title),
   );
+  late final Map<String, List<int>> _byFullKey = _group(
+    (i) => _fullChapterKey(chapters[i].title),
+  );
   late final Map<int, List<int>> _byNumber = _group(_numberAt);
   final Map<int, int?> _numbers = {};
   final Map<int, String> _pureNames = {};
@@ -122,17 +125,22 @@ class ChapterMatcher {
   }
 
   /// 舊目錄第 [oldIndex] 章（章名 [oldTitle]）在這份目錄裡的同一章，沒有
-  /// 是 null：先找同名的章（[sameChapterTitle]：繁簡、空白不同也算）；再照
-  /// Legado `BookHelp.getDurChapter`，在估計位置前後 10 章裡比去掉章號的
-  /// 章名（相似度超過 0.96），再找同一個章號（認中文數字與「100、」）。
+  /// 是 null：先找同名的章（[sameChapterTitle]：繁簡、空白不同也算）。
+  ///
+  /// [approximate]（預設）只影響位置，同 Legado `BookHelp.getDurChapter`：
+  /// 再在估計位置前後 10 章裡比去掉章號的章名（相似度超過 0.96），再找同
+  /// 一個章號（認中文數字與「100、」）。false 時（檢查更新要拿掉舊章，見
+  /// `mergeFetchedToc`）只認正規化後完整章名相同（[_fullChapterKey]）：章號
+  /// 寫法（「第3章」「第三章」）、全形半形、繁簡、空白與「（求月票）」這類
+  /// 附加的字不算不同；「（上）」與「（下）」是不同章。
+  ///
   /// 目錄裡有好幾章同名或同章號時（例如好幾個「番外」），取離估計位置最近
-  /// 的那一章，不是第一個。[byNumber] 是 [ChapterNumberMatch.untitledOnly]
-  /// 時只在章名去掉章號後沒剩字（「第3章」）才比章號。
+  /// 的那一章，不是第一個。
   int? sameChapter({
     required int oldIndex,
     required String? oldTitle,
     required int oldTotalCount,
-    ChapterNumberMatch byNumber = ChapterNumberMatch.always,
+    bool approximate = true,
   }) {
     if (_candidates.isEmpty) return null;
     final newSize = chapters.length;
@@ -160,9 +168,13 @@ class ChapterMatcher {
       if (converted != null) return converted;
     }
 
-    // 同 Legado：估計位置與原本的位置前後 10 章裡，比去掉章號與括號的章名。
-    // 好幾章一樣像時（每章都叫「正文」、短的「上」「下」），章號相同的優先，
-    // 再取離估計位置最近的（Legado 取第一個）。
+    if (!approximate) {
+      return nearest(_byFullKey[_fullChapterKey(oldTitle)]);
+    }
+
+    // 同 Legado：估計位置與原本的位置前後 10 章裡，比去掉章號與非分段標記
+    // 括號的章名。好幾章一樣像時（每章都叫「正文」、短的「上」「下」），
+    // 章號相同的優先，再取離估計位置最近的（Legado 取第一個）。
     final oldChapterNumber = _extractChapterNumber(oldTitle);
     final windowStart = math.max(0, math.min(oldIndex, estimatedIndex) - 10);
     final windowEnd = math.min(
@@ -197,22 +209,11 @@ class ChapterMatcher {
       if (best != null) return best;
     }
 
-    if (oldChapterNumber != null &&
-        (byNumber == ChapterNumberMatch.always || _onlyNumber(oldTitle))) {
+    if (oldChapterNumber != null) {
       return nearest(_byNumber[oldChapterNumber]);
     }
     return null;
   }
-}
-
-/// [ChapterMatcher.sameChapter] 什麼時候單憑章號就算同一章。
-enum ChapterNumberMatch {
-  /// 章名比不到時都比章號（對回閱讀進度，同 Legado）。
-  always,
-
-  /// 只有章名去掉章號後沒剩字（「第3章」）時才比章號：有章名的章，章號
-  /// 一樣、章名不同（「第3章 風起」與「第三章 雲湧」）不算。
-  untitledOnly,
 }
 
 /// 兩個章名算不算同一章：繁簡不同（繁體站換簡體站）、空白不同也算。
@@ -253,11 +254,22 @@ final RegExp _numberPrefix = RegExp(
   '^(?:[$_numberChars]+[,:、])*(?:[$_numberChars]+)(?:[,:、](?!\$)|\\.(?=[^\\d]))',
 );
 
-/// 章名前後括號裡附加的字（「（求月票）」）；整個章名都在括號裡時只拿掉
-/// 頭尾的括號（Legado `regexC`）。
-final RegExp _bracketed = RegExp(
-  r'(?!^)(?:[〖【《〔\[{(][^〖【《〔\[{()〕》】〗\]}]+)?[)〕》】〗\]}]$|'
-  r'^[〖【《〔\[{(](?:[^〖【《〔\[{()〕》】〗\]}]+[〕》】〗\]})])?(?!$)',
+/// 章名結尾括號裡附加的字（「（求月票）」）；整段是括號時只算最後的結尾
+/// 括號。分段標記（[_segmentMarker]）留著，兩半才分得開。
+final RegExp _trailingBracketed = RegExp(
+  r'(?!^)(?:[〖【《〔\[{(]([^〖【《〔\[{()〕》】〗\]}]+))?[)〕》】〗\]}]$',
+);
+
+/// 章名開頭括號裡附加的字（「（求月票）大戰」）；分段標記留著。
+final RegExp _leadingBracketed = RegExp(
+  r'^[〖【《〔\[{(](?:([^〖【《〔\[{()〕》】〗\]}]+)[〕》】〗\]})])?(?!$)',
+);
+
+/// 括號裡是分段標記（「（上）」「（下）」「（一）」「（2）」「（前篇）」）：
+/// 兩半是不同章，比對時不拿掉。其他附加的字（「（求月票）」）照舊拿掉。
+final RegExp _segmentMarker = RegExp(
+  '^(?:[上中下前后後](?:篇|部|卷|半)?|'
+  '[$_numberChars]+(?:篇|部|卷|章|节|節)?)\$',
 );
 
 /// 字母、數字與漢字以外的字（Legado `regexOther`）。
@@ -266,15 +278,36 @@ final RegExp _notWordOrHan = RegExp(
   unicode: true,
 );
 
+/// 拿掉 [pattern] 對到的括號附加字；括號裡是分段標記時留著。
+String _stripBracketedAdditions(String text, RegExp pattern) =>
+    text.replaceAllMapped(
+      pattern,
+      (match) => _segmentMarker.hasMatch(match.group(1) ?? '') ? match[0]! : '',
+    );
+
 /// 比對用的章名本身：去掉空白、章號、前後括號與標點，繁體轉簡體（Legado
-/// `getPureChapterName`；夜讀多轉繁簡，繁體站換簡體站也比得上）。
+/// `getPureChapterName`；夜讀多轉繁簡，繁體站換簡體站也比得上）。分段標記
+/// 留著。
 String _pureChapterName(String? title) {
   if (title == null || title.isEmpty) return '';
-  return ChineseUtils.t2s(StringUtils.fullToHalf(title))
+  var pure = ChineseUtils.t2s(StringUtils.fullToHalf(title))
       .replaceAll(_whitespace, '')
-      .replaceAll(_numberPrefix, '')
-      .replaceAll(_bracketed, '')
-      .replaceAll(_notWordOrHan, '');
+      .replaceAll(_numberPrefix, '');
+  pure = _stripBracketedAdditions(pure, _trailingBracketed);
+  pure = _stripBracketedAdditions(pure, _leadingBracketed);
+  return pure.replaceAll(_notWordOrHan, '');
+}
+
+/// 完整章名的正規化：章號寫法不同（「第3章」「第三章」「100、」）算同一個
+/// 章號，後面的字照 [_pureChapterName]（附加的括號拿掉、分段標記留著）；
+/// 章名只有章號時只比章號。
+String? _fullChapterKey(String? title) {
+  if (title == null || title.isEmpty) return null;
+  final number = _extractChapterNumber(title);
+  if (number != null && _onlyNumber(title)) return '#$number';
+  final pure = _pureChapterName(title);
+  if (number == null && pure.isEmpty) return null;
+  return '${number ?? ''}|$pure';
 }
 
 /// 章名只有章號、沒有別的字（「第3章」「100、」）。

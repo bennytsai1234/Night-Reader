@@ -91,6 +91,44 @@ void main() {
       expect(align('第100章 章名100（求月票）', titles), 104);
     });
   });
+
+  group('括號裡是分段標記（上）（下）', () {
+    test('舊的「（下）」對到新的「（下）」，不是「（上）」', () {
+      final titles = [
+        for (var n = 1; n <= 200; n++)
+          if (n == 100)
+            '第一百章 大戰（上）'
+          else if (n == 101)
+            '第一百章 大戰（下）'
+          else
+            '第${_chinese(n)}章 名$n',
+      ];
+      // 照比例估的位置是 99（新目錄的「（上）」），位置只影響取哪一個；
+      // 兩半的章名不同，要對到「（下）」。
+      expect(
+        alignChapterIndex(
+          oldIndex: 99,
+          oldTitle: '第100章 大戰（下）',
+          oldTotalCount: 200,
+          newChapters: toc(titles),
+        ),
+        100,
+      );
+    });
+
+    test('括號裡的「求月票」照舊拿掉，仍對得上', () {
+      final titles = ['第1章 序', '第2章 甲', '第10章 大戰', '第11章 乙'];
+      expect(
+        alignChapterIndex(
+          oldIndex: 2,
+          oldTitle: '第10章 大戰（求月票）',
+          oldTotalCount: 4,
+          newChapters: toc(titles),
+        ),
+        2,
+      );
+    });
+  });
 }
 
 String _chinese(int n) {

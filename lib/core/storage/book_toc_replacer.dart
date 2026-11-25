@@ -97,10 +97,11 @@ bool _sameAsStored(List<BookChapter> stored, List<BookChapter> chapters) {
 ///
 /// 書源換了網址的不留、記進 `moved`：舊目錄裡網址不在 [fetched] 的章，在
 /// [fetched] 裡網址不在舊目錄的新章中，照章名找得到同一章時
-/// （[ChapterMatcher.sameChapter]：章名一樣、繁簡不同，或只差章號的寫法
-/// 「第3章 風起」與「第三章 風起」；沒有章名的「第3章」與「第三章」比章號）。
-/// 位置照兩份完整目錄的序號估。網址還在舊目錄的章就是它自己，不拿來比：
-/// 「大戰（上）」被拿掉、「大戰（下）」還在，或網站只回最新幾章、章名都叫
+/// （[ChapterMatcher.sameChapter] 的完整章名比對：章名一樣、繁簡或全形半形
+/// 不同、章號寫法不同，或沒有章名的「第3章」與「第三章」比章號）。這裡會
+/// 拿掉舊章，只認完整章名，不走相似度：「大戰（上）」與「大戰（下）」是
+/// 不同章，不會被當成換了網址的那一章對掉。位置照兩份完整目錄的序號估。
+/// 網址還在舊目錄的章就是它自己，不拿來比：網站只回最新幾章、章名都叫
 /// 「正文」時，拿掉的章照樣留著。
 ({List<BookChapter> chapters, Map<String, String> moved}) mergeFetchedToc({
   required List<BookChapter> oldToc,
@@ -128,10 +129,12 @@ bool _sameAsStored(List<BookChapter> stored, List<BookChapter> chapters) {
       oldIndex: position,
       oldTitle: chapter.title,
       oldTotalCount: oldToc.length,
-      byNumber: ChapterNumberMatch.untitledOnly,
+      approximate: false,
     );
     if (same != null) {
       moved[chapter.url] = fetched[same].url;
+      // 換了網址的那一章還在（在新網址），後面的保留章接在它後面。
+      lastKeptUrl = fetched[same].url;
       continue;
     }
     if (!keep(chapter)) continue;
