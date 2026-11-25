@@ -37,8 +37,11 @@ final class CompleteContentFetcher {
     CancelToken? cancelToken,
   }) async {
     // 同 Legado `WebBook.getContentAwait`：正文規則空白時正文就是章節網址
-    // （有聲書的章節網址本身是音訊），不抓。
-    if ((source.ruleContent?.content ?? '').trim().isEmpty) return chapter.url;
+    // （有聲書的章節網址本身是音訊），不抓。文字書照舊沒有正文：Legado 把
+    // 網址顯示出來但不存，夜讀存成正文的話，下載會把整本記成下載好了。
+    if ((source.ruleContent?.content ?? '').trim().isEmpty) {
+      return book.bookKind == BookSourceKind.novel ? '' : chapter.url;
+    }
     final stopAt = (nextChapterUrl == null || nextChapterUrl.isEmpty)
         ? await _storedNextChapterUrl(book, chapter)
         : nextChapterUrl;

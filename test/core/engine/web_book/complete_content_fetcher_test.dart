@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart';
+import 'package:night_reader/core/constant/book_type.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
@@ -168,14 +169,22 @@ void main() {
         'bookSourceType': 1,
         'ruleContent': ?ruleContent,
       });
+      final audioBook = Book(
+        bookUrl: 'http://local.test/audio',
+        origin: 'http://local.test',
+        name: '有聲書',
+        type: BookType.audio,
+      );
+      final mp3 = BookChapter(
+        url: 'http://unreachable.invalid/a.mp3',
+        title: '第一集',
+      );
       expect(
-        await CompleteContentFetcher.fetch(
-          blank,
-          book,
-          BookChapter(url: 'http://unreachable.invalid/a.mp3', title: '第一集'),
-        ),
+        await CompleteContentFetcher.fetch(blank, audioBook, mp3),
         'http://unreachable.invalid/a.mp3',
       );
+      // 文字書照舊沒有正文，不把網址當正文存起來。
+      expect(await CompleteContentFetcher.fetch(blank, book, mp3), '');
     }
   });
 }
