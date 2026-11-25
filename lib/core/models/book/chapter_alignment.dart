@@ -74,12 +74,13 @@ class ChapterMatcher {
   /// Legado `BookHelp.getDurChapter`，在估計位置前後 10 章裡比去掉章號的
   /// 章名（相似度超過 0.96），再找同一個章號（認中文數字與「100、」）。
   /// 目錄裡有好幾章同名或同章號時（例如好幾個「番外」），取離估計位置最近
-  /// 的那一章，不是第一個。[byNumber] 是 false 時只比章名，不單憑章號。
+  /// 的那一章，不是第一個。[byNumber] 是 [ChapterNumberMatch.untitledOnly]
+  /// 時只在章名去掉章號後沒剩字（「第3章」）才比章號。
   int? sameChapter({
     required int oldIndex,
     required String? oldTitle,
     required int oldTotalCount,
-    bool byNumber = true,
+    ChapterNumberMatch byNumber = ChapterNumberMatch.always,
   }) {
     if (chapters.isEmpty) return null;
     final newSize = chapters.length;
@@ -144,11 +145,22 @@ class ChapterMatcher {
       if (best != null) return best;
     }
 
-    if (byNumber && oldChapterNumber != null) {
+    if (oldChapterNumber != null &&
+        (byNumber == ChapterNumberMatch.always || _onlyNumber(oldTitle))) {
       return nearest((i) => _numbers[i] == oldChapterNumber);
     }
     return null;
   }
+}
+
+/// [ChapterMatcher.sameChapter] 什麼時候單憑章號就算同一章。
+enum ChapterNumberMatch {
+  /// 章名比不到時都比章號（對回閱讀進度，同 Legado）。
+  always,
+
+  /// 只有章名去掉章號後沒剩字（「第3章」）時才比章號：有章名的章，章號
+  /// 一樣、章名不同（「第3章 風起」與「第三章 雲湧」）不算。
+  untitledOnly,
 }
 
 /// 兩個章名算不算同一章：繁簡不同（繁體站換簡體站）、空白不同也算。
@@ -211,6 +223,16 @@ String _pureChapterName(String? title) {
       .replaceAll(_numberPrefix, '')
       .replaceAll(_bracketed, '')
       .replaceAll(_notWordOrHan, '');
+}
+
+/// 章名只有章號、沒有別的字（「第3章」「100、」）。
+bool _onlyNumber(String? title) {
+  if (title == null) return false;
+  final compact = StringUtils.fullToHalf(title).replaceAll(_whitespace, '');
+  final match =
+      _numberedTitle.firstMatch(compact) ?? _leadingNumber.firstMatch(compact);
+  return match != null &&
+      compact.substring(match.end).replaceAll(_notWordOrHan, '').isEmpty;
 }
 
 /// 章名裡的章號（Legado `getChapterNum`）：「第一百章」「第100章」「100、」

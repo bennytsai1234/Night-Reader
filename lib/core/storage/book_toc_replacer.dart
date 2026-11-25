@@ -16,8 +16,9 @@ class BookTocReplacer {
   ///
   /// 書源拿掉的章節移出目錄，但已下載或正在讀的留下來，插回原本的位置：
   /// 網站壞掉時常只回一部分目錄（例如側欄的最新章節），照單全收會讓已下載
-  /// 的章節點不到、進度跑掉。新目錄裡有同名章節的不留，那是書源換了網址
-  /// （例如整站搬家）。書源回傳空目錄時丟 [StateError]，什麼都不寫。
+  /// 的章節點不到、進度跑掉。新目錄裡的新章照章名對得到它的不留，那是書源
+  /// 換了網址（例如整站搬家，見 [keepDroppedChapters]）。書源回傳空目錄時丟
+  /// [StateError]，什麼都不寫。
   Future<({List<BookChapter> chapters, bool progressMoved})> replace(
     Book book,
     List<BookChapter> fetched,
@@ -81,10 +82,14 @@ bool _sameAsStored(List<BookChapter> stored, List<BookChapter> chapters) {
 }
 
 /// [fetched] 加上 [oldToc] 裡書源拿掉、但 [keep] 要留的章節。留下的章節接在
-/// 舊目錄裡它前面最近一個還在的章節後面；前面都不在了就放最前面。在
-/// [fetched] 裡照章名找得到同一章的不留（[ChapterMatcher.sameChapter]，不單憑
-/// 章號）：章名一樣、繁簡不同，或只差章號的寫法（「第3章 風起」與「第三章
-/// 風起」），那是書源換了網址，閱讀進度照同一個比法對過去。
+/// 舊目錄裡它前面最近一個還在的章節後面；前面都不在了就放最前面。
+///
+/// 書源換了網址的不留：[fetched] 裡網址不在舊目錄的新章，照章名找得到同一
+/// 章時（[ChapterMatcher.sameChapter]：章名一樣、繁簡不同，或只差章號的寫法
+/// 「第3章 風起」與「第三章 風起」；沒有章名的「第3章」與「第三章」比章號），
+/// 閱讀進度照同一個比法對過去。網址還在舊目錄的章就是它自己，不拿來比：
+/// 「大戰（上）」被拿掉、「大戰（下）」還在，或網站只回最新幾章、章名都叫
+/// 「正文」時，拿掉的章照樣留著。
 List<BookChapter> keepDroppedChapters({
   required List<BookChapter> oldToc,
   required List<BookChapter> fetched,
@@ -93,7 +98,11 @@ List<BookChapter> keepDroppedChapters({
   final fetchedUrls = {for (final chapter in fetched) chapter.url};
   // 只有真的遇到書源拿掉、又要留的章節才準備比章名：一般檢查更新沒有
   // 章節被拿掉，不必把上千個章名都轉一次。
-  late final matcher = ChapterMatcher(fetched);
+  late final oldUrls = {for (final chapter in oldToc) chapter.url};
+  late final matcher = ChapterMatcher([
+    for (final chapter in fetched)
+      if (!oldUrls.contains(chapter.url)) chapter,
+  ]);
   final front = <BookChapter>[];
   final after = <String, List<BookChapter>>{};
   String? lastKeptUrl;
@@ -107,7 +116,7 @@ List<BookChapter> keepDroppedChapters({
               oldIndex: position,
               oldTitle: chapter.title,
               oldTotalCount: oldToc.length,
-              byNumber: false,
+              byNumber: ChapterNumberMatch.untitledOnly,
             ) !=
             null) {
       continue;

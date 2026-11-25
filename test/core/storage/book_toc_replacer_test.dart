@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/storage/book_toc_replacer.dart';
@@ -50,5 +51,71 @@ void main() {
     expect(book.durChapterTitle, '第三章 風起');
     expect(result.chapters[book.chapterIndex].url, 'https://new.example/c/3');
     expect(result.chapters, hasLength(5));
+  });
+
+  Book reading(int index, String title) => Book(
+    bookUrl: 'https://s.example/book/1',
+    origin: 'https://s.example',
+    name: '書',
+    chapterIndex: index,
+    durChapterTitle: title,
+    durChapterTime: 1,
+  );
+
+  test('正在讀的「大戰（上）」被書源拿掉、「大戰（下）」還在：留著，進度不動', () async {
+    final book = reading(1, '大戰（上）');
+    final old = toc('s.example', ['序', '大戰（上）', '大戰（下）', '尾聲']);
+    await chapterDao.replaceByBook(book.bookUrl, old);
+
+    final result = await BookTocReplacer(chapterDao: chapterDao)
+        .replace(book, [old[0], old[2], old[3]]);
+
+    expect(result.chapters.map((c) => c.title), ['序', '大戰（上）', '大戰（下）', '尾聲']);
+    expect(result.chapters[book.chapterIndex].url, old[1].url);
+    expect(result.progressMoved, isFalse);
+  });
+
+  test('書源只回最新 100 章、章名都是「正文」：已下載與正在讀的舊章留著，進度不動', () async {
+    final book = reading(120, '正文');
+    final old = toc('s.example', [for (var i = 0; i < 240; i++) '正文']);
+    await chapterDao.replaceByBook(book.bookUrl, old);
+    final contentDao = ReaderChapterContentDao(db);
+    await contentDao.saveContent(
+      contentKey: ReaderChapterContentDao.contentKey(
+        origin: book.origin,
+        bookUrl: book.bookUrl,
+        chapterUrl: old[60].url,
+      ),
+      origin: book.origin,
+      bookUrl: book.bookUrl,
+      chapterUrl: old[60].url,
+      chapterIndex: 60,
+      content: '已下載的正文',
+      updatedAt: 1,
+    );
+
+    final result = await BookTocReplacer(
+      chapterDao: chapterDao,
+      contentDao: contentDao,
+    ).replace(book, old.sublist(140));
+
+    final urls = result.chapters.map((c) => c.url).toList();
+    expect(urls, containsAll([old[60].url, old[120].url]));
+    expect(urls, hasLength(102));
+    expect(result.chapters[book.chapterIndex].url, old[120].url);
+  });
+
+  test('沒有章名的「第3章」改寫成「第三章」、網址全換：判成同一章，進度對過去', () async {
+    final book = reading(2, '第3章');
+    await chapterDao.replaceByBook(
+      book.bookUrl,
+      toc('old.example', ['第1章', '第2章', '第3章', '第4章']),
+    );
+
+    final result = await BookTocReplacer(chapterDao: chapterDao)
+        .replace(book, toc('new.example', ['第一章', '第二章', '第三章', '第四章']));
+
+    expect(result.chapters, hasLength(4));
+    expect(result.chapters[book.chapterIndex].title, '第三章');
   });
 }
