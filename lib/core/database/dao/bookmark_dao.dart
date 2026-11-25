@@ -91,6 +91,26 @@ class BookmarkDao extends DatabaseAccessor<AppDatabase>
         );
   }
 
+  /// 這本書的目錄整個翻過來（反轉目錄，共 [chapterCount] 章）：書籤記的
+  /// 序號跟著換成同一章翻過來的序號。同名的章（好幾個「番外」）照序號分，
+  /// 序號不跟著換會對到另一章。
+  Future<void> reverseChapters({
+    required String bookName,
+    required String bookAuthor,
+    required int chapterCount,
+  }) => customUpdate(
+    'UPDATE bookmarks SET chapterIndex = ? - 1 - chapterIndex '
+    'WHERE bookName = ? AND bookAuthor = ? '
+    'AND chapterIndex >= 0 AND chapterIndex < ?',
+    variables: [
+      Variable.withInt(chapterCount),
+      Variable.withString(bookName),
+      Variable.withString(bookAuthor),
+      Variable.withInt(chapterCount),
+    ],
+    updates: {bookmarks},
+  );
+
   /// 一本書換了書源：書籤跟著搬到新書源那本（書名、作者照新書源的寫法），
   /// 每個書籤對到新目錄裡的同一章（同換源時的閱讀進度：先找同名的章，再照
   /// 章號與比例估）。章內第幾個字照舊，跳回時由閱讀器照錨點的前後原文在

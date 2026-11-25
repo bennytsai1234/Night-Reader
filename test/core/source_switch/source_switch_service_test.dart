@@ -546,6 +546,29 @@ void main() {
       expect(identical(prepared.chapters.first, toc.chapters.first), isFalse);
     });
 
+    test('這本書反轉了目錄：新書源的目錄也照翻，讀到的那一章照章名對過去'
+        '（同 Legado 帶著閱讀設定）', () async {
+      final candidate = _candidate('new-origin');
+      final service = SourceSwitchService(
+        service: _FakeBookSourceService(
+          chapters: _chapters(candidate.bookUrl, 10),
+        ),
+        sourceDao: db.bookSourceDao,
+      );
+      final reversed = _currentBook(chapterIndex: 7, durChapterTitle: '第3章')
+        ..readConfig = ReadConfig(reverseToc: true);
+
+      final prepared = await service.prepareSwitch(reversed, candidate);
+
+      expect(prepared.chapters.first.title, '第10章');
+      expect([
+        for (final chapter in prepared.chapters) chapter.index,
+      ], List.generate(10, (i) => i));
+      expect(prepared.targetChapter.title, '第3章');
+      expect(prepared.targetChapterIndex, 7);
+      expect(prepared.migratedBook.readConfig!.reverseToc, isTrue);
+    });
+
     test('按標題對齊到目標章節索引', () async {
       final candidate = _candidate('new-origin');
       final chapters = _chapters(candidate.bookUrl, 100);

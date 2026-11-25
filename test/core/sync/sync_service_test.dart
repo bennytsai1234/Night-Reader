@@ -7,6 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/sync_store_blobs.dart';
 
+import 'package:night_reader/core/storage/book_toc_reverser.dart';
+import 'package:night_reader/core/database/dao/highlight_dao.dart';
+import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -165,6 +168,12 @@ class _Phone {
         ReplaceRuleSync(dao: rules),
         BookshelfSync(
           bookDao: books,
+          tocReverser: BookTocReverser(
+            bookDao: books,
+            chapterDao: chapters,
+            bookmarkDao: BookmarkDao(db),
+            highlightDao: HighlightDao(db),
+          ),
           storage: _Storage(books, discarded),
           isOpen: service.isBookOpen,
           download: downloaded.add,
@@ -1453,6 +1462,31 @@ void main() {
       final book = await b.book('b-src');
       expect(book.customCoverUrl, 'https://img/cover.jpg');
       expect(await b.books.getByUrl('a-src'), isNull, reason: 'B 照舊用自己的書源');
+    });
+
+    test('the TOC reversed on one phone is reversed on the other too, '
+        'progress staying on its chapter', () async {
+      // B 讀得比較後面，進度照 B 的。
+      await a.addBook('x', toc: toc, time: 100);
+      await b.addBook('x', toc: toc, chapterIndex: 1, charOffset: 9, time: 200);
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+
+      await BookTocReverser(
+        bookDao: a.books,
+        chapterDao: a.chapters,
+        bookmarkDao: BookmarkDao(a.db),
+        highlightDao: HighlightDao(a.db),
+      ).setReversed(await a.book('x'), true);
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+
+      final stored = await b.chapters.getByBook('x');
+      expect([for (final c in stored) c.title], toc.reversed);
+      final book = await b.book('x');
+      expect(book.readConfig!.reverseToc, isTrue);
+      expect(stored[book.chapterIndex].url, 'x/1');
+      expect(book.charOffset, 9);
     });
 
     test('a cover picked from the gallery on one phone (a file only there) '

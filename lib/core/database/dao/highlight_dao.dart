@@ -94,6 +94,25 @@ class HighlightDao extends DatabaseAccessor<AppDatabase>
         );
   }
 
+  /// 這本書的目錄整個翻過來：標註記的序號跟著換（同
+  /// [BookmarkDao.reverseChapters]）。
+  Future<void> reverseChapters({
+    required String bookName,
+    required String bookAuthor,
+    required int chapterCount,
+  }) => customUpdate(
+    'UPDATE highlights SET chapterIndex = ? - 1 - chapterIndex '
+    'WHERE bookName = ? AND bookAuthor = ? '
+    'AND chapterIndex >= 0 AND chapterIndex < ?',
+    variables: [
+      Variable.withInt(chapterCount),
+      Variable.withString(bookName),
+      Variable.withString(bookAuthor),
+      Variable.withInt(chapterCount),
+    ],
+    updates: {highlights},
+  );
+
   /// 一本書換了書源：標註跟著搬到新書源那本，每個對到新目錄裡的同一章
   /// （同 [BookmarkDao.moveToSource]）。
   Future<void> moveToSource({

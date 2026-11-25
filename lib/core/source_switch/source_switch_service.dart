@@ -12,6 +12,7 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/chapter_alignment.dart';
+import 'package:night_reader/core/storage/book_toc_reverser.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
@@ -365,7 +366,7 @@ class SourceSwitchService {
       chapterIndex: targetChapterIndex ?? currentBook.chapterIndex,
       durChapterTitle: targetChapterTitle ?? currentBook.durChapterTitle,
     );
-    final SourceToc(book: hydratedBook, :chapters) = toc == null
+    final SourceToc(book: hydratedBook, chapters: fetched) = toc == null
         ? await loadSourceToc(
             _service,
             source,
@@ -377,6 +378,14 @@ class SourceSwitchService {
         : SourceToc(toc.book, [
             for (final chapter in toc.chapters) chapter.copyWith(),
           ]);
+    // 換過去的書帶著這本書的閱讀設定（[Book.migrateTo]，同 Legado），存著的
+    // 目錄要照它的反轉目錄排（[BookTocReverser]）；新書源的目錄是照抓的那
+    // 一份的設定抓的。
+    final chapters =
+        (hydratedBook.readConfig?.reverseToc ?? false) ==
+            (currentBook.readConfig?.reverseToc ?? false)
+        ? fetched
+        : reversedToc(fetched);
 
     final migrated = _migrate(alignmentBook, hydratedBook, chapters);
     return _AlignedSwitch(

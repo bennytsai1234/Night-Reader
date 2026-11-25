@@ -9,6 +9,7 @@ import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/storage/book_toc_reverser.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_departure.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_sheet.dart';
@@ -117,6 +118,14 @@ final class ReaderMenuPages {
           value: _ReaderMoreAction.reSegment,
           selected: _host.book.getReSegment(),
         ),
+        // 本地書的目錄照檔案的順序，灰掉。
+        AppSheetAction(
+          label: '反轉目錄',
+          icon: Icons.swap_vert_rounded,
+          value: _ReaderMoreAction.reverseToc,
+          enabled: !isLocal,
+          selected: _host.book.getReverseToc(),
+        ),
         // 只有本地 TXT 有編碼可改；EPUB 與網路書沒有這一項。
         if (_isLocalTxt)
           const AppSheetAction(
@@ -159,6 +168,9 @@ final class ReaderMenuPages {
       case _ReaderMoreAction.reSegment:
         _host.menu.dismissControls();
         await _toggleReSegment();
+      case _ReaderMoreAction.reverseToc:
+        _host.menu.dismissControls();
+        await _toggleReverseToc();
       case _ReaderMoreAction.charset:
         _host.menu.dismissControls();
         await _changeCharset();
@@ -290,6 +302,47 @@ final class ReaderMenuPages {
 
   /// 「更多」的「設定編碼」（L6，只有本地 TXT）：照選的編碼重新解碼、重新
   /// 分章，閱讀進度與書籤留在同一章，再用新的章節重開這本書。
+  /// 「更多」的「反轉目錄」：這本書存著的目錄整個翻過來、之後抓的也照翻
+  /// （[BookTocReverser]，同 Legado 的「反轉目錄」）。進度、書籤、標註跟著
+  /// 同一章；照翻過來的目錄重開閱讀器，停在同一個位置（同「設定編碼」）。
+  Future<void> _toggleReverseToc() async {
+    final reversed = !_host.book.getReverseToc();
+    // 先寫回畫面這一刻的進度，翻過來才對得到同一個位置。
+    await _host.flushProgress();
+    if (!_mounted()) return;
+    // 翻目錄前讓舊閱讀器停止寫進度與正文；它關掉時不會拿舊目錄的序號把
+    // 進度寫回去。
+    _retire();
+    final ({Book book, List<BookChapter> chapters})? result;
+    try {
+      result = await BookTocReverser(
+        bookDao: _host.dependencies.bookDao,
+        chapterDao: _host.dependencies.chapterDao,
+        bookmarkDao: _host.dependencies.bookmarkDao,
+        highlightDao: _host.dependencies.highlightDao,
+      ).setReversed(_host.book, reversed);
+    } catch (error, stackTrace) {
+      AppLog.e('反轉目錄失敗', error: error, stackTrace: stackTrace);
+      _resume();
+      if (_mounted()) _showNotice(failureMessage('反轉目錄', error));
+      return;
+    }
+    if (!_mounted()) return;
+    if (result == null) {
+      _resume();
+      return;
+    }
+    unawaited(
+      Navigator.of(_context()).pushReplacement(
+        BookOpenRoute(
+          book: result.book,
+          openTarget: ReaderOpenTarget.resume(result.book),
+          initialChapters: result.chapters,
+        ),
+      ),
+    );
+  }
+
   Future<void> _changeCharset() async {
     final picked = await showAppActionSheet<String>(
       context: _context(),
@@ -552,6 +605,7 @@ enum _ReaderMoreAction {
   borrowChapter,
   refetchChapter,
   reSegment,
+  reverseToc,
   charset,
   login,
   bookDetail,
