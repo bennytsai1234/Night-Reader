@@ -288,6 +288,66 @@ void main() {
     expect(service.isTaskRetiring(book.bookUrl), isFalse);
   });
 
+  // 暫停全部時正在跑的那一輪停在下一章之前等「繼續全部」；讀者這時從佇列
+  // 刪掉它，那一輪要跟著結束，同一本書才加得回佇列。
+  test('removing a download parked by pause-all ends its run so the book can '
+      'be queued again', () async {
+    final book = Book(
+      bookUrl: '$base/book/paused',
+      origin: '$base/source/paused',
+      name: '暫停全部時刪掉的書',
+      isInBookshelf: true,
+    );
+    final chapters = [
+      for (var i = 0; i < 2; i++)
+        BookChapter(
+          url: '$base/stall/paused/$i',
+          title: '第 $i 章',
+          index: i,
+          bookUrl: book.bookUrl,
+        ),
+    ];
+    await getIt<BookSourceDao>().upsert(
+      BookSource.fromJson({
+        'bookSourceName': '暫停',
+        'bookSourceUrl': book.origin,
+      }),
+    );
+    await getIt<BookDao>().upsert(book);
+    await getIt<ChapterDao>().insertChapters(chapters);
+    final service = DownloadService();
+    final task = DownloadTask(
+      bookUrl: book.bookUrl,
+      bookName: book.name,
+      totalCount: chapters.length,
+    );
+    service.tasks.add(task);
+    service.isDownloading = true;
+    service.isPaused = true;
+    addTearDown(() {
+      service.isDownloading = false;
+      service.isPaused = false;
+      service.pauseCompleter?.complete();
+      service.pauseCompleter = null;
+      service.tasks.removeWhere((t) => t.bookUrl == book.bookUrl);
+    });
+
+    final run = service.processTask(task);
+    await until(() => service.pauseCompleter != null, '停在暫停前');
+    service.removeTask(book.bookUrl);
+
+    await run.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => fail('刪掉後那一輪還在等「繼續全部」'),
+    );
+    expect(service.activeTaskUrls, isNot(contains(book.bookUrl)));
+    await service.addDownloadTask(book, chapters);
+    expect(
+      service.tasks.where((t) => t.bookUrl == book.bookUrl && t.isWaiting),
+      hasLength(1),
+    );
+  });
+
   test('a chapter waiting to retry stops when cancelled', () async {
     final book = Book(
       bookUrl: '$base/book/retry',
