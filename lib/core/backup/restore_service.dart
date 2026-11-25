@@ -8,6 +8,7 @@ import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:night_reader/core/storage/book_storage_service.dart';
+import 'package:night_reader/core/storage/book_toc_reverser.dart';
 import 'package:night_reader/core/backup/backup_service.dart';
 import 'package:night_reader/core/backup/login_data_backup.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -150,6 +151,10 @@ class RestoreService {
   }) async {
     var restoredAny = false;
     final failedFiles = <String>[];
+    final tocDirections = _tocDirectionsOf(
+      backup.files,
+      fromLegado: fromLegado,
+    );
     // 閱讀紀錄的累計與每日秒數要一起還原，不受 ZIP 裡的檔案順序影響；
     // 先收起來，其他檔案還原完再處理。
     final readStatsFiles = <_DecodedFile>[];
@@ -178,6 +183,7 @@ class RestoreService {
             fileName,
             decoded,
             fromLegado: fromLegado,
+            tocDirections: tocDirections,
           );
           restoredAny = restoredAny || restored;
         } else if (fileName == _settingsFile &&
@@ -382,6 +388,43 @@ class RestoreService {
     return byBook.values.toList();
   }
 
+  /// 備份裡每本書（書名加作者）的目錄是不是反轉的，含不在書架上的。書籤
+  /// 與標註沒記方向時（Legado 的都沒記，夜讀沒記的是和那本書當時一樣），
+  /// 照備份裡那本書的記下，還原到目錄方向不同的書也對回同一章（ADR 0085）。
+  /// 同名同作者有好幾本時，書架上的優先。
+  static Map<(String, String), bool> _tocDirectionsOf(
+    List<_DecodedFile> files, {
+    required bool fromLegado,
+  }) {
+    final directions = <(String, String), bool>{};
+    for (final file in files) {
+      if (!_bookFiles.contains(file.fileName)) continue;
+      final decoded = file.decoded;
+      if (decoded is! List<dynamic>) continue;
+      for (final item in decoded.whereType<Map<String, dynamic>>()) {
+        final Book book;
+        try {
+          book = Book.fromJson(fromLegado ? _fromLegadoBook(item) : item);
+        } catch (_) {
+          continue;
+        }
+        final reversed = book.getReverseToc();
+        // 書籤記的書名是 `recordName`（Legado 的是書名）。
+        for (final name in {book.name, book.recordName}) {
+          final key = (name, book.author);
+          if (book.isInBookshelf) {
+            directions[key] = reversed;
+          } else {
+            directions.putIfAbsent(key, () => reversed);
+          }
+        }
+      }
+    }
+    return directions;
+  }
+
+  static const Set<String> _bookFiles = {'books.json', 'bookshelf.json'};
+
   /// Legado 的書：沒有「在不在書架上」這欄，記在類型的位元裡
   /// （`BookType.notShelf`）；閱讀進度叫 `durChapterIndex`、`durChapterPos`。
   static Map<String, dynamic> _fromLegadoBook(Map<String, dynamic> item) => {
@@ -395,6 +438,7 @@ class RestoreService {
     String fileName,
     List<dynamic> list, {
     required bool fromLegado,
+    required Map<(String, String), bool> tocDirections,
   }) async {
     if (!_listFiles.contains(fileName)) return false;
 
@@ -403,7 +447,12 @@ class RestoreService {
     // 卡住數秒）。檔案中途失敗時整個檔案不寫入，由呼叫端記為失敗。
     var importedAny = false;
     await getIt<AppDatabase>().transaction(() async {
-      importedAny = await _importItems(fileName, list, fromLegado: fromLegado);
+      importedAny = await _importItems(
+        fileName,
+        list,
+        fromLegado: fromLegado,
+        tocDirections: tocDirections,
+      );
     });
     return list.isEmpty || importedAny;
   }
@@ -412,7 +461,10 @@ class RestoreService {
     String fileName,
     List<dynamic> list, {
     required bool fromLegado,
+    required Map<(String, String), bool> tocDirections,
   }) async {
+    bool? tocReversedOf(String bookName, String bookAuthor) =>
+        tocDirections[(bookName, bookAuthor)];
     var importedAny = false;
     for (var item in list) {
       if (item is Map<String, dynamic>) {
@@ -429,6 +481,17 @@ class RestoreService {
               // 書本資料夾不在備份裡（`BookChapterFiles`）：新手機上沒有
               // 存好的封面檔，改用網址。
               await BookCoverStorageService.dropMissingCoverFiles(book);
+              // 這台存著的目錄照這台的反轉開關排：和備份的不同時先照備份的
+              // 翻過來（這台沒記方向的書籤與標註記下翻之前的），開書時上一章、
+              // 下一章才不會反了。進度照備份的寫進來。
+              final existing = await _bookDao.getByUrl(book.bookUrl);
+              if (existing != null &&
+                  existing.getReverseToc() != book.getReverseToc()) {
+                await BookTocReverser().setReversed(
+                  existing,
+                  book.getReverseToc(),
+                );
+              }
               await _bookDao.upsert(book);
             }
             break;
@@ -454,13 +517,23 @@ class RestoreService {
             // 也照這樣轉。
             final noted = Highlight.fromLegadoBookmark(item);
             if (noted != null) {
-              await _highlightDao.upsertAll([noted]);
+              await _highlightDao.upsertAll([
+                noted.copyWith(
+                  tocReversed: tocReversedOf(noted.bookName, noted.bookAuthor),
+                ),
+              ]);
               break;
             }
             // 2026-09 以前的備份也有書籤，欄位不同，`Bookmark.fromJson` 都讀得懂。
             final bookmark = Bookmark.fromJson(item);
             if (bookmark.id > 0 && bookmark.bookName.isNotEmpty) {
-              await _bookmarkDao.upsertAll([bookmark]);
+              await _bookmarkDao.upsertAll([
+                bookmark.copyWith(
+                  tocReversed:
+                      bookmark.tocReversed ??
+                      tocReversedOf(bookmark.bookName, bookmark.bookAuthor),
+                ),
+              ]);
             }
             break;
           case 'highlight.json':
@@ -468,7 +541,13 @@ class RestoreService {
             if (highlight.id > 0 &&
                 highlight.bookName.isNotEmpty &&
                 highlight.quote.isNotEmpty) {
-              await _highlightDao.upsertAll([highlight]);
+              await _highlightDao.upsertAll([
+                highlight.copyWith(
+                  tocReversed:
+                      highlight.tocReversed ??
+                      tocReversedOf(highlight.bookName, highlight.bookAuthor),
+                ),
+              ]);
             }
             break;
           case 'aiFind.json':

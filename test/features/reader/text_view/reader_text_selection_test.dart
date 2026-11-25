@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/features/reader/chapter/reader_illustration.dart';
 import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
@@ -947,6 +949,31 @@ void main() {
           blocks,
         )!;
         expect(range.start, display.lastIndexOf('甲乙'));
+      });
+
+      test('原文和畫面上的繁簡不同時照轉換後的寫法找', () {
+        ChineseUtils.initializeFromDictionaryData([
+          for (final path in ChineseUtils.dictionaryAssetPaths)
+            File(path).readAsStringSync(),
+        ]);
+        // 預設簡轉繁：正文顯示成繁體，Legado 備份裡的原文是簡體。
+        final traditional = chapterOf(['她的頭髮亂了', '風很大']);
+        final shown = traditional.displayText;
+        final range = ReaderMarkGeometry.highlightRangeIn(
+          mark(shown.indexOf('頭'), '头发乱了', anchored: false),
+          traditional,
+        )!;
+        expect(shown.substring(range.start, range.end), '頭髮亂了');
+        // 讀者改成繁轉簡：正文是簡體，原文是繁體。
+        final simplified = chapterOf(['她的头发乱了', '风很大']);
+        final again = ReaderMarkGeometry.highlightRangeIn(
+          mark(3, '頭髮亂了\n　　風', anchored: false),
+          simplified,
+        )!;
+        expect(
+          simplified.displayText.substring(again.start, again.end),
+          '头发乱了\n\n风',
+        );
       });
 
       test('那一章找不到這段字時不畫', () {
