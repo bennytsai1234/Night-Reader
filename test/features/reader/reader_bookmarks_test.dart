@@ -28,7 +28,6 @@ void main() {
         ReaderBookmarks.chapterIndexIn(
           mark(),
           toc(['楔子', '第一章', '第二章', '第三章']),
-          reversed: false,
         ),
         3,
       );
@@ -39,75 +38,13 @@ void main() {
         ReaderBookmarks.chapterIndexIn(
           mark(chapterTitle: '第三章 松煙墨'),
           toc(['第一章', '第二章', '第三章 松烟墨']),
-          reversed: false,
         ),
         2,
       );
     });
 
     test('without the chapter list it keeps the stored number', () {
-      expect(
-        ReaderBookmarks.chapterIndexIn(mark(), const [], reversed: false),
-        2,
-      );
-    });
-
-    group('the TOC reversed since (ADR 0085)', () {
-      // 兩個同名的「番外」只能靠序號分。
-      const titles = ['第一章', '番外', '第二章', '番外', '第三章'];
-      Bookmark twin({required int index, bool? tocReversed}) => Bookmark(
-        id: 1,
-        bookName: '書',
-        chapterIndex: index,
-        chapterTitle: '番外',
-        tocReversed: tocReversed,
-      );
-
-      test('counted in the other direction: counted from the other end, '
-          'landing on the same 番外', () {
-        final reversed = toc(titles.reversed.toList());
-        expect(
-          ReaderBookmarks.chapterIndexIn(
-            twin(index: 3, tocReversed: false),
-            reversed,
-            reversed: true,
-          ),
-          1,
-        );
-        expect(
-          ReaderBookmarks.chapterIndexIn(
-            twin(index: 1, tocReversed: true),
-            toc(titles),
-            reversed: false,
-          ),
-          3,
-        );
-      });
-
-      test('no direction recorded (older versions, Legado) counts as the '
-          'book’s own', () {
-        expect(
-          ReaderBookmarks.chapterIndexIn(
-            twin(index: 3),
-            toc(titles.reversed.toList()),
-            reversed: true,
-          ),
-          3,
-        );
-      });
-
-      test('new chapters appended after a mark in a reversed book still find '
-          'the same 番外', () {
-        final grown = toc([...titles, '第四章', '番外', '第五章']);
-        expect(
-          ReaderBookmarks.chapterIndexIn(
-            twin(index: 3, tocReversed: true),
-            grown,
-            reversed: true,
-          ),
-          3,
-        );
-      });
+      expect(ReaderBookmarks.chapterIndexIn(mark(), const []), 2);
     });
   });
 
