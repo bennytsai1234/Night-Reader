@@ -40,7 +40,10 @@ void main() {
     server.listen((request) async {
       request.response.headers.contentType = ContentType.html;
       request.response.write(
-        request.uri.path == '/locked'
+        request.uri.path.startsWith('/echo/')
+            ? '<html><body><div id="content">'
+                  '${request.uri.path.substring(6)}</div></body></html>'
+            : request.uri.path == '/locked'
             ? '<html><body><h1>請先登入</h1>'
                   '<div id="content">請先登錄後閱讀</div></body></html>'
             : '<html><body><h1>第1章 開端</h1>'
@@ -141,6 +144,39 @@ void main() {
       );
       expect(broken.title, '第1章');
       expect(content, contains('第一章的正文'));
+    });
+  });
+
+  // 同 Legado `WebBook.getContentAwait`：章節那一頁的請求帶著這一章，網址裡
+  // 的規則讀 `title` 是章名，`java.put` 存進這一章。
+  group('the chapter request carries the chapter', () {
+    final source = BookSource.fromJson({
+      'bookSourceName': '測試',
+      'bookSourceUrl': 'http://local.test',
+      'ruleContent': {'content': 'id.content@text'},
+    });
+
+    test('java.get("title") in the chapter URL is the chapter title', () async {
+      final content = await CompleteContentFetcher.fetch(
+        source,
+        Book(bookUrl: 'http://local.test/book', origin: 'http://local.test'),
+        BookChapter(url: "$baseUrl/echo/{{java.get('title')}}", title: 'T1'),
+      );
+      expect(content, contains('T1'));
+    });
+
+    test('java.put in the chapter URL stores into the chapter', () async {
+      final book = Book(
+        bookUrl: 'http://local.test/book',
+        origin: 'http://local.test',
+      );
+      final chapter = BookChapter(
+        url: "$baseUrl/echo/a@js:java.put('k', 'v'); result",
+        title: 'T1',
+      );
+      await CompleteContentFetcher.fetch(source, book, chapter);
+      expect(chapter.getVariable('k'), 'v');
+      expect(book.getVariable('k'), isEmpty);
     });
   });
 }

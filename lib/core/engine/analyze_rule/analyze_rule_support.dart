@@ -49,27 +49,16 @@ class SourceRule {
     _splitAfterMakeUp = _evalPatternJson.hasMatch(rule);
     // 處理 ##regex##replacement 與 ### replaceFirst
     if (rule.contains('##') && !_splitAfterMakeUp) {
-      final rawParts = rule.split('##');
-      final parts = <String>[];
-      for (var i = 0; i < rawParts.length; i++) {
-        final part = rawParts[i];
-        if (i == rawParts.length - 1 && part.endsWith('#')) {
-          replaceFirst = true;
-          parts.add(part.substring(0, part.length - 1));
-        } else {
-          parts.add(part);
-        }
-      }
-
-      if (rule.startsWith('##')) {
+      final startsWithReplace = rule.startsWith('##');
+      final split = _splitReplace(rule);
+      replaceRegex = split.regex;
+      replacement = split.replacement;
+      replaceFirst = split.first;
+      if (startsWithReplace) {
         mode = Mode.regex;
         rule = ''; // 提取規則為空，表示對全文進行正則替換
-        if (parts.length > 1) replaceRegex = parts[1];
-        if (parts.length > 2) replacement = parts[2];
       } else {
-        rule = parts[0];
-        if (parts.length > 1) replaceRegex = parts[1];
-        if (parts.length > 2) replacement = parts[2];
+        rule = split.rule;
       }
     }
 
@@ -205,13 +194,27 @@ class SourceRule {
         replaceFirst,
       );
     }
-    final parts = made.split('##');
+    final split = _splitReplace(made);
     return SourceRule._made(
-      parts[0].trim(),
+      split.rule,
       mode,
-      parts.length > 1 ? parts[1] : '',
-      parts.length > 2 ? parts[2] : '',
-      parts.length > 3,
+      split.regex,
+      split.replacement,
+      split.first,
+    );
+  }
+
+  /// 規則照 `##` 切出取代式，同 Legado `SourceRule` 的 `split("##")`：`[0]`
+  /// 去頭尾空白是規則、`[1]` 正則、`[2]` 取代，切得出第四段（`###`）是只換
+  /// 第一個。取代式結尾單獨一個 `#` 照字面留著。
+  static ({String rule, String regex, String replacement, bool first})
+  _splitReplace(String rule) {
+    final parts = rule.split('##');
+    return (
+      rule: parts[0].trim(),
+      regex: parts.length > 1 ? parts[1] : '',
+      replacement: parts.length > 2 ? parts[2] : '',
+      first: parts.length > 3,
     );
   }
 

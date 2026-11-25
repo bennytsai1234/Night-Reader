@@ -42,6 +42,17 @@ void main() {
     );
   });
 
+  // 同 Legado `split("##")`：切出第四段才是只換第一個，取代式結尾的 `#`
+  // 照字面留著；第四段之後還有字也一樣是只換第一個。
+  test('取代式結尾只有一個 # 時照字面、每一處都換', () {
+    expect(rule('<p>甲乙甲</p>').getString(r'p@text##甲##丙#'), '丙#乙丙#');
+  });
+
+  test('### 後面還有字也是只換第一個', () {
+    expect(rule(html).getString(r'class.info@text##作者：(\S+)##$1###x'), '張三');
+    expect(rule(html).getString(r'class.info@text##作者：(\S+)##$1####'), '張三');
+  });
+
   test('正則寫壞時 ### 交出取代式、## 照純文字取代', () {
     expect(rule(html).getString(r'class.info@text##作者：(##X###'), 'X');
     expect(rule('<p>甲(乙</p>').getString(r'p@text##(乙##丙'), '甲丙');
