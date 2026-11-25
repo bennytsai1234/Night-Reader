@@ -448,6 +448,13 @@ class RestoreService {
             break;
           case 'bookmark.json':
           case 'bookmarks.json':
+            // Legado 書籤的附註（`content`）在夜讀是標註的備忘（ADR 0044）：
+            // 有附註的轉成一筆帶備忘的標註，畫在書籤記的原文上。
+            final noted = Highlight.fromLegadoBookmark(item);
+            if (noted != null) {
+              await _highlightDao.upsertAll([noted]);
+              break;
+            }
             // 2026-09 以前的備份也有書籤，欄位不同，`Bookmark.fromJson` 都讀得懂。
             final bookmark = Bookmark.fromJson(item);
             if (bookmark.id > 0 && bookmark.bookName.isNotEmpty) {

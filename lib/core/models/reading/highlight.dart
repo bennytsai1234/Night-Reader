@@ -123,6 +123,37 @@ class Highlight {
     'note': note,
   };
 
+  /// Legado 備份裡寫了附註的書籤（`bookmark.json` 一筆，有 `content`）換成的
+  /// 標註：畫在書籤記的原文（`bookText`，選字加的是選到的字、從選單加的是
+  /// 那一頁的字）上，附註是備忘，編號照建立時間（同讀 Legado 書籤）。不是
+  /// Legado 的書籤（夜讀自己的有 `excerpt`）、沒有附註或沒有原文時是 null，
+  /// 照書籤讀。
+  static Highlight? fromLegadoBookmark(Map<String, dynamic> json) {
+    if (json.containsKey('excerpt')) return null;
+    String readString(String key) {
+      final value = json[key];
+      return value is String ? value : '';
+    }
+
+    final note = readString('content').trim();
+    final quote = readString('bookText');
+    final id = readJsonInt(json['time'], fallback: 0);
+    final bookName = readString('bookName');
+    if (note.isEmpty || quote.trim().isEmpty || id <= 0 || bookName.isEmpty) {
+      return null;
+    }
+    return Highlight(
+      id: id,
+      bookName: bookName,
+      bookAuthor: readString('bookAuthor'),
+      chapterIndex: readJsonInt(json['chapterIndex'], fallback: 0),
+      chapterTitle: readString('chapterName'),
+      charOffset: readJsonInt(json['chapterPos'], fallback: 0),
+      quote: quote,
+      note: note,
+    );
+  }
+
   factory Highlight.fromJson(Map<String, dynamic> json) {
     String readString(String key) {
       final value = json[key];

@@ -615,15 +615,24 @@ void main() {
       );
     });
 
-    test('書籤的位置與原文照 Legado 的欄位還原', () async {
+    test('書籤的位置與原文照 Legado 的欄位還原；寫了附註的變成帶備忘的標註', () async {
       await RestoreService().restoreFromZip(await legadoZip('legado-mark.zip'));
       final bookmarks = (await BookmarkDao(
         db,
       ).getAll()).where((b) => b.bookName == '雪中悍刀行').toList();
-      expect(bookmarks.map((b) => b.excerpt), containsAll(['天下第二', '開頭']));
-      final first = bookmarks.firstWhere((b) => b.excerpt == '天下第二');
-      expect(first.chapterTitle, '第四章');
-      expect(first.charOffset, 20);
+      expect(bookmarks.map((b) => b.excerpt), ['開頭']);
+      expect(bookmarks.single.chapterTitle, '第六章');
+      // Legado 書籤的附註（`content`）在夜讀是標註的備忘（ADR 0044）。
+      final noted = (await HighlightDao(
+        db,
+      ).getAll()).where((h) => h.bookName == '雪中悍刀行').single;
+      expect(noted.id, 1700000000123);
+      expect(noted.bookAuthor, '烽火戏诸侯');
+      expect(noted.chapterIndex, 3);
+      expect(noted.chapterTitle, '第四章');
+      expect(noted.charOffset, 20);
+      expect(noted.quote, '天下第二');
+      expect(noted.note, '這句要記住');
     });
 
     test('閱讀時長從毫秒換成秒，同一本書各台的時間加起來', () async {
