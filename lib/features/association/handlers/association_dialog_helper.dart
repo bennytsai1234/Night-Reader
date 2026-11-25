@@ -12,6 +12,8 @@ import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_rule_import_sheet.dart';
 import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/source/book_link_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/features/source_manager/widgets/import_preview_sheet.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
@@ -19,6 +21,48 @@ import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 
 /// AssociationHandlerService 的對話框與 UI 邏輯擴展
 mixin AssociationDialogHelper on AssociationBase {
+  /// 加入書架的連結找書用的（測試換成假的書源）。
+  @visibleForTesting
+  BookLinkService Function() bookLinks = BookLinkService.new;
+
+  @override
+  Future<void> addBookFromLink(BuildContext context, String url) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final links = bookLinks();
+    final Book book;
+    try {
+      book = await links.findBook(url);
+    } catch (error, stackTrace) {
+      messenger.showSnackBar(
+        SnackBar(content: UiText(failureMessage('加入書架', error, stackTrace))),
+      );
+      return;
+    }
+    if (!context.mounted) return;
+    final author = book.author.trim();
+    final confirmed = await showAppAlert<bool>(
+      context: context,
+      title: '外部匯入',
+      message:
+          '偵測到外部內容：\n$url\n\n'
+          '《${book.name}》${author.isEmpty ? '' : '　$author'}\n'
+          '書源：${book.originName}',
+      actions: const [
+        AppAlertAction(label: '加入書架', value: true, isDefault: true),
+        AppAlertAction(label: '取消', value: false),
+      ],
+    );
+    if (confirmed != true) return;
+    try {
+      await links.addToShelf(book);
+      messenger.showSnackBar(SnackBar(content: UiText('已加入書架：《${book.name}》')));
+    } catch (error, stackTrace) {
+      messenger.showSnackBar(
+        SnackBar(content: UiText(failureMessage('加入書架', error, stackTrace))),
+      );
+    }
+  }
+
   @override
   void showLinkImportDialog(
     BuildContext context,

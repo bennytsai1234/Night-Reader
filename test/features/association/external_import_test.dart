@@ -1,15 +1,22 @@
+import 'dart:async';
 import 'dart:io';
+
+import 'package:dio/dio.dart';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/source/book_link_service.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/features/association/association_handler_service.dart';
 import 'package:night_reader/features/association/import_content.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -31,6 +38,21 @@ const _rssSource =
 const _bookSourceLink =
     'yuedu://booksource/importonline?src='
     'https://www.yckceo.com/yuedu/shuyuan/json/id/7720.json';
+
+/// 書的詳情：書名「夜航」；抓完時 [fetched] 完成。
+class _Details extends BookSourceService {
+  Completer<void> fetched = Completer<void>();
+
+  @override
+  Future<Book> getBookInfo(
+    BookSource source,
+    Book book, {
+    CancelToken? cancelToken,
+  }) async {
+    if (!fetched.isCompleted) fetched.complete();
+    return book.copyWith(name: '夜航', author: '某人');
+  }
+}
 
 void main() {
   group('detectImportContentKind', () {
@@ -168,19 +190,63 @@ void main() {
       expect(find.byType(SnackBar), findsNothing);
     });
 
-    testWidgets('加入書架的連結跳出匯入書架的確認框', (tester) async {
-      final context = await pumpHost(tester);
-      service.handleUri(
-        context,
-        Uri.parse(
-          'legado://import/addToBookshelf?src='
-          'https%3A%2F%2Fexample.com%2Fbooks.json',
-        ),
-      );
-      await tester.pumpAndSettle();
+    group('加入書架的連結（src 是一本書的網址）', () {
+      late AppDatabase db;
+      final details = _Details();
 
-      expect(find.text('外部匯入'), findsOneWidget);
-      expect(find.text('匯入書架'), findsOneWidget);
+      setUp(() async {
+        db = AppDatabase.forTesting(NativeDatabase.memory());
+        await BookSourceDao(db).upsert(
+          BookSource(bookSourceUrl: 'https://a.example', bookSourceName: '甲站'),
+        );
+        service.bookLinks = () => BookLinkService(
+          sourceDao: BookSourceDao(db),
+          bookDao: BookDao(db),
+          service: details,
+        );
+      });
+
+      tearDown(() async {
+        service.bookLinks = BookLinkService.new;
+        await db.close();
+      });
+
+      Uri link(String url) => Uri.parse(
+        'legado://import/addToBookshelf?src=${Uri.encodeComponent(url)}',
+      );
+
+      testWidgets('抓到詳情後用外部匯入的確認框問，按「加入書架」才加', (tester) async {
+        final context = await pumpHost(tester);
+        service.handleUri(context, link('https://a.example/book/1'));
+        await tester.runAsync(() => details.fetched.future);
+        await tester.pumpAndSettle();
+
+        expect(find.text('外部匯入'), findsOneWidget);
+        expect(find.textContaining('《夜航》'), findsOneWidget);
+        expect(find.textContaining('甲站'), findsOneWidget);
+        expect(await BookDao(db).getInBookshelf(), isEmpty);
+
+        await tester.tap(find.text('加入書架'));
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pumpAndSettle();
+
+        expect(find.text('已加入書架：《夜航》'), findsOneWidget);
+        expect(
+          (await tester.runAsync(() => BookDao(db).getInBookshelf()))!
+              .map((book) => book.name),
+          ['夜航'],
+        );
+      });
+
+      testWidgets('找不到書源時說原因，不跳確認框', (tester) async {
+        final context = await pumpHost(tester);
+        service.handleUri(context, link('https://b.example/book/1'));
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pumpAndSettle();
+
+        expect(find.text('外部匯入'), findsNothing);
+        expect(find.text('加入書架失敗：找不到符合這個網址的書源'), findsOneWidget);
+      });
     });
 
     testWidgets('沒帶 src 的連結不理（同 Legado）', (tester) async {
