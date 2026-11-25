@@ -32,12 +32,14 @@ void main() {
 
   late HttpServer server;
   late String baseUrl;
+  final hits = <String>[];
 
   setUpAll(() async {
     await NetworkService().init();
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     baseUrl = 'http://${server.address.address}:${server.port}';
     server.listen((request) async {
+      hits.add(request.uri.path);
       request.response.headers.contentType = ContentType.html;
       request.response.write(
         request.uri.path.startsWith('/echo/')
@@ -177,6 +179,40 @@ void main() {
       await CompleteContentFetcher.fetch(source, book, chapter);
       expect(chapter.getVariable('k'), 'v');
       expect(book.getVariable('k'), isEmpty);
+    });
+  });
+
+  // 同 Legado `WebBook.getContentAwait`：章節網址就是書的網址、目錄頁還在手上
+  // （詳情頁就是目錄頁時存著的那一頁）就直接解析，不再抓一次。
+  group('a chapter whose URL is the book URL', () {
+    final source = BookSource.fromJson({
+      'bookSourceName': '測試',
+      'bookSourceUrl': 'http://local.test',
+      'ruleContent': {'content': 'id.content@text'},
+    });
+    setUp(hits.clear);
+
+    test('parses the stored TOC page without fetching it again', () async {
+      final book = Book(bookUrl: '$baseUrl/one', origin: 'http://local.test')
+        ..tocHtml = '<html><body><div id="content">存著的那頁</div></body></html>';
+      final content = await CompleteContentFetcher.fetch(
+        source,
+        book,
+        BookChapter(url: book.bookUrl, title: '全文'),
+      );
+      expect(content, contains('存著的那頁'));
+      expect(hits, isEmpty);
+    });
+
+    test('fetches it when no TOC page is stored', () async {
+      final book = Book(bookUrl: '$baseUrl/one', origin: 'http://local.test');
+      final content = await CompleteContentFetcher.fetch(
+        source,
+        book,
+        BookChapter(url: book.bookUrl, title: '全文'),
+      );
+      expect(content, contains('第一章的正文'));
+      expect(hits, ['/one']);
     });
   });
 }

@@ -849,6 +849,7 @@ Future<List<SearchBook>> _searchLoader(
   BookSource source,
   String key, {
   CancelToken? cancelToken,
+  int page = 1,
 }) => Future.delayed(const Duration(milliseconds: 200), () {
   final answers = _searchAnswers[source.bookSourceUrl] ?? const [];
   return [
