@@ -491,6 +491,39 @@ void main() {
       );
     });
 
+    test('準備到一半另一台切了反轉目錄：準備好的目錄照最新的開關翻過來再對章，'
+        '存下的目錄方向和開關一致', () async {
+      final service = switcher(_SitesBookSourceService({'a': _titles(10)}), [
+        ordered('a', 0),
+      ]);
+      final book = _currentBook();
+      final prepared = (await service.prepareAutomaticSwitch(
+        book,
+        chapterTitle: '第6章',
+      ))!;
+      expect(prepared.chapters.first.title, '第1章');
+      final latest = book.copyWith()..readConfig = ReadConfig(reverseToc: true);
+
+      final rebased = service.rebase(prepared, latest)!;
+      expect(rebased.migratedBook.readConfig!.reverseToc, isTrue);
+      expect(rebased.chapters.first.title, '第10章');
+      expect([
+        for (final chapter in rebased.chapters) chapter.index,
+      ], List.generate(10, (i) => i));
+      expect(rebased.targetChapterIndex, 4);
+      expect(rebased.targetChapter.title, '第6章');
+      expect(rebased.migratedBook.chapterIndex, 4);
+
+      // 再切回來：照樣翻回書源給的順序。
+      final back = service.rebase(
+        rebased,
+        book.copyWith()..readConfig = ReadConfig(),
+      )!;
+      expect(back.migratedBook.readConfig!.reverseToc, isFalse);
+      expect(back.chapters.first.title, '第1章');
+      expect(back.targetChapterIndex, 5);
+    });
+
     test('取消時不換也不丟錯誤', () async {
       final cancel = CancelToken()..cancel();
       final sites = _SitesBookSourceService({'a': _titles(10)});

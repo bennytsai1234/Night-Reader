@@ -292,24 +292,36 @@ class SourceSwitchService {
     final title = targetChapterTitle ?? latest.durChapterTitle;
     if (title == null) return null;
     final alignment = latest.copyWith(durChapterTitle: title);
-    final migrated = _migrate(
-      alignment,
-      prepared.migratedBook,
-      prepared.chapters,
-    );
-    if (migrated.index != prepared.targetChapterIndex ||
-        !sameChapterTitle(prepared.chapters[migrated.index].title, title)) {
+    // 準備的途中切了反轉目錄（另一台同步來的）：準備好的目錄照最新的開關
+    // 翻過來再對章，存下的目錄方向才和開關一致（[BookTocReverser]）。
+    final reverse =
+        _migratedReverseToc(latest, prepared.migratedBook) !=
+        prepared.migratedBook.getReverseToc();
+    final chapters = reverse
+        ? reversedToc(prepared.chapters)
+        : prepared.chapters;
+    final target = reverse
+        ? chapters.length - 1 - prepared.targetChapterIndex
+        : prepared.targetChapterIndex;
+    final migrated = _migrate(alignment, prepared.migratedBook, chapters);
+    if (migrated.index != target ||
+        !sameChapterTitle(chapters[migrated.index].title, title)) {
       return null;
     }
     return PreparedSourceSwitch(
       searchBook: prepared.searchBook,
       source: prepared.source,
       migratedBook: migrated.book,
-      chapters: prepared.chapters,
+      chapters: chapters,
       targetChapterIndex: migrated.index,
       validatedContent: prepared.validatedContent,
     );
   }
+
+  /// [from] 搬到 [to] 之後（[Book.migrateTo]）這本書的反轉目錄：帶著 [from]
+  /// 的閱讀設定，[from] 沒有時留著 [to] 的。
+  static bool _migratedReverseToc(Book from, Book to) =>
+      (from.readConfig ?? to.readConfig)?.reverseToc ?? false;
 
   /// [from] 的閱讀進度與書架上的設定搬到新書源的 [to]（[Book.migrateTo]）；
   /// [index] 是讀到的那一章在 [chapters] 的位置。
@@ -382,8 +394,8 @@ class SourceSwitchService {
     // 目錄要照它的反轉目錄排（[BookTocReverser]）；新書源的目錄是照抓的那
     // 一份的設定抓的。
     final chapters =
-        (hydratedBook.readConfig?.reverseToc ?? false) ==
-            (currentBook.readConfig?.reverseToc ?? false)
+        _migratedReverseToc(currentBook, hydratedBook) ==
+            hydratedBook.getReverseToc()
         ? fetched
         : reversedToc(fetched);
 
