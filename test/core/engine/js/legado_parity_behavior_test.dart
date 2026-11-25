@@ -104,6 +104,13 @@ void main() {
       ),
       '[::1]|http://[::1]:8080',
     );
+    expect(
+      eval(
+        'new Packages.java.net.URL("http://[::1]:8080/a").getHost() + "|" + '
+        'okhttp3.HttpUrl.parse("http://[::1]:8080/a").host()',
+      ),
+      '[::1]|::1',
+    );
   }, skip: skip);
 
   test('source.login runs the login program in the login URL', () {

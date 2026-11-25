@@ -151,10 +151,20 @@ class ExploreUrlParser {
     return trimmed.startsWith('{') && trimmed.endsWith('}');
   }
 
-  /// 解析 JSON 陣列格式的 exploreUrl，同 Legado 用 Gson 的寬鬆模式讀
+  /// 先照標準 JSON 讀，讀不了再照 Legado 用 Gson 的寬鬆模式讀（多的逗號、
+  /// 單引號、不加引號的名稱）。
+  static Object? _decodeJson(String jsonStr) {
+    try {
+      return jsonDecode(jsonStr);
+    } on FormatException {
+      return decodeLenientJson(jsonStr);
+    }
+  }
+
+  /// 解析 JSON 陣列格式的 exploreUrl
   static List<ExploreKind> _parseJsonArray(String jsonStr) {
     try {
-      final decoded = decodeLenientJson(jsonStr);
+      final decoded = _decodeJson(jsonStr);
       if (decoded is! List) return [];
       return decoded
           .whereType<Map>()
@@ -168,7 +178,7 @@ class ExploreUrlParser {
 
   static List<ExploreKind> _parseJsonObject(String jsonStr) {
     try {
-      final decoded = decodeLenientJson(jsonStr);
+      final decoded = _decodeJson(jsonStr);
       if (decoded is! Map) return [];
       return [ExploreKind.fromJson(Map<String, dynamic>.from(decoded))];
     } catch (e) {

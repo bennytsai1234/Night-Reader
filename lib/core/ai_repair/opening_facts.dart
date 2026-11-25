@@ -123,7 +123,8 @@ String? otherDomainsFact(BookSource source, SourceProbeReport probe) {
       return;
     }
     if (!target.scheme.startsWith('http') || target.host.isEmpty) return;
-    if (NetworkUtils.getSubDomain('${target.scheme}://${target.host}') == own) {
+    if (NetworkUtils.getSubDomain(NetworkUtils.getBaseUrl('$target') ?? '') ==
+        own) {
       final host = target.host.toLowerCase();
       if (host != ownHost) {
         siteCounts.update(host, (n) => n + 1, ifAbsent: () => 1);

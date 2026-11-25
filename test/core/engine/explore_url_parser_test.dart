@@ -18,6 +18,13 @@ void main() {
     expect(kinds.map((k) => k.title), ['玄幻', '都市']);
   });
 
+  test('標準 JSON 照標準讀：空的欄位名照收', () {
+    final kinds = ExploreUrlParser.parse(
+      '[{"title":"排行","url":"/a","":"metadata"}]',
+    );
+    expect(kinds.single.title, '排行');
+  });
+
   test('單一物件的字串裡的逗號也留著', () {
     final kinds = ExploreUrlParser.parse(
       '{"title":"排行","url":"/list?filter={a,}"}',
