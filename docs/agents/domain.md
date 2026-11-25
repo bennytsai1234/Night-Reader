@@ -7,7 +7,7 @@
 - 根目錄的 **`GLOSSARY.md`**。
 - **`docs/adr/`**：讀和這次要動的區域有關的 ADR。
 
-這些檔案不存在時**直接繼續**，不要提出它們不存在，也不要建議先建立。`/domain-modeling` 技能（經由 `/grill-with-docs` 與 `/improve-codebase-architecture` 觸發）會在用語或決定真的定案時才建立它們。
+這些檔案不存在時**直接繼續**，不要提出它們不存在，也不要建議先建立。`domain-modeling` 技能會在用語或決定真的定案時才建立它們。
 
 ## 檔案結構
 
