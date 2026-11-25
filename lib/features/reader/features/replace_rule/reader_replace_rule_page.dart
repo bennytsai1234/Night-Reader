@@ -259,7 +259,7 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
         appBar: _buildHeader(editing: editing),
         body: Builder(builder: _buildBody),
         bottomNavigationBar: editing
-            ? ReplaceRuleSelectBar(
+            ? ReaderReplaceRuleSelectBar(
                 hasSelection: _selectedIds.isNotEmpty,
                 onEnable: () => _setSelectedEnabled(true),
                 onDisable: () => _setSelectedEnabled(false),

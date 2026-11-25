@@ -7,8 +7,8 @@ import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 
 /// 替換規則多選時底部的玻璃工具列：只有啟用、停用、刪除三個動作。
-class ReplaceRuleSelectBar extends StatelessWidget {
-  const ReplaceRuleSelectBar({
+class ReaderReplaceRuleSelectBar extends StatelessWidget {
+  const ReaderReplaceRuleSelectBar({
     super.key,
     required this.hasSelection,
     required this.onEnable,
