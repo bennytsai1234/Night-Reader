@@ -25,12 +25,13 @@ abstract class AssociationBase {
     String url,
   );
 
-  /// 沒寫類型的連結：先下載內容，再照 [detectImportContentKind] 判斷。
+  /// 沒寫類型的連結：先下載內容，再照 [detectImportContent] 判斷。
   Future<void> importUntypedLink(BuildContext context, String url);
 
-  /// 已經拿到內容（分享的檔案或文字）：照 [detectImportContentKind] 判斷。
-  /// [label] 是對話框裡指稱這份內容的名字，例如檔名。
-  void importContent(BuildContext context, String label, String text);
+  /// 已經拿到內容（分享的檔案或文字）：照 [detectImportContent] 判斷，判斷完
+  /// 跳出對話框就結束（不等讀者按）。[label] 是對話框裡指稱這份內容的名字，
+  /// 例如檔名。
+  Future<void> importContent(BuildContext context, String label, String text);
 
   void dispose() {
     linkSubscription?.cancel();
