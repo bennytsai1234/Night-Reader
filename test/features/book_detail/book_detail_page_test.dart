@@ -509,4 +509,19 @@ void main() {
     bookDao.gate.complete();
     await tester.pumpAndSettle();
   });
+
+  testWidgets('編輯資訊沒有自訂標籤欄', (tester) async {
+    await pumpDetail(tester, bookWith());
+    bookDao.gate.complete();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_horiz_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('編輯資訊'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('編輯書籍資訊'), findsOneWidget);
+    expect(find.text('自訂標籤'), findsNothing);
+    expect(find.text('分類'), findsOneWidget);
+  });
 }

@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
@@ -221,5 +224,48 @@ void main() {
     await tester.tap(find.text('完成'));
     await tester.pumpAndSettle();
     expect(find.text('替換規則'), findsOneWidget);
+  });
+  testWidgets('多選後匯出選中的規則：照套用順序複製成 Legado 讀得懂的 JSON', (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await addRules(tester);
+    await openPage(tester);
+    await settle(tester);
+
+    await tester.longPress(find.text('去空白'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('選取'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('去廣告'));
+    await settle(tester);
+
+    await tester.tap(find.text('匯出'));
+    await tester.pumpAndSettle();
+    expect(find.text('分享選中'), findsOneWidget);
+    await tester.tap(find.text('匯出選中'));
+    await settle(tester);
+
+    final exported = jsonDecode(copied!) as List<dynamic>;
+    expect(
+      [for (final rule in exported) (rule as Map)['name']],
+      ['去廣告', '去空白'],
+    );
+    expect((exported.first as Map)['isEnabled'], isTrue);
+    expect((exported.first as Map)['isRegex'], isTrue);
+    expect(find.text('已複製至剪貼簿'), findsOneWidget);
   });
 }

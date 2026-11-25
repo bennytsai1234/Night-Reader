@@ -30,46 +30,61 @@ class TxtParser {
   /// Legado 內建、預設啟用的 TXT 目錄規則（`assets/defaultData/txtTocRule.json`），
   /// 照它的排序。另外打開「目录(古典、轻小说备用)」：它只比「目录」多認
   /// 「回」「话」「场」，Legado 預設關著時「第一回」的古典小說分不出章。
+  ///
+  /// 比 Legado 多認繁體與全形（L7）：數字收 兩、萬、億、貳、參、陸 與全形
+  /// ０–９，章節單位收「節」與「迴」；簡體與半形的寫法照樣認得。
   static final List<RegExp> tocRules = [
     // 目录(去空白)
-    r'(?<=[　\s])(?:序章|楔子|正文(?!完|结)|终章|后记|尾声|番外|第\s{0,4}[\d〇零一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+?\s{0,4}(?:章|节(?!课)|卷|集(?![合和]))).{0,30}$',
+    r'(?<=[　\s])(?:序章|楔子|正文(?!完|结)|终章|后记|尾声|番外|第\s{0,4}[\d０-９〇零一二两兩三四五六七八九十百千万萬亿億壹贰貳叁參肆伍陆陸柒捌玖拾佰仟]+?\s{0,4}(?:章|节(?!课)|節(?!課)|卷|集(?![合和]))).{0,30}$',
     // 目录
-    r'^[ 　\t]{0,4}(?:序章|楔子|正文(?!完|结)|终章|后记|尾声|番外|第\s{0,4}[\d〇零一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+?\s{0,4}(?:章|节(?!课)|卷|集(?![合和])|部(?![分赛游])|篇(?!张))).{0,30}$',
+    r'^[ 　\t]{0,4}(?:序章|楔子|正文(?!完|结)|终章|后记|尾声|番外|第\s{0,4}[\d０-９〇零一二两兩三四五六七八九十百千万萬亿億壹贰貳叁參肆伍陆陸柒捌玖拾佰仟]+?\s{0,4}(?:章|节(?!课)|節(?!課)|卷|集(?![合和])|部(?![分赛游])|篇(?!张))).{0,30}$',
     // 目录(古典、轻小说备用)
-    r'^[ 　\t]{0,4}(?:序章|楔子|正文(?!完|结)|终章|后记|尾声|番外|第\s{0,4}[\d〇零一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+?\s{0,4}(?:章|节(?!课)|卷|集(?![合和])|部(?![分赛游])|回(?![合来事去])|场(?![和合比电是])|话|篇(?!张))).{0,30}$',
+    r'^[ 　\t]{0,4}(?:序章|楔子|正文(?!完|结)|终章|后记|尾声|番外|第\s{0,4}[\d０-９〇零一二两兩三四五六七八九十百千万萬亿億壹贰貳叁參肆伍陆陸柒捌玖拾佰仟]+?\s{0,4}(?:章|节(?!课)|節(?!課)|卷|集(?![合和])|部(?![分赛游])|回(?![合来事去])|迴(?![合來来事去])|场(?![和合比电是])|话|篇(?!张))).{0,30}$',
     // 数字 分隔符 标题名称
-    r'^[ 　\t]{0,4}\d{1,5}[:：,.， 、_—\-].{1,30}$',
+    r'^[ 　\t]{0,4}[\d０-９]{1,5}[:：,.， 、_—\-].{1,30}$',
     // 大写数字 分隔符 标题名称
-    r'^[ 　\t]{0,4}(?:序章|楔子|正文(?!完|结)|终章|后记|尾声|番外|[零一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]{1,8}章?)[ 、_—\-].{1,30}$',
+    r'^[ 　\t]{0,4}(?:序章|楔子|正文(?!完|结)|终章|后记|尾声|番外|[零一二两兩三四五六七八九十百千万萬亿億壹贰貳叁參肆伍陆陸柒捌玖拾佰仟]{1,8}章?)[ 、_—\-].{1,30}$',
     // 正文 标题/序号
     r'^[ 　\t]{0,4}正文[ 　]{1,4}.{0,20}$',
     // Chapter/Section/Part/Episode 序号 标题
-    r'^[ 　\t]{0,4}(?:[Cc]hapter|[Ss]ection|[Pp]art|ＰＡＲＴ|[Nn][oO][.、]|[Ee]pisode|(?:内容|文章)?简介|文案|前言|序章|楔子|正文(?!完|结)|终章|后记|尾声|番外)\s{0,4}\d{1,4}.{0,30}$',
+    r'^[ 　\t]{0,4}(?:[Cc]hapter|[Ss]ection|[Pp]art|ＰＡＲＴ|[Nn][oO][.、]|[Ee]pisode|(?:内容|文章)?简介|文案|前言|序章|楔子|正文(?!完|结)|终章|后记|尾声|番外)\s{0,4}[\d０-９]{1,4}.{0,30}$',
     // 特殊符号 序号 标题
-    r'(?<=[\s　])[【〔〖「『〈［\[](?:第|[Cc]hapter)[\d零一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]{1,10}[章节].{0,20}$',
+    r'(?<=[\s　])[【〔〖「『〈［\[](?:第|[Cc]hapter)[\d０-９零一二两兩三四五六七八九十百千万萬亿億壹贰貳叁參肆伍陆陸柒捌玖拾佰仟]{1,10}[章节節].{0,20}$',
     // 特殊符号 标题(单个)
     r'(?<=[\s　]{0,4})(?:[☆★✦✧].{1,30}|(?:内容|文章)?简介|文案|前言|序章|楔子|正文(?!完|结)|终章|后记|尾声|番外)[ 　]{0,4}$',
     // 章/卷 序号 标题
-    r'^[ \t　]{0,4}(?:(?:内容|文章)?简介|文案|前言|序章|楔子|正文(?!完|结)|终章|后记|尾声|番外|[卷章][\d零一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]{1,8})[ 　]{0,4}.{0,30}$',
+    r'^[ \t　]{0,4}(?:(?:内容|文章)?简介|文案|前言|序章|楔子|正文(?!完|结)|终章|后记|尾声|番外|[卷章][\d０-９零一二两兩三四五六七八九十百千万萬亿億壹贰貳叁參肆伍陆陸柒捌玖拾佰仟]{1,8})[ 　]{0,4}.{0,30}$',
     // 书名 括号 序号
-    r'^[一-龥]{1,20}[ 　\t]{0,4}[(（][\d〇零一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]{1,8}[)）][ 　\t]{0,4}$',
+    r'^[一-龥]{1,20}[ 　\t]{0,4}[(（][\d０-９〇零一二两兩三四五六七八九十百千万萬亿億壹贰貳叁參肆伍陆陸柒捌玖拾佰仟]{1,8}[)）][ 　\t]{0,4}$',
     // 书名 序号
-    r'^[一-龥]{1,20}[ 　\t]{0,4}[\d〇零一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]{1,8}[ 　\t]{0,4}$',
+    r'^[一-龥]{1,20}[ 　\t]{0,4}[\d０-９〇零一二两兩三四五六七八九十百千万萬亿億壹贰貳叁參肆伍陆陸柒捌玖拾佰仟]{1,8}[ 　\t]{0,4}$',
     // 字数分割 分节阅读
-    r'(?<=[ 　\t]{0,4})(?:.{0,15}分[页节章段]阅读[-_ ]|第\s{0,4}[\d零一二两三四五六七八九十百千万]{1,6}\s{0,4}[页节]).{0,30}$',
+    r'(?<=[ 　\t]{0,4})(?:.{0,15}分[页節节章段]阅读[-_ ]|第\s{0,4}[\d０-９零一二两兩三四五六七八九十百千万萬亿億]{1,6}\s{0,4}[页節节]).{0,30}$',
   ].map((rule) => RegExp(rule, multiLine: true)).toList(growable: false);
 
   TxtParser(this.file);
 
   Future<void> load() async {}
 
-  /// 掃描文件並獲取章節位移 (不讀取全量內容入記憶體)
+  /// 掃描文件並獲取章節位移 (不讀取全量內容入記憶體)。[charset] 給了就照它
+  /// 解碼（讀者在「更多」手動指定的編碼）；沒給時照 [EncodingDetect.getEncode]
+  /// 偵測。
   Future<({List<Map<String, dynamic>> chapters, String charset})>
-  splitChapters({RegExp? customPattern}) async {
+  splitChapters({RegExp? customPattern, String? charset}) async {
     final bytes = await file.readAsBytes();
-    final charsetName = EncodingDetect.getEncode(bytes);
-    final content = EncodingDetect.decode(bytes);
-    final bomLength = EncodingDetect.bomLength(bytes);
+    return splitBytes(bytes, customPattern: customPattern, charset: charset);
+  }
+
+  /// 解碼 [bytes] 並分章；回傳的章節範圍是檔案裡的位元組位移。自動偵測與
+  /// 手動指定編碼走同一條路。
+  static ({List<Map<String, dynamic>> chapters, String charset}) splitBytes(
+    Uint8List bytes, {
+    RegExp? customPattern,
+    String? charset,
+  }) {
+    final charsetName = charset ?? EncodingDetect.getEncode(bytes);
+    final content = EncodingDetect.decodeWithCharset(bytes, charsetName);
+    final bomLength = EncodingDetect.bomLengthFor(bytes, charsetName);
 
     final sampleEnd = bytes.length < bomLength + _tocSampleBytes
         ? bytes.length
@@ -243,7 +258,7 @@ class TxtParser {
     ];
   }
 
-  Map<int, int> _buildByteOffsets({
+  static Map<int, int> _buildByteOffsets({
     required Uint8List bytes,
     required String content,
     required String charsetName,
@@ -276,7 +291,7 @@ class TxtParser {
     return byteOffsets;
   }
 
-  Map<int, int>? _buildExactByteOffsets({
+  static Map<int, int>? _buildExactByteOffsets({
     required Uint8List bytes,
     required String charsetName,
     required int initialByteOffset,
@@ -313,7 +328,10 @@ class TxtParser {
     if (normalized == 'UTF-16LE' ||
         normalized == 'UTF16LE' ||
         normalized == 'UTF-16BE' ||
-        normalized == 'UTF16BE') {
+        normalized == 'UTF16BE' ||
+        normalized == 'UTF-16' ||
+        normalized == 'UTF16' ||
+        normalized == 'UNICODE') {
       while (index + 1 < bytes.length) {
         advance(2, 1);
       }
@@ -357,7 +375,10 @@ class TxtParser {
     return null;
   }
 
-  ({int byteLength, int codeUnits}) _utf8UnitAt(Uint8List bytes, int index) {
+  static ({int byteLength, int codeUnits}) _utf8UnitAt(
+    Uint8List bytes,
+    int index,
+  ) {
     final first = bytes[index];
     if (first <= 0x7F) {
       return (byteLength: 1, codeUnits: 1);
@@ -396,7 +417,7 @@ class TxtParser {
     return (byteLength: 1, codeUnits: 1);
   }
 
-  bool _isValidUtf8SecondByte(Uint8List bytes, int index, int first) {
+  static bool _isValidUtf8SecondByte(Uint8List bytes, int index, int first) {
     if (index + 1 >= bytes.length) return false;
     final second = bytes[index + 1];
     if (first == 0xE0) return second >= 0xA0 && second <= 0xBF;
@@ -406,7 +427,7 @@ class TxtParser {
     return second >= 0x80 && second <= 0xBF;
   }
 
-  bool _isUtf8Continuation(Uint8List bytes, int index) {
+  static bool _isUtf8Continuation(Uint8List bytes, int index) {
     return index < bytes.length && bytes[index] >= 0x80 && bytes[index] <= 0xBF;
   }
 

@@ -11,15 +11,34 @@ int alignChapterIndex({
   required String? oldTitle,
   required int oldTotalCount,
   required List<BookChapter> newChapters,
+}) => alignChapter(
+  oldIndex: oldIndex,
+  oldTitle: oldTitle,
+  oldTotalCount: oldTotalCount,
+  newChapters: newChapters,
+).index;
+
+/// 同 [alignChapterIndex]，另說這一章是不是真的找到（同名、去掉章號的章名
+/// 或章號）；都不是、只照比例估時 `matched` 是 false。書籤與標註換目錄時
+/// 拿它判斷「對不到舊目錄就跳過」。
+({int index, bool matched}) alignChapter({
+  required int oldIndex,
+  required String? oldTitle,
+  required int oldTotalCount,
+  required List<BookChapter> newChapters,
 }) {
-  if (newChapters.isEmpty) return oldIndex;
+  if (newChapters.isEmpty) return (index: oldIndex, matched: false);
   final matcher = ChapterMatcher(newChapters);
-  return matcher.sameChapter(
-        oldIndex: oldIndex,
-        oldTitle: oldTitle,
-        oldTotalCount: oldTotalCount,
-      ) ??
-      matcher.estimate(oldIndex: oldIndex, oldTotalCount: oldTotalCount);
+  final found = matcher.sameChapter(
+    oldIndex: oldIndex,
+    oldTitle: oldTitle,
+    oldTotalCount: oldTotalCount,
+  );
+  if (found != null) return (index: found, matched: true);
+  return (
+    index: matcher.estimate(oldIndex: oldIndex, oldTotalCount: oldTotalCount),
+    matched: false,
+  );
 }
 
 /// 在一份目錄 [chapters] 裡找舊目錄的某一章。一份目錄要找很多章時（檢查

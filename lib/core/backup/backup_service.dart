@@ -14,6 +14,8 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/models/source/book_source_serialization.dart';
 import 'package:night_reader/core/app_update/app_version.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,7 +30,7 @@ import 'package:night_reader/core/sync/sync_settings.dart';
 class BackupService {
   /// 只屬於這台手機的設定：不寫進備份，還原時也不套用（舊的備份可能帶著）。
   /// 這台在同步裡的名字與從別台還原進來的閱讀時間、下載佇列的「暫停全部」、
-  /// 找過沒有書源的書，與離開時蓋住畫面、解鎖才能打開（另一台不一定有指紋，
+  /// 找過沒有書源的書，與「離開時」（另一台不一定有指紋，
   /// ADR 0083）。
   static final Set<String> deviceOnlyKeys = {
     SyncSettings.deviceIdKey,
@@ -222,8 +224,6 @@ class BackupService {
 
   static const Map<String, List<String>> _legadoSwitches = {
     'bookshelf.json': ['canUpdate', 'isInBookshelf'],
-    'bookSource.json': ['enabled', 'enabledExplore', 'enabledCookieJar'],
-    'replaceRule.json': ['scopeTitle', 'scopeContent', 'isEnabled', 'isRegex'],
   };
 
   static Map<String, dynamic> _legadoReadable(
@@ -231,6 +231,11 @@ class BackupService {
     Map<String, dynamic> json,
   ) {
     switch (name) {
+      // 書源與替換規則和匯出、分享共用同一份轉換。
+      case 'bookSource.json':
+        return BookSourceSerialization.legadoJsonOf(json);
+      case 'replaceRule.json':
+        return ReplaceRule.legadoJsonOf(json);
       // Legado 的閱讀時長以毫秒記（`ReadBook.upReadTime`）。
       case 'readRecord.json':
         return {...json, 'readTime': (json['readTime'] as int? ?? 0) * 1000};

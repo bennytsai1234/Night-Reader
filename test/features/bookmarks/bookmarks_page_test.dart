@@ -12,6 +12,7 @@ import 'package:night_reader/core/models/reading/read_record.dart';
 import 'package:night_reader/features/bookmarks/bookmarks_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 
 void main() {
   late AppDatabase db;
@@ -152,7 +153,15 @@ void main() {
     double top(String text) => tester.getTopLeft(find.text(text)).dy;
     expect(find.text('書籤那一句'), findsNothing);
     expect(top('前面畫的字'), lessThan(top('後面畫的字')));
-    expect(find.byTooltip('匯出標註'), findsOneWidget);
+    expect(find.byTooltip('匯出書籤與標註'), findsOneWidget);
+    await closePage(tester);
+  });
+
+  testWidgets('只有書籤、沒有標註時也能匯出', (tester) async {
+    await pumpPage(tester, [mark(1, '夜雨聽書', excerpt: '燈下的字句')]);
+    final button = tester.widget<GlassIconButton>(find.byType(GlassIconButton));
+    expect(button.onPressed, isNotNull);
+    expect(find.byTooltip('匯出書籤與標註'), findsOneWidget);
     await closePage(tester);
   });
 

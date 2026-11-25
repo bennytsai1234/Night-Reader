@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/features/replace_rule/replace_rule_exchange.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_preview.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_form.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_options.dart';
@@ -168,10 +170,10 @@ class _ReaderReplaceRuleEditorSheetState
     );
   }
 
-  Future<void> _save() async {
-    if (_saving) return;
-    if (!_formKey.currentState!.validate()) return;
-    final rule = ReplaceRule(
+  /// 畫面上的這條規則：儲存與「複製規則」都用它。編號與順序是打開的那一條
+  /// 的，畫面上不能改。
+  ReplaceRule _ruleFromForm() {
+    return ReplaceRule(
       id: widget.rule?.id ?? 0,
       name: _nameCtrl.text.trim(),
       group: _groupCtrl.text.trim(),
@@ -187,6 +189,12 @@ class _ReaderReplaceRuleEditorSheetState
       scopeContent: _scopeContent,
       order: widget.rule?.order ?? 0,
     );
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    if (!_formKey.currentState!.validate()) return;
+    final rule = _ruleFromForm();
     if (!rule.isValid()) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: UiText('規則格式無效，請檢查正則內容')));
@@ -204,6 +212,57 @@ class _ReaderReplaceRuleEditorSheetState
       ).showSnackBar(SnackBar(content: UiText(failureMessage('儲存規則', error))));
       setState(() => _saving = false);
     }
+  }
+
+  /// 把畫面上的這條規則複製成 JSON（Legado 讀得懂，同 Legado 編輯頁的
+  /// 「複製規則」）。
+  Future<void> _copyRule() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await Clipboard.setData(
+        ClipboardData(text: encodeReplaceRule(_ruleFromForm())),
+      );
+      messenger.showSnackBar(const SnackBar(content: UiText('已複製至剪貼簿')));
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: UiText(failureMessage('複製規則', error))),
+      );
+    }
+  }
+
+  /// 從剪貼簿貼一條規則進來：欄位換成那一條的，編號與順序留著這一條的
+  /// （同 Legado）；按「儲存」才存。剪貼簿裡不是規則時欄位不動。
+  Future<void> _pasteRule() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ClipboardData? data;
+    try {
+      data = await Clipboard.getData(Clipboard.kTextPlain);
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: UiText(failureMessage('貼上規則', error))),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final rule = decodeOneReplaceRule(data?.text);
+    if (rule == null) {
+      messenger.showSnackBar(const SnackBar(content: UiText('剪貼簿裡不是替換規則')));
+      return;
+    }
+    setState(() {
+      _nameCtrl.text = rule.name;
+      _groupCtrl.text = rule.group ?? '';
+      _timeoutCtrl.text = rule.timeoutMillisecond.toString();
+      _patternCtrl.text = rule.pattern;
+      _replacementCtrl.text = rule.replacement;
+      _scopeCtrl.text = rule.scope ?? '';
+      _excludeScopeCtrl.text = rule.excludeScope ?? '';
+      _isEnabled = rule.isEnabled;
+      _isRegex = rule.isRegex;
+      _scopeTitle = rule.scopeTitle;
+      _scopeContent = rule.scopeContent;
+    });
+    _runTest();
   }
 
   @override
@@ -264,6 +323,25 @@ class _ReaderReplaceRuleEditorSheetState
                 margin: EdgeInsets.zero,
                 testInputCtrl: _testInputCtrl,
                 testResult: _testResult,
+              ),
+              // 頁首右邊只放「儲存」，複製、貼上放最下面（同書源編輯頁的
+              // 「除錯書源」）。
+              GroupedSection(
+                margin: EdgeInsets.zero,
+                children: [
+                  GroupedRow(
+                    title: '複製規則',
+                    accent: true,
+                    showChevron: false,
+                    onTap: _copyRule,
+                  ),
+                  GroupedRow(
+                    title: '貼上規則',
+                    accent: true,
+                    showChevron: false,
+                    onTap: _pasteRule,
+                  ),
+                ],
               ),
             ],
           ),

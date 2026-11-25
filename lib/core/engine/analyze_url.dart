@@ -44,6 +44,10 @@ class AnalyzeUrl {
   final String baseUrl;
   final BaseSource? source;
   final dynamic ruleData;
+
+  /// 這個請求是哪一章的（同 Legado `AnalyzeUrl.chapter`）：抓正文、播音訊時
+  /// 給。網址裡的規則讀 `title` 是它的章名，`java.put` 先存進它。
+  final dynamic chapter;
   final String? speakText;
   final int? speakSpeed;
 
@@ -92,6 +96,7 @@ class AnalyzeUrl {
     this.baseUrl = '',
     this.source,
     this.ruleData,
+    this.chapter,
     Map<String, String>? headers,
     bool loginHeaders = true,
   }) {
@@ -162,6 +167,7 @@ class AnalyzeUrl {
       ruleData: ruleData,
     );
     rule
+      ..chapter = chapter
       ..key = key
       ..page = page ?? 1
       ..baseUrl = _jsBaseUrl

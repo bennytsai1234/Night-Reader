@@ -49,17 +49,15 @@ void main() {
 
   Future<BookDetailProvider> openDetail({
     String? intro,
+    Book? book,
     BookCoverStorageService? coverStorage,
   }) async {
-    final book = bookAt(
-      oldUrl,
-      'https://old.example',
-      inShelf: false,
-      intro: intro,
-    );
-    await db.chapterDao.insertChapters(chaptersOf(oldUrl, 3));
+    final source =
+        book ??
+        bookAt(oldUrl, 'https://old.example', inShelf: false, intro: intro);
+    await db.chapterDao.insertChapters(chaptersOf(source.bookUrl, 3));
     final provider = BookDetailProvider(
-      AggregatedSearchBook(book: book, sources: []),
+      AggregatedSearchBook(book: source, sources: []),
       entrance: Future<void>.value(),
       bookDao: db.bookDao,
       chapterDao: db.chapterDao,
@@ -208,6 +206,21 @@ void main() {
       expect(stored.name, '新書名');
       expect(stored.totalChapterNum, 12);
       expect(stored.latestChapterTitle, '第十二章');
+    },
+  );
+
+  test(
+    'editing book info keeps the custom tag that is no longer shown',
+    () async {
+      final source = bookAt(oldUrl, 'https://old.example', inShelf: true)
+        ..customTag = '想看';
+      await db.bookDao.saveJoinedShelf(source);
+      final provider = await openDetail(book: source);
+
+      final edited = await provider.updateBookInfo('新書名', '作者', '', '');
+      expect(edited.success, isTrue);
+      expect(provider.book.customTag, '想看');
+      expect((await db.bookDao.getByUrl(oldUrl))?.customTag, '想看');
     },
   );
 

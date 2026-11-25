@@ -225,6 +225,59 @@ void main() {
     );
   });
 
+  test('備份裡的書源與替換規則：照 toJson 的欄位與順序，只有開關換成 true／false', () async {
+    final source = BookSource(
+      bookSourceUrl: 'https://exact.example',
+      bookSourceName: '丙',
+      enabled: false,
+      enabledExplore: true,
+      enabledCookieJar: false,
+    );
+    final rule = ReplaceRule(
+      id: 9,
+      name: '規則丙',
+      pattern: 'c',
+      scopeTitle: true,
+      scopeContent: false,
+      isEnabled: false,
+    );
+    await BookSourceDao(db).upsert(source);
+    await ReplaceRuleDao(db).upsert(rule);
+
+    final zip = await BackupService().createBackupZip();
+    final archive = ZipDecoder().decodeBytes(await zip!.readAsBytes());
+    List<dynamic> entry(String name) =>
+        jsonDecode(utf8.decode(archive.findFile(name)!.content as List<int>));
+
+    final storedSource = (await BookSourceDao(db)
+        .getByUrl(source.bookSourceUrl))!;
+    final storedRule = (await ReplaceRuleDao(
+      db,
+    ).getAll()).firstWhere((r) => r.id == 9);
+    expect(
+      jsonEncode(
+        entry('bookSource.json')
+            .firstWhere((s) => s['bookSourceUrl'] == source.bookSourceUrl),
+      ),
+      jsonEncode({
+        ...storedSource.toJson(),
+        'enabled': false,
+        'enabledExplore': true,
+        'enabledCookieJar': false,
+      }),
+    );
+    expect(
+      jsonEncode(entry('replaceRule.json').firstWhere((r) => r['id'] == 9)),
+      jsonEncode({
+        ...storedRule.toJson(),
+        'scopeTitle': true,
+        'scopeContent': false,
+        'isEnabled': false,
+        'isRegex': true,
+      }),
+    );
+  });
+
   test('閱讀時長照 Legado 寫成毫秒、書籤多寫 Legado 的欄位，夜讀還原回來不變', () async {
     await ReadRecordDao(db).restoreByBookName(
       ReadRecord(deviceId: 'd', bookName: '時長書', readTime: 7200, lastRead: 5),

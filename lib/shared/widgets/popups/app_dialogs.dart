@@ -454,6 +454,33 @@ class _IrreversibleLine extends StatelessWidget {
   }
 }
 
+/// 提示框內的一張分組卡片（[AppAlert.content]）：幾格輸入框，或一列開關。
+/// 要勾好幾項的不放提示框，用底部面板。
+class AlertGroupedCard extends StatelessWidget {
+  const AlertGroupedCard({super.key, required this.rows});
+
+  final List<Widget> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: AppRadius.cardMd,
+      child: ColoredBox(
+        color: AppChrome.of(context).groupedBackground,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < rows.length; i++) ...[
+              if (i > 0) const InsetSeparator(indent: AppGrouped.rowPadding),
+              rows[i],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// 提示框內的輸入框：分組底色的圓角欄位，沒有外框線。
 class AlertTextField extends StatelessWidget {
   const AlertTextField({

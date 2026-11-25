@@ -82,8 +82,14 @@ class RestoreService {
 
   /// 從備份包 (ZIP) 恢復所有數據
   ///
+  /// [restoreSettings] 是 false 時設定（`config.json`）不動、保留這台的，
+  /// 其他資料照樣還原；登入資料不算設定（ADR 0039）。
+  ///
   /// 讀不到檔案時丟出例外，交給呼叫端顯示原因。
-  Future<RestoreResult> restoreFromZip(File zipFile) async {
+  Future<RestoreResult> restoreFromZip(
+    File zipFile, {
+    bool restoreSettings = true,
+  }) async {
     final path = zipFile.path;
     // 解壓縮與 JSON 解析在背景 isolate 做：備份含已下載的正文時有幾十 MB，
     // 在畫面執行緒上一次解完會卡住將近半秒。
@@ -122,7 +128,11 @@ class RestoreService {
         ? () async {}
         : await DownloadService().holdForRestore(downloadBooks);
     try {
-      return await _restore(backup, fromLegado: fromLegado);
+      return await _restore(
+        backup,
+        fromLegado: fromLegado,
+        restoreSettings: restoreSettings,
+      );
     } finally {
       await releaseDownloads();
     }
@@ -136,6 +146,7 @@ class RestoreService {
   Future<RestoreResult> _restore(
     _DecodedBackup backup, {
     required bool fromLegado,
+    required bool restoreSettings,
   }) async {
     var restoredAny = false;
     final failedFiles = <String>[];
@@ -154,6 +165,8 @@ class RestoreService {
           !LoginDataBackup.files.contains(fileName)) {
         continue;
       }
+      // 不還原設定時連讀都不讀，設定檔壞了也不算失敗。
+      if (!restoreSettings && fileName == _settingsFile) continue;
       try {
         if (error != null) throw error;
         if (LoginDataBackup.files.contains(fileName)) {
@@ -167,7 +180,7 @@ class RestoreService {
             fromLegado: fromLegado,
           );
           restoredAny = restoredAny || restored;
-        } else if (fileName == 'config.json' &&
+        } else if (fileName == _settingsFile &&
             decoded is Map<String, dynamic>) {
           final restored = await _restorePreferences(
             TabBarLook.migrateBackup(decoded),
@@ -257,9 +270,13 @@ class RestoreService {
     'readerChapterContents.json',
   };
 
+  /// 設定：備份那台偏好設定裡的每一項（[BackupService.deviceOnlyKeys] 以外），
+  /// 含外觀、閱讀、朗讀、書架顯示、同步空間與 AI 服務。
+  static const String _settingsFile = 'config.json';
+
   /// 夜讀會還原的檔；登入資料另見 [LoginDataBackup.files]，閱讀統計另外
   /// 收（[_readStatsFiles]）。
-  static const Set<String> _restorableFiles = {..._listFiles, 'config.json'};
+  static const Set<String> _restorableFiles = {..._listFiles, _settingsFile};
 
   /// 任一檔讀不出來就整組不還原，免得累計與每日只換了一半。備份那台用過
   /// 同步（[fromDevice]）時記下還原了哪些，同步時不再算一次（ADR 0039）。
