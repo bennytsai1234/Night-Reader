@@ -426,6 +426,12 @@ class LocalBookService {
   static Future<void> recoverOnce(BookDao bookDao) =>
       _recovery ??= recoverInterruptedUpdates(bookDao);
 
+  /// 測試用：當成這次已經收過（每項測試的資料夾都是新的，沒有沒做完的
+  /// 更新）。收尾要讀真的檔案系統，元件測試（`testWidgets`）裡等不到它，
+  /// 讀本地書、同步本地書就卡住；前一項測試留下的那一次也不能沿用。
+  @visibleForTesting
+  static void markRecoveredForTesting() => _recovery = Future<void>.value();
+
   /// 更新原檔（[_updateOriginal]）做到一半 App 被關掉時留下的：照資料庫裡
   /// 這本書的指紋決定，已經是新檔的就收尾（刪掉舊檔），還不是就退回舊檔。
   static Future<void> recoverInterruptedUpdates(BookDao bookDao) async {
