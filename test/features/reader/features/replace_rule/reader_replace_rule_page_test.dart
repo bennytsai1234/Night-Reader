@@ -6,7 +6,9 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_page.dart';
+import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_select_bar.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 
 void main() {
@@ -117,6 +119,48 @@ void main() {
     expect(find.text('去廣告'), findsOneWidget);
     expect(find.text('修標點'), findsOneWidget);
     expect(find.text('去空白'), findsOneWidget);
+  });
+
+  testWidgets('多選工具列從畫面外滑進，離開時滑出去', (tester) async {
+    await addRules(tester);
+    await openPage(tester);
+    await settle(tester);
+    expect(find.byType(ReaderReplaceRuleSelectBar), findsNothing);
+
+    await tester.longPress(find.text('去廣告'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('選取'));
+    await tester.pump();
+
+    final screenHeight =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    final start = tester.getRect(find.byType(ReaderReplaceRuleSelectBar));
+    expect(start.top, greaterThanOrEqualTo(screenHeight), reason: '第一幀還在畫面外');
+
+    await tester.pump(AppMotion.menu * 0.5);
+    final midway = tester.getRect(find.byType(ReaderReplaceRuleSelectBar));
+    expect(midway.top, lessThan(start.top));
+    expect(midway.top, greaterThan(0));
+
+    await tester.pump(AppMotion.menu);
+    final resting = tester.getRect(find.byType(ReaderReplaceRuleSelectBar));
+    expect(resting.top, lessThan(midway.top));
+    expect(resting.bottom, lessThanOrEqualTo(screenHeight));
+    expect(resting.bottom, greaterThan(screenHeight - 100));
+
+    await tester.tap(find.text('完成'));
+    await tester.pump();
+    final leavingStart = tester.getRect(
+      find.byType(ReaderReplaceRuleSelectBar),
+    );
+    expect(leavingStart.top, greaterThanOrEqualTo(resting.top));
+
+    await tester.pump(AppMotion.menu * 0.5);
+    final leaving = tester.getRect(find.byType(ReaderReplaceRuleSelectBar));
+    expect(leaving.top, greaterThan(resting.top));
+
+    await tester.pumpAndSettle();
+    expect(find.byType(ReaderReplaceRuleSelectBar), findsNothing);
   });
 
   testWidgets('多選後一起停用選中的規則', (tester) async {

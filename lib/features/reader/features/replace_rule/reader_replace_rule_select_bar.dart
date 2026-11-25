@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
@@ -28,40 +27,32 @@ class ReaderReplaceRuleSelectBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final actionsEnabled = hasSelection;
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.only(bottom: AppGlass.tabBarBottomGap),
-      child: Padding(
-        // 和規則清單的卡片左右切齊（平板上收在內容欄裡）。
-        padding: ReadableWidth.cardInsetOf(context),
-        child: FloatingGlassToolbar(
-          height: height,
-          child: Row(
-            children: [
-              Expanded(
-                child: _BarTextButton(
-                  label: '啟用',
-                  color: scheme.onSurface,
-                  onTap: actionsEnabled ? onEnable : null,
-                ),
-              ),
-              Expanded(
-                child: _BarTextButton(
-                  label: '停用',
-                  color: scheme.onSurface,
-                  onTap: actionsEnabled ? onDisable : null,
-                ),
-              ),
-              Expanded(
-                child: _BarTextButton(
-                  label: '刪除',
-                  color: context.danger,
-                  onTap: actionsEnabled ? onDelete : null,
-                ),
-              ),
-            ],
+    return FloatingGlassToolbar(
+      height: height,
+      child: Row(
+        children: [
+          Expanded(
+            child: _BarTextButton(
+              label: '啟用',
+              color: scheme.onSurface,
+              onTap: actionsEnabled ? onEnable : null,
+            ),
           ),
-        ),
+          Expanded(
+            child: _BarTextButton(
+              label: '停用',
+              color: scheme.onSurface,
+              onTap: actionsEnabled ? onDisable : null,
+            ),
+          ),
+          Expanded(
+            child: _BarTextButton(
+              label: '刪除',
+              color: context.danger,
+              onTap: actionsEnabled ? onDelete : null,
+            ),
+          ),
+        ],
       ),
     );
   }

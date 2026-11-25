@@ -11,6 +11,7 @@ import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/sync/replace_rule_sync.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_editor_sheet.dart';
 import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_select_bar.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -258,15 +259,60 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
         extendBodyBehindAppBar: true,
         appBar: _buildHeader(editing: editing),
         body: Builder(builder: _buildBody),
-        bottomNavigationBar: editing
-            ? ReaderReplaceRuleSelectBar(
-                hasSelection: _selectedIds.isNotEmpty,
-                onEnable: () => _setSelectedEnabled(true),
-                onDisable: () => _setSelectedEnabled(false),
-                onDelete: _confirmDeleteSelected,
-              )
-            : null,
       ),
+    );
+  }
+
+  /// 規則清單與多選工具列疊在一起：工具列浮在清單下緣，進出場只滑動、
+  /// 不淡（ADR 0022，同書架的多選工具列）。
+  Widget _buildBody(BuildContext context) {
+    final inset = ReadableWidth.cardInsetOf(context);
+    return Stack(
+      children: [
+        Positioned.fill(child: _buildRuleContent(context)),
+        Positioned(
+          left: inset.left,
+          right: inset.right,
+          bottom:
+              MediaQuery.paddingOf(context).bottom + AppGlass.tabBarBottomGap,
+          child: _buildSelectBar(context),
+        ),
+      ],
+    );
+  }
+
+  /// 多選的工具列：進場照選單 200ms easeOutCubic、離場同長度 easeInCubic
+  /// （同書架的多選工具列）；系統關閉動畫時直接出現、直接消失。
+  Widget _buildSelectBar(BuildContext context) {
+    final gap = MediaQuery.paddingOf(context).bottom + AppGlass.tabBarBottomGap;
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : AppMotion.menu;
+    return AnimatedSwitcher(
+      duration: duration,
+      switchInCurve: AppMotion.menuCurve,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) => AnimatedBuilder(
+        animation: animation,
+        child: child,
+        builder: (context, child) => GlassSlide(
+          shown: animation.value,
+          edge: AxisDirection.down,
+          gap: gap,
+          child: child!,
+        ),
+      ),
+      child: _editing
+          ? ReaderReplaceRuleSelectBar(
+              key: const ValueKey('replace-rule-select-bar'),
+              hasSelection: _selectedIds.isNotEmpty,
+              onEnable: () => _setSelectedEnabled(true),
+              onDisable: () => _setSelectedEnabled(false),
+              onDelete: _confirmDeleteSelected,
+            )
+          : const SizedBox.shrink(
+              key: ValueKey('replace-rule-select-bar-hidden'),
+            ),
     );
   }
 
@@ -331,7 +377,7 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
     );
   }
 
-  Widget _buildBody(BuildContext context) {
+  Widget _buildRuleContent(BuildContext context) {
     final padding = MediaQuery.paddingOf(context);
     final visible = _visibleRules;
     final noResults = !_loading && _rules.isNotEmpty && visible.isEmpty;
@@ -379,6 +425,13 @@ class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
               child: GroupedListView(
                 ready: !_loading,
                 loadingLabel: '正在載入替換規則',
+                // 多選時工具列浮在清單下緣，最後一條要留在它上面；和平常
+                // 一樣再加上組間距。
+                bottomPadding: _editing
+                    ? AppGlass.tabBarBottomGap +
+                          ReaderReplaceRuleSelectBar.height +
+                          AppGrouped.sectionGap
+                    : AppGrouped.sectionGap,
                 children: [
                   GroupedSection(
                     separatorIndent: _editing
