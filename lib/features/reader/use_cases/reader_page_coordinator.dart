@@ -483,6 +483,7 @@ class ReaderPageCoordinator {
         chapterIndex: ReaderBookmarks.chapterIndexIn(
           bookmark,
           runtime.chapters,
+          reversed: _host.book.getReverseToc(),
         ),
       ),
       settled: settled,
@@ -548,6 +549,7 @@ class ReaderPageCoordinator {
         chapterIndex: ReaderHighlights.chapterIndexIn(
           highlight,
           runtime.chapters,
+          reversed: _host.book.getReverseToc(),
         ),
       ),
       settled: settled,

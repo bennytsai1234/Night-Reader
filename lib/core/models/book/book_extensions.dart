@@ -115,6 +115,9 @@ extension BookExtensions on BookBase {
   }
 
   bool getReSegment() => readConfig?.reSegment ?? false;
+
+  /// 這本書的目錄反轉了沒（「反轉目錄」，[BookTocReverser]）。
+  bool getReverseToc() => readConfig?.reverseToc ?? false;
 }
 
 /// Book 位元運算擴展

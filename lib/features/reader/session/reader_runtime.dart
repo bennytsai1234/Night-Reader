@@ -272,6 +272,12 @@ class ReaderRuntime extends ChangeNotifier {
       await repository.ensureChapters();
       await _loadChapterShares();
       if (!isCurrentOperationToken(token)) return;
+      // 開書時本地 EPUB 重轉、目錄變了：位置是舊目錄的序號，照章名對過去。
+      location = location.copyWith(
+        chapterIndex: repository.takeRefreshedChapterIndex(
+          location.chapterIndex,
+        ),
+      );
       if (jumped == null) {
         if (chapterTitle != null && chapterTitle.isNotEmpty) {
           location = location.copyWith(

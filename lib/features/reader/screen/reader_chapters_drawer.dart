@@ -8,6 +8,7 @@ import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/models/reading/bookmark.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/reading/highlight.dart';
+import 'package:night_reader/core/models/book/toc_search.dart';
 import 'package:night_reader/core/models/book/toc_volumes.dart';
 import 'package:night_reader/features/reader/text_view/overlay/highlight_marks.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_style.dart';
@@ -20,6 +21,7 @@ import 'package:night_reader/shared/widgets/glass/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:night_reader/shared/widgets/lists/swipe_actions.dart';
 import 'package:night_reader/shared/widgets/book/locked_chapter_icon.dart';
+import 'package:night_reader/shared/widgets/book/toc_search_dialog.dart';
 import 'package:night_reader/shared/widgets/book/toc_volume_row.dart';
 import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
@@ -123,6 +125,35 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
   late Set<int> _collapsed;
   late List<int> _rows;
 
+  /// 目錄搜尋（「搜尋目錄」，同書籍詳情）；空的是沒在搜。搜尋時只列章名
+  /// 對得到的（[tocTitleMatches]），不照卷收起。每次打開清掉。
+  String _query = '';
+
+  List<int> _rowsFor() => _query.isEmpty
+      ? _volumes.rows(_collapsed)
+      : [
+          for (var i = 0; i < widget.chapters.length; i++)
+            if (tocTitleMatches(widget.chapters[i].title, _query)) i,
+        ];
+
+  /// 換了搜尋字：照新的結果排列、捲回頂端；清掉搜尋時捲回目前這章。
+  void _setQuery(String query) {
+    if (!mounted || query == _query) return;
+    setState(() {
+      _query = query;
+      _rows = _rowsFor();
+    });
+    if (query.isEmpty) {
+      _lastScrolledChapterIndex = -1;
+      _scheduleScrollToCurrentChapter();
+    } else if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+  }
+
+  Future<void> _openSearch() =>
+      showTocSearchDialog(context, initial: _query, onChanged: _setQuery);
+
   @override
   void initState() {
     super.initState();
@@ -142,6 +173,7 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
     _resetPending = false;
     _tab = _DrawerTab.chapters;
     _opening++;
+    _query = '';
     _resetVolumes();
     _lastScrolledChapterIndex = -1;
     _scheduleScrollToCurrentChapter();
@@ -150,19 +182,19 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
   void _resetVolumes() {
     _volumes = TocVolumes(widget.chapters);
     _collapsed = _volumes.initiallyCollapsed(_currentChapterIndex);
-    _rows = _volumes.rows(_collapsed);
+    _rows = _rowsFor();
   }
 
   /// 目前這章所在的卷收著時展開，打勾的那章一定看得到。
   void _revealCurrentChapter() {
     final volume = _volumes.volumeAt(_currentChapterIndex);
-    if (_collapsed.remove(volume)) _rows = _volumes.rows(_collapsed);
+    if (_collapsed.remove(volume)) _rows = _rowsFor();
   }
 
   void _toggleVolume(int volume) {
     setState(() {
       if (!_collapsed.remove(volume)) _collapsed.add(volume);
-      _rows = _volumes.rows(_collapsed);
+      _rows = _rowsFor();
     });
   }
 
@@ -188,7 +220,7 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
       final volumes = TocVolumes(widget.chapters);
       if (volumes.sameVolumes(_volumes)) {
         _volumes = volumes;
-        _rows = volumes.rows(_collapsed);
+        _rows = _rowsFor();
       } else {
         _resetVolumes();
         _lastScrolledChapterIndex = -1;
@@ -228,11 +260,13 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
     final chapterTitle = widget.titleFor(index);
     final Widget tile;
     if (widget.chapters[index].isVolume) {
+      // 搜尋時不照卷收起（同書籍詳情）。
+      final grouped = _query.isEmpty;
       tile = TocVolumeRow(
         title: chapterTitle,
         count: _volumes.countOf(index),
-        collapsed: _collapsed.contains(index),
-        onToggle: () => _toggleVolume(index),
+        collapsed: grouped ? _collapsed.contains(index) : null,
+        onToggle: grouped ? () => _toggleVolume(index) : null,
       );
     } else {
       final isCurrentChapter = _currentChapterIndex == index;
@@ -245,7 +279,9 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
         title: chapterTitle,
         titleWidget: Padding(
           padding: EdgeInsets.only(
-            left: _volumes.volumeOf(index) >= 0 ? tocChapterIndent : 0,
+            left: _query.isEmpty && _volumes.volumeOf(index) >= 0
+                ? tocChapterIndent
+                : 0,
           ),
           child: DragOverflowText(
             child: UiText(
@@ -417,21 +453,57 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
             if (tab == _DrawerTab.chapters) _scheduleScrollToCurrentChapter();
           },
         ),
-        const Spacer(),
-        switch (_tab) {
-          _DrawerTab.chapters => _countLabel(
-            theme,
-            '共 ${_volumes.chapterCount} 章',
+        // 右側在分段之後剩下的寬度裡靠右；字放不下時拖著看（過長文字）。
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: switch (_tab) {
+              _DrawerTab.chapters => _buildChapterActions(theme),
+              _DrawerTab.bookmarks => _buildMarksActions<Bookmark>(
+                theme,
+                valueListenable: widget.bookmarks!,
+              ),
+              _DrawerTab.highlights => _buildMarksActions<Highlight>(
+                theme,
+                valueListenable: widget.highlights!,
+              ),
+            },
           ),
-          _DrawerTab.bookmarks => _buildMarksActions<Bookmark>(
-            theme,
-            valueListenable: widget.bookmarks!,
+        ),
+      ],
+    );
+  }
+
+  /// 目錄頁右上：共幾章（搜尋時寫找到幾章）與「搜尋目錄」，和書籤頁的
+  /// 幾個加「匯出」同樣大小；搜尋中圖示用強調色，點了在提示框裡改字或
+  /// 清空（面板窄，不另放清除鈕）。
+  Widget _buildChapterActions(ThemeData theme) {
+    final searching = _query.isNotEmpty;
+    final total = _volumes.chapterCount;
+    final found = searching
+        ? _rows.where((index) => !widget.chapters[index].isVolume).length
+        : total;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: DragOverflowText(
+            child: _countLabel(
+              theme,
+              searching ? '$found/$total 章' : '共 $total 章',
+            ),
           ),
-          _DrawerTab.highlights => _buildMarksActions<Highlight>(
-            theme,
-            valueListenable: widget.highlights!,
+        ),
+        IconButton(
+          tooltip: context.ui('搜尋目錄'),
+          visualDensity: VisualDensity.compact,
+          icon: Icon(
+            Icons.search_rounded,
+            size: 20,
+            color: searching ? theme.colorScheme.primary : null,
           ),
-        },
+          onPressed: _openSearch,
+        ),
       ],
     );
   }
@@ -489,7 +561,7 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
       ),
   ];
 
-  Widget _countLabel(ThemeData theme, String text) => UiText(
+  UiText _countLabel(ThemeData theme, String text) => UiText(
     text,
     style: AppTextStyles.uiSm.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
@@ -673,6 +745,16 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
   }
 
   Widget _buildChapterList(BuildContext context) {
+    if (_query.isNotEmpty && _rows.isEmpty) {
+      return AppStateView(
+        icon: Icons.search_off,
+        title: '找不到相符章節',
+        primaryAction: AppStateAction(
+          label: '清除搜尋',
+          onPressed: () => _setQuery(''),
+        ),
+      );
+    }
     return ChapterScrollbar(
       itemCount: _rows.length,
       visibleRange: _visibleRange,

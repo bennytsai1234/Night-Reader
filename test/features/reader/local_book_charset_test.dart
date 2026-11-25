@@ -46,6 +46,7 @@ Future<Book> _seedWrongCharsetBook(WidgetTester tester) async {
           title: chapter['title'] as String,
           start: chapter['start'] as int,
           end: chapter['end'] as int,
+          isVolume: false,
         ),
     ]);
     await getIt<BookDao>().upsert(book);

@@ -312,6 +312,15 @@ void main() {
       expect(picked!.map((c) => c.url), ['b', 'y', 'c']);
     });
 
+    test('still means the same chapters after the TOC was reversed', () {
+      // 排進來時是 [a, b, c, d]，選了 b–c；開跑前讀者反轉了目錄。
+      final now = toc(['d', 'c', 'b', 'a']);
+
+      final picked = chaptersInDownloadScope(now, range(from: 'b', to: 'c'));
+
+      expect(picked!.map((c) => c.url), ['c', 'b']);
+    });
+
     test('without ends is the whole book, skipping volume headings and '
         'paid chapters', () {
       final now = toc(['a', 'b', 'c', 'd']);

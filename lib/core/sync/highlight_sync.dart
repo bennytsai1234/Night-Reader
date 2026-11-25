@@ -21,7 +21,8 @@ class HighlightSync extends SyncKind {
       SyncRecord(time: 0, data: highlight.toJson()..remove('id'));
 
   /// 標註的內容是「哪本書、哪一章（章名）的第幾個字起、畫了哪段字、什麼
-  /// 顏色與樣子、備忘寫了什麼」。章節序號與錨點同書籤，只是這台目錄裡的座標，不算改過。
+  /// 顏色與樣子、備忘寫了什麼」。章節序號與錨點同書籤，只是這台目錄裡的座標，不算改過；
+  /// 記下序號時的目錄方向同書籤，記了就算。
   @override
   SyncFingerprint get fingerprint => _fingerprintOf;
 
@@ -35,6 +36,7 @@ class HighlightSync extends SyncKind {
       'bookAuthor': data['bookAuthor'],
       if (hasTitle) 'chapterTitle': title.trim(),
       if (!hasTitle) 'chapterIndex': data['chapterIndex'],
+      'tocReversed': ?data['tocReversed'],
       'charOffset': data['charOffset'],
       'quote': data['quote'],
       'color': data['color'],

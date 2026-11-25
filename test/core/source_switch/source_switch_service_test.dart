@@ -491,6 +491,39 @@ void main() {
       );
     });
 
+    test('準備到一半另一台切了反轉目錄：準備好的目錄照最新的開關翻過來再對章，'
+        '存下的目錄方向和開關一致', () async {
+      final service = switcher(_SitesBookSourceService({'a': _titles(10)}), [
+        ordered('a', 0),
+      ]);
+      final book = _currentBook();
+      final prepared = (await service.prepareAutomaticSwitch(
+        book,
+        chapterTitle: '第6章',
+      ))!;
+      expect(prepared.chapters.first.title, '第1章');
+      final latest = book.copyWith()..readConfig = ReadConfig(reverseToc: true);
+
+      final rebased = service.rebase(prepared, latest)!;
+      expect(rebased.migratedBook.readConfig!.reverseToc, isTrue);
+      expect(rebased.chapters.first.title, '第10章');
+      expect([
+        for (final chapter in rebased.chapters) chapter.index,
+      ], List.generate(10, (i) => i));
+      expect(rebased.targetChapterIndex, 4);
+      expect(rebased.targetChapter.title, '第6章');
+      expect(rebased.migratedBook.chapterIndex, 4);
+
+      // 再切回來：照樣翻回書源給的順序。
+      final back = service.rebase(
+        rebased,
+        book.copyWith()..readConfig = ReadConfig(),
+      )!;
+      expect(back.migratedBook.readConfig!.reverseToc, isFalse);
+      expect(back.chapters.first.title, '第1章');
+      expect(back.targetChapterIndex, 5);
+    });
+
     test('取消時不換也不丟錯誤', () async {
       final cancel = CancelToken()..cancel();
       final sites = _SitesBookSourceService({'a': _titles(10)});
@@ -544,6 +577,29 @@ void main() {
       expect(sourceService.contentCalls, 1);
       // 清單留著的那份不改：換不成再點一次要用原本的。
       expect(identical(prepared.chapters.first, toc.chapters.first), isFalse);
+    });
+
+    test('這本書反轉了目錄：新書源的目錄也照翻，讀到的那一章照章名對過去'
+        '（同 Legado 帶著閱讀設定）', () async {
+      final candidate = _candidate('new-origin');
+      final service = SourceSwitchService(
+        service: _FakeBookSourceService(
+          chapters: _chapters(candidate.bookUrl, 10),
+        ),
+        sourceDao: db.bookSourceDao,
+      );
+      final reversed = _currentBook(chapterIndex: 7, durChapterTitle: '第3章')
+        ..readConfig = ReadConfig(reverseToc: true);
+
+      final prepared = await service.prepareSwitch(reversed, candidate);
+
+      expect(prepared.chapters.first.title, '第10章');
+      expect([
+        for (final chapter in prepared.chapters) chapter.index,
+      ], List.generate(10, (i) => i));
+      expect(prepared.targetChapter.title, '第3章');
+      expect(prepared.targetChapterIndex, 7);
+      expect(prepared.migratedBook.readConfig!.reverseToc, isTrue);
     });
 
     test('按標題對齊到目標章節索引', () async {
@@ -853,6 +909,59 @@ void main() {
       expect(movedHighlight.chapterIndex, 6, reason: '標註也跟著搬');
       expect(movedHighlight.charOffset, 30);
       expect(movedHighlight.color, HighlightColor.green);
+    });
+
+    test('反轉了的書換源：書籤與標註照記下的方向對到新目錄裡同一個番外，'
+        '記下新書的方向（ADR 0085）', () async {
+      // 兩本都反轉了；書源原本的順序是「番外、第一章、第二章、第三章、番外」。
+      const reversedTitles = ['番外', '第三章', '第二章', '第一章', '番外'];
+      final newChapters = [
+        for (final (i, title) in reversedTitles.indexed)
+          BookChapter(url: 'new/$i', title: title, bookUrl: 'new', index: i),
+      ];
+      final bookmarks = BookmarkDao(db);
+      final highlights = HighlightDao(db);
+      // 沒反轉時記在後面的番外（書源順序第 4 章，反轉後是第 0 章）。
+      await bookmarks.upsertAll([
+        Bookmark(
+          id: 1,
+          bookName: '書',
+          chapterIndex: 4,
+          chapterTitle: '番外',
+          tocReversed: false,
+        ),
+        // 沒記方向：當成和舊書一樣（反轉後的第 4 章）。
+        Bookmark(id: 2, bookName: '書', chapterIndex: 4, chapterTitle: '番外'),
+      ]);
+      await highlights.upsertAll([
+        Highlight(
+          id: 3,
+          bookName: '書',
+          chapterIndex: 4,
+          chapterTitle: '番外',
+          quote: '字',
+          tocReversed: false,
+        ),
+      ]);
+
+      for (final move in [bookmarks.moveToSource, highlights.moveToSource]) {
+        await move(
+          fromName: '書',
+          fromAuthor: '',
+          toName: '書',
+          toAuthor: '',
+          oldTotalCount: 5,
+          fromReversed: true,
+          toReversed: true,
+          chapters: newChapters,
+        );
+      }
+
+      final moved = {for (final b in await bookmarks.getAll()) b.id: b};
+      expect((moved[1]!.chapterIndex, moved[1]!.tocReversed), (0, true));
+      expect((moved[2]!.chapterIndex, moved[2]!.tocReversed), (4, true));
+      final highlight = (await highlights.getAll()).single;
+      expect((highlight.chapterIndex, highlight.tocReversed), (0, true));
     });
 
     test('換源時那一章的插圖暫時連不上，留記號給書架自動下載補抓', () async {

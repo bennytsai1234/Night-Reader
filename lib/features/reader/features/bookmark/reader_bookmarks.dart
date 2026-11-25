@@ -48,7 +48,11 @@ class ReaderBookmarks extends ValueNotifier<List<Bookmark>> {
           id: bookmark.id,
           location: locationOf(
             bookmark,
-            chapterIndex: chapterIndexIn(bookmark, chapters),
+            chapterIndex: chapterIndexIn(
+              bookmark,
+              chapters,
+              reversed: _book.getReverseToc(),
+            ),
           ),
         ),
     ];
@@ -74,6 +78,7 @@ class ReaderBookmarks extends ValueNotifier<List<Bookmark>> {
         charOffset: location.charOffset,
         anchor: jsonEncode(location.toJson()),
         excerpt: excerpt,
+        tocReversed: _book.getReverseToc(),
       ),
     );
   }
@@ -84,14 +89,19 @@ class ReaderBookmarks extends ValueNotifier<List<Bookmark>> {
   /// 刪掉後按「復原」：照原本的編號放回去。
   Future<void> restore(Bookmark bookmark) async => _dao?.upsertAll([bookmark]);
 
-  /// 書籤在這台目錄（[chapters]）裡是第幾章：先找同名的章（繁簡不同也
-  /// 算），再照章號；目錄還沒讀出來時照記下的序號。
-  static int chapterIndexIn(Bookmark bookmark, List<BookChapter> chapters) =>
-      chapterIndexByTitle(
-        chapterIndex: bookmark.chapterIndex,
-        chapterTitle: bookmark.chapterTitle,
-        chapters: chapters,
-      );
+  /// 書籤在這台目錄（[chapters]，[reversed] 是這本書現在反轉了沒）裡是
+  /// 第幾章（[chapterIndexByTitle]）。
+  static int chapterIndexIn(
+    Bookmark bookmark,
+    List<BookChapter> chapters, {
+    required bool reversed,
+  }) => chapterIndexByTitle(
+    chapterIndex: bookmark.chapterIndex,
+    chapterTitle: bookmark.chapterTitle,
+    countedReversed: bookmark.tocReversed,
+    reversed: reversed,
+    chapters: chapters,
+  );
 
   /// 跳回書籤要去的位置：記下的錨點（含前後原文，正文變了照它找回同一
   /// 句），章節序號換成這台目錄裡的。
@@ -111,20 +121,6 @@ class ReaderBookmarks extends ValueNotifier<List<Bookmark>> {
     super.dispose();
   }
 }
-
-/// 記下的章（章名與這台目錄的序號）在 [chapters] 裡是第幾章：先找同名的
-/// 章（繁簡不同也算），再照章號；目錄還沒讀出來時照記下的序號。書籤與標註
-/// 共用。
-int chapterIndexByTitle({
-  required int chapterIndex,
-  required String chapterTitle,
-  required List<BookChapter> chapters,
-}) => alignChapterIndex(
-  oldIndex: chapterIndex,
-  oldTitle: chapterTitle,
-  oldTotalCount: 0,
-  newChapters: chapters,
-);
 
 /// 記下的錨點（`ReaderLocation` 的 JSON，含前後原文）換成閱讀器的位置，
 /// 章節序號換成這台目錄裡的 [chapterIndex]；讀不懂時照章內第幾個字。書籤

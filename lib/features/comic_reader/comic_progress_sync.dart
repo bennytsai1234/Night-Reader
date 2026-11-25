@@ -115,7 +115,11 @@ class ComicProgressSync {
     // 抓的途中讀者捲過（同一張長圖裡往下讀也算）就不跳。
     final now = current();
     if (now == null || now != since) return;
-    final index = pulled.progress.chapterIndexIn(titles(), ids: ids());
+    final index = pulled.progress.chapterIndexIn(
+      titles(),
+      ids: ids(),
+      reversed: book.getReverseToc(),
+    );
     final page = pulled.progress.charOffset;
     if (shouldJump(now, index, page)) jumpTo(index, page);
     await flush();
