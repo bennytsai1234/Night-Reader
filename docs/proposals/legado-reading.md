@@ -309,69 +309,69 @@
 
 ## 少一個選項
 
-每一筆前面的方框給使用者勾。
+使用者 2026-11-25 照 Claude 的建議定了：打勾的已定，其餘不做。
 
 ### 替換規則
 
-- [ ] **R20　調整規則的先後**：Legado 每條有置頂、置底，也能長按拖曳排序（`legado:ui/replace/ReplaceRuleActivity.kt:133-142`、`347`）。夜讀的順序只在新增時決定，之後改不了；兩條規則會互相影響時（例如一條刪廣告、一條修標點）讀者沒辦法調。要補的話：管理頁長按選單加「置頂」「置底」，拖曳排序可以不做。
-- [ ] **R19　多選規則一起處理**：Legado 多選後可以一起啟用、停用、置頂、置底、匯出、刪除（`legado:ui/replace/ReplaceRuleActivity.kt:247-253`）。夜讀只能一條一條開關、刪除，匯入一包幾十條的規則之後想整包停用要點幾十次。要補的話：長按進選取，動作只放啟用、停用、刪除。
-- [ ] **R16、R17　搜尋與照分組篩選**：Legado 管理頁可以搜尋名稱或分組、照分組篩選、看未分組的（`legado:data/dao/ReplaceRuleDao.kt:25-35`）。夜讀管理頁是一整條清單，規則多時找不到某一條。要補的話：頁首一個搜尋框，分組篩選可以不做。
-- [ ] **R18　分組管理**：Legado 可以改分組名、刪分組（`legado:ui/replace/GroupManageDialog.kt`）。夜讀只能一條一條改分組欄。要補的話依附在 R17 之後。
-- [ ] **R15　這一章被哪些規則改過**：Legado 閱讀選單「有效替換」列出改到這一章的規則（開了繁簡轉換時另列一項），點了直接編輯（`legado:ui/book/read/EffectiveReplacesDialog.kt:46-63`、`legado:help/book/ContentProcessor.kt:146-167`）。夜讀的替換規則面板只寫這本書啟用了幾條；正文被某條規則改壞時，讀者得一條條關掉試。要補的話：替換規則面板加一列「本章套用了哪些」，點了開編輯。
-- [ ] **R14　新書預設套不套替換規則**：Legado 在「其他設定」有「替換淨化預設開啟」（`legado:help/config/AppConfig.kt:472`，預設開）。夜讀的值存在、會同步（`lib/features/settings/settings_provider.dart:76-80`、`lib/core/sync/settings_sync.dart:49`），但沒有任何頁面能改，永遠是開。要補的話預設照舊開，放「閱讀偏好」。
-- [ ] **R22　匯入前預覽與勾選**：Legado 匯入規則先列出每一條、已有的同一條預設不勾，可以給這批統一加一個分組（`legado:ui/association/ImportReplaceRuleViewModel.kt:57-82`、`128-138`）。夜讀按下匯入就整包寫進去，同一條（同編號）直接蓋掉這台改過的（`lib/features/association/handlers/association_dialog_helper.dart:134-153`）。書源匯入已經有預覽（同檔 `102-106`），要補的話照書源那一套，已有的預設不勾。
-- [ ] **R23　匯出規則**：Legado 可以把選到的規則匯出成 JSON 分享（`legado:ui/replace/ReplaceRuleActivity.kt:253`）。夜讀沒有匯出，規則只能跟著備份與同步走。要補的話：寫 Legado 讀得懂的格式，布林值寫 `true`／`false`（夜讀現在的 `ReplaceRule.toJson` 寫 `1`／`0`，`lib/core/models/replace_rule.dart:152-167`，Legado 用 Gson 讀布林值會失敗）。
-- [ ] **R21　複製、貼上一條規則**：Legado 編輯頁可以把這條規則複製成 JSON、從剪貼簿貼一條進來（`legado:ui/replace/edit/ReplaceEditActivity.kt`、選單 `replace_edit.xml`）。夜讀要分享一條規則只能整份備份。要補的話併進 R23 一起做。
+- [x] **R20　調整規則的先後（已定）**：Legado 每條有置頂、置底，也能長按拖曳排序（`legado:ui/replace/ReplaceRuleActivity.kt:133-142`、`347`）。夜讀的順序只在新增時決定，之後改不了；兩條規則會互相影響時（例如一條刪廣告、一條修標點）讀者沒辦法調。要補的話：管理頁長按選單加「置頂」「置底」，拖曳排序可以不做。
+- [x] **R19　多選規則一起處理（已定）**：Legado 多選後可以一起啟用、停用、置頂、置底、匯出、刪除（`legado:ui/replace/ReplaceRuleActivity.kt:247-253`）。夜讀只能一條一條開關、刪除，匯入一包幾十條的規則之後想整包停用要點幾十次。要補的話：長按進選取，動作只放啟用、停用、刪除。
+- [x] **R16、R17　搜尋與照分組篩選（已定，只做搜尋）**：Legado 管理頁可以搜尋名稱或分組、照分組篩選、看未分組的（`legado:data/dao/ReplaceRuleDao.kt:25-35`）。夜讀管理頁是一整條清單，規則多時找不到某一條。要補的話：頁首一個搜尋框，分組篩選可以不做。
+- [ ] **R18　分組管理（不做）**：Legado 可以改分組名、刪分組（`legado:ui/replace/GroupManageDialog.kt`）。夜讀只能一條一條改分組欄。要補的話依附在 R17 之後。
+- [ ] **R15　這一章被哪些規則改過（不做）**：Legado 閱讀選單「有效替換」列出改到這一章的規則（開了繁簡轉換時另列一項），點了直接編輯（`legado:ui/book/read/EffectiveReplacesDialog.kt:46-63`、`legado:help/book/ContentProcessor.kt:146-167`）。夜讀的替換規則面板只寫這本書啟用了幾條；正文被某條規則改壞時，讀者得一條條關掉試。要補的話：替換規則面板加一列「本章套用了哪些」，點了開編輯。
+- [x] **R14　新書預設套不套替換規則（已定）**：Legado 在「其他設定」有「替換淨化預設開啟」（`legado:help/config/AppConfig.kt:472`，預設開）。夜讀的值存在、會同步（`lib/features/settings/settings_provider.dart:76-80`、`lib/core/sync/settings_sync.dart:49`），但沒有任何頁面能改，永遠是開。要補的話預設照舊開，放「閱讀偏好」。
+- [x] **R22　匯入前預覽與勾選（已定）**：Legado 匯入規則先列出每一條、已有的同一條預設不勾，可以給這批統一加一個分組（`legado:ui/association/ImportReplaceRuleViewModel.kt:57-82`、`128-138`）。夜讀按下匯入就整包寫進去，同一條（同編號）直接蓋掉這台改過的（`lib/features/association/handlers/association_dialog_helper.dart:134-153`）。書源匯入已經有預覽（同檔 `102-106`），要補的話照書源那一套，已有的預設不勾。
+- [x] **R23　匯出規則（已定）**：Legado 可以把選到的規則匯出成 JSON 分享（`legado:ui/replace/ReplaceRuleActivity.kt:253`）。夜讀沒有匯出，規則只能跟著備份與同步走。要補的話：寫 Legado 讀得懂的格式，布林值寫 `true`／`false`（夜讀現在的 `ReplaceRule.toJson` 寫 `1`／`0`，`lib/core/models/replace_rule.dart:152-167`，Legado 用 Gson 讀布林值會失敗）。
+- [x] **R21　複製、貼上一條規則（已定）**：Legado 編輯頁可以把這條規則複製成 JSON、從剪貼簿貼一條進來（`legado:ui/replace/edit/ReplaceEditActivity.kt`、選單 `replace_edit.xml`）。夜讀要分享一條規則只能整份備份。要補的話併進 R23 一起做。
 
 ### 目錄
 
-- [ ] **T3　每本書把目錄翻過來**：有些書源給的目錄是新到舊，Legado 在目錄選單「倒序目錄」把這本書存著的目錄整個翻過來、之後抓的也照翻（`legado:ui/book/toc/TocViewModel.kt:55-69`）。夜讀抓目錄時已經照這本書的這個值翻（`lib/core/engine/web_book/web_book_service.dart:329-333`），但沒有任何地方能把它打開；書籍詳情目錄的「倒序」只是倒著顯示（`lib/features/book_detail/book_detail_provider.dart:657`），閱讀的上一章、下一章仍是反的。要補的話放閱讀器「更多」，和「重新分段」一樣是這本書的開關，預設關。
-- [ ] **T2　閱讀器的目錄搜尋**：Legado 從閱讀器打開的目錄頁可以搜章名（`legado:ui/book/toc/TocActivity.kt:73-81`）。夜讀只有書籍詳情的目錄能搜（`lib/features/book_detail/widgets/book_info_toc_bar.dart:79-90`），閱讀器左側的目錄面板沒有（`lib/features/reader/screen/reader_chapters_drawer.dart`），上千章的書只能拖捲動條找。要補的話照書籍詳情那一套。
-- [ ] **T1、T5　目錄列顯示書源給的附加資訊與字數**：Legado 目錄每列在章名下顯示書源規則抓到的附加資訊（多半是更新時間）與本章字數（字數可關），沒下載的章畫一個雲（`legado:ui/book/toc/ChapterListAdapter.kt:146-168`）。夜讀把這兩個欄位抓下來存著（`lib/core/models/book/book_chapter.dart:22-23`），目錄不顯示。已下載的標記用處較小：書架上的書整本自動下載（ADR 0008）。要補的話只補附加資訊，字數預設不顯示。
-- [ ] **T4　目錄的章名套標題規則**：Legado 目錄選單「使用替換」打開才套（`legado:help/config/AppConfig.kt:380-384`，預設關）。夜讀目錄一律原章名，和 Legado 的預設一樣。R8 修好後頁首與目錄會不一樣，要補的話預設關。
+- [x] **T3　每本書把目錄翻過來（已定）**：有些書源給的目錄是新到舊，Legado 在目錄選單「倒序目錄」把這本書存著的目錄整個翻過來、之後抓的也照翻（`legado:ui/book/toc/TocViewModel.kt:55-69`）。夜讀抓目錄時已經照這本書的這個值翻（`lib/core/engine/web_book/web_book_service.dart:329-333`），但沒有任何地方能把它打開；書籍詳情目錄的「倒序」只是倒著顯示（`lib/features/book_detail/book_detail_provider.dart:657`），閱讀的上一章、下一章仍是反的。要補的話放閱讀器「更多」，和「重新分段」一樣是這本書的開關，預設關。
+- [x] **T2　閱讀器的目錄搜尋（已定）**：Legado 從閱讀器打開的目錄頁可以搜章名（`legado:ui/book/toc/TocActivity.kt:73-81`）。夜讀只有書籍詳情的目錄能搜（`lib/features/book_detail/widgets/book_info_toc_bar.dart:79-90`），閱讀器左側的目錄面板沒有（`lib/features/reader/screen/reader_chapters_drawer.dart`），上千章的書只能拖捲動條找。要補的話照書籍詳情那一套。
+- [ ] **T1、T5　目錄列顯示書源給的附加資訊與字數（不做）**：Legado 目錄每列在章名下顯示書源規則抓到的附加資訊（多半是更新時間）與本章字數（字數可關），沒下載的章畫一個雲（`legado:ui/book/toc/ChapterListAdapter.kt:146-168`）。夜讀把這兩個欄位抓下來存著（`lib/core/models/book/book_chapter.dart:22-23`），目錄不顯示。已下載的標記用處較小：書架上的書整本自動下載（ADR 0008）。要補的話只補附加資訊，字數預設不顯示。
+- [ ] **T4　目錄的章名套標題規則（不做）**：Legado 目錄選單「使用替換」打開才套（`legado:help/config/AppConfig.kt:380-384`，預設關）。夜讀目錄一律原章名，和 Legado 的預設一樣。R8 修好後頁首與目錄會不一樣，要補的話預設關。
 
 ### 書籤
 
-- [ ] **B1　不選字也能加書籤**：Legado 閱讀選單「添加書籤」在這一頁的開頭留一個，同時跳出附註框（`legado:ui/book/read/ReadBookActivity.kt` 的 `menu_add_bookmark`）。夜讀只能選字後按「書籤」（`docs/design/reader.md`「書籤」），想在讀到的地方隨手留一個要先長按選字。要補的話放閱讀器「更多」，留在畫面頂端那一句的開頭。
-- [ ] **B6　匯出書籤**：Legado 目錄頁的書籤分頁可以匯出 JSON 與 Markdown（`legado:ui/book/toc/TocViewModel.kt:83-120`）。夜讀「閱讀紀錄」與目錄面板只匯出標註（`lib/core/backup/highlight_export.dart`），書籤沒有。要補的話併進標註匯出的同一個 Markdown 檔。
+- [x] **B1　不選字也能加書籤（已定）**：Legado 閱讀選單「添加書籤」在這一頁的開頭留一個，同時跳出附註框（`legado:ui/book/read/ReadBookActivity.kt` 的 `menu_add_bookmark`）。夜讀只能選字後按「書籤」（`docs/design/reader.md`「書籤」），想在讀到的地方隨手留一個要先長按選字。要補的話放閱讀器「更多」，留在畫面頂端那一句的開頭。
+- [x] **B6　匯出書籤（已定）**：Legado 目錄頁的書籤分頁可以匯出 JSON 與 Markdown（`legado:ui/book/toc/TocViewModel.kt:83-120`）。夜讀「閱讀紀錄」與目錄面板只匯出標註（`lib/core/backup/highlight_export.dart`），書籤沒有。要補的話併進標註匯出的同一個 Markdown 檔。
 
 ### 朗讀
 
-- [ ] **A3　朗讀跳到上一段、下一段**：Legado 朗讀面板有上一段、下一段（`legado:service/BaseReadAloudService.kt:333-385`），漏聽一句可以退回去。夜讀只有上一章、下一章，要重聽一句得停掉、捲回去、再從那一頁開始念。要補的話：朗讀面板加「上一句」「下一句」（夜讀一句一念），通知欄不加。
-- [ ] **A6　語速跟隨手機設定**：Legado 語速旁有「跟隨系統」（`legado:res/layout/dialog_read_aloud.xml` 的 `cb_tts_follow_sys`），勾了用手機文字轉語音設定裡的語速。夜讀只有自己的語速。要補的話預設不跟隨，放「朗讀與語音」。
-- [ ] **A8　每本書指定朗讀引擎**：Legado 可以給某一本書指定引擎（`legado:data/entities/Book.kt:400`），例如外文書用另一個引擎。夜讀的書有這個欄位（`lib/core/models/book/book_base.dart:112`）但沒有用，引擎只有一個全域設定（`lib/core/playback/tts_service.dart:443-446`）。要補的話預設跟全域。
-- [ ] **A12　耳機鍵的兩個開關**：Legado 有「媒體鍵下一首改成下一段」與「按媒體鍵開始朗讀」（`legado:res/xml/pref_config_aloud.xml` 的 `mediaButtonPerNext`、`pref_config_other.xml` 的 `readAloudByMediaButton`）。夜讀耳機的上一首、下一首固定是換章，閱讀器開著時按耳機播放鍵不會開始朗讀。要補的話兩個都預設關，和現在一樣。
+- [x] **A3　朗讀跳到上一段、下一段（已定）**：Legado 朗讀面板有上一段、下一段（`legado:service/BaseReadAloudService.kt:333-385`），漏聽一句可以退回去。夜讀只有上一章、下一章，要重聽一句得停掉、捲回去、再從那一頁開始念。要補的話：朗讀面板加「上一句」「下一句」（夜讀一句一念），通知欄不加。
+- [ ] **A6　語速跟隨手機設定（不做）**：Legado 語速旁有「跟隨系統」（`legado:res/layout/dialog_read_aloud.xml` 的 `cb_tts_follow_sys`），勾了用手機文字轉語音設定裡的語速。夜讀只有自己的語速。要補的話預設不跟隨，放「朗讀與語音」。
+- [ ] **A8　每本書指定朗讀引擎（不做）**：Legado 可以給某一本書指定引擎（`legado:data/entities/Book.kt:400`），例如外文書用另一個引擎。夜讀的書有這個欄位（`lib/core/models/book/book_base.dart:112`）但沒有用，引擎只有一個全域設定（`lib/core/playback/tts_service.dart:443-446`）。要補的話預設跟全域。
+- [ ] **A12　耳機鍵的兩個開關（不做）**：Legado 有「媒體鍵下一首改成下一段」與「按媒體鍵開始朗讀」（`legado:res/xml/pref_config_aloud.xml` 的 `mediaButtonPerNext`、`pref_config_other.xml` 的 `readAloudByMediaButton`）。夜讀耳機的上一首、下一首固定是換章，閱讀器開著時按耳機播放鍵不會開始朗讀。要補的話兩個都預設關，和現在一樣。
 
 ### 選字
 
-- [ ] **S4　從選到的地方開始朗讀**：Legado 選字選單有「朗讀」，從選到的字開始念（`legado:res/menu/content_select_action.xml` 的 `menu_aloud`）。夜讀朗讀只從畫面頂端那一句開始，想從中間某句念要先捲到那句在最上面。要補的話收在「⋮」裡，從選取開頭那一句念。
-- [ ] **S8　分享選到的字**：Legado 選字選單有「分享」（`menu_share_str`），交給手機的分享面板。夜讀只列能處理文字的 App（翻譯、字典），沒有一般的分享（`lib/features/reader/text_view/overlay/reader_text_selection_layer.dart:416-468`）。要補的話收在「⋮」裡。
+- [x] **S4　從選到的地方開始朗讀（已定）**：Legado 選字選單有「朗讀」，從選到的字開始念（`legado:res/menu/content_select_action.xml` 的 `menu_aloud`）。夜讀朗讀只從畫面頂端那一句開始，想從中間某句念要先捲到那句在最上面。要補的話收在「⋮」裡，從選取開頭那一句念。
+- [x] **S8　分享選到的字（已定）**：Legado 選字選單有「分享」（`menu_share_str`），交給手機的分享面板。夜讀只列能處理文字的 App（翻譯、字典），沒有一般的分享（`lib/features/reader/text_view/overlay/reader_text_selection_layer.dart:416-468`）。要補的話收在「⋮」裡。
 
 ### 正文整理
 
-- [ ] **C3　這一章不要去重複章名**：Legado 閱讀選單「移除重複標題」是每章的開關（`legado:ui/book/read/ReadBookActivity.kt:605-619`、`legado:help/book/ContentProcessor.kt:104-130`），正文第一句剛好和章名一樣、被當成重複章名去掉時，關掉這一章就回來。夜讀一律去（`lib/features/reader/chapter/reader_content_transformer.dart:997-1029`），多了「章名後面要接空白、標點或結尾」的條件（同檔 `686`），誤去的機會比 Legado 少，但誤去了沒得救。要補的話放閱讀器「更多」，預設照舊去。
-- [ ] **C5　EPUB 留下注音**：Legado 預設把注音（ruby）照字留在正文裡，可以逐本關掉（`legado:ui/book/read/ReadBookActivity.kt:540-558`）。夜讀轉檔時一律拿掉（`lib/core/local_book/epub_parser.dart:581-593` 的 `rt`、`rp`），日文輕小說的假名讀音、中文書的注音看不到。要補的話預設照舊拿掉；要留得在轉檔時留下，改了要重新匯入。
+- [ ] **C3　這一章不要去重複章名（不做）**：Legado 閱讀選單「移除重複標題」是每章的開關（`legado:ui/book/read/ReadBookActivity.kt:605-619`、`legado:help/book/ContentProcessor.kt:104-130`），正文第一句剛好和章名一樣、被當成重複章名去掉時，關掉這一章就回來。夜讀一律去（`lib/features/reader/chapter/reader_content_transformer.dart:997-1029`），多了「章名後面要接空白、標點或結尾」的條件（同檔 `686`），誤去的機會比 Legado 少，但誤去了沒得救。要補的話放閱讀器「更多」，預設照舊去。
+- [ ] **C5　EPUB 留下注音（不做）**：Legado 預設把注音（ruby）照字留在正文裡，可以逐本關掉（`legado:ui/book/read/ReadBookActivity.kt:540-558`）。夜讀轉檔時一律拿掉（`lib/core/local_book/epub_parser.dart:581-593` 的 `rt`、`rp`），日文輕小說的假名讀音、中文書的注音看不到。要補的話預設照舊拿掉；要留得在轉檔時留下，改了要重新匯入。
 
 ### 本地 TXT 與 EPUB
 
-- [ ] **L1、L2　一次加入好幾本、整個資料夾**：Legado 的「添加本地」是一個檔案清單頁，選一個資料夾列出裡面的書（含壓縮檔），可以多選一起加入書架，「智能掃描」連子資料夾一起找（`legado:ui/book/import/local/ImportBookActivity.kt:91-100`、`257-275`）。夜讀的選檔器一次只能選一個檔（`lib/core/platform/app_file_selection_service.dart:44-60`），整理好的一資料夾小說要一本一本加。要補的話：選檔器打開多選就夠，資料夾掃描可以不做。
-- [ ] **L4　壓縮檔裡的書**：Legado 匯入 ZIP、RAR、7z 時把裡面的 TXT、EPUB 都加進書架，解壓後的檔被刪掉還會從壓縮檔再解一次（`legado:model/localBook/LocalBook.kt:273-310`）。夜讀的 ZIP 一律當成一話的本地漫畫（ADR 0052、`lib/features/bookshelf/provider/bookshelf_import_mixin.dart:12-15`），裡面是 TXT 的 ZIP 匯入失敗。要補的話：ZIP 裡沒有圖、有 TXT 或 EPUB 時當文字書匯入，RAR、7z 不做；改 ADR 0052。
-- [ ] **L6　手動改這本書的編碼**：Legado 閱讀選單「設置編碼」可以改這本 TXT 的編碼、重新讀目錄（`legado:ui/book/read/BaseReadBookActivity.kt:346-360`），清單是 UTF-8、GB2312、GB18030、GBK、Unicode、UTF-16、UTF-16LE、ASCII，也可以自己打。夜讀認錯編碼時沒有辦法改（認錯的例子見 L5）。要補的話：L5 修好後放閱讀器「更多」，只給本地 TXT。
-- [ ] **L8　替這本書換一條分章規則**：Legado 目錄選單與閱讀選單「TXT 目錄規則」列出所有規則，選一條就照它重新分章，也能新增、編輯、啟停、匯入匯出規則（`legado:ui/book/toc/TocActivity.kt:129-132`、`legado:ui/book/read/ReadBookActivity.kt:566-568`）。夜讀自動分錯時只能改原檔再匯入。要補的話：先做 L7 的內建規則與自動挑選，換規則只列內建的幾條，不做規則管理。
-- [ ] **L11　每本書關掉超長章節拆分**：Legado 目錄選單與書籍詳情的「分割長章節」（`legado:ui/book/toc/TocActivity.kt:133-138`，預設開）。夜讀一律拆。要補的話預設開，和現在一樣。
-- [ ] **L3　自訂從檔名拆書名與作者的方式**：Legado 匯入頁「導入文件名」寫一段 JS（`legado:model/localBook/LocalBook.kt:341-359`）。四種常見寫法修進 L3 之後用處很小，建議不做。
+- [x] **L1、L2　一次加入好幾本、整個資料夾（已定，只做多選）**：Legado 的「添加本地」是一個檔案清單頁，選一個資料夾列出裡面的書（含壓縮檔），可以多選一起加入書架，「智能掃描」連子資料夾一起找（`legado:ui/book/import/local/ImportBookActivity.kt:91-100`、`257-275`）。夜讀的選檔器一次只能選一個檔（`lib/core/platform/app_file_selection_service.dart:44-60`），整理好的一資料夾小說要一本一本加。要補的話：選檔器打開多選就夠，資料夾掃描可以不做。
+- [ ] **L4　壓縮檔裡的書（不做）**：Legado 匯入 ZIP、RAR、7z 時把裡面的 TXT、EPUB 都加進書架，解壓後的檔被刪掉還會從壓縮檔再解一次（`legado:model/localBook/LocalBook.kt:273-310`）。夜讀的 ZIP 一律當成一話的本地漫畫（ADR 0052、`lib/features/bookshelf/provider/bookshelf_import_mixin.dart:12-15`），裡面是 TXT 的 ZIP 匯入失敗。要補的話：ZIP 裡沒有圖、有 TXT 或 EPUB 時當文字書匯入，RAR、7z 不做；改 ADR 0052。
+- [x] **L6　手動改這本書的編碼（已定）**：Legado 閱讀選單「設置編碼」可以改這本 TXT 的編碼、重新讀目錄（`legado:ui/book/read/BaseReadBookActivity.kt:346-360`），清單是 UTF-8、GB2312、GB18030、GBK、Unicode、UTF-16、UTF-16LE、ASCII，也可以自己打。夜讀認錯編碼時沒有辦法改（認錯的例子見 L5）。要補的話：L5 修好後放閱讀器「更多」，只給本地 TXT。
+- [ ] **L8　替這本書換一條分章規則（不做）**：Legado 目錄選單與閱讀選單「TXT 目錄規則」列出所有規則，選一條就照它重新分章，也能新增、編輯、啟停、匯入匯出規則（`legado:ui/book/toc/TocActivity.kt:129-132`、`legado:ui/book/read/ReadBookActivity.kt:566-568`）。夜讀自動分錯時只能改原檔再匯入。要補的話：先做 L7 的內建規則與自動挑選，換規則只列內建的幾條，不做規則管理。
+- [ ] **L11　每本書關掉超長章節拆分（不做）**：Legado 目錄選單與書籍詳情的「分割長章節」（`legado:ui/book/toc/TocActivity.kt:133-138`，預設開）。夜讀一律拆。要補的話預設開，和現在一樣。
+- [ ] **L3　自訂從檔名拆書名與作者的方式（不做）**：Legado 匯入頁「導入文件名」寫一段 JS（`legado:model/localBook/LocalBook.kt:341-359`）。四種常見寫法修進 L3 之後用處很小，建議不做。
 
 ### 備份與 Legado 互通
 
-- [ ] **K10　自動備份**：Legado 每天第一次開 App、離開閱讀器時，當天還沒備份過就自動備份到設定的資料夾與 WebDAV（`legado:help/storage/Backup.kt:99-118`，`legado:ui/main/MainActivity.kt:321`）。夜讀只有手動建立備份；同步只留最新的狀態、刪除也跟著同步（ADR 0039），誤刪書源或書架後兩台都沒了，沒有前幾天的版本可以拿回來。要補的話：放「備份與同步」，備份到同步空間、留最近幾份，預設關。
-- [ ] **K9　還原時略過某幾項**：Legado 還原前可以勾選略過閱讀界面設定、主題模式、主題、封面設定、書架樣式、本地書等（`legado:help/storage/BackupConfig.kt:22-44`、`legado:ui/config/BackupConfigFragment.kt:235`、`251`）。夜讀還原一律全部併進來，拿別台的備份還原時這台的外觀與閱讀設定都被換掉。要補的話：還原確認框加「設定也還原」一個勾，預設勾。
-- [ ] **K12　匯出書的選項**：Legado 匯出時可以選 TXT 或 EPUB、套不套替換規則、要不要章名、只匯出某幾章、TXT 的編碼（`legado:help/config/AppConfig.kt:309-335`、`legado:service/ExportBookService.kt`）。夜讀只匯出整本 TXT、一律含章名、UTF-8（`lib/core/backup/export_book_service.dart`）。要補的話：先修 K12 的替換規則，選項只加「套用替換規則」（預設開），EPUB 與章節範圍不做。
-- [ ] **K8　還原 Legado 的設定**：Legado 的設定在 `config.xml`（Android 的偏好設定檔），夜讀不讀。兩邊同名的設定一百多個（夜讀的設定名稱多半照搬 Legado），但數值的意思不一定一樣（例如語速、繁簡轉換的編號），整份照收會把夜讀的設定改壞。要補的話只收逐一對過的幾個（繁簡轉換、替換規則預設、換源校驗作者這類），其他不收。
-- [ ] **K6、K7　Legado 的分組、TXT 目錄規則**：分組要等夜讀的書架有分組才用得到（列在「完全沒有的功能」）；TXT 目錄規則要等 L8。線上朗讀引擎、字典規則夜讀沒有這兩個功能。建議跟著各自的功能做，這一波不做。
+- [ ] **K10　自動備份（不做）**：Legado 每天第一次開 App、離開閱讀器時，當天還沒備份過就自動備份到設定的資料夾與 WebDAV（`legado:help/storage/Backup.kt:99-118`，`legado:ui/main/MainActivity.kt:321`）。夜讀只有手動建立備份；同步只留最新的狀態、刪除也跟著同步（ADR 0039），誤刪書源或書架後兩台都沒了，沒有前幾天的版本可以拿回來。要補的話：放「備份與同步」，備份到同步空間、留最近幾份，預設關。
+- [x] **K9　還原時略過某幾項（已定）**：Legado 還原前可以勾選略過閱讀界面設定、主題模式、主題、封面設定、書架樣式、本地書等（`legado:help/storage/BackupConfig.kt:22-44`、`legado:ui/config/BackupConfigFragment.kt:235`、`251`）。夜讀還原一律全部併進來，拿別台的備份還原時這台的外觀與閱讀設定都被換掉。要補的話：還原確認框加「設定也還原」一個勾，預設勾。
+- [ ] **K12　匯出書的選項（不做）**：Legado 匯出時可以選 TXT 或 EPUB、套不套替換規則、要不要章名、只匯出某幾章、TXT 的編碼（`legado:help/config/AppConfig.kt:309-335`、`legado:service/ExportBookService.kt`）。夜讀只匯出整本 TXT、一律含章名、UTF-8（`lib/core/backup/export_book_service.dart`）。要補的話：先修 K12 的替換規則，選項只加「套用替換規則」（預設開），EPUB 與章節範圍不做。
+- [ ] **K8　還原 Legado 的設定（不做）**：Legado 的設定在 `config.xml`（Android 的偏好設定檔），夜讀不讀。兩邊同名的設定一百多個（夜讀的設定名稱多半照搬 Legado），但數值的意思不一定一樣（例如語速、繁簡轉換的編號），整份照收會把夜讀的設定改壞。要補的話只收逐一對過的幾個（繁簡轉換、替換規則預設、換源校驗作者這類），其他不收。
+- [ ] **K6、K7　Legado 的分組、TXT 目錄規則（不做）**：分組要等夜讀的書架有分組才用得到（列在「完全沒有的功能」）；TXT 目錄規則要等 L8。線上朗讀引擎、字典規則夜讀沒有這兩個功能。建議跟著各自的功能做，這一波不做。
 
 ## 有更好的做法
 
-- [ ] **L7　TXT 章名認得繁體字與全形數字**：Legado 的 TXT 目錄規則只有簡體字，數字只認半形（`app/src/main/assets/defaultData/txtTocRule.json`），繁體的「第一節」「第兩百章」「第一萬章」「第貳章」與「第１章」都分不出；夜讀現在的規則也一樣。夜讀的介面是繁體，讀者手上的 TXT 很多是繁體：照 Legado 補規則時，數字與章、節、卷、集、部、篇、回都同時收繁簡（節、兩、萬、貳、參、陸、億、迴），數字收全形。好處是繁體 TXT 分得出章，壞處是規則比 Legado 長、和 Legado 匯出的規則不完全一樣。
+- [x] **L7　TXT 章名認得繁體字與全形數字（已定）**：Legado 的 TXT 目錄規則只有簡體字，數字只認半形（`app/src/main/assets/defaultData/txtTocRule.json`），繁體的「第一節」「第兩百章」「第一萬章」「第貳章」與「第１章」都分不出；夜讀現在的規則也一樣。夜讀的介面是繁體，讀者手上的 TXT 很多是繁體：照 Legado 補規則時，數字與章、節、卷、集、部、篇、回都同時收繁簡（節、兩、萬、貳、參、陸、億、迴），數字收全形。好處是繁體 TXT 分得出章，壞處是規則比 Legado 長、和 Legado 匯出的規則不完全一樣。
 
 ## Legado 有、夜讀完全沒有的功能
 
@@ -387,4 +387,4 @@
 
 ## 拿不準
 
-- **R14　本地 EPUB 預設套不套替換規則**：Legado 本地 EPUB 與漫畫書預設不套（`legado:data/entities/Book.kt:200-210`），理由是 EPUB 正文是 HTML、通常也沒有廣告；夜讀只有漫畫、有聲書預設不套，EPUB 照常套（`lib/core/models/book/book_extensions.dart:105-111`）。夜讀的 EPUB 匯入時已經轉成純文字（ADR 0032），套規則不會弄壞標記，但專刪網站廣告的規則可能刪到書裡的字。卡在：這算「同一本書結果和 Legado 不同」要照 Legado 改，還是轉成純文字後本來就該一視同仁。
+- **R14　本地 EPUB 預設套不套替換規則（不做，維持照常套）**：Legado 本地 EPUB 與漫畫書預設不套（`legado:data/entities/Book.kt:200-210`），理由是 EPUB 正文是 HTML、通常也沒有廣告；夜讀只有漫畫、有聲書預設不套，EPUB 照常套（`lib/core/models/book/book_extensions.dart:105-111`）。夜讀的 EPUB 匯入時已經轉成純文字（ADR 0032），套規則不會弄壞標記，但專刪網站廣告的規則可能刪到書裡的字。卡在：這算「同一本書結果和 Legado 不同」要照 Legado 改，還是轉成純文字後本來就該一視同仁。

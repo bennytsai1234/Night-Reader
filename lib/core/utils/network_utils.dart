@@ -111,7 +111,9 @@ class NetworkUtils {
     if (url == null) return null;
     try {
       final uri = Uri.parse(url);
-      return "${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}";
+      // `Uri.host` 拿掉了 IPv6 外面的方括號，組回網址要加回去。
+      final host = uri.host.contains(':') ? '[${uri.host}]' : uri.host;
+      return "${uri.scheme}://$host${uri.hasPort ? ':${uri.port}' : ''}";
     } catch (_) {
       return null;
     }

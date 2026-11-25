@@ -459,7 +459,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         // 連續好幾章都失敗多半是書源壞了：整個任務先記為失敗，不把剩下的
         // 章節一章章打完（書架自動下載何時再試見 ADR 0008）。
         if (consecutiveFailures >= _maxConsecutiveFailures) break;
-        if (!await _mayContinue(task)) {
+        if (!await _mayContinue(task, cancelToken)) {
           stoppedEarly = true;
           break;
         }
@@ -468,7 +468,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
           await Future.any<Object?>([nextChapterEnd(), cancelToken.whenCancel]);
         }
         // 等名額期間可能被暫停或退役，開抓前再看一次。
-        if (!await _mayContinue(task)) {
+        if (!await _mayContinue(task, cancelToken)) {
           stoppedEarly = true;
           break;
         }
@@ -592,13 +592,14 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
   /// 10 章是連續兩輪全部失敗（每章已各自重試 [_maxRetries] 次）。
   static const int _maxConsecutiveFailures = 10;
 
-  /// 整個下載沒停、這本沒暫停也沒退役；全域暫停時等到繼續。
-  Future<bool> _mayContinue(DownloadTask task) async {
+  /// 整個下載沒停、這本沒暫停也沒退役、這一輪沒被停下；全域暫停時等到
+  /// 繼續。
+  Future<bool> _mayContinue(DownloadTask task, CancelToken cancelToken) async {
     if (!isDownloading ||
         task.status == DownloadTask.statusPaused ||
         isTaskRetiring(task.bookUrl)) {
       return false;
     }
-    return waitUntilTaskRunnable(task.bookUrl);
+    return waitUntilTaskRunnable(task.bookUrl, cancelToken: cancelToken);
   }
 }
