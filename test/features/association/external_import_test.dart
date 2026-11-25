@@ -193,8 +193,11 @@ void main() {
     group('加入書架的連結（src 是一本書的網址）', () {
       late AppDatabase db;
       final details = _Details();
+      final opened = <Book>[];
 
       setUp(() async {
+        opened.clear();
+        service.openBookDetail = (_, book) async => opened.add(book);
         db = AppDatabase.forTesting(NativeDatabase.memory());
         await BookSourceDao(db).upsert(
           BookSource(bookSourceUrl: 'https://a.example', bookSourceName: '甲站'),
@@ -208,6 +211,7 @@ void main() {
 
       tearDown(() async {
         service.bookLinks = BookLinkService.new;
+        service.openBookDetail = openBookDetailPage;
         await db.close();
       });
 
@@ -215,27 +219,43 @@ void main() {
         'legado://import/addToBookshelf?src=${Uri.encodeComponent(url)}',
       );
 
-      testWidgets('抓到詳情後用外部匯入的確認框問，按「加入書架」才加', (tester) async {
+      testWidgets('抓到詳情後直接開這本書的書籍詳情（同 Legado），不跳確認框', (tester) async {
         final context = await pumpHost(tester);
         service.handleUri(context, link('https://a.example/book/1'));
         await tester.runAsync(() => details.fetched.future);
-        await tester.pumpAndSettle();
-
-        expect(find.text('外部匯入'), findsOneWidget);
-        expect(find.textContaining('《夜航》'), findsOneWidget);
-        expect(find.textContaining('甲站'), findsOneWidget);
-        expect(await BookDao(db).getInBookshelf(), isEmpty);
-
-        await tester.tap(find.text('加入書架'));
         await tester.runAsync(() => Future<void>.delayed(Duration.zero));
         await tester.pumpAndSettle();
 
-        expect(find.text('已加入書架：《夜航》'), findsOneWidget);
+        expect(find.text('外部匯入'), findsNothing);
+        expect(opened.map((book) => (book.name, book.origin)), [
+          ('夜航', 'https://a.example'),
+        ]);
         expect(
-          (await tester.runAsync(() => BookDao(db).getInBookshelf()))!
-              .map((book) => book.name),
-          ['夜航'],
+          await tester.runAsync(() => BookDao(db).getInBookshelf()),
+          isEmpty,
+          reason: '加不加入書架由讀者在書籍詳情決定',
         );
+      });
+
+      testWidgets('書架上已經有這本：開它的書籍詳情', (tester) async {
+        await tester.runAsync(
+          () => BookDao(db).upsert(
+            Book(
+              bookUrl: 'https://a.example/book/2',
+              origin: 'https://a.example',
+              name: '書架上的',
+              isInBookshelf: true,
+            ),
+          ),
+        );
+        final context = await pumpHost(tester);
+        service.handleUri(context, link('https://a.example/book/2'));
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pumpAndSettle();
+
+        expect(opened.map((book) => (book.name, book.isInBookshelf)), [
+          ('書架上的', true),
+        ]);
       });
 
       testWidgets('找不到書源時說原因，不跳確認框', (tester) async {

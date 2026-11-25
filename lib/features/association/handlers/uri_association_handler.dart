@@ -11,8 +11,8 @@ import 'association_base.dart';
 /// 判斷類型，認不得的路徑下載後依內容判斷。
 ///
 ///   legado://import/{bookSource|rssSource|replaceRule}?src={url}
-///   legado://import/addToBookshelf?src={一本書的詳情頁網址}：找書源、抓詳情後問
-///     要不要加入書架（[addBookFromLink]）
+///   legado://import/addToBookshelf?src={一本書的詳情頁網址}：找書源、抓詳情後
+///     打開書籍詳情（[addBookFromLink]）
 ///   yuedu://{booksource|rsssource|replace}/importonline?src={url}
 ///   其他路徑（例如 legado://import/auto?src={url}）：下載後依內容判斷
 ///

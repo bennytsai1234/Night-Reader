@@ -304,9 +304,9 @@
 #### K14　`legado://import/addToBookshelf` 連結加不進書架（功能結果錯）
 
 - 讀者會看到：網頁或書源給的「加入閱讀書架」連結，在夜讀打開後提示「辨識為書架資料」，按「匯入書架」回「匯入書架失敗：資料格式不對」。
-- Legado：`src` 是一本書的詳情頁網址；照網址的網站找啟用的書源（或書源的 `bookUrlPattern`），抓詳情後問要不要加入書架（`legado:ui/association/OnLineImportActivity.kt:84-86`、`legado:ui/association/AddToBookshelfDialog.kt:103-140`）。
+- Legado：`src` 是一本書的詳情頁網址；照網址的網站找啟用的書源（或書源的 `bookUrlPattern`），抓到詳情後存成搜尋結果、直接打開這本書的書籍詳情，加不加入書架在詳情頁決定；這本已經在書架上時只提示「已在书架」（`legado:ui/association/OnLineImportActivity.kt:84-86`、`legado:ui/association/AddToBookshelfDialog.kt:81-90`、`103-140`）。
 - 夜讀：這個路徑當成書架檔，下載 `src` 後照夜讀的書架格式解析（`lib/features/association/handlers/uri_association_handler.dart:31`、`lib/features/association/handlers/association_dialog_helper.dart:106-115`），拿到的是網頁，當 JSON 解失敗（`lib/core/backup/bookshelf_exchange_service.dart:112-113`）。
-- 已修（#652）：照 Legado 找書源、抓詳情，再用外部匯入的確認框問要不要加入書架。使用者的 fork 抓完是直接開書籍詳情、不問，夜讀照清單先問。
+- 已修（#652）：照 Legado 找書源、抓詳情後直接打開書籍詳情；找不到書源、不是網址時只提示原因。已經在書架上的，夜讀打開它的書籍詳情（Legado 只提示「已在书架」，使用者 2026-11-25 定）。
 
 ## 少一個選項
 

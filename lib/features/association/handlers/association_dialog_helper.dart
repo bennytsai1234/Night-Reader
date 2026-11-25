@@ -14,6 +14,7 @@ import 'package:night_reader/features/replace_rule/widgets/replace_rule_import_s
 import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/source/book_link_service.dart';
+import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/features/source_manager/widgets/import_preview_sheet.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
@@ -25,42 +26,26 @@ mixin AssociationDialogHelper on AssociationBase {
   @visibleForTesting
   BookLinkService Function() bookLinks = BookLinkService.new;
 
+  /// 打開找到的書的書籍詳情（測試換成記下開了哪本）。
+  @visibleForTesting
+  Future<void> Function(BuildContext context, Book book) openBookDetail =
+      openBookDetailPage;
+
   @override
   Future<void> addBookFromLink(BuildContext context, String url) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final links = bookLinks();
     final Book book;
     try {
-      book = await links.findBook(url);
+      book = await bookLinks().findBook(url);
     } catch (error, stackTrace) {
-      messenger.showSnackBar(
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: UiText(failureMessage('加入書架', error, stackTrace))),
       );
       return;
     }
     if (!context.mounted) return;
-    final author = book.author.trim();
-    final confirmed = await showAppAlert<bool>(
-      context: context,
-      title: '外部匯入',
-      message:
-          '偵測到外部內容：\n$url\n\n'
-          '《${book.name}》${author.isEmpty ? '' : '　$author'}\n'
-          '書源：${book.originName}',
-      actions: const [
-        AppAlertAction(label: '加入書架', value: true, isDefault: true),
-        AppAlertAction(label: '取消', value: false),
-      ],
-    );
-    if (confirmed != true) return;
-    try {
-      await links.addToShelf(book);
-      messenger.showSnackBar(SnackBar(content: UiText('已加入書架：《${book.name}》')));
-    } catch (error, stackTrace) {
-      messenger.showSnackBar(
-        SnackBar(content: UiText(failureMessage('加入書架', error, stackTrace))),
-      );
-    }
+    // 同 Legado：直接開書籍詳情，讀者看過簡介、目錄再決定要不要加入書架。
+    await openBookDetail(context, book);
   }
 
   @override
@@ -177,3 +162,9 @@ mixin AssociationDialogHelper on AssociationBase {
   }
 }
 // AI_PORT: GAP-INTENT-01 extracted from AssociationHandlerService
+
+/// 打開 [book] 的書籍詳情。
+Future<void> openBookDetailPage(BuildContext context, Book book) =>
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => BookDetailPage(book: book)));

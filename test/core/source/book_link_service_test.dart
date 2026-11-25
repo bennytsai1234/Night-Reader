@@ -100,29 +100,28 @@ void main() {
     expect(book.bookUrl, url);
   });
 
-  test('加入書架：記成在書架上，整本下載交給書架自動下載', () async {
+  test('書架上已經有這本：就是書架上那本，不再向書源抓', () async {
     await sources.upsert(source('https://a.example'));
-    final links = service(_Details());
-    final book = await links.findBook('https://a.example/book/1');
-
-    await links.addToShelf(book);
-
-    final saved = (await books.getByUrl('https://a.example/book/1'))!;
-    expect(saved.isInBookshelf, isTrue);
-    expect(saved.syncTime, greaterThan(0));
-    expect(saved.name, 'a.example的書');
-  });
-
-  test('找不到書源、沒啟用、已在書架與不是網址時說原因', () async {
-    await sources.upsert(source('https://off.example', enabled: false));
     await books.upsert(
       Book(
-        bookUrl: 'https://off.example/1',
-        origin: 'https://off.example',
+        bookUrl: 'https://a.example/book/1',
+        origin: 'https://a.example',
         name: '書架上的',
         isInBookshelf: true,
+        chapterIndex: 3,
       ),
     );
+    final details = _Details();
+
+    final book = await service(details).findBook('https://a.example/book/1');
+
+    expect(book.name, '書架上的');
+    expect(book.chapterIndex, 3);
+    expect(details.asked, isEmpty);
+  });
+
+  test('找不到書源、沒啟用與不是網址時說原因', () async {
+    await sources.upsert(source('https://off.example', enabled: false));
 
     Future<String> reason(String url) async {
       try {
@@ -134,7 +133,6 @@ void main() {
     }
 
     expect(await reason('https://off.example/2'), '找不到符合這個網址的書源');
-    expect(await reason('https://off.example/1'), '《書架上的》已經在書架上');
     expect(await reason('not a url'), '書的網址格式不對');
   });
 }
