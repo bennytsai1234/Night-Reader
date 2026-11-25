@@ -212,7 +212,7 @@ void main() {
       expect(
         aiRepairSystemPrompt,
         allOf(
-          contains('test 只走搜尋結果的第一本'),
+          contains('從搜尋 test 時只走搜尋結果的第一本'),
           contains('校驗從第一本往下走'),
           isNot(contains('試抓與校驗都從搜尋結果的第一本')),
         ),

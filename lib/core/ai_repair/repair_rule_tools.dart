@@ -80,9 +80,54 @@ Future<String> runRepairJs(
       sent.write(cut ? line.substring(0, room) : line);
     },
   );
-  if (sent.isEmpty) return result;
-  return '$result\n# 這段程式送出的請求\n$sent${cut ? '…（後面省略）' : ''}';
+  final note = callsAjaxWithSecondArgument(code)
+      ? '\n# $aiRepairAjaxSecondArgument'
+      : '';
+  if (sent.isEmpty) return '$result$note';
+  return '$result$note\n# 這段程式送出的請求\n$sent${cut ? '…（後面省略）' : ''}';
 }
+
+/// 跑程式的結果後面附的一句：程式給 `java.ajax` 傳了第二個參數。同 Legado，
+/// `java.ajax` 只收網址一個參數，第二個參數沒有送出；AI 看不到時會以為網站
+/// 不認它給的標頭（酷匠阅读把標頭當第二個參數，判成網站要登入）。
+const String aiRepairAjaxSecondArgument =
+    'java.ajax 只收網址一個參數，這段程式給的第二個參數沒有送出：方法、內文、'
+    '標頭寫在網址後面（網址,{"headers":{"名稱":"值"}}），或改用 '
+    'java.get(網址, 標頭物件)、java.connect(網址, 標頭物件)';
+
+/// [code] 裡有沒有呼叫 `java.ajax(…)` 時傳了不只一個參數：從括號後面往下
+/// 走，跳過字串與巢狀的括號，同一層先碰到逗號就是。
+@visibleForTesting
+bool callsAjaxWithSecondArgument(String code) {
+  for (final match in _ajaxCall.allMatches(code)) {
+    var depth = 0;
+    String? quote;
+    for (var i = match.end; i < code.length; i++) {
+      final char = code[i];
+      if (quote != null) {
+        if (char == r'\') {
+          i++;
+        } else if (char == quote) {
+          quote = null;
+        }
+        continue;
+      }
+      if (char == '"' || char == "'" || char == '`') {
+        quote = char;
+      } else if (char == '(' || char == '[' || char == '{') {
+        depth++;
+      } else if (char == ')' || char == ']' || char == '}') {
+        if (depth == 0) break;
+        depth--;
+      } else if (char == ',' && depth == 0) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+final RegExp _ajaxCall = RegExp(r'\bjava\.ajax\s*\(');
 
 /// [onProgress] 收 [task] 一邊跑一邊交回的紀錄；傳回之後（含超過時間）到的
 /// 不收。
