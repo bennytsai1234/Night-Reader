@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
@@ -15,6 +16,7 @@ import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/source/book_link_service.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
+import 'package:night_reader/features/settings/sync_status_text.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/features/source_manager/widgets/import_preview_sheet.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
@@ -31,19 +33,61 @@ mixin AssociationDialogHelper on AssociationBase {
   Future<void> Function(BuildContext context, Book book) openBookDetail =
       openBookDetailPage;
 
+  /// 找書時開一個點外面關不掉的進度框，可以按「取消」或返回鍵收掉；收掉
+  /// （含進度框被拿掉）就停掉正在抓的請求，什麼都不提示。
   @override
   Future<void> addBookFromLink(BuildContext context, String url) async {
-    final Book book;
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final cancel = CancelToken();
+    Route<void>? progress;
+    final dialog = showStatefulAppAlert<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context, _, _) {
+        progress ??= ModalRoute.of(context);
+        return _CancelOnDispose(
+          cancelToken: cancel,
+          child: const AppAlert<bool>(
+            title: '加入書架',
+            content: SyncProgressView(value: null, label: '正在找書…'),
+            actions: [AppAlertAction(label: '取消', value: true)],
+          ),
+        );
+      },
+    );
+    unawaited(dialog.whenComplete(cancel.cancel));
+
+    Book? book;
+    Object? failure;
+    StackTrace? failureStack;
     try {
-      book = await bookLinks().findBook(url);
+      book = await bookLinks().findBook(url, cancelToken: cancel);
     } catch (error, stackTrace) {
-      if (!context.mounted) return;
+      failure = error;
+      failureStack = stackTrace;
+    }
+    if (cancel.isCancelled) return;
+    // 收掉自己這個進度框：又點了一條連結時，上面可能疊著另一個。還沒畫出
+    // 第一幀就找完時拿不到它，照最上面的收。
+    final route = progress;
+    if (route == null || route.isCurrent) {
+      navigator.pop();
+      await dialog;
+    } else if (route.isActive) {
+      navigator.removeRoute(route);
+    }
+    if (!context.mounted) return;
+    if (book == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: UiText(failureMessage('加入書架', error, stackTrace))),
+        SnackBar(
+          content: UiText(switch (failure) {
+            BookAlreadyOnShelfException(:final message) => message,
+            _ => failureMessage('加入書架', failure!, failureStack),
+          }),
+        ),
       );
       return;
     }
-    if (!context.mounted) return;
     // 同 Legado：直接開書籍詳情，讀者看過簡介、目錄再決定要不要加入書架。
     await openBookDetail(context, book);
   }
@@ -168,3 +212,25 @@ Future<void> openBookDetailPage(BuildContext context, Book book) =>
     Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => BookDetailPage(book: book)));
+
+/// 進度框被拿掉時（例如底下的畫面整個收掉）取消 [cancelToken]。
+class _CancelOnDispose extends StatefulWidget {
+  const _CancelOnDispose({required this.cancelToken, required this.child});
+
+  final CancelToken cancelToken;
+  final Widget child;
+
+  @override
+  State<_CancelOnDispose> createState() => _CancelOnDisposeState();
+}
+
+class _CancelOnDisposeState extends State<_CancelOnDispose> {
+  @override
+  void dispose() {
+    widget.cancelToken.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
