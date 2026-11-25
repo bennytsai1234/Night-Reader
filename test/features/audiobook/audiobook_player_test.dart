@@ -433,6 +433,135 @@ void main() {
     });
   }
 
+  AudiobookPlayer gatedPicker(_GatedBookDao gated) {
+    final picker = AudiobookPlayer(
+      engine: () => engine,
+      bookDao: gated,
+      chapterDao: ChapterDao(db),
+      sourceDao: BookSourceDao(db),
+      sourceService: source,
+      sync: sync,
+      playback: playback,
+      random: Random(1),
+    );
+    addTearDown(picker.dispose);
+    return picker;
+  }
+
+  test('選集等存進度的途中上一集播完：不自動接下一集，載入選的那一集', () async {
+    final gated = _GatedBookDao(db);
+    final picker = gatedPicker(gated);
+    await picker.open(book, chapterIndex: 1);
+    final saving = Completer<void>();
+    gated.gates.add(saving);
+
+    final pick = picker.playChapter(3);
+    await pumpEventQueue();
+    engine.finish();
+    await pumpEventQueue();
+    saving.complete();
+    await pick;
+    await pumpEventQueue();
+
+    expect(picker.chapterIndex, 3);
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/ep3.mp3');
+  });
+
+  test('選集等存進度時回到前景：不接另一台的進度，載入選的那一集、不記成同步過', () async {
+    final gated = _GatedBookDao(db);
+    final picker = gatedPicker(gated);
+    await picker.open(book, chapterIndex: 1);
+    await picker.pause();
+    sync.pulled = PulledProgress(
+      SyncedProgress(
+        chapterIndex: 3,
+        charOffset: 1000,
+        chapterTitle: '第 3 集',
+        time: 1,
+      ),
+      (_) async => sync.commits++,
+    );
+    final saving = Completer<void>();
+    gated.gates.add(saving);
+
+    final pick = picker.playChapter(2);
+    await pumpEventQueue();
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await pumpEventQueue();
+    saving.complete();
+    await pick;
+    await pumpEventQueue();
+
+    expect(picker.chapterIndex, 2);
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/ep2.mp3');
+    expect(sync.commits, 0);
+  });
+
+  test('選集等存進度時系統暫停：選的那一集載好停著，不自己播', () async {
+    final gated = _GatedBookDao(db);
+    final picker = gatedPicker(gated);
+    await picker.open(book, chapterIndex: 1);
+    await picker.pause();
+    final saving = Completer<void>();
+    gated.gates.add(saving);
+
+    final pick = picker.playChapter(3);
+    await pumpEventQueue();
+    picker.onPause();
+    await pumpEventQueue();
+    saving.complete();
+    await pick;
+    await pumpEventQueue();
+
+    expect(picker.chapterIndex, 3);
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/ep3.mp3');
+    expect(picker.playing, isFalse);
+    expect(engine.playing, isFalse);
+  });
+
+  test('回到前景接進度的載入途中換集：沒接上，不記成同步過', () async {
+    final gated = _GatedBookDao(db);
+    final picker = gatedPicker(gated);
+    await picker.open(book, chapterIndex: 1);
+    await picker.pause();
+    sync.pulled = PulledProgress(
+      SyncedProgress(
+        chapterIndex: 3,
+        charOffset: 1000,
+        chapterTitle: '第 3 集',
+        time: 1,
+      ),
+      (_) async => sync.commits++,
+    );
+    source.gate = Completer<void>();
+    final saving = Completer<void>();
+    gated.gates.add(saving);
+
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await pumpEventQueue();
+    final pick = picker.playChapter(1);
+    await pumpEventQueue();
+    source.gate!.complete();
+    await pumpEventQueue();
+    saving.complete();
+    await pick;
+    await pumpEventQueue();
+
+    expect(picker.chapterIndex, 1);
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/ep1.mp3');
+    expect(sync.commits, 0);
+  });
+
   test('開書還在等上次聽到哪時選了別集：播選的那集，這本書照樣登記為開著', () async {
     final ready = Completer<void>();
     sync.ready = ready.future;
@@ -718,6 +847,69 @@ void main() {
     final saved = await stored();
     expect(saved.chapterIndex, 3);
     expect(saved.durChapterTitle, '第 2 集');
+  });
+
+  test('聽的時候檢查更新換了這一集的網址與集數、只留集名：照集名存成新序號', () async {
+    addTearDown(MovedChapters.clear);
+    // 開書時的目錄：每一集都有集名。
+    await ChapterDao(db).replaceByBook(book.bookUrl, [
+      BookChapter(
+        url: 'https://audio.test/vol',
+        title: '第一卷',
+        isVolume: true,
+        bookUrl: book.bookUrl,
+        index: 0,
+      ),
+      for (final (i, title) in const [
+        '第 1 集 開端',
+        '第 2 集 風起',
+        '第 3 集 雲湧',
+      ].indexed)
+        BookChapter(
+          url: 'https://audio.test/ep${i + 1}',
+          title: title,
+          bookUrl: book.bookUrl,
+          index: i + 1,
+        ),
+    ]);
+    // 接著上次聽到的第 2 集、第 95 秒開書。
+    await bookDao.updateProgress(book.bookUrl, 2, '第 2 集 風起', 95000);
+    await player.open(book.copyWith());
+    // 檢查更新換上新目錄：第 1 集前面多了番外，第 2 集換了網址、只回來
+    // 集名（換目錄時沒認出同一集，對應裡沒有它）。
+    await ChapterDao(db).replaceByBook(book.bookUrl, [
+      BookChapter(
+        url: 'https://audio.test/vol',
+        title: '第一卷',
+        isVolume: true,
+        bookUrl: book.bookUrl,
+        index: 0,
+      ),
+      BookChapter(
+        url: 'https://audio.test/extra',
+        title: '番外',
+        bookUrl: book.bookUrl,
+        index: 1,
+      ),
+      for (final (i, title) in const ['第 1 集', '第 2 集', '第 3 集'].indexed)
+        BookChapter(
+          url: i == 1
+              ? 'https://audio.test/v2/ep${i + 1}'
+              : 'https://audio.test/ep${i + 1}',
+          title: title,
+          bookUrl: book.bookUrl,
+          index: i + 2,
+        ),
+    ]);
+    // 換目錄時沒認出換了網址的那一集，對應是空的。
+    MovedChapters.record(book.bookUrl, const {});
+    engine.advance(const Duration(seconds: 30));
+    await player.pause();
+
+    final saved = await stored();
+    expect(saved.chapterIndex, 3);
+    expect(saved.durChapterTitle, '第 2 集 風起');
+    expect(saved.charOffset, 30000);
   });
 
   test('一集播完接著播下一集，最後一集播完停在結尾', () async {

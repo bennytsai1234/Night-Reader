@@ -166,6 +166,65 @@ void main() {
     expect(jsonDecode(saved.readerAnchorJson!)['chapterIndex'], 1);
   });
 
+  test('來源同時換了這一章的網址與序號、新目錄只留章號：照章名寫成新序號', () async {
+    final opened = [
+      for (final (i, title) in ['第1章 開端', '第2章 風起', '第3章 雲湧'].indexed)
+        BookChapter(
+          url: 'https://s.example/c/$i',
+          title: title,
+          bookUrl: book.bookUrl,
+          index: i,
+        ),
+    ];
+    await chapterDao.replaceByBook(book.bookUrl, opened);
+    final controller = controllerReading(opened);
+    // 資料庫的進度還在前一章（閱讀器換章後存進度還沒輪到）：檢查更新換上
+    // 新目錄時只留下資料庫進度那一章，正在讀的第 2 章沒被留下。
+    await bookDao.updateProgress(book.bookUrl, 0, '第1章 開端', 10);
+    // 檢查更新換上新目錄：前面多了一章，第 2 章換了網址、只回來章號（換
+    // 目錄時沒認出同一章，對應裡沒有它）。
+    final stored = (await bookDao.getByUrl(book.bookUrl))!;
+    final result = await BookTocReplacer(chapterDao: chapterDao)
+        .replace(stored, [
+          BookChapter(
+            url: 'https://s.example/c/0',
+            title: '第1章 開端',
+            bookUrl: book.bookUrl,
+            index: 0,
+          ),
+          BookChapter(
+            url: 'https://s.example/c/x',
+            title: '番外',
+            bookUrl: book.bookUrl,
+            index: 1,
+          ),
+          BookChapter(
+            url: 'https://s.example/v2/1',
+            title: '第2章',
+            bookUrl: book.bookUrl,
+            index: 2,
+          ),
+          BookChapter(
+            url: 'https://s.example/c/2',
+            title: '第3章 雲湧',
+            bookUrl: book.bookUrl,
+            index: 3,
+          ),
+        ]);
+    expect(result.moved, isEmpty);
+    MovedChapters.record(book.bookUrl, result.moved);
+    await bookDao.upsert(stored);
+
+    await controller.saveImmediately(
+      const ReaderLocation(chapterIndex: 1, charOffset: 30),
+    );
+
+    final saved = (await bookDao.getByUrl(book.bookUrl))!;
+    expect(saved.chapterIndex, 2);
+    expect(saved.durChapterTitle, '第2章 風起');
+    expect(jsonDecode(saved.readerAnchorJson!)['chapterIndex'], 2);
+  });
+
   group('閱讀中檢查更新、書源換了網址（反轉目錄）', () {
     tearDown(MovedChapters.clear);
 
@@ -217,7 +276,7 @@ void main() {
       expect(saved.charOffset, 30);
     });
 
-    test('對應還沒傳回來時存的進度，傳回來後重存成同一章', () async {
+    test('對應還沒傳回來時存的進度照章名就落在同一章，傳回來後重存仍是同一章', () async {
       final opened = newestFirst(moved: false);
       await chapterDao.replaceByBook(book.bookUrl, opened);
       final controller = controllerReading(opened);
@@ -229,7 +288,10 @@ void main() {
       await controller.saveImmediately(
         ReaderLocation(chapterIndex: at, charOffset: 40),
       );
-      expect((await bookDao.getByUrl(book.bookUrl))!.chapterIndex, at);
+      expect(
+        (await bookDao.getByUrl(book.bookUrl))!.chapterIndex,
+        indexOfUrl(toc, 'https://new.example/c/24'),
+      );
 
       final moved = {
         for (var n = 1; n <= 25; n++)

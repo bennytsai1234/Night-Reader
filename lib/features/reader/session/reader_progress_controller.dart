@@ -85,16 +85,24 @@ class ReaderProgressController {
     final anchorJson = jsonEncode(persisted.toJson());
     // 閱讀器開著時，檢查更新可能已換上新目錄、章節重新編號（書源在中間
     // 插入或刪除章節）；閱讀器手上仍是開書時的目錄。寫進資料庫的序號依
-    // 章節網址換成目前目錄的（書源換了網址的章照換目錄時記下的新網址，
-    // [MovedChapters]），下次開書才落在同一章。目錄裡已經沒有這一章時照
-    // 閱讀器的序號寫。查序號與寫進度在同一個交易裡，中間不會被換目錄。
+    // 章節網址換成目前目錄的（書源換了網址的章照換目錄時記下的新網址，換了
+    // 網址又換了序號、只認得章名的照章名，[MovedChapters]），下次開書才落在
+    // 同一章。目錄裡已經沒有這一章時照閱讀器的序號寫。查序號與寫進度在同
+    // 一個交易裡，中間不會被換目錄。
     final chapter = repository.chapterAt(normalized.chapterIndex);
     final chapterDao = repository.chapterDao;
     int? movedAt;
     await chapterDao.transaction(() async {
       final storedIndex = chapter == null
           ? null
-          : await MovedChapters.indexOf(chapterDao, book.bookUrl, chapter.url);
+          : await MovedChapters.indexOf(
+              chapterDao,
+              book.bookUrl,
+              chapter.url,
+              title: chapter.title,
+              oldIndex: normalized.chapterIndex,
+              oldTotalCount: repository.chapterCount,
+            );
       final persistedIndex = storedIndex ?? normalized.chapterIndex;
       movedAt = await bookDao.updateProgress(
         book.bookUrl,

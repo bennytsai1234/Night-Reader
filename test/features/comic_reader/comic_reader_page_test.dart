@@ -189,6 +189,59 @@ void main() {
     expect(saved.durChapterTitle, '第2話');
   });
 
+  testWidgets('閱讀中檢查更新換了話的網址與序號、只留話號：存的第幾話照話名對到新目錄', (tester) async {
+    addTearDown(MovedChapters.clear);
+    final titled = [
+      for (final (i, title) in const [
+        '第1話 開端',
+        '第2話 風起',
+        '第3話 雲湧',
+        '第4話 終章',
+      ].indexed)
+        BookChapter(
+          url: 'local://comic/1/$i',
+          title: title,
+          bookUrl: book.bookUrl,
+          index: i,
+        ),
+    ];
+    await open(tester, toc: titled);
+    // 檢查更新換上新目錄：最前面多了一話，第 2 話換了網址、只回來話號。
+    await tester.runAsync(() async {
+      await getIt<ChapterDao>().replaceByBook(book.bookUrl, [
+        BookChapter(
+          url: 'local://comic/1/extra',
+          title: '番外',
+          bookUrl: book.bookUrl,
+          index: 0,
+        ),
+        titled[0].copyWith(index: 1),
+        titled[1].copyWith(url: 'local://comic/1/v2/1', title: '第2話', index: 2),
+        titled[2].copyWith(index: 3),
+        titled[3].copyWith(index: 4),
+      ]);
+      final stored = (await getIt<BookDao>().getByUrl(book.bookUrl))!
+        ..chapterIndex = 2;
+      await getIt<BookDao>().upsert(stored);
+      // 換目錄時沒認出換了網址的那一話，對應是空的。
+      MovedChapters.record(book.bookUrl, const {});
+    });
+
+    await tester.drag(find.byType(ComicStripView), const Offset(0, -700));
+    await settle(tester);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 600)),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await settle(tester);
+
+    final saved = (await tester.runAsync(
+      () => getIt<BookDao>().getByUrl(book.bookUrl),
+    ))!;
+    expect(saved.chapterIndex, 2);
+    expect(saved.durChapterTitle, '第2話 風起');
+  });
+
   testWidgets('選單與換章分隔的章名照繁簡轉換', (tester) async {
     ChineseUtils.initializeFromDictionaryData([
       for (final path in ChineseUtils.dictionaryAssetPaths)
