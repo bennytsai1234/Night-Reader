@@ -816,9 +816,9 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       final chapters = _chapterStore;
       int? moved;
       await chapters.transaction(() async {
+        // 手上的書照舊記播放器目錄的序號：換源照這份目錄估位置。
         final index =
             await chapters.indexOfUrl(book.bookUrl, chapter.url) ?? _index;
-        book.chapterIndex = index;
         moved = await _books.updateProgress(
           book.bookUrl,
           index,
