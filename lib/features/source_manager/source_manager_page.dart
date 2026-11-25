@@ -1080,14 +1080,19 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   Future<void> _openEditor(SourceManagerProvider p, String sourceUrl) async {
     final full = await p.beginEditing(sourceUrl);
     if (full == null) return;
+    // 登入、搜尋前先存好、留在編輯頁的那一次也算改了資料庫；返回時的
+    // 結果要用另一個變數接，不能蓋掉 onSaved 記下的。
+    var saved = false;
     var changed = false;
     try {
       if (mounted) {
-        changed =
-            await Navigator.of(context).push<bool>(
-              MaterialPageRoute(builder: (_) => SourceEditorPage(source: full)),
-            ) ==
-            true;
+        final result = await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder: (_) =>
+                SourceEditorPage(source: full, onSaved: () => saved = true),
+          ),
+        );
+        changed = result == true || saved;
       }
     } finally {
       await p.endEditing(sourceUrl, changed: changed);
@@ -1095,10 +1100,13 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   }
 
   Future<void> _openNewEditor(SourceManagerProvider provider) async {
-    final changed = await Navigator.of(
-      context,
-    ).push<bool>(MaterialPageRoute(builder: (_) => const SourceEditorPage()));
-    if (changed == true && mounted) await provider.loadSources();
+    var saved = false;
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => SourceEditorPage(onSaved: () => saved = true),
+      ),
+    );
+    if ((changed == true || saved) && mounted) await provider.loadSources();
   }
 
   Future<void> _runAction(

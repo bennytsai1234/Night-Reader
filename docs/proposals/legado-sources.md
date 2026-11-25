@@ -173,7 +173,7 @@
 | 發現頁往下載入下一頁 | 一樣 | 捲到底頁碼加一，同網址去重，沒有新書就停（`N:lib/features/explore/explore_show_provider.dart:131`）。 |
 | 沒寫發現規則時用搜尋規則 | 一樣 | 發現的書單規則空著時整套用搜尋規則（`N:lib/core/engine/web_book/book_list_parser.dart:245-252`）。 |
 | 發現篩選（`exploreScreen`） | 一樣 | 兩邊都只存著，見「書源的欄位」。 |
-| 發現的書源分組與啟用發現 | 結果不對 | 分組與名稱篩選一樣；停用的書源開著「啟用發現」時 Legado 照列，夜讀不列，見 R20。夜讀另外照類型分開（ADR 0051）。 |
+| 發現的書源分組與啟用發現 | 結果不對 | 分組與名稱篩選一樣；停用的書源開著「啟用發現」時 Legado 照列，夜讀不列，見 R20。夜讀另外照類型分開（ADR 0051）。已修（#638）。 |
 | 發現書源的選單（編輯、置頂、登入、搜尋、重新整理、刪除） | 少一個選項 | 編輯、置頂、搜尋、重新整理、刪除都有；有登入網址的書源 Legado 多一項「登入」（`L:ui/main/explore/ExploreAdapter.kt:159-165`），夜讀沒有（`N:lib/features/explore/explore_page.dart:467-494`）。 |
 
 ### 登入
@@ -387,11 +387,12 @@
 - Legado：`L:model/webBook/BookContent.kt:66-77`，`title` 規則有結果就寫進章節並 `bookChapterDao.update`。
 - 夜讀：`N:lib/core/engine/web_book/content_parser.dart:44-77` 只讀 `content` 與 `nextContentUrl`；`ContentRule.title` 照收（`N:lib/core/models/source/book_source_rules.dart:249`），整個 `lib/` 沒有地方讀它。
 
-### R20 停用的書源開著「啟用發現」，發現頁不列（少數寫法才碰到）
+### R20 停用的書源開著「啟用發現」，發現頁不列（少數寫法才碰到）（已修，#638）
 
 - 讀者會碰到：讀者把某個書源停用（不想讓它出現在搜尋），但留著「啟用發現」看它的排行與分類。Legado 的「啟用」與「啟用發現」各管各的，發現頁照列；夜讀停用就整個從發現頁消失，「啟用發現」開著也沒用。
 - Legado：`L:data/dao/BookSourceDao.kt:84-88`，發現頁只看 `enabledExplore = 1 and hasExploreUrl = 1`，不看 `enabled`。
 - 夜讀：`N:lib/core/models/source/book_source_logic.dart:551-556`，`canParticipateInDiscovery` 要 `enabled && enabledExplore && hasExploreUrl`，另外要校驗沒擋下；沒有 ADR 記這個決定。
+- 同一個原因（#638 一起修）：夜讀的「啟用」也管讀書（`isReadingEnabledByRuntime`），停用書源的書在書籍詳情不抓資訊與目錄，書架也不檢查更新、不下載；Legado 的「啟用」只管搜尋，書籍詳情、閱讀、檢查更新、快取都只要書源在（`L:ui/book/info/BookInfoViewModel.kt:104`、`L:model/ReadBook.kt:167`、`L:ui/main/MainViewModel.kt:151`、`L:model/CacheBook.kt:52`）。
 
 ### R21 匯入列出好幾個書源檔網址的 `{"sourceUrls": […]}` 時什麼都沒匯入（少數寫法才碰到）（已修，#637）
 
@@ -416,15 +417,15 @@
 使用者 2026-11-25 照 Claude 的建議定了：打勾的已定，其餘不做。每一條寫 Legado 給讀者的是什麼、夜讀現在怎樣。
 
 - [ ] **O1 線程數（不做）**：Legado「其他設定」一個數字管搜尋、換源、校驗、檢查新章節、下載與目錄正文分頁同時幾個（預設 16，`L:help/config/AppConfig.kt:234-237`）；夜讀各處固定（搜尋 16、校驗 8、檢查新章節 4、分頁 4）。
-- [x] **O2 發現書源的「登入」（已定）**：有登入網址的書源，Legado 在發現頁長按選單多一項「登入」；夜讀要到書源管理才登入得了。
+- [x] **O2 發現書源的「登入」（已做，#622）**：有登入網址的書源，Legado 在發現頁長按選單多一項「登入」；夜讀要到書源管理才登入得了。
 - [ ] **O3 書源管理排序「回應時間」「是否啟用」（不做）**：夜讀只有手動、自動、名稱、網址、更新時間。
-- [x] **O4 書源管理篩選「需要登入」（已定）**：列出有登入網址的書源。
+- [x] **O4 書源管理篩選「可以登入」（已做，#622）**：列出有登入網址的書源。夜讀叫「可以登入」，因為「需要登入」已經是校驗標記的名字。
 - [ ] **O5 匯入預覽的四個選項（不做）**：自訂分組（加進原本的分組或整個取代）、保留原名、保留分組、保留啟用狀態；後三個預設關，關著時兩邊都照檔案覆蓋，夜讀現在等於永遠關著。
-- [x] **O6 書源編輯頁的動作（已定，只做登入、在此書源搜尋、清除 Cookie、複製與貼上書源）**：登入、在這個書源搜尋、清除 Cookie（沒有登入網址的書源現在清不了）、自動補全、複製與貼上書源、設定書源變數（附 `variableComment` 的說明）。夜讀頁首只有「儲存」（`docs/design/screens.md` 第 58 行）。
+- [x] **O6 書源編輯頁的動作（已做，#622，只做登入、在此書源搜尋、清除 Cookie、複製與貼上書源）**：登入、在這個書源搜尋、清除 Cookie（沒有登入網址的書源現在清不了）、自動補全、複製與貼上書源、設定書源變數（附 `variableComment` 的說明）。夜讀頁首只有「儲存」（`docs/design/screens.md` 第 58 行）。
 - [ ] **O7 書源編輯頁的欄位（不做）**：夜讀沒列、改不到的有詳情頁網址規則（`bookUrlPattern`）、校驗關鍵字、併發率、自動存 Cookie、程式庫、變數說明、封面解密；搜尋與發現的簡介；詳情的 `canReName`、`downloadUrls`；目錄的卷名、付費、更新時間、`formatJs`、`preUpdateJs`；正文的章名、`webJs`、`sourceRegex`、`imageStyle`、`imageDecode`、`payAction`（`N:lib/features/source_manager/source_editor_page.dart` 的 `_controllers`）。匯入的值照存，只是不能在 App 裡改。
 - [x] **O8 除錯（已定，只做改關鍵字；已做，#645）**：從書源編輯進除錯時改關鍵字（Legado 有輸入框，「我的」「系統」、書源的校驗關鍵字與第一個發現分類可以點，`L:ui/book/source/debug/BookSourceDebugActivity.kt:94-107`；夜讀固定搜「我的世界」）；看搜尋、詳情、目錄、正文四步的原始網頁；重新整理發現分類。
 - [ ] **O9 換源（不做）**：搜到一半停止；結果長按選單（置頂、置底、編輯、停用、刪除書源），置頂置底會記住、下次照它排；載入字數（抓每個書源讀到的那一章，列出字數並照它排）。
-- [x] **O10 登入頁只刪登入標頭（已定）**：Legado 登入選單有「刪除登入標頭」，表單內容與 Cookie 留著；夜讀只有全部一起清的「清除登入資料」。
+- [x] **O10 登入頁只刪登入標頭（已做，#622）**：Legado 登入選單有「刪除登入標頭」，刪標頭時連 Cookie 儲存裡這個書源的 Cookie 一起清，表單內容留著（`L:data/entities/BaseSource.kt:159-162`）；夜讀照做，另外還有全部一起清的「清除登入資料」。
 
 ## 有更好的做法
 

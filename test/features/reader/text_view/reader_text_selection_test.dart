@@ -13,6 +13,8 @@ import 'package:night_reader/features/reader/text_view/overlay/selection_service
 import 'package:night_reader/features/reader/text_view/overlay/reader_text_selection_layer.dart';
 import 'package:night_reader/features/reader/text_view/text/word_segmenter.dart';
 
+Future<void> _ignoreShare(String text) async {}
+
 ChapterBlock _block(
   int index,
   String text,
@@ -376,6 +378,8 @@ void main() {
       ValueChanged<ReaderTextSelection>? onReplace,
       ValueChanged<ReaderTextSelection>? onBookmark,
       ValueChanged<ReaderTextSelection>? onHighlight,
+      ValueChanged<ReaderLocation>? onReadAloud,
+      Future<void> Function(String text) shareText = _ignoreShare,
       LineBox box = const LineBox(left: 100, top: 300, right: 140, bottom: 320),
     }) async {
       final chapter = _chapter();
@@ -406,6 +410,8 @@ void main() {
             onReplace: onReplace,
             onBookmark: onBookmark,
             onHighlight: onHighlight,
+            onReadAloud: onReadAloud,
+            shareText: shareText,
             highlightColor: Colors.amber,
             child: const SizedBox.expand(),
           ),
@@ -575,12 +581,15 @@ void main() {
       expect(open.right, moreOrLessEquals(closed.right));
     });
 
-    testWidgets('手機上沒有文字處理 App 時不顯示「⋮」', (tester) async {
+    testWidgets('手機上沒有文字處理 App 時，「⋮」裡仍有分享', (tester) async {
       await pumpSelected(tester, onHide: (_) {});
       await tester.pump();
 
       expect(find.text('隱藏'), findsOneWidget);
-      expect(find.byIcon(Icons.more_vert), findsNothing);
+      expect(find.byIcon(Icons.more_vert), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      expect(find.text('分享'), findsOneWidget);
     });
 
     testWidgets('按「隱藏」交出選到的字並收起選取', (tester) async {
@@ -698,13 +707,52 @@ void main() {
       expect(highlight.location.anchorAfter, startsWith('城門即將關閉'));
     });
 
-    testWidgets('沒有文字處理 App 時，「⋮」裡只有「標註」', (tester) async {
-      await pumpSelected(tester, onHighlight: (_) {});
+    testWidgets('沒有文字處理 App 時，「⋮」裡有朗讀、標註與分享', (tester) async {
+      await pumpSelected(tester, onHighlight: (_) {}, onReadAloud: (_) {});
       await tester.pump();
       expect(find.byIcon(Icons.more_vert), findsOneWidget);
       await tester.tap(find.byIcon(Icons.more_vert));
       await tester.pumpAndSettle();
+      expect(find.text('朗讀'), findsOneWidget);
       expect(find.text('標註'), findsOneWidget);
+      expect(find.text('分享'), findsOneWidget);
+    });
+
+    testWidgets('「⋮」裡的「朗讀」交出選取開頭那一句的句首並收起選取', (tester) async {
+      ReaderLocation? start;
+      final service = await pumpSelected(
+        tester,
+        onReadAloud: (location) => start = location,
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('朗讀'));
+      await tester.pump();
+
+      expect(service.active, isFalse);
+      final display = _chapter().displayText;
+      expect(start?.chapterIndex, 0);
+      expect(start?.charOffset, display.indexOf('天色漸暗'));
+    });
+
+    testWidgets('「⋮」裡的「分享」交出選到的字，段落之間只換一行', (tester) async {
+      final shared = <String>[];
+      final service = await pumpSelected(
+        tester,
+        onHide: (_) {},
+        shareText: (text) async => shared.add(text),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('分享'));
+      await tester.pump();
+
+      expect(shared, ['城門']);
+      expect(service.active, isFalse);
     });
 
     test('a highlight drops the blanks at either end of the selection', () {
@@ -769,6 +817,35 @@ void main() {
 
       final long = select('長街', '燈還').asBookmark;
       expect(long.excerpt, '他快步走過長街，回到書鋪。燈還');
+    });
+
+    test('朗讀從選取開頭那一句的句首開始', () {
+      const title = '第二章';
+      const body = '雨停了。他快步走過長街，回到書鋪。燈還亮著。';
+      const display = '$title\n\n$body';
+      final start = title.length + 2;
+      final chapter = ChapterBlocks(
+        chapterIndex: 0,
+        title: title,
+        displayText: display,
+        contentHash: 'h4',
+        blocks: [
+          _block(0, title, 0, paragraph: -1, isTitle: true),
+          _block(1, body, start),
+        ],
+      );
+      final selection = ReaderTextSelection(
+        blocks: chapter,
+        epoch: LayoutEpoch.initial,
+        range: ChapterTextRange(
+          display.indexOf('長街'),
+          display.indexOf('長街') + 2,
+        ),
+      );
+      final location = selection.asSpeechStart;
+      expect(location.chapterIndex, 0);
+      expect(location.charOffset, display.indexOf('他快步'));
+      expect(location.contentHash, 'h4');
     });
   });
 
@@ -851,6 +928,7 @@ void main() {
       VoidCallback? onAutoScrollEnd,
       ValueChanged<ReaderTextSelection>? onHide,
       ValueChanged<ReaderTextSelection>? onReplace,
+      Future<void> Function(String text) shareText = _ignoreShare,
     }) async {
       final chapter = blocks ?? _chapter();
       final display = chapter.displayText;
@@ -885,6 +963,7 @@ void main() {
             onAutoScrollEnd: onAutoScrollEnd,
             onHide: onHide,
             onReplace: onReplace,
+            shareText: shareText,
             highlightColor: Colors.amber,
             child: const SizedBox.expand(),
           ),
@@ -951,6 +1030,22 @@ void main() {
       expect(copied, [
         {'text': '城門即將關閉。\n他快步走過長街'},
       ]);
+    });
+
+    testWidgets('分享時段落之間只換一行', (tester) async {
+      final shared = <String>[];
+      final service = await pumpLayer(
+        tester,
+        to: '長街',
+        shareText: (text) async => shared.add(text),
+      );
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('分享'));
+      await tester.pump();
+
+      expect(shared, ['城門即將關閉。\n他快步走過長街']);
+      expect(service.active, isFalse);
     });
 
     testWidgets('跨過插圖時「隱藏」「替換」灰掉，按了不收掉選取', (tester) async {
