@@ -130,6 +130,7 @@ extension AnalyzeByCssHelper on AnalyzeByCssBase {
     final href = switch (top) {
       Document() => top.querySelector('base[href]')?.attributes['href'],
       Element() => top.querySelector('base[href]')?.attributes['href'],
+      DocumentFragment() => top.querySelector('base[href]')?.attributes['href'],
       _ => null,
     };
     final parsed = href == null ? null : Uri.tryParse(href.trim());

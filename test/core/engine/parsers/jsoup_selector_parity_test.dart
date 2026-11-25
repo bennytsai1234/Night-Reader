@@ -138,6 +138,11 @@ void main() {
       'https://cdn.test/b/x.png',
     );
     expect(rule('<a href="/chapter/1">一</a>').getString('a@abs:href'), '');
+    expect(
+      rule('<div><base href="https://x.test/"><a href="b">b</a></div>')
+          .getString('a@abs:href'),
+      'https://x.test/b',
+    );
   });
 
   test('屬性相等配上別的屬性條件照常選得到，不會卡住', () {
