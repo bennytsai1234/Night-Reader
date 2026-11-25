@@ -185,6 +185,81 @@ void main() {
       expect(book.charOffset, 4);
     });
 
+    test('同一話補上漏掉的頁重新匯入：換成新的那份，不並存', () async {
+      imageFolder('第2話', [7]);
+      // 舊版匯入時漏了沒有副檔名的圖：這一話只有一張有副檔名的。
+      final chapter = Directory(p.join(picked.path, '第1話'))..createSync();
+      File(p.join(chapter.path, '002.png'))
+          .writeAsBytesSync(stripedPng(4, 6, 0x112233, 0x445566));
+      final first = await service.importPath(picked.path);
+
+      File(p.join(chapter.path, '001'))
+          .writeAsBytesSync(stripedPng(4, 5, 0x112233, 0x445566));
+      final again = await service.importPath(picked.path);
+
+      expect(again!.bookUrl, first!.bookUrl);
+      final chapters = await ChapterDao(db).getByBook(first.bookUrl);
+      expect(chapters.map((c) => c.title), ['第1話', '第2話']);
+      // 書的資料夾裡只剩兩話的兩個 CBZ，舊的缺頁那份刪掉了。
+      expect(
+        Directory(first.bookUrl.replaceFirst('local://', ''))
+            .listSync()
+            .whereType<File>(),
+        hasLength(2),
+      );
+      final pages = await ComicChapterFiles.open(
+        LocalComicService.chapterPathOf(first, chapters.first),
+      );
+      expect(pages.pages.map((page) => page.height), [5, 6]);
+    });
+
+    test('換掉正在讀的那一話時，進度留在同一話', () async {
+      imageFolder('第1話', [5]);
+      imageFolder('第2話', [6]);
+      final first = await service.importPath(picked.path);
+      await BookDao(db).updateProgress(first!.bookUrl, 0, '第1話', 0);
+
+      File(p.join(picked.path, '第1話', '2.png'))
+          .writeAsBytesSync(stripedPng(4, 7, 0x112233, 0x445566));
+      await service.importPath(picked.path);
+
+      final book = (await BookDao(db).getByUrl(first.bookUrl))!;
+      final chapters = await ChapterDao(db).getByBook(book.bookUrl);
+      expect(chapters[book.chapterIndex].title, '第1話');
+    });
+
+    test('同步下載的章不照章名換掉同名的一話', () async {
+      imageFolder('番外', [5]);
+      final first = await service.importPath(picked.path);
+      final printA = (await ChapterDao(db).getByBook(first!.bookUrl))
+          .single
+          .url;
+
+      // 雲端這本的另一話也叫「番外」、內容不同：下載下來要新增，不是換掉
+      // 舊的那一話（同步的章名可以重複）。
+      final staging = Directory(p.join(root.path, 'staging'))..createSync();
+      final archive = Archive()
+        ..add(
+          ArchiveFile.bytes('p1.png', stripedPng(4, 9, 0x112233, 0x445566)),
+        );
+      File(p.join(staging.path, '00001.cbz'))
+          .writeAsBytesSync(ZipEncoder().encode(archive));
+      final printB = LocalComicLibrary.fingerprintOf(
+        p.join(staging.path, '00001.cbz'),
+      );
+      await service.importPath(
+        staging.path,
+        name: first.name,
+        related: {printA},
+        titles: {printB: '番外'},
+        fingerprint: printA,
+      );
+
+      final chapters = await ChapterDao(db).getByBook(first.bookUrl);
+      expect(chapters.map((c) => c.title), ['番外', '番外']);
+      expect(chapters.map((c) => c.url), containsAll([printA, printB]));
+    });
+
     test('單一個 CBZ 是只有一話的書；沒有圖的不匯入', () async {
       cbz('短篇.cbz', [5]);
       final book = await service.importPath(p.join(picked.path, '短篇.cbz'));

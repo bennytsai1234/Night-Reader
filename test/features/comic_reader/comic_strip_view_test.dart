@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/comic/comic_chapter_files.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/features/comic_reader/comic_chapter_transition.dart';
 import 'package:night_reader/features/comic_reader/comic_strip_model.dart';
 import 'package:night_reader/features/comic_reader/comic_strip_view.dart';
 import 'package:night_reader/features/source_login/source_failure_remedy.dart';
@@ -326,6 +327,78 @@ void main() {
     expect(harness.last.pageIndex, 10);
     expect(harness.last.fraction, closeTo(0.25, 0.001));
     expect(_scrollPixels(tester), closeTo(10 * 800 + 200, 0.5));
+  });
+
+  testWidgets('慣性滑動中轉螢幕：停回轉之前頂端的那一張、那一成', (tester) async {
+    final harness = _Harness(
+      FakeComicSource(pagesPerChapter: 20, width: 60, height: 60),
+      chapters: 1,
+    );
+    await harness.pump(tester);
+    tester
+        .state<ScrollableState>(find.byType(Scrollable))
+        .position
+        .jumpTo(4100);
+    await harness.settle(tester);
+    await tester.fling(
+      find.byType(ComicStripView),
+      const Offset(0, -300),
+      3000,
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    final position = tester
+        .state<ScrollableState>(find.byType(Scrollable))
+        .position;
+    // 手放開了，還在慣性滑動。
+    expect(position.isScrollingNotifier.value, isTrue);
+    final before = harness.last;
+    final target = before.pageIndex * 800.0 + before.fraction * 800.0;
+
+    tester.view.physicalSize = const Size(800, 400);
+    await tester.pump();
+
+    // 轉之前讀到第 11 張的某處：換算後停在同一張的同一成，慣性不再照舊
+    // 座標接著滑。
+    expect(harness.last.pageIndex, before.pageIndex);
+    expect(harness.last.fraction, closeTo(before.fraction, 0.02));
+    expect(position.pixels, closeTo(target, 1));
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(position.pixels, closeTo(target, 1));
+    expect(position.isScrollingNotifier.value, isFalse);
+  });
+
+  testWidgets('換章分隔在畫面頂端時轉螢幕：分隔留在頂端，不跳到下一話', (tester) async {
+    final harness = _Harness(FakeComicSource(pagesPerChapter: 3), chapters: 2);
+    await harness.pump(tester);
+    final separator = find.ancestor(
+      of: find.text(ComicChapterTransition.finishedLabel),
+      matching: find.byType(ComicChapterTransition),
+    );
+    final position = tester
+        .state<ScrollableState>(find.byType(Scrollable))
+        .position;
+    // 第 1 話的 3 張各高 600：換章分隔從 1800 開始。
+    position.jumpTo(1800);
+    await harness.settle(tester);
+    final height = tester.getSize(separator).height;
+    position.jumpTo(1800 + height / 2);
+    await harness.settle(tester);
+
+    tester.view.physicalSize = const Size(800, 400);
+    await harness.settle(tester);
+
+    // 轉之前分隔在畫面頂端的中間：轉之後分隔留在頂端、還在中間，不是把
+    // 分隔捲過去、停在下一話第一張的頂端。
+    final visible = find.text(ComicChapterTransition.finishedLabel);
+    expect(visible, findsOneWidget);
+    final visibleSeparator = find.ancestor(
+      of: visible,
+      matching: find.byType(ComicChapterTransition),
+    );
+    expect(tester.getCenter(visibleSeparator).dy, closeTo(0, 1));
+    expect(tester.getBottomLeft(visibleSeparator).dy, greaterThan(1));
   });
 
   testWidgets('點兩下放大到兩倍、再點兩下回到原本大小', (tester) async {

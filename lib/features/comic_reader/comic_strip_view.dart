@@ -534,19 +534,45 @@ class _ComicStripViewState extends State<ComicStripView>
     if (correction != null) position.shiftBy(correction);
   }
 
-  /// 捲動位置換到 [location]（照現在的高度表），畫面還沒照新尺寸排之前呼叫。
-  void _keepLocation(ComicLocation location) {
-    for (var g = -_model.before.length; g < _model.after.length; g++) {
-      final item = _itemOf(g);
-      if (item is ComicPageItem &&
-          item.chapterIndex == location.chapterIndex &&
-          item.pageIndex == location.pageIndex) {
-        _scroll.position.correctPixels(
-          _topOf(g) + location.fraction * _extentOf(item),
-        );
-        return;
-      }
-    }
+  /// 畫面頂端這一塊與在那一塊的幾成：轉螢幕、改視窗寬度時記下，量好新
+  /// 尺寸再照它接回。換章分隔也算一塊：頂端是分隔時停在分隔，不會被當成
+  /// 下一話的開頭。
+  ({ComicStripItem item, double fraction})? _topAnchor() {
+    if (!_scroll.hasClients) return null;
+    final pixels = _scroll.position.pixels;
+    final (g, within) = _itemAt(pixels);
+    final item = _itemOf(g);
+    if (item == null) return null;
+    final extent = _extentOf(item);
+    return (
+      item: item,
+      fraction: extent <= 0 ? 0.0 : (within / extent).clamp(0.0, 1.0),
+    );
+  }
+
+  /// 轉螢幕、改視窗寬度後這一幀：位置已經照新尺寸換算好，慣性滑動一起
+  /// 停下，停在轉之前頂端看到的地方，不接著滑到別張；換算後超出新的捲動
+  /// 範圍時照範圍停下。
+  void _stopScrollingAfterResize() {
+    if (!_scroll.hasClients) return;
+    final position = _scroll.comicPosition;
+    position.stopBallistic();
+    final target = position.pixels.clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if ((target - position.pixels).abs() > 0.5) position.jumpTo(target);
+  }
+
+  /// 捲動位置換到 [anchor]（照現在的高度表），畫面還沒照新尺寸排之前呼叫。
+  void _keepAnchor(({ComicStripItem item, double fraction}) anchor) {
+    final a = _model.after.indexOf(anchor.item);
+    final b = _model.before.indexOf(anchor.item);
+    final g = a >= 0 ? a : (b >= 0 ? -b - 1 : null);
+    if (g == null) return;
+    _scroll.position.correctPixels(
+      _topOf(g) + anchor.fraction * _extentOf(anchor.item),
+    );
   }
 
   int? _indexOf(ComicPageItem item) {
@@ -804,12 +830,12 @@ class _ComicStripViewState extends State<ComicStripView>
     return LayoutBuilder(
       builder: (context, constraints) {
         final screen = constraints.biggest;
-        ComicLocation? keep;
+        ({ComicStripItem item, double fraction})? keep;
         if (screen != _screen) {
           // 轉螢幕、改視窗寬度：圖照新寬度變高，捲動位置照新的高度換算成
-          // 同一張的同一成，不留著原本的像素距離。
+          // 頂端那一塊的同一成，不留著原本的像素距離。
           if (!_screen.isEmpty && _measured && _scroll.hasClients) {
-            keep = _locationAt(_scroll.position.pixels);
+            keep = _topAnchor();
           }
           _screen = screen;
           _tx = _clampTx(_tx, _scale);
@@ -817,12 +843,13 @@ class _ComicStripViewState extends State<ComicStripView>
           // 圖片清單可能在畫面建好之前就讀好了，之後不一定再有通知。
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
+            if (keep != null) _stopScrollingAfterResize();
             _applyPendingFraction();
             _onScroll();
           });
         }
         _measure();
-        if (keep != null) _keepLocation(keep);
+        if (keep != null) _keepAnchor(keep);
         return Listener(
           onPointerDown: _onPointerDown,
           child: GestureDetector(
@@ -1057,5 +1084,10 @@ class _ComicScrollPosition extends ScrollPositionWithSingleContext {
         : 0.0;
     jumpTo(pixels + delta);
     if (velocity != 0) goBallistic(velocity);
+  }
+
+  /// 慣性滑動停在現在的位置：轉螢幕、改視窗寬度時不接著滑到別張。
+  void stopBallistic() {
+    if (activity is BallisticScrollActivity) goIdle();
   }
 }

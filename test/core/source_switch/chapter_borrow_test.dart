@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,9 +12,15 @@ import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/source_switch/chapter_borrow.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
+import 'package:night_reader/core/utils/illustration_markers.dart';
+import 'package:path/path.dart' as p;
 
 const _borrowed = '借來的這一章正文，字數夠長，讀得到，用來通過可讀性檢查。';
+const _image = 'https://img.example/a.png';
+const _illustrated = '$_borrowed\n<img src="$_image">';
 
 /// 借的書源：記下抓了哪一本、哪一章、停點是哪裡；規則會改章節的欄位
 /// （同真的書源規則寫 variable）。
@@ -51,6 +59,33 @@ class _WatchedChapterDao extends ChapterDao {
     final result = await super.getByUrl(bookUrl, url);
     onGetByUrl?.call(++_calls);
     return result;
+  }
+}
+
+/// 抓插圖時真的寫進這本書的插圖資料夾（同書源的 `fetchIllustrations`）。
+class _IllustratedLenderService extends _LenderService {
+  _IllustratedLenderService({super.content});
+
+  /// 插圖寫好之後跑：模擬讀者這時關掉面板。
+  void Function()? onIllustrations;
+
+  @override
+  Future<int> fetchIllustrations(
+    BookSource source,
+    Book book,
+    String content, {
+    required String dir,
+    bool retryMissing = true,
+    bool externalContent = false,
+    CancelToken? cancelToken,
+  }) async {
+    for (final src in IllustrationMarkers.sourcesOf(content)) {
+      final file = File(BookIllustrationStorage.pathFor(dir, src));
+      await file.create(recursive: true);
+      await file.writeAsBytes(const [0x89, 0x50, 0x4E, 0x47]);
+    }
+    onIllustrations?.call();
+    return 0;
   }
 }
 
@@ -123,6 +158,16 @@ void main() {
     chapterDao: chapterDao,
     contentDao: contentDao,
   ).getRawContent(book: book, chapter: mainChapter());
+
+  void useTemporaryRoots() {
+    final root = Directory.systemTemp.createTempSync('borrow_images_');
+    addTearDown(() => root.deleteSync(recursive: true));
+    AppStoragePaths.useRoots((
+      documents: p.join(root.path, 'docs'),
+      support: p.join(root.path, 'support'),
+      temporary: p.join(root.path, 'tmp'),
+    ));
+  }
 
   setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
@@ -226,6 +271,55 @@ void main() {
       expect(await stored(), '原本的正文');
     });
   }
+
+  test('取消時這次抓下的插圖一起清掉', () async {
+    useTemporaryRoots();
+    final cancelToken = CancelToken();
+    final service = _IllustratedLenderService(content: _illustrated);
+    // 插圖抓完、寫正文之前讀者關掉面板。
+    service.onIllustrations = cancelToken.cancel;
+
+    await expectLater(
+      borrow(service, cancelToken: cancelToken),
+      throwsA(isA<DioException>()),
+    );
+
+    final dir = await BookIllustrationStorage.dirFor(book);
+    expect(
+      File(BookIllustrationStorage.pathFor(dir, _image)).existsSync(),
+      isFalse,
+    );
+    expect(await stored(), isNull);
+  });
+
+  test('這次抓下的插圖這本書存著的正文也用到時留著', () async {
+    useTemporaryRoots();
+    // 這一章原本的正文就有同一張圖（取消了，原本的正文留著）。
+    await ReaderChapterContentStore(
+      chapterDao: chapterDao,
+      contentDao: contentDao,
+    ).saveRawContent(
+      book: book,
+      chapter: mainChapter(),
+      content: '原本的正文<img src="$_image">',
+      saveChapterMetadata: false,
+    );
+    final cancelToken = CancelToken();
+    final service = _IllustratedLenderService(content: _illustrated);
+    service.onIllustrations = cancelToken.cancel;
+
+    await expectLater(
+      borrow(service, cancelToken: cancelToken),
+      throwsA(isA<DioException>()),
+    );
+
+    final dir = await BookIllustrationStorage.dirFor(book);
+    expect(
+      File(BookIllustrationStorage.pathFor(dir, _image)).existsSync(),
+      isTrue,
+    );
+    expect(await stored(), '原本的正文<img src="$_image">');
+  });
 
   test('分卷標題與付費章節不能借', () {
     final toc = lenderToc();
