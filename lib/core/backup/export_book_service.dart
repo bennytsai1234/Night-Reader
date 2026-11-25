@@ -12,11 +12,14 @@ import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:share_plus/share_plus.dart';
 
 class ExportBookService {
+  ExportBookService({BookSourceService? sourceService})
+    : _sourceService = sourceService ?? BookSourceService();
+
   final ChapterDao _chapterDao = getIt<ChapterDao>();
   final ReaderChapterContentDao _chapterContentDao =
       getIt<ReaderChapterContentDao>();
   BookSourceDao get _sourceDao => getIt<BookSourceDao>();
-  final BookSourceService _sourceService = BookSourceService();
+  final BookSourceService _sourceService;
 
   /// 匯出全書為 TXT 檔案。漫畫是圖、沒有文字，丟出 [StateError]（書籍詳情
   /// 不給漫畫這個選項，ADR 0052）。
@@ -78,12 +81,14 @@ class ExportBookService {
         );
         if (content.trim().isNotEmpty) {
           if (content.contains('<img')) {
-            await _sourceService.fetchIllustrations(
+            // 暫時連不上的圖留記號，書架自動下載之後再補（同閱讀器抓正文）。
+            final pending = await _sourceService.fetchIllustrations(
               source,
               book,
               content,
               dir: await BookIllustrationStorage.dirFor(book),
             );
+            if (pending > 0) await BookIllustrationStorage.markUnfetched(book);
           }
           // 補抓的期間使用者借來或重新取得的不蓋掉，匯出存著的那一份
           // （ADR 0080）。

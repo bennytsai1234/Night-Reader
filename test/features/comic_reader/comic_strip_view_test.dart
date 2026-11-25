@@ -33,6 +33,8 @@ class _Harness {
   Future<void> pump(
     WidgetTester tester, {
     SourceFailureRemedy? Function(Object error)? remedyFor,
+    double initialFraction = 0,
+    bool started = false,
   }) async {
     tester.view.physicalSize = _screen;
     tester.view.devicePixelRatio = 1;
@@ -50,11 +52,12 @@ class _Harness {
             titleOf: (i) => '第${i + 1}話',
             gapBetween: (a, b) => 0,
             remedyFor: remedyFor,
+            initialFraction: initialFraction,
           ),
         ),
       ),
     );
-    model.start();
+    if (!started) model.start();
     await settle(tester);
   }
 
@@ -256,6 +259,61 @@ void main() {
     final grew = 400 * (2.0 - ComicStripModel.defaultAspectRatio);
     expect(_scrollPixels(tester), closeTo(before + grew, 0.5));
     expect(harness.last.pageIndex, location.pageIndex);
+  });
+
+  testWidgets('一話的圖清單在畫面建好之前就讀好：照樣接回上次在那張圖的幾成', (tester) async {
+    final harness = _Harness(FakeComicSource(), chapters: 1);
+    // 本地漫畫讀檔很快，第一幀之前就讀好了。
+    harness.model.start();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 30)),
+    );
+    expect(harness.model.pageCountOf(0), 4);
+
+    await harness.pump(tester, initialFraction: 0.5, started: true);
+
+    // 60×90 的圖在寬 400 的畫面上高 600：一半是 300。
+    expect(_scrollPixels(tester), closeTo(300, 0.5));
+    expect(harness.last.pageIndex, 0);
+    expect(harness.last.fraction, closeTo(0.5, 0.001));
+  });
+
+  testWidgets('接回上次的位置時圖還沒到：圖到了、高度變了，仍停在那張圖的同一成', (tester) async {
+    final source = FakeComicSource(knownSizes: false, height: 120)
+      ..pageGates[(0, 0)] = Completer<void>();
+    final harness = _Harness(source);
+    await harness.pump(tester, initialFraction: 0.5);
+    expect(harness.last.fraction, closeTo(0.5, 0.001));
+
+    // 圖的比例 2.0，骨架是 1.42：圖高 800，一半是 400。
+    source.pageGates[(0, 0)]!.complete();
+    await harness.settle(tester);
+    expect(_scrollPixels(tester), closeTo(400, 0.5));
+    expect(harness.last.pageIndex, 0);
+    expect(harness.last.fraction, closeTo(0.5, 0.001));
+  });
+
+  testWidgets('轉螢幕、改視窗寬度：圖照新寬度變高，畫面頂端仍是同一張的同一成', (tester) async {
+    final harness = _Harness(
+      FakeComicSource(pagesPerChapter: 20, width: 60, height: 60),
+      chapters: 1,
+    );
+    await harness.pump(tester);
+    // 正方形的圖在寬 400 時一張高 400：4100 是第 11 張（第 10 張）的四分之一。
+    tester
+        .state<ScrollableState>(find.byType(Scrollable))
+        .position
+        .jumpTo(4100);
+    await harness.settle(tester);
+    expect(harness.last.pageIndex, 10);
+    expect(harness.last.fraction, closeTo(0.25, 0.001));
+
+    tester.view.physicalSize = const Size(800, 800);
+    await harness.settle(tester);
+
+    expect(harness.last.pageIndex, 10);
+    expect(harness.last.fraction, closeTo(0.25, 0.001));
+    expect(_scrollPixels(tester), closeTo(10 * 800 + 200, 0.5));
   });
 
   testWidgets('點兩下放大到兩倍、再點兩下回到原本大小', (tester) async {

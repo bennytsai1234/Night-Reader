@@ -47,21 +47,19 @@ class SourceManagerMenus {
       enabled: provider.anySourceChecked,
     ),
     for (final tag in provider.checkResultTags)
-      // 「需要登入」在上面已經有一項（篩有登入網址的），標記的同一項不
-      // 再列一次。
-      if (tag != SourceManagerProvider.needLoginFilter)
-        GlassMenuItem(
-          value: tag,
-          label: tag,
-          checked: provider.filterGroup == tag,
-        ),
+      GlassMenuItem(
+        value: SourceManagerProvider.groupFilter(tag),
+        label: tag,
+        checked: provider.filterGroup == SourceManagerProvider.groupFilter(tag),
+      ),
     if (provider.userGroups.isNotEmpty) const GlassMenuDivider(),
     for (final group in provider.userGroups)
       GlassMenuItem(
         translate: false,
-        value: group,
+        value: SourceManagerProvider.groupFilter(group),
         label: group,
-        checked: provider.filterGroup == group,
+        checked:
+            provider.filterGroup == SourceManagerProvider.groupFilter(group),
       ),
     const GlassMenuDivider(),
     const GlassMenuItem(

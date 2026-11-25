@@ -30,6 +30,8 @@ class BackupService {
   /// 時蓋住畫面、解鎖才能打開（另一台不一定有指紋，ADR 0083）。
   static final Set<String> deviceOnlyKeys = {
     SyncSettings.deviceIdKey,
+    SyncSettings.lastSyncKey,
+    SyncSettings.lastSyncSpaceKey,
     PreferKey.downloadsPausedAll,
     PreferKey.orphanedBooksSwitched,
     PreferKey.appCoverOnLeave,

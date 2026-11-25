@@ -16,7 +16,12 @@ class SyncSettings {
   static const _urlKey = 'sync.webdav.url';
   static const _userKey = 'sync.webdav.user';
   static const _passwordKey = 'sync.webdav.password';
-  static const _lastSyncKey = 'sync.last_success_at';
+
+  /// 這台上次全面同步做完的時間，與那時的同步空間（[identity]）。時間只屬於
+  /// 那個空間：換了空間（含還原備份改了設定）就不算，換回來才又算；只屬於
+  /// 這台，備份不帶（`BackupService.deviceOnlyKeys`）。
+  static const lastSyncKey = 'sync.last_success_at';
+  static const lastSyncSpaceKey = 'sync.last_success_space';
 
   /// 用 Google 雲端硬碟時登入的帳號（電子郵件），給畫面顯示與分辨換了帳號。
   static const _googleAccountKey = 'sync.google.account';
@@ -46,7 +51,6 @@ class SyncSettings {
     final prefs = await _ensure();
     await prefs.setString(_googleAccountKey, account);
     await prefs.setString(_spaceKey, 'google_drive');
-    await prefs.remove(_lastSyncKey);
   }
 
   Future<WebDavAccount?> webDavAccount() async {
@@ -82,7 +86,6 @@ class SyncSettings {
     await prefs.setString(_userKey, account.user);
     await prefs.setString(_passwordKey, account.password);
     await prefs.setString(_spaceKey, 'webdav');
-    await prefs.remove(_lastSyncKey);
   }
 
   /// 停用同步；WebDAV 的帳號留著，再打開時不用重填（Google 帳號由
@@ -90,7 +93,7 @@ class SyncSettings {
   Future<void> disable() async {
     final prefs = await _ensure();
     await prefs.setString(_spaceKey, 'none');
-    await prefs.remove(_lastSyncKey);
+    await _forgetLastSync(prefs);
   }
 
   /// 這台手機的名字，第一次用到時隨機產生。
@@ -107,14 +110,33 @@ class SyncSettings {
     return id;
   }
 
+  /// 換了同步空間：上一個空間的時間不留（升級前存的沒記空間，靠這裡清）。
+  Future<void> forgetLastSync() async => _forgetLastSync(await _ensure());
+
+  static Future<void> _forgetLastSync(SharedPreferences prefs) async {
+    await prefs.remove(lastSyncKey);
+    await prefs.remove(lastSyncSpaceKey);
+  }
+
+  /// 現在這個同步空間上次全面同步做完的時間；沒做完過、或記的是別的空間
+  /// 時是 null。沒記空間的（這個欄位之前存的）照舊算。
   Future<DateTime?> lastSyncAt() async {
     final prefs = await _ensure();
-    final millis = prefs.getInt(_lastSyncKey);
-    return millis == null ? null : DateTime.fromMillisecondsSinceEpoch(millis);
+    final millis = prefs.getInt(lastSyncKey);
+    if (millis == null) return null;
+    final space = prefs.getString(lastSyncSpaceKey);
+    if (space != null && space != await identity()) return null;
+    return DateTime.fromMillisecondsSinceEpoch(millis);
   }
 
   Future<void> setLastSyncAt(DateTime time) async {
     final prefs = await _ensure();
-    await prefs.setInt(_lastSyncKey, time.millisecondsSinceEpoch);
+    await prefs.setInt(lastSyncKey, time.millisecondsSinceEpoch);
+    final space = await identity();
+    if (space == null) {
+      await prefs.remove(lastSyncSpaceKey);
+    } else {
+      await prefs.setString(lastSyncSpaceKey, space);
+    }
   }
 }

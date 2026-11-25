@@ -214,6 +214,8 @@ class _CloseButton extends StatelessWidget {
         button: true,
         label: context.ui('關閉'),
         excludeSemantics: true,
+        // 排除子語意也排除了 PressScale 的點擊：讀屏的點擊接在這裡。
+        onTap: () => Navigator.maybePop(context),
         child: PressScale(
           onTap: () => Navigator.maybePop(context),
           child: SizedBox.square(

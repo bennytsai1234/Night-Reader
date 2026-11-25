@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
@@ -106,6 +110,17 @@ class _FakeBookSourceService extends BookSourceService {
     url: 'https://cdn.test/${chapter.index}.mp3',
     headers: const {},
   );
+
+  /// 插圖都連不上：每張都還沒抓到、也還不能確定抓不到。
+  @override
+  Future<int> fetchIllustrations(
+    BookSource source,
+    Book book,
+    String content, {
+    required String dir,
+    bool retryMissing = true,
+    CancelToken? cancelToken,
+  }) async => '<img'.allMatches(content).length;
 }
 
 /// 自動換源用的網站：每個書源的目錄照 [tocs]（書源網址 → 章名），搜到的
@@ -838,6 +853,42 @@ void main() {
       expect(movedHighlight.chapterIndex, 6, reason: '標註也跟著搬');
       expect(movedHighlight.charOffset, 30);
       expect(movedHighlight.color, HighlightColor.green);
+    });
+
+    test('換源時那一章的插圖暫時連不上，留記號給書架自動下載補抓', () async {
+      final root = await Directory.systemTemp.createTemp('switch_images');
+      addTearDown(() => root.delete(recursive: true));
+      AppStoragePaths.useRoots((
+        documents: root.path,
+        support: root.path,
+        temporary: root.path,
+      ));
+      final oldBook = _currentBook();
+      await db.bookDao.upsert(oldBook);
+      final candidate = _candidate('new-origin');
+      final service = SourceSwitchService(
+        service: _FakeBookSourceService(
+          chapters: _chapters(candidate.bookUrl, 10),
+          content: '這是一段足夠長的章節正文內容。\n<img src="https://a.test/1.jpg">\n後文也夠長。',
+        ),
+        sourceDao: db.bookSourceDao,
+      );
+
+      final resolution = await service.prepareSwitch(
+        oldBook,
+        candidate,
+        targetChapterIndex: 5,
+        targetChapterTitle: '第6章',
+      );
+      await service.commitSwitch(
+        oldBook,
+        resolution,
+        bookDao: db.bookDao,
+        chapterDao: db.chapterDao,
+      );
+
+      final migrated = (await db.bookDao.getByUrl(candidate.bookUrl))!;
+      expect(await BookIllustrationStorage.isUnfetched(migrated), isTrue);
     });
 
     test('漫畫換源：目標那一話只有圖也能換，不寫進正文快取（ADR 0052）', () async {

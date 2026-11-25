@@ -578,7 +578,7 @@ class _NumberInputDialogState extends State<_NumberInputDialog> {
             borderRadius: AppRadius.cardMd,
             borderSide: BorderSide.none,
           ),
-          errorText: _errorText,
+          errorText: UiLanguageText.convertNullable(context, _errorText),
           errorStyle: AppTextStyles.bodyBase.copyWith(
             color: Theme.of(context).colorScheme.error,
           ),

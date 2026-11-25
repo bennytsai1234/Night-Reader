@@ -290,7 +290,9 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                   if (!provider.checkService.isChecking &&
                       !provider.pausedCheck.isPaused &&
                       provider.lastCheckReport.affectedCount > 0) {
-                    provider.setFilterGroup(abnormalSourceGroupTag);
+                    provider.setFilterGroup(
+                      SourceManagerProvider.groupFilter(abnormalSourceGroupTag),
+                    );
                   } else {
                     SourceManagerDialogs.showCheckLog(context, provider);
                   }

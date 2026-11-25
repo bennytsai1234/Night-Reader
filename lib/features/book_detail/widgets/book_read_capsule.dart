@@ -62,6 +62,8 @@ class BookReadCapsule extends StatelessWidget {
               button: true,
               label: context.ui(label),
               excludeSemantics: true,
+              // 排除子語意也排除了 PressScale 的點擊：讀屏的點擊接在這裡。
+              onTap: onPressed,
               child: PressScale(
                 scale: 0.97,
                 onTap: onPressed,

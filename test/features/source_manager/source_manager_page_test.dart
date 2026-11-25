@@ -26,6 +26,7 @@ import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:night_reader/shared/widgets/lists/search_field.dart';
+import 'package:night_reader/shared/widgets/lists/selection_circle.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:provider/provider.dart';
@@ -331,7 +332,7 @@ void main() {
         find.descendant(
           of: tile,
           matching: find.byWidgetPredicate(
-            (widget) => widget.runtimeType.toString() == '_SelectionCircle',
+            (widget) => widget is SelectionCircle,
           ),
         ),
       );
@@ -587,8 +588,6 @@ void main() {
         BookSource(
           bookSourceUrl: 'https://plain.example',
           bookSourceName: '沒有登入網址',
-          // 校驗標記也叫「需要登入」：篩選只有一項，篩的是有登入網址的。
-          bookSourceGroup: loginRequiredSourceGroupTag,
           customOrder: 1,
         ),
       );
@@ -605,9 +604,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('分組與篩選'));
     await tester.pumpAndSettle();
-    // 清單列上的校驗標記也叫「需要登入」；選單裡只有這一項。
-    expect(find.text('需要登入'), findsNWidgets(2));
-    await tester.tap(find.text('需要登入').last);
+    await tester.tap(find.text('需要登入'));
     await tester.pumpAndSettle();
 
     expect(find.text('有登入網址'), findsOneWidget);
