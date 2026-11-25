@@ -220,6 +220,18 @@ class TTSService extends ChangeNotifier {
     return future;
   }
 
+  /// 等引擎回覆初始化、念一句的上限。系統的朗讀服務連不上或一直不回話時，
+  /// 外掛會把呼叫排著等（`third_party/flutter_tts/PATCHES.md` nightreader.6），
+  /// 逾時就當成引擎出錯，朗讀停在那句、提示「朗讀引擎出錯，已暫停」，不讓
+  /// 播放列一直停在「暫停朗讀」。
+  static const Duration engineReplyWait = Duration(seconds: 10);
+
+  /// 測試把等待改短；平常照 [engineReplyWait]。
+  @visibleForTesting
+  static Duration? debugEngineReplyWait;
+
+  Duration get _engineReplyWait => debugEngineReplyWait ?? engineReplyWait;
+
   Future<void> _initialize() async {
     await _loadSavedSpeechParams();
     notifyListeners();
@@ -227,7 +239,7 @@ class TTSService extends ChangeNotifier {
       // 媒體工作階段和朗讀引擎各開各的：系統一直不回應工作階段時，朗讀照樣
       // 能念（工作階段開好時會補上播放資訊）。
       unawaited(SystemPlayback.instance.start());
-      await _initTts();
+      await _initTts().timeout(_engineReplyWait);
       _isInitialized = true;
       // 引擎、音色清單與保存的選擇都載好了：設定頁跟著更新。
       notifyListeners();
@@ -327,8 +339,17 @@ class TTSService extends ChangeNotifier {
         currentWordEnd = -1;
         _isPlaying = true;
         notifyListeners();
-        // 引擎連著但不收這句時回 0（`third_party/flutter_tts`）。
-        if (await _flutterTts.speak(text) == 0) {
+        // 引擎連著但不收這句時回 0（`third_party/flutter_tts`）；外掛排著等
+        // 一直連不上的引擎時不一直等，照引擎出錯處理。
+        final dynamic result;
+        try {
+          result = await _flutterTts.speak(text).timeout(_engineReplyWait);
+        } on TimeoutException {
+          AppLog.e('TTSService: speak got no reply within $_engineReplyWait');
+          _reportFailure(TtsFailure.engine);
+          return;
+        }
+        if (result == 0) {
           _reportFailure(TtsFailure.engine);
         }
       },

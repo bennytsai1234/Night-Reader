@@ -15,6 +15,7 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/playback/audio_focus.dart';
 import 'package:night_reader/features/audiobook/audiobook_page.dart';
 import 'package:night_reader/features/audiobook/audiobook_player.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -49,6 +50,7 @@ class _World {
   final ChapterDao chapters;
   final BookSourceDao sources;
   final engine = FakeAudioEngine();
+  final focusSession = FakeAudioFocusSession();
   late final AudiobookPlayer player = AudiobookPlayer(
     engine: () => engine,
     bookDao: books,
@@ -57,6 +59,7 @@ class _World {
     sourceService: FakeAudioSourceService(),
     sync: FakeSync(),
     playback: RecordingPlayback(),
+    audioFocus: AudioFocus(platform: focusSession),
     random: Random(1),
   );
 

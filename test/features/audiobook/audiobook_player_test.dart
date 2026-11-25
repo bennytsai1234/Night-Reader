@@ -7,6 +7,7 @@ import 'dart:math';
 import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -17,6 +18,7 @@ import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/playback/audio_focus.dart';
 import 'package:night_reader/core/storage/books_in_use.dart';
 import 'package:night_reader/core/storage/moved_chapters.dart';
 import 'package:night_reader/core/playback/system_playback.dart';
@@ -64,6 +66,8 @@ void main() {
   late FakeAudioSourceService source;
   late FakeSync sync;
   late RecordingPlayback playback;
+  late FakeAudioFocusSession focusSession;
+  late AudioFocus focus;
   late AudiobookPlayer player;
   late Book book;
 
@@ -111,6 +115,8 @@ void main() {
     source = FakeAudioSourceService();
     sync = FakeSync();
     playback = RecordingPlayback();
+    focusSession = FakeAudioFocusSession();
+    focus = AudioFocus(platform: focusSession);
     player = AudiobookPlayer(
       engine: () => engine,
       bookDao: bookDao,
@@ -119,6 +125,7 @@ void main() {
       sourceService: source,
       sync: sync,
       playback: playback,
+      audioFocus: focus,
       random: Random(1),
     );
   });
@@ -141,6 +148,36 @@ void main() {
     expect(player.playing, isTrue);
     expect(player.chapterIndex, 2);
     expect(sync.opened, [book.bookUrl]);
+  });
+
+  test('通話中按播放不出聲，留在暫停並說明；通話結束後再按就播', () async {
+    final notices = <String>[];
+    final subscription = player.notices.listen(notices.add);
+    await player.open(book);
+    expect(engine.playing, isTrue);
+    await player.pause();
+
+    // 有聲書原本拿著焦點，來電時暫時被拿走：`audio_session` 之後按播放會
+    // 直接回「給了」，不再問系統。
+    focusSession.interruptionEvents.add(
+      AudioInterruptionEvent(true, AudioInterruptionType.pause),
+    );
+    await pumpEventQueue();
+
+    await player.play();
+    await pumpEventQueue();
+    expect(engine.playing, isFalse);
+    expect(player.phase, AudiobookPhase.paused);
+    expect(notices, [audiobookNoAudioFocusNotice]);
+
+    focusSession.interruptionEvents.add(
+      AudioInterruptionEvent(false, AudioInterruptionType.pause),
+    );
+    await pumpEventQueue();
+    await player.play();
+    expect(engine.playing, isTrue);
+    expect(player.phase, AudiobookPhase.playing);
+    await subscription.cancel();
   });
 
   test('編輯書源改了網址回來，播放器手上的書換成新網址，已下載的集數照新的書本資料夾找', () async {
