@@ -255,6 +255,47 @@ void main() {
     expect(restored[1790000000000]!.excerpt, '雨聲');
   });
 
+  // 夜讀 2026-09 以前的書籤也有 `content`，意思同 Legado（讀者寫的評論）。
+  test('a bookmark with a note from an old Night Reader backup becomes a '
+      'highlight with that note, ordered by when it was made', () async {
+    const time = 1790000000000;
+    // 這台早一秒畫的標註（編號照 `BookmarkDao.newId`：毫秒乘 1000 加隨機數）。
+    await HighlightDao(db).upsertAll([
+      Highlight(id: (time - 1000) * 1000 + 7, bookName: '舊書籤', quote: '早一秒'),
+    ]);
+    final zip = await writeZip('old-noted.zip', {
+      'manifest.json': jsonEncode({'schemaVersion': 2}),
+      'bookmark.json': jsonEncode([
+        {
+          'id': 3,
+          'time': time,
+          'bookName': '舊書籤',
+          'bookAuthor': '某人',
+          'chapterIndex': 1,
+          'chapterPos': 4,
+          'chapterName': '第二章',
+          'bookText': '那一句',
+          'content': '當時的想法',
+        },
+      ]),
+    });
+
+    await RestoreService().restoreFromZip(zip);
+
+    final noted = (await HighlightDao(
+      db,
+    ).getAll()).firstWhere((h) => h.note == '當時的想法');
+    expect(noted.id, time * 1000);
+    expect(noted.quote, '那一句');
+    // 清單照編號排：晚一秒建立的排在早一秒的前面。
+    final all = await HighlightDao(db).watchAll().first;
+    final order = [
+      for (final h in all)
+        if (h.bookName == '舊書籤') h.quote,
+    ];
+    expect(order, ['那一句', '早一秒']);
+  });
+
   test('highlights are restored with their color and style', () async {
     final zip = await writeZip('highlights.zip', {
       'manifest.json': jsonEncode({'schemaVersion': db.schemaVersion}),
@@ -626,7 +667,7 @@ void main() {
       final noted = (await HighlightDao(
         db,
       ).getAll()).where((h) => h.bookName == '雪中悍刀行').single;
-      expect(noted.id, 1700000000123);
+      expect(noted.id, 1700000000123 * 1000);
       expect(noted.bookAuthor, '烽火戏诸侯');
       expect(noted.chapterIndex, 3);
       expect(noted.chapterTitle, '第四章');
