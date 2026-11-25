@@ -95,6 +95,30 @@ void main() {
     return provider;
   }
 
+  test('使用者的分組取名「全部」：選它只搜這一組，和不限分組分開', () async {
+    for (final (url, group) in [
+      ('https://fast.example', '全部'),
+      ('https://partial.example', '其他'),
+    ]) {
+      final source = (await sourceDao.getByUrl(url))!;
+      await sourceDao.upsert(source..bookSourceGroup = group);
+    }
+    final provider = await search();
+    await provider.loadGroups();
+    expect(provider.selectedGroup, isNull);
+
+    provider.updateSelectedGroup('全部');
+    await provider.startSearch();
+    expect(provider.selectedGroup, '全部');
+    expect(provider.filteredResults.map((r) => r.origin), [
+      'https://fast.example',
+    ]);
+
+    provider.updateSelectedGroup(null);
+    await provider.startSearch();
+    expect(provider.filteredResults, hasLength(4));
+  });
+
   test('換源清單照這次回應的快慢排，不照書源順序', () async {
     final provider = await search();
     expect(provider.filteredResults.map((r) => r.origin), [

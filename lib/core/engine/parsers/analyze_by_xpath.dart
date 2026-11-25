@@ -163,10 +163,6 @@ class AnalyzeByXPath {
   /// (原 Android 的) strToJXDocument，處理表格標籤補全
   String _prepareHtml(String html) {
     var h = html.trim();
-    h = h.replaceAllMapped(
-      RegExp(r'""(?=\s+[a-zA-Z_:][-a-zA-Z0-9_:.]*=)'),
-      (_) => '"',
-    );
     if (h.endsWith('</td>')) {
       h = '<tr>$h</tr>';
     }

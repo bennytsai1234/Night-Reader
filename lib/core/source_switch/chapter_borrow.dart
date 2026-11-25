@@ -21,8 +21,8 @@ bool chapterBorrowable(BookChapter chapter) => chapterIsDownloadable(chapter);
 /// 同一章分頁的停止點用借的書源目錄的下一章（最後一章用第一章，同引擎沒給
 /// 停點時的做法），不拿主書源的。插圖用借的書源抓進這本書的插圖資料夾；
 /// 連不上的照現狀留給書架自動下載補。正文要讀得到（同換源）；寫進去的
-/// 同一個交易裡再看一次主書源這一章還在目錄裡、沒有改成付費章節、
-/// [cancelToken] 沒有取消。傳回存進去的正文；借不成丟 [AppException]
+/// 同一個交易裡再看一次主書源這一章還在目錄裡、沒有改成付費章節，寫完、
+/// 交易收尾前 [cancelToken] 沒有取消。傳回存進去的正文；借不成丟 [AppException]
 /// （書源搜不到、抓不到時照書源工作原本丟的）。
 Future<String> borrowChapter({
   required Book book,
@@ -62,8 +62,10 @@ Future<String> borrowChapter({
     );
     if (pending > 0) await BookIllustrationStorage.markUnfetched(book);
   }
-  // 取消、這一章還在不在目錄、是不是付費章節，和寫入在同一個交易裡看：
-  // 中間不會被關面板、換目錄插進來。
+  // 這一章還在不在目錄、是不是付費章節，和寫入在同一個交易裡看：中間不會
+  // 被換目錄插進來。資料庫在另一個 isolate，交易裡每等一次，畫面都可能收
+  // 到關面板、改選別章而取消：交易最後再看一次取消，取消了就丟出錯誤、整個
+  // 交易退回，原本的正文留著。
   return chapterDao.transaction(() async {
     if (cancelToken?.cancelError case final cancelled?) throw cancelled;
     final current = await chapterDao.getByUrl(book.bookUrl, chapter.url);
@@ -83,6 +85,7 @@ Future<String> borrowChapter({
           replaceStored: true,
         );
     if (!saved) throw LockedChapterException();
+    if (cancelToken?.cancelError case final cancelled?) throw cancelled;
     return content;
   });
 }

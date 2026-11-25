@@ -347,9 +347,11 @@ class JsExtensions extends JsExtensionsBase {
         return null;
       }
       if (!uri.hasScheme) return null;
+      // java.net.URL 的 host 是 IPv6 時帶著方括號，`Uri.host` 拿掉了。
+      final host = uri.host.contains(':') ? '[${uri.host}]' : uri.host;
       final origin = uri.hasPort
-          ? '${uri.scheme}://${uri.host}:${uri.port}'
-          : '${uri.scheme}://${uri.host}';
+          ? '${uri.scheme}://$host:${uri.port}'
+          : '${uri.scheme}://$host';
       Map<String, String>? params;
       if (uri.hasQuery) {
         params = {};
@@ -360,7 +362,7 @@ class JsExtensions extends JsExtensionsBase {
         }
       }
       return {
-        'host': uri.host,
+        'host': host,
         'origin': origin,
         'pathname': uri.path,
         'searchParams': params,

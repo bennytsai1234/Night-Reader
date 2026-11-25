@@ -119,6 +119,11 @@ class AnalyzeByJsonPath {
         try {
           final path = _compile(rule);
           final matches = path.read(_jsonData);
+          // 同 Legado `getList`（Jayway `read`）：確定路徑對到陣列時是陣列裡
+          // 的每一筆；其他路徑是對到的每一個值，值本身是陣列也不展開。
+          if (!_isDefinite(rule)) {
+            return [for (final match in matches) match.value];
+          }
           final values = <dynamic>[];
           for (final match in matches) {
             final value = match.value;
@@ -169,10 +174,58 @@ class AnalyzeByJsonPath {
     }
   }
 
-  /// Get a single object
+  /// 單一個值，同 Legado `getObject`（Jayway 的 `read`）：路徑對到的值照
+  /// 原樣交出，對到陣列就是整個陣列，不展開成一筆筆再取第一筆；對到好幾個
+  /// 時是它們的清單。組合規則（`||`、`&&`、`%%`）與內嵌的 `{$.…}` 照
+  /// [getElements] 取第一筆。
   dynamic getObject(String rule) {
-    final list = getElements(rule);
-    return list.isNotEmpty ? list.first : null;
+    rule = _preProcessRule(rule);
+    if (rule.isEmpty) return null;
+    if (rule.contains(r'{$.') ||
+        RuleAnalyzer(rule, isCode: true).splitRule(['&&', '||', '%%']).length >
+            1) {
+      final list = getElements(rule);
+      return list.isNotEmpty ? list.first : null;
+    }
+    try {
+      final matches = _compile(rule).read(_jsonData).toList();
+      if (!_isDefinite(rule)) return [for (final match in matches) match.value];
+      return matches.isEmpty ? null : matches.first.value;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Jayway 的「確定路徑」：只會對到一個值（沒有 `..`、`*`、篩選、切片、
+  /// 好幾個索引或名稱）。確定路徑交出那個值，其他的交出對到的清單，筆數
+  /// 是 0 或 1 也一樣。
+  static bool _isDefinite(String rule) {
+    if (rule.contains('..')) return false;
+    String? quote;
+    var depth = 0;
+    for (var i = 0; i < rule.length; i++) {
+      final c = rule[i];
+      if (quote != null) {
+        if (c == '\\') {
+          i++;
+        } else if (c == quote) {
+          quote = null;
+        }
+        continue;
+      }
+      if (c == '"' || c == "'") {
+        quote = c;
+      } else if (c == '[') {
+        depth++;
+      } else if (c == ']') {
+        depth--;
+      } else if (c == '*') {
+        return false;
+      } else if (depth > 0 && (c == ',' || c == ':' || c == '?')) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Get a list of strings

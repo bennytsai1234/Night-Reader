@@ -73,6 +73,31 @@ void main() {
     expect(LocalComicLibrary.discover(picked.path).map((s) => s.title), ['夜行']);
   });
 
+  test('沒有副檔名的圖照內容認（同 Mihon）：資料夾裡的圖與直接放的圖都算', () {
+    final chapter = Directory(p.join(picked.path, '第1話'))..createSync();
+    File(p.join(chapter.path, '001')).writeAsBytesSync(stripedPng(4, 4, 0, 0));
+    final notes = Directory(p.join(picked.path, '只有說明'))..createSync();
+    File(p.join(notes.path, 'README')).writeAsStringSync('x');
+    expect(LocalComicLibrary.discover(picked.path).map((s) => s.title), [
+      '第1話',
+    ]);
+
+    // JPEG 的寬高常在檔頭 64 個位元組之後（前面是 EXIF 這類資料）。
+    final jpeg = Directory(p.join(picked.path, '第2話'))..createSync();
+    File(p.join(jpeg.path, '001')).writeAsBytesSync([
+      0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0xA0, //
+      ...List.filled(0xA0, 0),
+    ]);
+    expect(LocalComicLibrary.discover(picked.path).map((s) => s.title), [
+      '第1話',
+      '第2話',
+    ]);
+
+    final loose = Directory(p.join(root.path, 'picked', '散圖'))..createSync();
+    File(p.join(loose.path, '002')).writeAsBytesSync(stripedPng(4, 4, 0, 0));
+    expect(LocalComicLibrary.discover(loose.path).map((s) => s.title), ['散圖']);
+  });
+
   test('章指紋只看圖：同樣的圖放在 CBZ 或資料夾都一樣', () {
     imageFolder('第1話', [5, 6]);
     cbz('第1話.cbz', [5, 6]);

@@ -416,13 +416,53 @@ abstract final class ComicChapterFiles {
       name.split('/').any((part) => part.startsWith('.')) ||
       name.startsWith('__MACOSX/');
 
+  /// 手機上的檔 [path] 是不是一張圖：照副檔名，沒有副檔名時看檔頭（同
+  /// 列圖時的認法，匯入本地漫畫找章節用）。
+  static bool isImagePath(String path) =>
+      _isImageFile(p.basename(path), () => _headOf(File(path)));
+
   static bool _isImageFile(String name, Uint8List? Function() head) {
     if (p.basename(name).startsWith('.')) return false;
     final extension = p.extension(name).toLowerCase();
     if (imageExtensions.contains(extension)) return true;
     if (extension.isNotEmpty) return false;
     final bytes = head();
-    return bytes != null && ImageSize.ofBytes(bytes) != null;
+    return bytes != null &&
+        (_hasImageMagic(bytes) || ImageSize.ofBytes(bytes) != null);
+  }
+
+  /// 檔頭是常見圖檔格式的記號（同 Mihon 的 `ImageUtil.findImageType`）：JPEG
+  /// 的寬高常在 EXIF 之後、讀進來的這幾十個位元組裡沒有，只看記號。
+  static const List<String> _imageBrands = [
+    'avif',
+    'avis',
+    'heic',
+    'heix',
+    'mif1',
+    'msf1',
+  ];
+
+  static bool _hasImageMagic(Uint8List b) {
+    bool starts(List<int> magic, [int at = 0]) {
+      if (b.length < at + magic.length) return false;
+      for (var i = 0; i < magic.length; i++) {
+        if (b[at + i] != magic[i]) return false;
+      }
+      return true;
+    }
+
+    return starts(const [0xFF, 0xD8, 0xFF]) || // JPEG
+        starts(const [0x89, 0x50, 0x4E, 0x47]) || // PNG
+        starts(const [0x47, 0x49, 0x46, 0x38]) || // GIF
+        (starts(const [0x52, 0x49, 0x46, 0x46]) &&
+            starts(const [0x57, 0x45, 0x42, 0x50], 8)) || // WebP
+        starts(const [0x42, 0x4D]) || // BMP
+        (starts(const [0x66, 0x74, 0x79, 0x70], 4) &&
+            _imageBrands.any(
+              (brand) => starts(brand.codeUnits, 8),
+            )) || // AVIF、HEIF
+        starts(const [0xFF, 0x0A]) || // JPEG XL
+        starts(const [0x00, 0x00, 0x00, 0x0C, 0x4A, 0x58, 0x4C, 0x20]);
   }
 
   static const int _sniffBytes = 64;

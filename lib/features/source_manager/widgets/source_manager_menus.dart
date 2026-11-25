@@ -47,17 +47,18 @@ class SourceManagerMenus {
     ),
     for (final tag in provider.checkResultTags)
       GlassMenuItem(
-        value: tag,
+        value: SourceManagerProvider.groupFilter(tag),
         label: tag,
-        checked: provider.filterGroup == tag,
+        checked: provider.filterGroup == SourceManagerProvider.groupFilter(tag),
       ),
     if (provider.userGroups.isNotEmpty) const GlassMenuDivider(),
     for (final group in provider.userGroups)
       GlassMenuItem(
         translate: false,
-        value: group,
+        value: SourceManagerProvider.groupFilter(group),
         label: group,
-        checked: provider.filterGroup == group,
+        checked:
+            provider.filterGroup == SourceManagerProvider.groupFilter(group),
       ),
     const GlassMenuDivider(),
     const GlassMenuItem(
