@@ -77,6 +77,7 @@ Future<List<SearchBook>> _loader(
   BookSource source,
   String key, {
   CancelToken? cancelToken,
+  int page = 1,
 }) => Future.delayed(
   Duration(milliseconds: 100 + (source.customOrder * 37) % 500),
   () => _answer(source),

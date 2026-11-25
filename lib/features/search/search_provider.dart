@@ -232,7 +232,25 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   /// 進度那一列的「放到背景」能不能按：別的背景工作在跑時灰掉（ADR 0070）。
   bool get canMoveToBackground =>
-      stage == SearchStage.searching && _backgroundSearches.canMoveToBackground;
+      stage == SearchStage.searching &&
+      !_run.isLoadingMore &&
+      _backgroundSearches.canMoveToBackground;
+
+  /// 結果捲到底時還有下一頁可以搜（[SearchRun.hasMorePages]）；放到背景的
+  /// 那一件與還沒放出來的結果不接著搜。
+  bool get hasMorePages =>
+      _background == null &&
+      _attachment != _Attachment.holding &&
+      _run.hasMorePages;
+
+  /// 結果捲到底：接著搜下一頁（同 Legado `SearchActivity.scrollToBottom`）。
+  Future<void> loadMorePages() async {
+    if (!hasMorePages || _run.isSearching) return;
+    // 接著搜的書接在尾端（docs/design/screens.md），用滾輪、觸控板捲到底
+    // 沒有拖曳、還沒固定順序時也一樣。
+    holdResultOrder();
+    await _run.loadMore();
+  }
 
   /// 暫停中的「繼續」能不能按：別的背景工作在跑、結果還沒放出來時灰掉。
   bool get canResumeBackground =>
