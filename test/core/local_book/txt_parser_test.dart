@@ -105,6 +105,25 @@ void main() {
       final content = '书名\n作者：某某\n\n第一章 开始\n${_body('a')}第二章 结束\n${_body('b')}';
       expect(_titles(content).first, '前言');
     });
+
+    test('「前言」的前 500 字當成簡介，匯入後是這本書的簡介', () async {
+      final dir = await Directory.systemTemp.createTemp('txt_intro_');
+      addTearDown(() => dir.delete(recursive: true));
+      Future<String?> introOf(String content) async {
+        final file = File('${dir.path}/${content.hashCode}.txt');
+        await file.writeAsString(content);
+        final split = TxtParser.splitBytes(await file.readAsBytes());
+        final imported = await LocalBookService().importBook(file.path);
+        expect(imported!.book.intro, split.intro);
+        return split.intro;
+      }
+
+      final chapters = '第一章 开始\n${_body('a')}第二章 结束\n${_body('b')}';
+      expect(await introOf('\n简介：一段话。\n\n$chapters'), '简介：一段话。');
+      expect(await introOf('${'长' * 600}\n$chapters'), '长' * 500);
+      expect(await introOf('\n\n$chapters'), isNull);
+      expect(await introOf(_body('没有章名')), isNull);
+    });
   });
 
   group('照長度切時切在換行', () {
