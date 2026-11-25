@@ -91,6 +91,10 @@ void main() {
       expect(
         detectImportContentKind('[{"bookUrl":"https://a.com/1","name":"書"}]'),
         ImportContentKind.bookshelf,
+      ); // Legado 匯出的書架：只有書名、作者、簡介。
+      expect(
+        detectImportContentKind('[{"name":"書","author":"某人","intro":""}]'),
+        ImportContentKind.bookshelf,
       );
     });
 

@@ -21,7 +21,7 @@ enum ImportContentKind {
 /// 分享的檔案、分享的文字、沒帶類型的匯入連結（`legado://import/auto`）都用
 /// 這一個判斷，同一份內容不會一處說是書源、另一處說無法辨識。欄位與順序對照
 /// Legado 的 `BaseAssociationViewModel.importJson`；陣列看第一個認得的項目，
-/// 和各匯入器一樣略過前面的空項目。書架匯出是夜讀自己的格式，最後才看。
+/// 和各匯入器一樣略過前面的空項目。書架最後才看。
 ImportContentKind? detectImportContentKind(String text) {
   final Object? decoded;
   try {
@@ -46,8 +46,11 @@ ImportContentKind? _kindOfEntry(Map<dynamic, dynamic> entry) {
     return ImportContentKind.replaceRule;
   }
   if (entry.containsKey('themeName')) return ImportContentKind.theme;
-  // 夜讀的書架匯出（{kind, books, chapters, sources}），或書籍、章節物件與其陣列。
-  if (entry['books'] is List || entry.containsKey('bookUrl')) {
+  // 夜讀的書架匯出（一本一筆的陣列，或舊的 {kind, books, chapters, sources}）、
+  // 書籍與章節物件，或 Legado 匯出的書架（`[{name, author, intro}]`）。
+  if (entry['books'] is List ||
+      entry.containsKey('bookUrl') ||
+      (entry['name'] is String && entry.containsKey('author'))) {
     return ImportContentKind.bookshelf;
   }
   return null;

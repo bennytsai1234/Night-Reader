@@ -28,7 +28,6 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/network/request_log.dart';
-import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
 import 'package:night_reader/core/sync/source_sync.dart';
@@ -251,12 +250,6 @@ class BookSourceService {
     shouldBreak: stopAtFirstSearchResult,
     cancelToken: cancelToken,
   );
-
-  Future<List<Book>> importBookshelf(String url) async {
-    final result = await BookshelfExchangeService().importFromUrl(url);
-    if (result.books <= 0) return [];
-    return getIt<BookDao>().getInBookshelf();
-  }
 
   /// 儲存編輯後的書源。網址改過時，以原網址記的一切跟著搬到新網址（書架上
   /// 的書、搜尋結果、已下載的正文見 [BookSourceDao.saveEdited]，登入資訊與

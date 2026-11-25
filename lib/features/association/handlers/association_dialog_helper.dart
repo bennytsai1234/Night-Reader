@@ -11,7 +11,7 @@ import 'association_base.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_rule_import_sheet.dart';
-import 'package:night_reader/core/backup/bookshelf_exchange_service.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_import_flow.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/features/source_manager/widgets/import_preview_sheet.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
@@ -103,12 +103,10 @@ mixin AssociationDialogHelper on AssociationBase {
           await importSourcesWithPreview(context, content, service: service);
           return;
         case ImportContentKind.bookshelf:
-          final result = await BookshelfExchangeService().importFromText(
-            content,
-          );
+          if (!context.mounted) return;
+          message = await importBookshelfText(context, content);
           if (!context.mounted) return;
           await context.read<BookshelfProvider>().loadBooks();
-          message = result.summary ?? '未找到可匯入的書架資料';
         case ImportContentKind.replaceRule:
           // 同書源：先開匯入預覽，這台已有的預設不勾。
           if (!context.mounted) return;
