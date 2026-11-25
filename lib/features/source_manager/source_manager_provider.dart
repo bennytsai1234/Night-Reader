@@ -189,10 +189,10 @@ class SourceImportService {
     final updatedSources = <BookSource>[];
     final olderSources = <BookSource>[];
     final unchangedSources = <BookSource>[];
-    final existingByUrl = <String, int>{};
-    for (final source in await _dao.getAllPart()) {
-      existingByUrl[source.bookSourceUrl] = source.lastUpdateTime;
-    }
+    final existingByUrl = <String, BookSource>{
+      for (final source in await _dao.getAllPart())
+        source.bookSourceUrl: source,
+    };
 
     // 檔案裡同一個網址有好幾筆：留更新時間最晚的（一樣晚的留後面那筆，同
     // 寫進資料庫時後面蓋前面）。
@@ -205,12 +205,12 @@ class SourceImportService {
     }
 
     for (final s in latest.values) {
-      final existingUpdateTime = existingByUrl[s.bookSourceUrl];
-      if (existingUpdateTime == null) {
+      final existing = existingByUrl[s.bookSourceUrl];
+      if (existing == null) {
         newSources.add(s);
-      } else if (s.lastUpdateTime > existingUpdateTime) {
+      } else if (s.isNewerThan(existing)) {
         updatedSources.add(s);
-      } else if (s.lastUpdateTime < existingUpdateTime) {
+      } else if (s.lastUpdateTime < existing.lastUpdateTime) {
         olderSources.add(s);
       } else {
         unchangedSources.add(s);

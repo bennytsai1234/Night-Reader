@@ -530,6 +530,11 @@ extension BookSourceLogic on BookSourceBase {
     dropForeignCheckMarks();
   }
 
+  /// 匯入同一個網址的書源時，這一份是不是比這台的 [existing] 新：只有更新
+  /// 時間比較晚才換掉這台的（同書源匯入預覽）；較舊或一樣的不動。
+  bool isNewerThan(BookSourceBase existing) =>
+      lastUpdateTime > existing.lastUpdateTime;
+
   /// 書源屬於哪一類（[BookSourceKind]）。
   BookSourceKind get sourceKind => switch (bookSourceType) {
     SourceType.book => BookSourceKind.novel,
