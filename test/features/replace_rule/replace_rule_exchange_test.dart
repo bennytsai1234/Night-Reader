@@ -150,51 +150,91 @@ void main() {
     tearDown(() => db.close());
 
     test('已有的同一條（同編號）標更新或已有、預設不勾；新的預設勾', () async {
-      await dao.upsert(_rule(id: 5, name: '這台改過的', pattern: '甲'));
-      await dao.upsert(_rule(id: 7, name: '一樣的', pattern: '丙', order: 1));
+      await dao.upsert(_rule(id: 1700000000005, name: '這台改過的', pattern: '甲'));
+      await dao.upsert(
+        _rule(id: 1700000000007, name: '一樣的', pattern: '丙', order: 1),
+      );
       final preview = await previewReplaceRuleImport(
         encodeReplaceRules([
-          _rule(id: 5, name: '檔案裡的', pattern: '甲甲'),
-          _rule(id: 6, name: '新規則', pattern: '乙'),
+          _rule(id: 1700000000005, name: '檔案裡的', pattern: '甲甲'),
+          _rule(id: 1700000000006, name: '新規則', pattern: '乙'),
           // 只有順序不同也算同一條。
-          _rule(id: 7, name: '一樣的', pattern: '丙', order: 9),
-          ReplaceRule(id: 8, name: '空的'),
+          _rule(id: 1700000000007, name: '一樣的', pattern: '丙', order: 9),
+          ReplaceRule(id: 1700000000008, name: '空的'),
         ]),
         dao,
       );
       expect(
         [for (final item in preview.items) (item.rule.id, item.state)],
         [
-          (5, ReplaceRuleImportState.updated),
-          (6, ReplaceRuleImportState.added),
-          (7, ReplaceRuleImportState.unchanged),
+          (1700000000005, ReplaceRuleImportState.updated),
+          (1700000000006, ReplaceRuleImportState.added),
+          (1700000000007, ReplaceRuleImportState.unchanged),
         ],
       );
       expect(preview.invalidCount, 1);
-      expect([for (final r in preview.defaultSelection) r.id], [6]);
+      expect([for (final r in preview.defaultSelection) r.id], [1700000000006]);
     });
 
     test('照預設的勾選匯入：沒勾的已有規則不被蓋掉', () async {
-      await dao.upsert(_rule(id: 5, name: '這台改過的', pattern: '甲'));
+      await dao.upsert(_rule(id: 1700000000005, name: '這台改過的', pattern: '甲'));
       final before = (await dao.getAll()).single.toJson();
       final preview = await previewReplaceRuleImport(
         encodeReplaceRules([
-          _rule(id: 5, name: '檔案裡的', pattern: '甲甲'),
-          _rule(id: 6, name: '新規則', pattern: '乙'),
+          _rule(id: 1700000000005, name: '檔案裡的', pattern: '甲甲'),
+          _rule(id: 1700000000006, name: '新規則', pattern: '乙'),
         ]),
         dao,
       );
       final count = await importReplaceRules(preview.defaultSelection, dao);
       expect(count, 1);
       final rules = {for (final r in await dao.getAll()) r.id: r};
-      expect(rules.keys, unorderedEquals([5, 6]));
-      expect(rules[5]!.toJson(), before);
+      expect(rules.keys, unorderedEquals([1700000000005, 1700000000006]));
+      expect(rules[1700000000005]!.toJson(), before);
+    });
+
+    test('舊流水號撞號、是別條規則：當成新增、預設勾，匯入後兩條都在', () async {
+      await dao.upsert(_rule(id: 3, name: '去廣告', pattern: '廣告'));
+      final preview = await previewReplaceRuleImport(
+        encodeReplaceRules([
+          _rule(id: 3, name: '去水印', pattern: '水印'),
+          // 同一條規則只改了開關：同步也認成同一條，照舊標更新。
+          _rule(id: 3, name: '去廣告', pattern: '廣告')..isEnabled = true,
+        ]),
+        dao,
+      );
+      expect(
+        [for (final item in preview.items) item.state],
+        [ReplaceRuleImportState.added, ReplaceRuleImportState.updated],
+      );
+      await importReplaceRules(preview.defaultSelection, dao);
+      final rules = await dao.getAll();
+      expect(
+        {for (final r in rules) r.pattern: r.name},
+        {'廣告': '去廣告', '水印': '去水印'},
+      );
+      expect(rules.firstWhere((r) => r.pattern == '廣告').id, 3);
+      expect(rules.firstWhere((r) => r.pattern == '水印').id, isNot(3));
+    });
+
+    test('編號是建立時間的同號規則照舊標更新、預設不勾', () async {
+      await dao.upsert(_rule(id: 1700000000005, name: '這台的', pattern: '甲'));
+      final preview = await previewReplaceRuleImport(
+        encodeReplaceRules([
+          _rule(id: 1700000000005, name: '別的', pattern: '乙'),
+        ]),
+        dao,
+      );
+      expect(preview.items.single.state, ReplaceRuleImportState.updated);
+      expect(preview.defaultSelection, isEmpty);
     });
 
     test('勾了已有的才覆蓋', () async {
-      await dao.upsert(_rule(id: 5, name: '這台改過的', pattern: '甲'));
+      await dao.upsert(_rule(id: 1700000000005, name: '這台改過的', pattern: '甲'));
       final preview = await previewReplaceRuleImport(
-        encodeReplaceRules([_rule(id: 5, name: '檔案裡的', pattern: '甲甲')]),
+        encodeReplaceRules([
+          _rule(id: 1700000000005, name: '檔案裡的', pattern: '甲甲'),
+        ]),
         dao,
       );
       await importReplaceRules([preview.items.single.rule], dao);

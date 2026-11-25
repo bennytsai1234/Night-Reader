@@ -16,8 +16,8 @@ class ReplaceRuleSync extends SyncKind {
   final ReplaceRuleDao _dao;
 
   /// 比這個小的編號是照順序配的舊編號，不是建立時間（2001 年以後的毫秒數
-  /// 都比它大）。
-  static const int _firstTimeId = 1000000000000;
+  /// 都比它大）：兩台各自的同一號不一定是同一條（匯入預覽也照這個分）。
+  static const int firstTimeId = 1000000000000;
 
   static const String kind = 'replace_rules';
 
@@ -99,7 +99,7 @@ class ReplaceRuleSync extends SyncKind {
       final theirs = remote[key];
       final collides =
           claimed.contains(id) ||
-          (theirs != null && (!theirs.deleted || id < _firstTimeId));
+          (theirs != null && (!theirs.deleted || id < firstTimeId));
       if (collides) mapping[id] = null;
     }
     if (mapping.isEmpty) return local;

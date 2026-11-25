@@ -296,14 +296,16 @@ void main() {
       });
       final dao = GetIt.instance<ReplaceRuleDao>();
       await tester.runAsync(
-        () => dao.upsert(ReplaceRule(id: 5, name: '這台改過的', pattern: '甲')),
+        () => dao.upsert(
+          ReplaceRule(id: 1700000000005, name: '這台改過的', pattern: '甲'),
+        ),
       );
       final context = await pumpHost(tester);
       // Legado 匯出的樣子：開關是 true／false。
       const shared =
-          '[{"id":5,"name":"檔案裡的","pattern":"甲甲","isEnabled":true,'
+          '[{"id":1700000000005,"name":"檔案裡的","pattern":"甲甲","isEnabled":true,'
           '"isRegex":false,"scopeTitle":false,"scopeContent":true},'
-          '{"id":6,"name":"新規則","pattern":"乙","isEnabled":true,'
+          '{"id":1700000000006,"name":"新規則","pattern":"乙","isEnabled":true,'
           '"isRegex":false,"scopeTitle":false,"scopeContent":true}]';
 
       await tester.runAsync(
@@ -332,7 +334,10 @@ void main() {
       }
       await tester.pumpAndSettle();
       final rules = (await tester.runAsync(dao.getAll))!;
-      expect({for (final r in rules) r.id: r.name}, {5: '這台改過的', 6: '新規則'});
+      expect(
+        {for (final r in rules) r.id: r.name},
+        {1700000000005: '這台改過的', 1700000000006: '新規則'},
+      );
       expect(find.text('成功匯入 1 個替換規則'), findsOneWidget);
     });
 

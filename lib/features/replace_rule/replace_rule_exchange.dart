@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/sync/replace_rule_sync.dart';
 
 // 替換規則的匯入、匯出與複製貼上用的 JSON（同 Legado 的 `ReplaceRule`）。
 // 匯出、複製寫 Legado 讀得懂的樣子（[ReplaceRule.toLegadoJson]）；讀的時候
@@ -43,16 +44,17 @@ ReplaceRule? decodeOneReplaceRule(String? text) {
   return rules.single;
 }
 
-/// 匯入預覽裡一條規則和這台的關係（同 Legado 匯入規則的「新增」「更新」
-/// 「已有」）：用編號對。
+/// 匯入預覽裡一條規則和這台的關係（Legado 匯入規則的「新增」「更新」
+/// 「已有」）：用編號對，舊流水號另看規則本身（[_stateOf]）。
 enum ReplaceRuleImportState {
-  /// 這台沒有這個編號。
+  /// 這台沒有這個編號，或舊流水號撞到這台另一條規則（會配新編號）。
   added('新增'),
 
-  /// 這台有同一個編號，內容不一樣：匯入會蓋掉這台的。
+  /// 這台有同一條，有任何一欄不一樣（名稱、分組、開關也算，順序不算）：
+  /// 匯入會蓋掉這台的。
   updated('更新'),
 
-  /// 這台有同一條，內容一樣（順序不算）。
+  /// 這台有同一條，每一欄都一樣（順序不算）。
   unchanged('已有');
 
   const ReplaceRuleImportState(this.label);
@@ -103,16 +105,29 @@ Future<ReplaceRuleImportPreview> previewReplaceRuleImport(
   return ReplaceRuleImportPreview(
     items: [
       for (final rule in valid)
-        ReplaceRuleImportItem(rule, switch (local[rule.id]) {
-          null => ReplaceRuleImportState.added,
-          final mine when _sameContent(mine, rule) =>
-            ReplaceRuleImportState.unchanged,
-          _ => ReplaceRuleImportState.updated,
-        }),
+        ReplaceRuleImportItem(rule, _stateOf(rule, local[rule.id])),
     ],
     invalidCount: rules.length - valid.length,
   );
 }
+
+/// [incoming] 和這台同號的 [mine] 是什麼關係。舊流水號（1、2、3……）撞號、
+/// 規則本身不同時是別條規則：當成新增，編號清成 0，寫入時配一個新的，兩條
+/// 都留，不蓋掉這台的那條（同同步的做法，ADR 0039、[ReplaceRuleSync.reconcile]）。
+ReplaceRuleImportState _stateOf(ReplaceRule incoming, ReplaceRule? mine) {
+  if (mine == null) return ReplaceRuleImportState.added;
+  if (_sameContent(mine, incoming)) return ReplaceRuleImportState.unchanged;
+  if (incoming.id < ReplaceRuleSync.firstTimeId &&
+      _identity(mine) != _identity(incoming)) {
+    incoming.id = 0;
+    return ReplaceRuleImportState.added;
+  }
+  return ReplaceRuleImportState.updated;
+}
+
+/// 規則本身（找什麼、換成什麼、套用在哪），同同步認同一條的方式。
+String _identity(ReplaceRule rule) =>
+    ReplaceRuleSync.identityOf(ReplaceRuleSync.recordOf(rule));
 
 /// 寫入勾選的規則：照各自的編號存，已有的蓋掉，沒有編號的配新的；回傳
 /// 寫了幾條。
