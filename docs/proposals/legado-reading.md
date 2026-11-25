@@ -332,8 +332,8 @@
 
 ### 書籤
 
-- [x] **B1　不選字也能加書籤（已定）**：Legado 閱讀選單「添加書籤」在這一頁的開頭留一個，同時跳出附註框（`legado:ui/book/read/ReadBookActivity.kt` 的 `menu_add_bookmark`）。夜讀只能選字後按「書籤」（`docs/design/reader.md`「書籤」），想在讀到的地方隨手留一個要先長按選字。要補的話放閱讀器「更多」，留在畫面頂端那一句的開頭。
-- [x] **B6　匯出書籤（已定）**：Legado 目錄頁的書籤分頁可以匯出 JSON 與 Markdown（`legado:ui/book/toc/TocViewModel.kt:83-120`）。夜讀「閱讀紀錄」與目錄面板只匯出標註（`lib/core/backup/highlight_export.dart`），書籤沒有。要補的話併進標註匯出的同一個 Markdown 檔。
+- [x] **B1　不選字也能加書籤（已做，#639）**：Legado 閱讀選單「添加書籤」在這一頁的開頭留一個，同時跳出附註框（`legado:ui/book/read/ReadBookActivity.kt` 的 `menu_add_bookmark`）。夜讀只能選字後按「書籤」（`docs/design/reader.md`「書籤」），想在讀到的地方隨手留一個要先長按選字。要補的話放閱讀器「更多」，留在畫面頂端那一句的開頭。
+- [x] **B6　匯出書籤（已做，#639）**：Legado 目錄頁的書籤分頁可以匯出 JSON 與 Markdown（`legado:ui/book/toc/TocViewModel.kt:83-120`）。夜讀「閱讀紀錄」與目錄面板只匯出標註（`lib/core/backup/highlight_export.dart`），書籤沒有。要補的話併進標註匯出的同一個 Markdown 檔。
 
 ### 朗讀
 
