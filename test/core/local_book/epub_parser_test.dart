@@ -117,6 +117,46 @@ Map<String, Object> _epub2() => {
   'OEBPS/c1.html': _xhtml('<h1>第一章</h1><p>正文。</p>'),
 };
 
+/// 第一卷底下兩章，卷名和第一章指向同一個檔案。[nav] 時用 EPUB 3 的目錄頁，
+/// 卷名是沒有連結的 `<span>`；否則用 NCX。[description] 是 OPF 的簡介。
+Map<String, Object> _volumes({bool nav = false, String? description}) => {
+  'mimetype': 'application/epub+zip',
+  'META-INF/container.xml': _container,
+  'OEBPS/content.opf':
+      '''<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>分卷之書</dc:title>
+    ${description == null ? '' : '<dc:description>$description</dc:description>'}
+  </metadata>
+  <manifest>
+    ${nav ? '<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>' : '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>'}
+    <item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="c2" href="c2.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine${nav ? '' : ' toc="ncx"'}><itemref idref="c1"/><itemref idref="c2"/></spine>
+</package>''',
+  if (nav)
+    'OEBPS/nav.xhtml': _xhtml(
+      '''
+<nav epub:type="toc"><ol>
+  <li><span>第一卷</span>
+    <ol><li><a href="c1.xhtml">第一章</a></li><li><a href="c2.xhtml">第二章</a></li></ol>
+  </li>
+</ol></nav>''',
+    )
+  else
+    'OEBPS/toc.ncx': '''<?xml version="1.0"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/"><navMap>
+  <navPoint><navLabel><text>第一卷</text></navLabel><content src="c1.xhtml"/>
+    <navPoint><navLabel><text>第一章</text></navLabel><content src="c1.xhtml"/></navPoint>
+    <navPoint><navLabel><text>第二章</text></navLabel><content src="c2.xhtml"/></navPoint>
+  </navPoint>
+</navMap></ncx>''',
+  'OEBPS/c1.xhtml': _xhtml('<h1>第一章</h1><p>甲</p>'),
+  'OEBPS/c2.xhtml': _xhtml('<h1>第二章</h1><p>乙</p>'),
+};
+
 /// 沒有目錄：一個檔案一章，章名取第一個標題。
 Map<String, Object> _noToc() => {
   'mimetype': 'application/epub+zip',
@@ -270,6 +310,43 @@ void main() {
       '第二章 岔路\n岔路口。',
       '第三章 遠方\n上半\n下半',
     ]);
+    // 底下還有條目的是分卷，卷首的字照樣讀得到。
+    expect(info.chapters.map((c) => c.isVolume), [false, false, true, false]);
+  });
+
+  test('目錄的上層標成分卷；只有卷名、和第一章指向同一處的也留成一列', () async {
+    for (final nav in [false, true]) {
+      final (info, texts) = await convert(
+        await write('volumes-$nav.epub', _volumes(nav: nav)),
+      );
+
+      expect(info.chapters.map((c) => c.title), ['第一卷', '第一章', '第二章']);
+      expect(info.chapters.map((c) => c.isVolume), [true, false, false]);
+      expect(texts, ['第一卷', '第一章\n甲', '第二章\n乙']);
+    }
+  });
+
+  test('讀 OPF 的簡介，是 HTML 時只取文字', () async {
+    final (plain, _) = await convert(
+      await write('intro.epub', _volumes(description: '一段簡介。')),
+    );
+    expect(plain.intro, '一段簡介。');
+
+    final (html, _) = await convert(
+      await write(
+        'intro-html.epub',
+        _volumes(description: '&lt;p&gt;第一段&lt;/p&gt;&lt;p&gt;第二段&lt;/p&gt;'),
+      ),
+    );
+    expect(html.intro, '第一段第二段');
+
+    final (none, _) = await convert(await write('no-intro.epub', _volumes()));
+    expect(none.intro, isNull);
+
+    final imported = await LocalBookService().importBook(
+      await write('intro-import.epub', _volumes(description: '一段簡介。')),
+    );
+    expect(imported!.book.intro, '一段簡介。');
   });
 
   test('插圖在原位置留標記、圖抽到插圖資料夾；只有圖的章併到下一章開頭', () async {
@@ -333,7 +410,7 @@ void main() {
     final ranges = EpubParser.readChapters(textPath);
     expect(ranges, [
       for (final c in result.chapters)
-        (title: c.title, start: c.start!, end: c.end!),
+        (title: c.title, start: c.start!, end: c.end!, isVolume: c.isVolume),
     ]);
     expect(await LocalBookService().currentEpubChapters(result.book), ranges);
 
@@ -379,14 +456,73 @@ void main() {
     );
   });
 
-  test('EPUB 2 讀 NCX 巢狀目錄，卷名頁照樣是一章', () async {
+  test('EPUB 2 讀 NCX 巢狀目錄，卷名頁是分卷', () async {
     final (info, texts) = await convert(await write('book2.epub', _epub2()));
 
     expect(info.title, '二版書');
     expect(info.author, isNull);
     expect(info.coverExtension, '.jpg');
     expect(info.chapters.map((c) => c.title), ['第一卷', '第一章']);
+    expect(info.chapters.map((c) => c.isVolume), [true, false]);
     expect(texts, ['第一卷', '第一章\n正文。']);
+  });
+
+  test('舊轉法的書開書時重轉多出分卷，閱讀位置照章名留在同一章', () async {
+    final path = await write('old-volumes.epub', _volumes());
+    final result = (await LocalBookService().importBook(path))!;
+    final textPath = await LocalBookService.epubTextPath(result.book);
+    // 舊轉法（textVersion 2）沒有只有卷名的分卷：目錄只有兩章，讀到第二章。
+    final old = [
+      for (final (i, c) in result.chapters.skip(1).indexed)
+        c.copyWith(index: i, url: '${result.book.bookUrl}#$i'),
+    ];
+    final chaptersFile = File(EpubParser.chaptersPathFor(textPath));
+    final json = jsonDecode(await chaptersFile.readAsString()) as Map;
+    await chaptersFile.writeAsString(jsonEncode({...json, 'version': 2}));
+    final book = result.book
+      ..chapterIndex = 1
+      ..durChapterTitle = '第二章'
+      ..totalChapterNum = 2;
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.bookDao.upsert(book);
+    await db.chapterDao.insertChapters(old);
+    final repository = ReaderChapterRepository(
+      book: book,
+      bookDao: db.bookDao,
+      chapterDao: db.chapterDao,
+      sourceDao: db.bookSourceDao,
+      contentDao: db.readerChapterContentDao,
+    );
+
+    final chapters = await repository.ensureChapters();
+
+    expect(chapters.map((c) => c.title), ['第一卷', '第一章', '第二章']);
+    expect(repository.takeRefreshedChapterIndex(1), 2);
+    // 只對一次：之後拿到的已經是新目錄的位置。
+    expect(repository.takeRefreshedChapterIndex(2), 2);
+    final stored = (await db.bookDao.getByUrl(book.bookUrl))!;
+    expect(stored.chapterIndex, 2);
+    expect(stored.durChapterTitle, '第二章');
+    expect(stored.totalChapterNum, 3);
+    expect(
+      (await db.chapterDao.getByBook(book.bookUrl)).map((c) => c.isVolume),
+      [true, false, false],
+    );
+  });
+
+  test('轉好的文字不見時重轉，舊目錄的章照章名讀新範圍', () async {
+    final path = await write('lost-volumes.epub', _volumes());
+    final result = (await LocalBookService().importBook(path))!;
+    await File(await LocalBookService.epubTextPath(result.book)).delete();
+    // 舊轉法的目錄：沒有分卷，第一章是第 0 個、範圍是新轉法裡卷名的位置。
+    final first = result.chapters[1].copyWith(
+      index: 0,
+      start: result.chapters[0].start,
+      end: result.chapters[0].end,
+    );
+
+    expect(await LocalBookService().getContent(result.book, first), '第一章\n甲');
   });
 
   test('卷名和第一章指向同一個檔案時，正文只出現一次', () async {

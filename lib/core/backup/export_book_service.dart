@@ -55,9 +55,16 @@ class ExportBookService {
     buffer.writeln('---');
 
     for (var i = 0; i < chapters.length; i++) {
-      // 分卷只寫卷名（同 Legado）。
+      // 分卷寫卷名；本地 EPUB 的分卷可能有卷首的字（同 Legado 照樣匯出）。
       if (chapters[i].isVolume) {
-        buffer.writeln('\n${(await present(chapters[i], '')).title}\n');
+        final volume = await present(
+          chapters[i],
+          book.isLocal
+              ? await LocalBookService().getContent(book, chapters[i])
+              : '',
+        );
+        buffer.writeln('\n${volume.title}\n');
+        if (volume.text.trim().isNotEmpty) buffer.writeln(volume.text);
         onProgress?.call((i + 1) / chapters.length);
         continue;
       }

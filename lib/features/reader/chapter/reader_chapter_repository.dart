@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart' show Value;
+import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
@@ -10,6 +12,7 @@ import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/local_book/local_book_formats.dart';
+import 'package:night_reader/core/models/book/chapter_alignment.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
@@ -178,10 +181,35 @@ class ReaderChapterRepository {
     return chapters;
   }
 
-  /// 本地 EPUB 轉法改過（例如開始留插圖，ADR 0050）時重轉，章節範圍跟著
-  /// 換掉，存著的舊正文清掉。章數與每章的字不變，閱讀進度照舊。
+  /// 開書時 EPUB 重轉、換掉的舊目錄（[_syncEpubChapters]），開書的位置照它
+  /// 對到新目錄一次（[takeRefreshedChapterIndex]）。
+  List<BookChapter>? _replacedChapters;
+
+  /// 開書前拿到的位置（舊目錄的第 [index] 章）在現在的目錄裡是第幾章：開書
+  /// 時 EPUB 重轉、目錄變了（例如多了分卷）就照章名對過去，只對一次；目錄
+  /// 沒換照舊。
+  int takeRefreshedChapterIndex(int index) {
+    final old = _replacedChapters;
+    _replacedChapters = null;
+    return old == null ? index : _alignToRefreshed(old, index);
+  }
+
+  int _alignToRefreshed(List<BookChapter> old, int index) {
+    if (old.isEmpty || _chapters.isEmpty) return index;
+    final safe = index.clamp(0, old.length - 1);
+    return alignChapterIndex(
+      oldIndex: safe,
+      oldTitle: old[safe].title,
+      oldTotalCount: old.length,
+      newChapters: _chapters,
+    );
+  }
+
+  /// 本地 EPUB 轉法改過（例如開始留插圖，ADR 0050；標出分卷）時重轉，章節
+  /// 範圍跟著換掉，存著的舊正文清掉。每章的字不變；章數變了（多了只有卷名
+  /// 的分卷）時閱讀進度照章名對到新目錄的同一章，和目錄一起寫回去。
   Future<void> _syncEpubChapters() async {
-    final List<({String title, int start, int end})>? ranges;
+    final List<LocalChapterRange>? ranges;
     try {
       ranges = await LocalBookService().currentEpubChapters(book);
     } on FileSystemException catch (error) {
@@ -194,10 +222,29 @@ class ReaderChapterRepository {
     if (ranges == null || LocalBookService.chaptersMatch(_chapters, ranges)) {
       return;
     }
+    final old = _chapters;
     final refreshed = LocalBookService().chaptersOf(book, ranges);
-    await chapterDao.replaceByBook(book.bookUrl, refreshed);
-    await contentDao?.deleteByBook(book.origin, book.bookUrl);
     _chapters = refreshed;
+    _replacedChapters = old;
+    final index = _alignToRefreshed(old, book.chapterIndex);
+    await bookDao.transaction(() async {
+      await chapterDao.replaceByBook(book.bookUrl, refreshed);
+      if (index != book.chapterIndex || refreshed.length != old.length) {
+        await bookDao.writeFields(
+          book,
+          BooksCompanion(
+            chapterIndex: Value(index),
+            durChapterTitle: Value(refreshed[index].title),
+            totalChapterNum: Value(refreshed.length),
+          ),
+        );
+      }
+    });
+    book
+      ..chapterIndex = index
+      ..durChapterTitle = refreshed[index].title
+      ..totalChapterNum = refreshed.length;
+    await contentDao?.deleteByBook(book.origin, book.bookUrl);
   }
 
   /// 每章佔全書多少（全書進度用）。本地書照每章在檔案裡的位元組範圍；
