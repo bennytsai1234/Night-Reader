@@ -420,17 +420,23 @@ class LocalBookService {
   }
 
   static Future<void>? _recovery;
+  static bool _recovered = false;
 
-  /// 這次開 App 第一次讀本地書之前跑一次 [recoverInterruptedUpdates]；之後
-  /// 再呼叫都等同一次。
-  static Future<void> recoverOnce(BookDao bookDao) =>
-      _recovery ??= recoverInterruptedUpdates(bookDao);
+  /// 這次開 App 第一次讀本地書之前跑一次 [recoverInterruptedUpdates]；還在
+  /// 跑時再呼叫都等同一次，跑完之後直接回來。
+  static Future<void> recoverOnce(BookDao bookDao) async {
+    if (_recovered) return;
+    await (_recovery ??= recoverInterruptedUpdates(bookDao));
+    _recovered = true;
+  }
 
   /// 測試用：當成這次已經收過（每項測試的資料夾都是新的，沒有沒做完的
   /// 更新）。收尾要讀真的檔案系統，元件測試（`testWidgets`）裡等不到它，
   /// 讀本地書、同步本地書就卡住；前一項測試留下的那一次也不能沿用。
+  /// 只記一個旗標、不先做好一個 Future：元件測試在自己的假時鐘裡跑，等
+  /// 測試開始前做好的 Future，後續會排到沒人推進的假時鐘，一樣卡住。
   @visibleForTesting
-  static void markRecoveredForTesting() => _recovery = Future<void>.value();
+  static void markRecoveredForTesting() => _recovered = true;
 
   /// 更新原檔（[_updateOriginal]）做到一半 App 被關掉時留下的：照資料庫裡
   /// 這本書的指紋決定，已經是新檔的就收尾（刪掉舊檔），還不是就退回舊檔。
