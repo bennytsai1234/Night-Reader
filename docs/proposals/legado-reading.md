@@ -325,8 +325,8 @@
 
 ### 目錄
 
-- [x] **T3　每本書把目錄翻過來（已定）**：有些書源給的目錄是新到舊，Legado 在目錄選單「倒序目錄」把這本書存著的目錄整個翻過來、之後抓的也照翻（`legado:ui/book/toc/TocViewModel.kt:55-69`）。夜讀抓目錄時已經照這本書的這個值翻（`lib/core/engine/web_book/web_book_service.dart:329-333`），但沒有任何地方能把它打開；書籍詳情目錄的「倒序」只是倒著顯示（`lib/features/book_detail/book_detail_provider.dart:657`），閱讀的上一章、下一章仍是反的。要補的話放閱讀器「更多」，和「重新分段」一樣是這本書的開關，預設關。
-- [x] **T2　閱讀器的目錄搜尋（已定）**：Legado 從閱讀器打開的目錄頁可以搜章名（`legado:ui/book/toc/TocActivity.kt:73-81`）。夜讀只有書籍詳情的目錄能搜（`lib/features/book_detail/widgets/book_info_toc_bar.dart:79-90`），閱讀器左側的目錄面板沒有（`lib/features/reader/screen/reader_chapters_drawer.dart`），上千章的書只能拖捲動條找。要補的話照書籍詳情那一套。
+- [x] **T3　每本書把目錄翻過來（已做，#650，ADR 0085）**：有些書源給的目錄是新到舊，Legado 在目錄選單「倒序目錄」把這本書存著的目錄整個翻過來、之後抓的也照翻（`legado:ui/book/toc/TocViewModel.kt:55-69`）。夜讀抓目錄時已經照這本書的這個值翻（`lib/core/engine/web_book/web_book_service.dart:329-333`），但沒有任何地方能把它打開；書籍詳情目錄的「倒序」只是倒著顯示（`lib/features/book_detail/book_detail_provider.dart:657`），閱讀的上一章、下一章仍是反的。要補的話放閱讀器「更多」，和「重新分段」一樣是這本書的開關，預設關。
+- [x] **T2　閱讀器的目錄搜尋（已做，#650）**：Legado 從閱讀器打開的目錄頁可以搜章名（`legado:ui/book/toc/TocActivity.kt:73-81`）。夜讀只有書籍詳情的目錄能搜（`lib/features/book_detail/widgets/book_info_toc_bar.dart:79-90`），閱讀器左側的目錄面板沒有（`lib/features/reader/screen/reader_chapters_drawer.dart`），上千章的書只能拖捲動條找。要補的話照書籍詳情那一套。
 - [ ] **T1、T5　目錄列顯示書源給的附加資訊與字數（不做）**：Legado 目錄每列在章名下顯示書源規則抓到的附加資訊（多半是更新時間）與本章字數（字數可關），沒下載的章畫一個雲（`legado:ui/book/toc/ChapterListAdapter.kt:146-168`）。夜讀把這兩個欄位抓下來存著（`lib/core/models/book/book_chapter.dart:22-23`），目錄不顯示。已下載的標記用處較小：書架上的書整本自動下載（ADR 0008）。要補的話只補附加資訊，字數預設不顯示。
 - [ ] **T4　目錄的章名套標題規則（不做）**：Legado 目錄選單「使用替換」打開才套（`legado:help/config/AppConfig.kt:380-384`，預設關）。夜讀目錄一律原章名，和 Legado 的預設一樣。R8 修好後頁首與目錄會不一樣，要補的話預設關。
 
