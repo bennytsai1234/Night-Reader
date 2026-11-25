@@ -20,6 +20,19 @@ class NetworkUtils {
   /// 丟錯。
   static String toRequestUrl(String url) => toAsciiHost(_trimAsciiSpace(url));
 
+  /// 書源網址換成 Cookie 罐查得到的網址：去掉 `#` 後面（書源網址常帶
+  /// `#註記`），網域照送出請求時換成 punycode（Cookie 罐照送出的網址存）；只給
+  /// 網域時當成那個網域的首頁（同 Legado 的 Cookie API 收網址或網域）。沒有
+  /// 主機的是 null。
+  static Uri? cookieJarUri(String url) {
+    var text = url.split('#').first.trim();
+    if (text.isEmpty) return null;
+    if (!text.contains('://')) text = 'https://$text';
+    final uri = Uri.tryParse(toRequestUrl(text));
+    if (uri == null || uri.host.isEmpty) return null;
+    return uri;
+  }
+
   /// OkHttp 跳過的空白：tab、換行、form feed、return、空格。
   static String _trimAsciiSpace(String s) {
     bool space(int c) =>
