@@ -55,6 +55,8 @@ class AnalyzeByXPath {
       }
     } else if (doc is Element) {
       _initFromElement(doc);
+    } else if (doc is Document && doc.documentElement != null) {
+      _initFromElement(doc.documentElement!);
     } else if (doc is List) {
       // 上一條規則找到的一組元素：只有一個時從它查，多個時接成一份網頁。
       final single = elementsListSingle(doc);

@@ -40,15 +40,24 @@ class JsoupBridge {
   /// 一種文字節點：解析出來的照它在不在 `<script>`、`<style>` 底下，交給
   /// JS 時記下來，之後搬到別處也不變；規則自己做的照它做的是哪一種。
   final Map<dom.Text, bool> _textKinds = Map.identity();
+
+  /// 文件的 `location()`：解析時給的頁面網址（Jsoup `Document.location`），
+  /// 和網頁 `<base href>` 改過的 [_baseUris] 分開。
+  final Map<dom.Document, String> _locations = Map.identity();
   int _nextId = 1;
 
-  bool get isEmpty => _nodes.isEmpty && _baseUris.isEmpty && _textKinds.isEmpty;
+  bool get isEmpty =>
+      _nodes.isEmpty &&
+      _baseUris.isEmpty &&
+      _textKinds.isEmpty &&
+      _locations.isEmpty;
 
   void clear() {
     _nodes.clear();
     _ids.clear();
     _baseUris.clear();
     _textKinds.clear();
+    _locations.clear();
   }
 
   dom.Node? node(int id) => _nodes[id];
@@ -137,6 +146,7 @@ class JsoupBridge {
       }
     }
     setBaseUri(document, effective);
+    if (baseUri != null && baseUri.isNotEmpty) _locations[document] = baseUri;
     return document;
   }
 
@@ -209,9 +219,8 @@ class JsoupBridge {
         };
       case 'outerHtml':
         return switch (node) {
-          dom.Element() => node.outerHtml,
           dom.Document() => node.documentElement?.outerHtml ?? '',
-          _ => node.text ?? '',
+          _ => _outerHtml(node),
         };
       case 'data':
         return _data(node);
@@ -346,13 +355,16 @@ class JsoupBridge {
             : [container, ...container.querySelectorAll('*')];
       // ── 文件 ──
       case 'body':
-        return document?.body;
+        return document == null ? null : _bodyOf(document);
       case 'head':
-        return document?.head;
+        return document == null ? null : _headOf(document);
       case 'title':
         final title = document?.querySelector('title');
         return title == null ? '' : jsoupText(title);
       case 'location':
+        return document == null
+            ? baseUriOf(node)
+            : _locations[document] ?? baseUriOf(node);
       case 'baseUri':
         return baseUriOf(node);
       case 'setBaseUri':
@@ -778,7 +790,10 @@ class JsoupBridge {
       'comment' => dom.Comment(value),
       _ => html_parser.parse(''),
     };
-    if (created is dom.Document) created.nodes.clear();
+    if (created is dom.Document) {
+      created.nodes.clear();
+      if (baseUri != null && baseUri.isNotEmpty) _locations[created] = baseUri;
+    }
     setBaseUri(created, baseUri);
     return created;
   }
@@ -808,13 +823,55 @@ class JsoupBridge {
     _ => '',
   };
 
-  static String _outerHtml(dom.Node node) => switch (node) {
+  /// Jsoup 的 `outerHtml`：TextNode 把 `&`、`<`、`>`、不換行空白寫回實體
+  /// （網頁上看到的字面 `<b>` 不會變成真的標籤），DataNode 照原文。
+  String _outerHtml(dom.Node node) => switch (node) {
     dom.Element() => node.outerHtml,
     dom.Document() => node.outerHtml,
-    dom.Text() => node.data,
+    dom.Text() when _isData(node) => node.data,
+    dom.Text() => _escapeText(node.data),
     dom.Comment() => '<!--${node.data ?? ''}-->',
     _ => node.text ?? '',
   };
+
+  static String _escapeText(String text) => text
+      .replaceAll('&', '&amp;')
+      .replaceAll('\u00a0', '&nbsp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;');
+
+  /// Jsoup `Document.body()`／`head()`：沒有就補一個（空的文件、`empty()`
+  /// 之後也拿得到，可以接著寫內容）。
+  static dom.Element _bodyOf(dom.Document document) {
+    final html = _htmlOf(document);
+    for (final child in html.children) {
+      if (child.localName == 'body' || child.localName == 'frameset') {
+        return child;
+      }
+    }
+    final body = dom.Element.tag('body');
+    html.append(body);
+    return body;
+  }
+
+  static dom.Element _headOf(dom.Document document) {
+    final html = _htmlOf(document);
+    for (final child in html.children) {
+      if (child.localName == 'head') return child;
+    }
+    final head = dom.Element.tag('head');
+    html.nodes.insert(0, head);
+    return head;
+  }
+
+  static dom.Element _htmlOf(dom.Document document) {
+    for (final child in document.children) {
+      if (child.localName == 'html') return child;
+    }
+    final html = dom.Element.tag('html');
+    document.append(html);
+    return html;
+  }
 
   /// [container] 自己與底下的每個元素，文件順序。
   static List<dom.Element> _allElements(dom.Element? container) =>
@@ -842,6 +899,10 @@ class JsoupBridge {
   void _copyMarks(dom.Node from, dom.Node to, {required bool deep}) {
     final uri = _baseUris[from];
     if (uri != null) _baseUris[to] = uri;
+    if (from is dom.Document && to is dom.Document) {
+      final location = _locations[from];
+      if (location != null) _locations[to] = location;
+    }
     if (from is dom.Text && to is dom.Text) _textKinds[to] = _isData(from);
     if (!deep) return;
     final count = from.nodes.length < to.nodes.length
