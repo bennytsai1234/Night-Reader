@@ -43,6 +43,47 @@ typedef SelectionHighlight = ({
   String quote,
 });
 
+/// 在 [displayText] 的這一段正文（[paragraphStart]～[paragraphEnd]）裡，
+/// 從 [start] 所在那一句的句首留一個書籤；[end] 是選取結尾，選得比一句
+/// 長時清單帶到那裡。句子照朗讀的分句、在開頭所在的那一段裡切。選字選單
+/// 的「書籤」與「更多」的「書籤」共用這一套，章、章內位置、錨點與摘錄
+/// 都一樣。
+SelectionBookmark bookmarkInSentence({
+  required String displayText,
+  required String contentHash,
+  required String chapterTitle,
+  required int chapterIndex,
+  required int paragraphStart,
+  required int paragraphEnd,
+  required int start,
+  required int end,
+}) {
+  final paragraphText = displayText.substring(paragraphStart, paragraphEnd);
+  final local = start - paragraphStart;
+  var sentenceStart = start;
+  var sentenceEnd = end;
+  for (final sentence in const ReaderTtsSegmenter().segment(
+    text: paragraphText,
+    chapterIndex: chapterIndex,
+    startOffset: local,
+  )) {
+    if (sentence.startCharOffset > local) break;
+    if (local < sentence.endCharOffset) {
+      sentenceStart = paragraphStart + sentence.startCharOffset;
+      sentenceEnd = math.max(end, paragraphStart + sentence.endCharOffset);
+      break;
+    }
+  }
+  return (
+    location: ReaderLocation(
+      chapterIndex: chapterIndex,
+      charOffset: sentenceStart,
+    ).withContentIdentity(contentHash: contentHash, displayText: displayText),
+    chapterTitle: chapterTitle,
+    excerpt: displayText.substring(sentenceStart, sentenceEnd).trim(),
+  );
+}
+
 /// 選取在 viewport 上要畫的東西：看得到的那一段的字形框（每條視覺行一個）、
 /// 開頭與結尾那個字的行框（不在畫面上或那一段還沒排好時是 null），以及這一
 /// 章正文的頂端還在 viewport 上緣上面多遠、底端還在下緣下面多遠（0 或負的
@@ -157,61 +198,26 @@ final class ReaderTextSelection {
   /// 朗讀的分句、在開頭所在的那一段裡切。位置和閱讀進度同一套（章內第幾
   /// 個字，綁上這一章正文的身分與前後原文）。
   SelectionBookmark get asBookmark {
-    final sentence = _sentenceAtStart;
-    final start = sentence.start;
-    final end = math.max(range.end, sentence.end);
-    return (
-      location: ReaderLocation(chapterIndex: chapterIndex, charOffset: start)
-          .withContentIdentity(
-            contentHash: blocks.contentHash,
-            displayText: blocks.displayText,
-          ),
-      chapterTitle: blocks.title,
-      excerpt: blocks.displayText.substring(start, end).trim(),
-    );
-  }
-
-  /// 選字「朗讀」的起點：選取開頭那一句的句首。分句與書籤 [asBookmark]
-  /// 同一套（朗讀的分句，在開頭所在的那一段裡切）。
-  ReaderLocation get asSpeechStart {
-    final sentence = _sentenceAtStart;
-    return ReaderLocation(
-      chapterIndex: chapterIndex,
-      charOffset: sentence.start,
-    ).withContentIdentity(
-      contentHash: blocks.contentHash,
-      displayText: blocks.displayText,
-    );
-  }
-
-  /// 選取開頭所在那一句在 displayText 的範圍；開頭那一句切不出來時是空的
-  /// 選取範圍。
-  ChapterTextRange get _sentenceAtStart {
     final paragraph =
         blocks.sourceParagraphRange(
           blocks.blockForCharOffset(range.start).key,
         ) ??
         range;
-    final paragraphText = blocks.displayText.substring(
-      paragraph.start,
-      paragraph.end,
-    );
-    final local = range.start - paragraph.start;
-    for (final sentence in const ReaderTtsSegmenter().segment(
-      text: paragraphText,
+    return bookmarkInSentence(
+      displayText: blocks.displayText,
+      contentHash: blocks.contentHash,
+      chapterTitle: blocks.title,
       chapterIndex: chapterIndex,
-      startOffset: local,
-    )) {
-      if (sentence.startCharOffset > local) break;
-      if (local < sentence.endCharOffset) {
-        return ChapterTextRange(
-          paragraph.start + sentence.startCharOffset,
-          paragraph.start + sentence.endCharOffset,
-        );
-      }
-    }
-    return ChapterTextRange(range.start, range.start);
+      paragraphStart: paragraph.start,
+      paragraphEnd: paragraph.end,
+      start: range.start,
+      end: range.end,
+    );
   }
+
+  /// 選字「朗讀」的起點：選取開頭那一句的句首。分句與書籤 [asBookmark]
+  /// 同一套（`bookmarkInSentence`）。
+  ReaderLocation get asSpeechStart => asBookmark.location;
 
   /// 把選到的字畫上標註：從選取開頭畫到結尾，頭尾的空白不算（全是空白時
   /// [SelectionHighlight.quote] 是空的）；跨段時段落分隔照正文原樣記。位置

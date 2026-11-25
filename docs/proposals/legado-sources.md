@@ -212,7 +212,7 @@
 | 匯入的格式（陣列、單一、純文字夾多個） | 結果不對（少數） | 陣列、單一物件一樣；列出好幾個書源檔網址的 `{"sourceUrls": […]}` 不認，見 R21。 |
 | 照網域分組顯示 | 一樣 | 「按域名分組」。 |
 | 單筆選單（置頂、置底、登入、搜尋、除錯、刪除、啟用發現） | 一樣 | 都有；「啟用發現」夜讀在多選裡。 |
-| 多選（啟用、停用、加分組、移除分組、啟用發現、停用發現、置頂、置底、匯出、分享、校驗、選取區間） | 一樣 | 都有，見「校驗選取的區間」。 |
+| 多選（啟用、停用、加分組、移除分組、啟用發現、停用發現、置頂、置底、匯出、分享、校驗、選取區間） | 一樣 | 都有，見「校驗選取的區間」。匯出、分享原本把開關寫成 1／0，Legado 讀不進去，已修（#633）。 |
 | 拖曳排序 | 一樣 | 手動排序時可以拖（`N:lib/features/source_manager/source_manager_page.dart:583`）。 |
 
 ### 書源編輯與除錯
@@ -393,7 +393,7 @@
 - Legado：`L:data/dao/BookSourceDao.kt:84-88`，發現頁只看 `enabledExplore = 1 and hasExploreUrl = 1`，不看 `enabled`。
 - 夜讀：`N:lib/core/models/source/book_source_logic.dart:551-556`，`canParticipateInDiscovery` 要 `enabled && enabledExplore && hasExploreUrl`，另外要校驗沒擋下；沒有 ADR 記這個決定。
 
-### R21 匯入列出好幾個書源檔網址的 `{"sourceUrls": […]}` 時什麼都沒匯入（少數寫法才碰到）
+### R21 匯入列出好幾個書源檔網址的 `{"sourceUrls": […]}` 時什麼都沒匯入（少數寫法才碰到）（已修，#637）
 
 - 讀者會碰到：書源倉庫或別人分享的匯入內容是一個物件，裡面 `sourceUrls` 列著幾個書源檔的網址。Legado 逐一下載匯入；夜讀把它當成一個書源，沒有書源網址就略過，結果是「未解析到有效書源」。網址後面接 `#requestWithoutUA`（下載時不送瀏覽器標識）的，夜讀也照原字串去抓。
 - Legado：`L:ui/association/ImportBookSourceViewModel.kt:135-150`（物件先讀 `$.sourceUrls`，讀到就逐一 `importSourceUrl`），`191-195`（`#requestWithoutUA`）。

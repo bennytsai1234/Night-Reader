@@ -107,6 +107,20 @@ class ReaderChapterRepository {
   List<ReplaceRule>? _enabledRules;
   Future<List<ReplaceRule>>? _enabledRulesInFlight;
 
+  /// 這本書要換目錄了（改編碼）：已經在讀的章照樣排給畫面，但不再存回正文
+  /// 表，免得把舊編碼的正文寫回剛清掉的目錄底下。
+  bool _retired = false;
+
+  /// 目錄要換掉之前呼叫（[changeCharset]）：停止存正文；停止寫進度。
+  void retire() {
+    _retired = true;
+  }
+
+  /// 換目錄失敗、閱讀器照舊時恢復。
+  void resume() {
+    _retired = false;
+  }
+
   /// 替換規則表每改一次就加一（[_forgetEnabledRules]）：快取的規則清單只在
   /// 讀的期間沒改過時留著，重載失敗也不放回改之前的那份。
   int _rulesRevision = 0;
@@ -537,6 +551,7 @@ class ReaderChapterRepository {
         }
       },
       resolveNextChapterUrl: (index) => chapterAt(index + 1)?.url,
+      shouldStore: () => !_retired,
     );
   }
 
@@ -596,6 +611,7 @@ class ReaderChapterRepository {
   /// 不再用了（閱讀器關掉）：停止跟著規則表的變動。
   void dispose() {
     _disposed = true;
+    _retired = true;
     unawaited(_ruleChanges?.cancel());
     _ruleChanges = null;
   }

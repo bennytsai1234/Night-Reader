@@ -42,6 +42,8 @@ const _reviewed = {
   'lib/features/reader/features/settings/reader_highlight_style.dart':
       '標註的顏色與深淺',
   'lib/features/reader/text_view/core/text_view_types.dart': '正文層共用的小型別',
+  'lib/features/replace_rule/replace_rule_exchange.dart':
+      '主角是替換規則匯出、匯入的 JSON 讀寫與匯入預覽的函式',
   'lib/features/settings/provider/settings_base.dart':
       '在 provider/ 底下，SettingsProviderBase',
   'lib/features/settings/sync_status_text.dart': '同步的狀態文字與進度框',

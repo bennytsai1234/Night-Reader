@@ -38,7 +38,7 @@
 | 資料 3 | `lib/main.dart`、`lib/app_providers.dart`、`lib/core/startup/`、`di/`、`config/`、`constant/`、`exception/`、`fonts/`、`base/`、`background_work/`、`diagnostics/`、`platform/`、`app_lock/`；Android 那一半：`android/app/src/main/` 的 Kotlin 與 `AndroidManifest.xml`；`lib/core/utils/` 的 `encoder_utils`、`lru_map`；`lib/core/storage/resource_service.dart` |
 | 資料 4 | 同步：`lib/core/sync/` |
 | 介面 0 | `lib/shared/widgets/skeleton/` |
-| 介面 1 | `lib/shared/widgets/` 其餘、`lib/shared/navigation/`、`theme/`、`layout/` |
+| 介面 1 | `lib/shared/widgets/` 其餘、`lib/shared/navigation/`、`theme/`、`layout/`、`lib/shared/` 最上層的檔 |
 | 介面 2 | `lib/features/bookshelf/`、`book_detail/`、`home/` |
 | 介面 3 | `lib/features/settings/`、`about/`、`association/`、`replace_rule/` |
 | 文件 | 全部文件；另外列出 `lib/features/`、`lib/core/` 底下的資料夾，與表上只列了部分檔案的資料夾（`lib/core/source/`、`storage/`、`utils/`）裡的檔，表上沒有的寫進報告「沒排進分段的程式」一節 |

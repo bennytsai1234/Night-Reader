@@ -63,6 +63,7 @@ class ChapterContentPreparationPipeline {
     this.getSource,
     this.setSource,
     this.resolveNextChapterUrl,
+    this.shouldStore,
     this.retryDelay = _defaultRetryDelay,
   });
 
@@ -73,6 +74,10 @@ class ChapterContentPreparationPipeline {
   final BookSource? Function()? getSource;
   final void Function(BookSource source)? setSource;
   final String? Function(int chapterIndex)? resolveNextChapterUrl;
+
+  /// 這份正文還要不要存：閱讀器換目錄時（改編碼）先退役，退役之後才做完的
+  /// 讀章不再寫回舊正文。null 是照常存。
+  final bool Function()? shouldStore;
   final Duration Function(int attempt) retryDelay;
 
   final Map<String, Future<ChapterContentPreparationResult>> _inFlight =
@@ -366,6 +371,7 @@ class ChapterContentPreparationPipeline {
     final store = contentStore;
     // 付費還沒買的章節照樣回傳顯示，由 store 決定不存。
     if (store == null || result.content.trim().isEmpty) return;
+    if (shouldStore?.call() == false) return;
     if (result.isReady) {
       await store.saveRawContent(
         book: book,

@@ -159,10 +159,28 @@ class ReaderRuntime extends ChangeNotifier {
   ReaderLocation? captureVisibleLocation() =>
       viewportBridge.captureVisibleLocation();
 
+  /// 這本書要換目錄了（改編碼）：停止存正文、停止寫進度；之後舊閱讀器關掉
+  /// 也不再存。呼叫前先 [flushProgress]。
+  void retire() {
+    _retired = true;
+    repository.retire();
+    progressController.retire();
+  }
+
+  /// 換目錄失敗、閱讀器照舊時恢復。
+  void resume() {
+    _retired = false;
+    repository.resume();
+    progressController.resume();
+  }
+
+  bool _retired = false;
+
   Future<ReaderLocation?> saveProgress({
     ReaderLocation? location,
     bool immediate = true,
   }) async {
+    if (_retired) return null;
     return viewportBridge.saveProgress(
       location: location,
       immediate: immediate,
@@ -170,6 +188,7 @@ class ReaderRuntime extends ChangeNotifier {
   }
 
   Future<ReaderLocation?> flushProgress() {
+    if (_retired) return Future<ReaderLocation?>.value();
     return viewportBridge.flushProgress();
   }
 

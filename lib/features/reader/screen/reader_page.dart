@@ -8,7 +8,7 @@ import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/reading/bookmark.dart';
 import 'package:night_reader/features/reader/features/bookmark/reader_bookmarks.dart';
 import 'package:night_reader/core/models/reading/highlight.dart';
-import 'package:night_reader/core/backup/highlight_export.dart';
+import 'package:night_reader/core/backup/bookmark_highlight_export.dart';
 import 'package:night_reader/features/reader/features/highlight/reader_highlight_sheet.dart';
 import 'package:night_reader/features/reader/features/highlight/reader_highlights.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
@@ -113,6 +113,14 @@ class _ReaderPageState extends State<ReaderPage>
     remedy: _remedy,
     changeSource: _changeSource,
     showNotice: _showNotice,
+    retire: () {
+      _host.retire();
+      _progressSync.retire();
+    },
+    resume: () {
+      _host.resume();
+      _progressSync.resume();
+    },
   );
 
   /// 讀不到正文時的按鈕列、登入與網頁驗證（[ReaderSourceRemedy]）。
@@ -417,8 +425,8 @@ class _ReaderPageState extends State<ReaderPage>
                         ),
                     onHighlightTap: _jumpToHighlightFromDrawer,
                     onHighlightDelete: _coordinator.deleteHighlight,
-                    onHighlightExport: (items) => unawaited(
-                      shareHighlights([
+                    onExport: (items) => unawaited(
+                      shareBookmarksAndHighlights([
                         (
                           bookName: widget.book.name,
                           bookAuthor: widget.book.author,

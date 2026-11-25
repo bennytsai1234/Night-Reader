@@ -141,6 +141,11 @@ class BookSource extends BookSourceBase {
 
   Map<String, dynamic> toJson() => BookSourceSerialization.sourceToJson(this);
 
+  /// 給 Legado 讀的樣子（備份、匯出、分享）：開關寫 `true`／`false`
+  /// （[BookSourceSerialization.legadoJsonOf]）。
+  Map<String, dynamic> toLegadoJson() =>
+      BookSourceSerialization.legadoJsonOf(toJson());
+
   String getCheckKeyword(String defaultValue) {
     return (ruleSearch?.checkKeyWord != null &&
             ruleSearch!.checkKeyWord!.isNotEmpty)

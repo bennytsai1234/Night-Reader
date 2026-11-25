@@ -46,7 +46,7 @@ void main() {
           body: Column(
             children: [
               GroupedSwitchRow(
-                title: '離開時蓋住畫面',
+                title: '離開時',
                 value: true,
                 enabled: false,
                 onChanged: (_) {},

@@ -46,6 +46,19 @@ import 'package:night_reader/core/chinese/chinese_display.dart';
 
 enum _BookshelfBatchAction { checkUpdate, delete }
 
+/// 一次加入好幾個本地書的結果，寫給讀者看：全成功、部分失敗或全失敗。
+/// [failed] 是失敗的檔名（不含副檔名）。
+@visibleForTesting
+String localBookImportMessage({
+  required int added,
+  required List<String> failed,
+}) {
+  if (failed.isEmpty) return added == 1 ? '匯入成功' : '已加入 $added 本';
+  final names = failed.join('、');
+  if (added == 0) return '匯入失敗：$names';
+  return '已加入 $added 本，${failed.length} 本失敗：$names';
+}
+
 /// 頁首兩個選單的非排序項目；排序項目直接用 [BookshelfSortMode]。
 /// 左邊「整理」管書架怎麼看、怎麼排，右邊「加入」把書帶進書架。
 /// 「整理」的篩選選項：選了哪一類（null 是全部）。
@@ -656,21 +669,64 @@ class _BookshelfPageState extends State<BookshelfPage>
     );
   }
 
-  Future<void> _importLocalBook(
+  Future<void> _importLocalBooks(
     BuildContext context,
     BookshelfProvider provider,
-    String path,
-  ) async {
-    try {
-      final ok = await provider.importLocalBookPath(path);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: UiText(ok ? '匯入成功' : '匯入失敗')));
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: UiText(failureMessage('匯入', e))));
+    List<String> paths, {
+    List<String> rejected = const [],
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (paths.isEmpty) {
+      // 選到的檔都被副檔名篩掉：什麼都沒匯入，還是要告訴讀者少了哪幾本。
+      messenger.showSnackBar(
+        SnackBar(
+          content: UiText(localBookImportMessage(added: 0, failed: rejected)),
+        ),
+      );
+      return;
     }
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final progress = ValueNotifier<({String label, double? value})>((
+      label: '正在匯入…',
+      value: null,
+    ));
+    final dialog = showStatefulAppAlert<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context, _, _) => PopScope(
+        canPop: false,
+        child: AppAlert<void>(
+          title: '加入本地書',
+          content: ValueListenableBuilder(
+            valueListenable: progress,
+            builder: (context, value, _) =>
+                SyncProgressView(value: value.value, label: value.label),
+          ),
+          actions: const [],
+        ),
+      ),
+    );
+    String message = '匯入失敗';
+    try {
+      final result = await provider.importLocalBookPaths(
+        paths,
+        onProgress: (done, total) => progress.value = (
+          label: '第 $done／$total 本',
+          value: total <= 0 ? null : done / total,
+        ),
+      );
+      message = localBookImportMessage(
+        added: result.added,
+        failed: [...rejected, ...result.failed],
+      );
+    } catch (e) {
+      message = failureMessage('匯入', e);
+    } finally {
+      navigator.pop();
+      await dialog;
+      progress.dispose();
+    }
+    messenger.showSnackBar(SnackBar(content: UiText(message)));
   }
 
   Future<void> _showImportBookshelfUrlDialog(
@@ -1202,10 +1258,16 @@ class _BookshelfPageState extends State<BookshelfPage>
   }
 
   Future<void> _pickLocalBook(BookshelfProvider provider) async {
-    final path = await AppFileSelectionService.instance.pickLocalBookPath();
-    if (path != null && mounted) {
-      await _importLocalBook(context, provider, path);
-    }
+    final selection = await AppFileSelectionService.instance
+        .pickLocalBookPaths();
+    if (!mounted) return;
+    if (selection.paths.isEmpty && selection.rejected.isEmpty) return;
+    await _importLocalBooks(
+      context,
+      provider,
+      selection.paths,
+      rejected: selection.rejected,
+    );
   }
 
   /// 加入本地漫畫（ADR 0052）：選一個作品資料夾，複製進 App、每話整理成

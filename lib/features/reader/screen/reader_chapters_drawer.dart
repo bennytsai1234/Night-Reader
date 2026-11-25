@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/backup/bookmark_highlight_export.dart';
 import 'package:night_reader/shared/widgets/popups/popup_routes.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/models/reading/bookmark.dart';
@@ -41,7 +42,7 @@ class ReaderChaptersDrawer extends StatefulWidget {
     this.highlightChapter,
     this.onHighlightTap,
     this.onHighlightDelete,
-    this.onHighlightExport,
+    this.onExport,
     this.shown,
     this.listenable,
   });
@@ -70,8 +71,8 @@ class ReaderChaptersDrawer extends StatefulWidget {
   /// 往左滑刪掉一個標註。
   final ValueChanged<Highlight>? onHighlightDelete;
 
-  /// 按了「匯出」，給照這台目錄排好的標註。
-  final ValueChanged<List<Highlight>>? onHighlightExport;
+  /// 按了「匯出」，給這本書的書籤與標註（章節序號已對到這台目錄）。
+  final ValueChanged<List<BookmarkHighlightExportItem>>? onExport;
 
   final List<BookChapter> chapters;
 
@@ -422,37 +423,71 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
             theme,
             '共 ${_volumes.chapterCount} 章',
           ),
-          _DrawerTab.bookmarks => ValueListenableBuilder(
+          _DrawerTab.bookmarks => _buildMarksActions<Bookmark>(
+            theme,
             valueListenable: widget.bookmarks!,
-            builder: (context, items, _) => items.isEmpty
-                ? const SizedBox.shrink()
-                : _countLabel(theme, '${items.length} 個'),
           ),
-          _DrawerTab.highlights => ValueListenableBuilder(
+          _DrawerTab.highlights => _buildMarksActions<Highlight>(
+            theme,
             valueListenable: widget.highlights!,
-            builder: (context, items, _) => items.isEmpty
-                ? const SizedBox.shrink()
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _countLabel(theme, '${items.length} 個'),
-                      if (widget.onHighlightExport case final onExport?)
-                        IconButton(
-                          tooltip: context.ui('匯出'),
-                          visualDensity: VisualDensity.compact,
-                          icon: const Icon(Icons.ios_share_rounded, size: 20),
-                          onPressed: () => onExport([
-                            for (final row in _highlightRows(items))
-                              row.highlight,
-                          ]),
-                        ),
-                    ],
-                  ),
           ),
         },
       ],
     );
   }
+
+  /// 書籤與標註頁右上：這頁有幾個，以及「匯出」（兩頁都匯出同一個檔）。
+  /// 兩邊都沒有時不畫；另一頁有的話只畫「匯出」。
+  Widget _buildMarksActions<T>(
+    ThemeData theme, {
+    required ValueListenable<List<T>> valueListenable,
+  }) {
+    return ValueListenableBuilder<List<T>>(
+      valueListenable: valueListenable,
+      builder: (context, items, _) {
+        final hasAny =
+            items.isNotEmpty ||
+            (widget.bookmarks?.value.isNotEmpty ?? false) ||
+            (widget.highlights?.value.isNotEmpty ?? false);
+        if (!hasAny) return const SizedBox.shrink();
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (items.isNotEmpty) _countLabel(theme, '${items.length} 個'),
+            if (widget.onExport case final onExport?)
+              IconButton(
+                tooltip: context.ui('匯出'),
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.ios_share_rounded, size: 20),
+                onPressed: () => onExport(_exportItems()),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 這本書的書籤與標註，章節序號已對到這台目錄。
+  List<BookmarkHighlightExportItem> _exportItems() => [
+    for (final bookmark in widget.bookmarks?.value ?? const <Bookmark>[])
+      (
+        chapter:
+            widget.bookmarkChapter?.call(bookmark) ?? bookmark.chapterIndex,
+        charOffset: bookmark.charOffset,
+        chapterTitle: bookmark.chapterTitle,
+        text: bookmark.excerpt,
+        note: '',
+      ),
+    for (final highlight in widget.highlights?.value ?? const <Highlight>[])
+      (
+        chapter:
+            widget.highlightChapter?.call(highlight) ?? highlight.chapterIndex,
+        charOffset: highlight.charOffset,
+        chapterTitle: highlight.chapterTitle,
+        text: highlight.quote,
+        note: highlight.note,
+      ),
+  ];
 
   Widget _countLabel(ThemeData theme, String text) => UiText(
     text,

@@ -831,25 +831,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
         .showSnackBar(SnackBar(content: UiText(result.message)));
   }
 
-  /// 提示框內的分組輸入卡片。
-  Widget _fieldCard(BuildContext context, List<Widget> rows) {
-    final chrome = AppChrome.of(context);
-    final children = <Widget>[];
-    for (var i = 0; i < rows.length; i++) {
-      if (i > 0) {
-        children.add(const InsetSeparator(indent: AppGrouped.rowPadding));
-      }
-      children.add(rows[i]);
-    }
-    return ClipRRect(
-      borderRadius: AppRadius.cardMd,
-      child: ColoredBox(
-        color: chrome.groupedBackground,
-        child: Column(mainAxisSize: MainAxisSize.min, children: children),
-      ),
-    );
-  }
-
   void _showDownloadRangeDialog(
     BuildContext context,
     BookDetailProvider provider,
@@ -865,18 +846,20 @@ class _BookDetailPageState extends State<BookDetailPage> {
         title: '指定下載範圍',
         // 錯誤寫在對話框裡；頁面的 SnackBar 會被對話框的遮罩蓋住。
         message: errorMessage,
-        content: _fieldCard(ctx, [
-          GroupedTextFieldRow(
-            label: '起始章節',
-            controller: fields[0],
-            keyboardType: TextInputType.number,
-          ),
-          GroupedTextFieldRow(
-            label: '結束章節',
-            controller: fields[1],
-            keyboardType: TextInputType.number,
-          ),
-        ]),
+        content: AlertGroupedCard(
+          rows: [
+            GroupedTextFieldRow(
+              label: '起始章節',
+              controller: fields[0],
+              keyboardType: TextInputType.number,
+            ),
+            GroupedTextFieldRow(
+              label: '結束章節',
+              controller: fields[1],
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
         actions: const [
           AppAlertAction(label: '取消', value: false),
           AppAlertAction(label: '加入佇列', value: true, isDefault: true),
@@ -1078,13 +1061,15 @@ class _BookDetailPageState extends State<BookDetailPage> {
       fieldTexts: [p.tocSearchQuery],
       builder: (ctx, _, fields) => AppAlert<void>(
         title: '搜尋目錄',
-        content: _fieldCard(ctx, [
-          GroupedTextFieldRow(
-            controller: fields.single,
-            autofocus: true,
-            onChanged: p.setSearchQuery,
-          ),
-        ]),
+        content: AlertGroupedCard(
+          rows: [
+            GroupedTextFieldRow(
+              controller: fields.single,
+              autofocus: true,
+              onChanged: p.setSearchQuery,
+            ),
+          ],
+        ),
         actions: const [
           AppAlertAction(label: '關閉', value: null, isDefault: true),
         ],
@@ -1109,13 +1094,12 @@ class _BookDetailPageState extends State<BookDetailPage> {
           p.book.getShownIntro(),
           p.book.customCoverUrl ?? p.book.coverUrl ?? '',
           p.book.kind ?? '',
-          p.book.customTag ?? '',
           p.book.originName,
           p.book.tocUrl,
         ],
         builder: (ctx, fields) => StatefulBuilder(
           builder: (ctx, setSheetState) {
-            final [n, a, i, c, k, tag, sourceName, toc] = fields;
+            final [n, a, i, c, k, sourceName, toc] = fields;
             GroupedTextFieldRow field(
               String label,
               TextEditingController controller,
@@ -1134,7 +1118,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
                 i.text,
                 c.text,
                 kind: k.text,
-                customTag: tag.text,
                 originName: sourceName.text,
                 tocUrl: toc.text,
               );
@@ -1173,7 +1156,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
                         field('書名', n),
                         field('作者', a),
                         field('分類', k),
-                        field('自訂標籤', tag),
                       ],
                     ),
                     GroupedSection(

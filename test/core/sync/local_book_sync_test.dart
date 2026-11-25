@@ -21,6 +21,7 @@ import 'package:night_reader/core/sync/sync_records.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
+import 'package:night_reader/core/utils/big5.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -450,6 +451,101 @@ void main() {
       expect(shelf.single.chapterIndex, 1);
       expect(shelf.single.charOffset, 2);
       expect((await b.localBooks().plan()).isEmpty, isTrue);
+    });
+
+    test('TXT 的編碼跟著小紀錄到另一台，下載後照它解碼、分章', () async {
+      final mine = await a.import('夜航.txt', _novel);
+      a.use();
+      await LocalBookService().changeCharset(
+        (await a.books.getByUrl(mine.bookUrl))!,
+        'GBK',
+        bookDao: a.books,
+        chapterDao: a.chapters,
+      );
+      final upload = await a.localBooks().plan();
+      expect(upload.of(LocalBookAction.upload), hasLength(1));
+      expect((await a.localBooks().run(upload)).failures, isEmpty);
+      final data = store.records[mine.fileFingerprint!]!.data;
+      expect(data['charset'], 'GBK');
+      // 舊版只讀這幾個欄位；紀錄多一欄也不會出錯。
+      expect(data['name'], '夜航');
+      expect(data['ext'], 'txt');
+      expect(data['size'], greaterThan(0));
+
+      final download = await b.localBooks().plan();
+      expect(download.of(LocalBookAction.download), hasLength(1));
+      expect((await b.localBooks().run(download)).failures, isEmpty);
+      final theirs = (await b.shelf()).single;
+      expect(theirs.charset, 'GBK');
+      expect(theirs.totalChapterNum, greaterThan(0));
+    });
+
+    test('舊版寫的小紀錄沒有編碼欄位，下載照自動偵測', () async {
+      a.use();
+      final dir = Directory(p.join(a.root.path, 'picked'))
+        ..createSync(recursive: true);
+      final path = p.join(dir.path, '舊紀錄.txt');
+      File(path)
+          .writeAsBytesSync(Big5.encode('第一章 開始\n這是正文。\n第二章 結束\n這是正文。\n'));
+      final mine = (await LocalBookService().addToShelf(
+        path,
+        bookDao: a.books,
+        chapterDao: a.chapters,
+      ))!;
+      expect(mine.charset, 'Big5');
+      final upload = await a.localBooks().plan();
+      expect((await a.localBooks().run(upload)).failures, isEmpty);
+
+      // 拿掉編碼欄位，模擬舊版寫的小紀錄。
+      final fileName = LocalBookSync.fileName;
+      final file = store.files[fileName]!;
+      final doc = SyncDocument.decode(file.$1);
+      final record = doc.records[mine.fileFingerprint!]!;
+      store.files[fileName] = (
+        SyncDocument({
+          ...doc.records,
+          mine.fileFingerprint!: SyncRecord(
+            time: record.time,
+            data: {
+              for (final MapEntry(:key, :value) in record.data.entries)
+                if (key != 'charset') key: value,
+            },
+          ),
+        }).encode(),
+        file.$2 + 1,
+      );
+
+      final download = await b.localBooks().plan();
+      expect(download.of(LocalBookAction.download), hasLength(1));
+      expect((await b.localBooks().run(download)).failures, isEmpty);
+      expect((await b.shelf()).single.charset, 'Big5');
+    });
+
+    test('兩台都有的書編碼不同時不動這台，維持這台的編碼', () async {
+      final mine = await a.import('夜航.txt', _novel);
+      await a.localBooks().run(await a.localBooks().plan());
+      final theirs = await b.import('夜航.txt', _novel);
+      expect(theirs.fileFingerprint, mine.fileFingerprint);
+      expect(theirs.charset, 'UTF-8');
+
+      // 另一台把雲端紀錄的編碼改成 GBK（原檔沒變）。
+      final fileName = LocalBookSync.fileName;
+      final file = store.files[fileName]!;
+      final doc = SyncDocument.decode(file.$1);
+      final record = doc.records[mine.fileFingerprint!]!;
+      store.files[fileName] = (
+        SyncDocument({
+          ...doc.records,
+          mine.fileFingerprint!: SyncRecord(
+            time: record.time,
+            data: {...record.data, 'charset': 'GBK'},
+          ),
+        }).encode(),
+        file.$2 + 1,
+      );
+
+      expect((await b.localBooks().plan()).isEmpty, isTrue);
+      expect((await b.shelf()).single.charset, 'UTF-8');
     });
 
     test('a local comic goes up one chapter file each, joins the other '

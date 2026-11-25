@@ -12,7 +12,9 @@ import 'package:night_reader/core/database/dao/ai_find_dao.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/cache_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/cookie_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
@@ -50,7 +52,9 @@ void main() {
       ..registerSingleton<BookmarkDao>(BookmarkDao(db))
       ..registerSingleton<HighlightDao>(HighlightDao(db))
       ..registerSingleton<AiFindDao>(AiFindDao(db))
-      ..registerSingleton<ReaderChapterContentDao>(ReaderChapterContentDao(db));
+      ..registerSingleton<ReaderChapterContentDao>(ReaderChapterContentDao(db))
+      ..registerSingleton<CacheDao>(CacheDao(db))
+      ..registerSingleton<CookieDao>(CookieDao(db));
     tempDir = await Directory.systemTemp.createTemp('restore_test');
   });
 
@@ -627,6 +631,187 @@ void main() {
       final record = await ReadRecordDao(db).getByBookName('雪中悍刀行');
       expect(record?.readTime, 5400);
       expect(record?.lastRead, 1700000500000);
+    });
+  });
+
+  group('設定也還原：不勾時設定保留這台的，資料照樣還原', () {
+    /// 另一台手機的備份：設定與各種資料都有。[tag] 讓每個測試的資料各自
+    /// 分得開（整個檔共用一個資料庫）。
+    Future<File> otherPhoneZip(String name, {required String tag}) => writeZip(
+      name,
+      {
+        'manifest.json': jsonEncode({'schemaVersion': db.schemaVersion}),
+        'config.json': jsonEncode({
+          PreferKey.readerFontSize: 30.0,
+          PreferKey.themeMode: 'dark',
+          'sync.webdav.url': 'https://other.example/dav',
+        }),
+        'bookSource.json': jsonEncode([
+          {'bookSourceUrl': 'https://$tag.example', 'bookSourceName': tag},
+        ]),
+        'bookshelf.json': jsonEncode([
+          {
+            'bookUrl': 'https://$tag.example/b/1',
+            'origin': 'https://$tag.example',
+            'name': '$tag的書',
+            'author': '某人',
+            'isInBookshelf': true,
+            'chapterIndex': 7,
+            'charOffset': 120,
+          },
+        ]),
+        'replaceRule.json': jsonEncode([
+          {
+            'id': 1800000000000 + tag.length,
+            'name': '$tag的規則',
+            'pattern': '廣告',
+            'replacement': '',
+          },
+        ]),
+        'bookmark.json': jsonEncode([
+          {
+            'id': 1800000000000 + tag.length,
+            'bookName': '$tag的書',
+            'bookAuthor': '某人',
+            'chapterIndex': 7,
+            'chapterTitle': '第八章',
+            'charOffset': 120,
+            'excerpt': '$tag的書籤',
+          },
+        ]),
+        'highlight.json': jsonEncode([
+          {
+            'id': 1800000000000123 + tag.length,
+            'bookName': '$tag的書',
+            'bookAuthor': '某人',
+            'chapterIndex': 7,
+            'charOffset': 120,
+            'quote': '$tag的標註',
+          },
+        ]),
+        'readRecord.json': jsonEncode([
+          {'bookName': '$tag的書', 'deviceId': '', 'readTime': 42, 'lastRead': 1},
+        ]),
+        'cookie.json': jsonEncode([
+          {'url': 'https://$tag.example', 'cookie': 'sid=$tag'},
+        ]),
+      },
+    );
+
+    /// 這台手機原本的設定：字級 18、深淺沒設過、自己的同步空間。
+    Future<SharedPreferences> thisPhoneSettings() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(PreferKey.readerFontSize, 18.0);
+      await prefs.remove(PreferKey.themeMode);
+      await prefs.setString('sync.webdav.url', 'https://mine.example/dav');
+      return prefs;
+    }
+
+    Future<void> expectDataRestored(String tag) async {
+      expect(
+        await BookSourceDao(db).getByUrl('https://$tag.example'),
+        isNotNull,
+      );
+      final book = await BookDao(db).getByUrl('https://$tag.example/b/1');
+      expect(book?.isInBookshelf, isTrue);
+      expect(book?.chapterIndex, 7);
+      expect(book?.charOffset, 120);
+      expect(
+        (await ReplaceRuleDao(db).getAll()).map((rule) => rule.name),
+        contains('$tag的規則'),
+      );
+      expect(
+        (await BookmarkDao(db).getAll()).map((mark) => mark.excerpt),
+        contains('$tag的書籤'),
+      );
+      expect(
+        (await HighlightDao(db).getAll()).map((mark) => mark.quote),
+        contains('$tag的標註'),
+      );
+      expect((await ReadRecordDao(db).getByBookName('$tag的書'))?.readTime, 42);
+      expect(
+        (await CookieDao(db).getAll()).map((cookie) => cookie.cookie),
+        contains('sid=$tag'),
+      );
+    }
+
+    test('勾著時設定換成備份的', () async {
+      final prefs = await thisPhoneSettings();
+
+      final result = await RestoreService().restoreFromZip(
+        await otherPhoneZip('with-settings.zip', tag: 'withset'),
+      );
+
+      expect(result.failedFiles, isEmpty);
+      expect(prefs.getDouble(PreferKey.readerFontSize), 30.0);
+      expect(prefs.getString(PreferKey.themeMode), 'dark');
+      expect(prefs.getString('sync.webdav.url'), 'https://other.example/dav');
+      await expectDataRestored('withset');
+    });
+
+    test('不勾時設定保留這台的', () async {
+      final prefs = await thisPhoneSettings();
+
+      final result = await RestoreService().restoreFromZip(
+        await otherPhoneZip('without-settings.zip', tag: 'noset'),
+        restoreSettings: false,
+      );
+
+      expect(result.failedFiles, isEmpty);
+      expect(result.restoredAny, isTrue);
+      expect(prefs.getDouble(PreferKey.readerFontSize), 18.0);
+      expect(prefs.containsKey(PreferKey.themeMode), isFalse);
+      expect(prefs.getString('sync.webdav.url'), 'https://mine.example/dav');
+      await expectDataRestored('noset');
+    });
+
+    test('不勾時只有設定的備份算沒有可還原的資料，讀不懂的設定檔也不算失敗', () async {
+      final prefs = await thisPhoneSettings();
+      final onlySettings = await writeZip('only-settings.zip', {
+        'manifest.json': jsonEncode({'schemaVersion': db.schemaVersion}),
+        'config.json': jsonEncode({PreferKey.readerFontSize: 30.0}),
+      });
+      final brokenSettings = await writeZip('broken-settings.zip', {
+        'manifest.json': jsonEncode({'schemaVersion': db.schemaVersion}),
+        'config.json': '{',
+      });
+
+      final only = await RestoreService().restoreFromZip(
+        onlySettings,
+        restoreSettings: false,
+      );
+      final broken = await RestoreService().restoreFromZip(
+        brokenSettings,
+        restoreSettings: false,
+      );
+
+      expect(only.restoredAny, isFalse);
+      expect(only.failedFiles, isEmpty);
+      expect(broken.failedFiles, isEmpty);
+      expect(prefs.getDouble(PreferKey.readerFontSize), 18.0);
+    });
+
+    test('沒有 manifest 的備份（Legado 的路徑）不勾時也不套設定', () async {
+      final prefs = await thisPhoneSettings();
+      final zip = await writeZip('legado-with-config.zip', {
+        'config.xml': '<?xml version="1.0"?><map></map>',
+        'config.json': jsonEncode({PreferKey.readerFontSize: 30.0}),
+        'bookSource.json': jsonEncode([
+          {'bookSourceUrl': 'https://lgnoset.example', 'bookSourceName': '丙'},
+        ]),
+      });
+
+      final result = await RestoreService().restoreFromZip(
+        zip,
+        restoreSettings: false,
+      );
+
+      expect(result.invalidArchive, isFalse);
+      expect(prefs.getDouble(PreferKey.readerFontSize), 18.0);
+      expect(
+        await BookSourceDao(db).getByUrl('https://lgnoset.example'),
+        isNotNull,
+      );
     });
   });
 }
