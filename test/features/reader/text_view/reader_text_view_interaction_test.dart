@@ -97,6 +97,29 @@ class _FakeChapterDao extends Fake implements ChapterDao {
 
 class _FakeSourceDao extends Fake implements BookSourceDao {}
 
+/// 跟閱讀頁一樣由畫面擁有 runtime：樹拆掉時釋放，排著的進度在測試框架
+/// 檢查有沒有剩下的計時器之前寫完。
+class _RuntimeOwner extends StatefulWidget {
+  const _RuntimeOwner({required this.runtime, required this.child});
+
+  final ReaderRuntime runtime;
+  final Widget child;
+
+  @override
+  State<_RuntimeOwner> createState() => _RuntimeOwnerState();
+}
+
+class _RuntimeOwnerState extends State<_RuntimeOwner> {
+  @override
+  void dispose() {
+    widget.runtime.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 const Size _viewport = Size(400, 600);
 
 const ReaderStylePreferences _style = ReaderStylePreferences(
@@ -200,30 +223,32 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     runtime = customRuntime ?? _makeRuntime();
-    addTearDown(runtime.dispose);
     viewport = ReaderViewportController();
     taps = <TapUpDetails>[];
     onTap = null;
     await tester.pumpWidget(
       MaterialApp(
-        home: ReaderTextView(
+        home: _RuntimeOwner(
           runtime: runtime,
-          backgroundColor: Colors.white,
-          textColor: Colors.black,
-          style: _style,
-          viewportController: viewport,
-          ttsHighlight: ttsHighlight,
-          textSelectionEnabled: textSelectionEnabled,
-          highlights: highlights,
-          bookUrl: skeletonPages == null ? null : 'http://interaction.test',
-          skeletonPages: skeletonPages,
-          progressListenable: progress,
-          enableDiskCache: false,
-          preprocessor: const TextPreprocessor(useIsolate: false),
-          onContentTapUp: (details) {
-            taps.add(details);
-            onTap?.call(details);
-          },
+          child: ReaderTextView(
+            runtime: runtime,
+            backgroundColor: Colors.white,
+            textColor: Colors.black,
+            style: _style,
+            viewportController: viewport,
+            ttsHighlight: ttsHighlight,
+            textSelectionEnabled: textSelectionEnabled,
+            highlights: highlights,
+            bookUrl: skeletonPages == null ? null : 'http://interaction.test',
+            skeletonPages: skeletonPages,
+            progressListenable: progress,
+            enableDiskCache: false,
+            preprocessor: const TextPreprocessor(useIsolate: false),
+            onContentTapUp: (details) {
+              taps.add(details);
+              onTap?.call(details);
+            },
+          ),
         ),
       ),
     );
@@ -1511,24 +1536,26 @@ void main() {
         visualOffsetPx: 120,
       ),
     );
-    addTearDown(runtime.dispose);
     final outside = <double>[];
     await tester.pumpWidget(
       MaterialApp(
-        home: NotificationListener<ScrollNotification>(
-          onNotification: (notification) {
-            if (notification.metrics.outOfRange) {
-              outside.add(notification.metrics.pixels);
-            }
-            return false;
-          },
-          child: ReaderTextView(
-            runtime: runtime,
-            backgroundColor: Colors.white,
-            textColor: Colors.black,
-            style: _style,
-            enableDiskCache: false,
-            preprocessor: const TextPreprocessor(useIsolate: false),
+        home: _RuntimeOwner(
+          runtime: runtime,
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification.metrics.outOfRange) {
+                outside.add(notification.metrics.pixels);
+              }
+              return false;
+            },
+            child: ReaderTextView(
+              runtime: runtime,
+              backgroundColor: Colors.white,
+              textColor: Colors.black,
+              style: _style,
+              enableDiskCache: false,
+              preprocessor: const TextPreprocessor(useIsolate: false),
+            ),
           ),
         ),
       ),
