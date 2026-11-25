@@ -10,8 +10,6 @@
 - **重裝或換同步空間後第一次同步，把這台自己加回來的書移出書架**（分支 `fix/bookshelf-sync-first-time-delete`，#657 審查中）：雲端只有刪除紀錄時，書架照本地書的做法比刪除時間與加入書架的時間（`lib/core/sync/bookshelf_sync.dart`、`sync_merge.dart`）；書源沒有加入時間，維持雲端的贏，補進 ADR 0039。
 - **整理 #525 留下的文件**（分支 `fix/frame-viewer-dark-and-doc-sediment`）：動畫儀表板深色的數字與 agent 文件裡的實跑數字，照「文件只寫現在的樣子」（ADR 的日期與經過是紀錄，不動）。
 - **全面檢查審查時找到、改前就有的閱讀器問題**：有聲書選集時剛好在存進度，選的集被自動接下一集、回前景同步或系統暫停蓋掉，回前景同步被換集打斷仍記成已同步（#611 審查，中）；書源同時改了某集網址與集數時三個閱讀器都寫回舊集數（#597）；已下載打包的漫畫那一話有壞圖時重試不重抓（#631，Mihon 也這樣）；舊版缺頁的本地漫畫重新匯入後兩話並存（#601）；慣性滑動中轉螢幕位置偏、換章分隔在頂端時轉螢幕停到下一話（#614）；借源取消後抓下的插圖留著（#591）。有聲書在通話中按播放可能照播：`audio_session` 在 Android 上已要過焦點就直接回「給了」，朗讀這邊 #649 已繞過，有聲書還沒（#649 審查）。細節在 `docs/proposals/audit-reader.md`「#528 核對結果」。漫畫重新匯入、轉螢幕與借源插圖在做（分支 `fix/comic-borrow-leftovers`），有聲書兩條等朗讀那包合併再做；已打包漫畫壞圖重試照 Mihon 不修。
-- **大的規則包打開匯入預覽那一下很重**：底部面板一打開就把每一列建好，300 條在電腦除錯模式要 710ms（30 條 186ms，面板本身就重），情境在 `test/frame_budget/replace_rule_import_frame_budget_test.dart`；改成捲到才建要動共用的底部面板，先用手機正式版量過再決定（#633）。
-- **本機 Windows 上幾個測試固定或偶爾失敗**：同步本地書（`local_book_sync_test`，暫存資料夾改名 `base_*.json.tmp` 被拒）、Big5／GB18030 的 TXT（`txt_parser_test`、`epub_parser_test`，檔案還開著刪不掉）、AI 修復紀錄（`ai_repair_log_test`）在純 `beta` 也失敗；`background_search_test`、`reading_stats_view_test` 整批跑時偶爾失敗、單獨跑會過。CI（Linux）都過，但每個對話在本機都要逐一判斷是不是自己改壞的。
 
 ## 第四階段：AI
 
@@ -28,6 +26,8 @@
 
 ## 正式版之後
 
+- **大的規則包打開匯入預覽那一下很重**：底部面板一打開就把每一列建好，300 條在電腦除錯模式要 710ms（30 條 186ms，面板本身就重），情境在 `test/frame_budget/replace_rule_import_frame_budget_test.dart`；改成捲到才建要動共用的底部面板，先用手機正式版量過再決定（#633）；要在手機上量，收穩期間不動共用的底部面板。
+- **本機 Windows 上幾個測試固定或偶爾失敗**：同步本地書（`local_book_sync_test`，暫存資料夾改名 `base_*.json.tmp` 被拒）、Big5／GB18030 的 TXT（`txt_parser_test`、`epub_parser_test`，檔案還開著刪不掉）、AI 修復紀錄（`ai_repair_log_test`）在純 `beta` 也失敗；`background_search_test`、`reading_stats_view_test` 整批跑時偶爾失敗、單獨跑會過。CI（Linux）都過，但每個對話在本機都要逐一判斷是不是自己改壞的；要在 Windows 上查，不影響 App。
 - **重新打造巡檢**：這一波把每日的自動巡檢關了；重新設計它怎麼跑，定案前排程維持關著。
 - **和 Legado 對照，盤點夜讀還缺哪些功能**：使用者 2026-11-23 發現「重新分段」沒有開關才提的；列出 Legado 有、夜讀完全沒有的，給使用者挑。
 - **對照 Legado 這一波沒做的選項**：使用者 2026-11-25 照 Claude 的建議沒勾的，替換規則分組管理與「本章套用了哪些」、目錄顯示更新時間與套標題規則、朗讀語速跟隨手機、每本書的朗讀引擎、耳機鍵開關、每章不去重複章名、EPUB 注音、ZIP 裡的 TXT、換分章規則、每本書不拆長章、檔名拆書名的程式、自動備份、匯出書的選項、還原 Legado 的設定與分組、線程數、書源排序與篩選、匯入書源的四個選項、書源編輯頁其餘欄位、換源面板的操作、程式庫共用、檢查新章節不抓詳情、兩組相依開關合一、漫畫與文字書速度分開；細節在 `docs/proposals/legado-*.md`、`settings-inventory.md` 標「不做」的條目。
