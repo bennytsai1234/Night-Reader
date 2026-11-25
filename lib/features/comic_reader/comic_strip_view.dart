@@ -517,8 +517,11 @@ class _ComicStripViewState extends State<ComicStripView>
     final position = _scroll.comicPosition;
     final pixels = position.pixels;
     double? correction;
+    // 還停在接回的地方才算（自動捲動不經過手指，捲走了就照一般的補法）。
     if (_restoring case (item: final restored, :final fraction)
-        when restored == item && g >= 0) {
+        when restored == item &&
+            g >= 0 &&
+            (pixels - (_topOf(g) + fraction * before)).abs() < 0.5) {
       setState(() {});
       position.shiftBy(_topOf(g) + fraction * after - pixels);
       return;
