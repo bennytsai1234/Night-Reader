@@ -103,6 +103,10 @@ void setUpScreenshot(
   tester.view.physicalSize = size * devicePixelRatio;
   tester.view.devicePixelRatio = devicePixelRatio;
   addTearDown(tester.view.reset);
+  // 測試裡的 MaterialApp 預設畫右上角的 DEBUG 斜角標籤（App 本身關掉了），
+  // 截圖不要它。
+  WidgetsApp.debugAllowBannerOverride = false;
+  addTearDown(() => WidgetsApp.debugAllowBannerOverride = true);
 
   final previous = PathProviderPlatform.instance;
   final dir = Directory.systemTemp.createTempSync('night-reader-test-');
