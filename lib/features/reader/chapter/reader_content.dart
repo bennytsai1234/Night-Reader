@@ -45,6 +45,24 @@ class ReaderContent {
     return plainText.isEmpty ? title.length : title.length + 2;
   }
 
+  /// [charOffset] 落在的那一段正文：[start]～[end] 是那一段在 [displayText]
+  /// 的位置，[offset] 是夾到那一段裡的位置。章名與段落分隔上算下一段的開頭，
+  /// 最後一段之後算最後一段的結尾；沒有正文時回傳 null。
+  ({int start, int end, int offset})? paragraphAt(int charOffset) {
+    if (paragraphs.isEmpty) return null;
+    final safe = charOffset.clamp(0, displayText.length).toInt();
+    var start = bodyStartOffset;
+    for (final paragraph in paragraphs) {
+      final end = start + paragraph.length;
+      if (safe < end) {
+        return (start: start, end: end, offset: safe < start ? start : safe);
+      }
+      start = end + 2;
+    }
+    final end = displayText.length;
+    return (start: end - paragraphs.last.length, end: end, offset: end);
+  }
+
   /// [rawText] 裡的 [IllustrationMarkers.placeholder]`(i)` 是第 i 張插圖的
   /// 位置：一律拿掉，對應 [illustrationSlots] 的第 i 個（每張圖一個，關掉
   /// 「顯示插圖」時都是 null）；是 null（關掉、圖檔不在或讀不出大小）的那張

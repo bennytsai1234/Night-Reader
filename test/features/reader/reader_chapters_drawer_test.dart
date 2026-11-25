@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/backup/bookmark_highlight_export.dart';
 import 'package:night_reader/core/models/reading/bookmark.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/reading/highlight.dart';
@@ -147,7 +148,7 @@ void main() {
     ]);
     Highlight? tapped;
     Highlight? deleted;
-    List<Highlight>? exported;
+    List<BookmarkHighlightExportItem>? exported;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -161,7 +162,7 @@ void main() {
             highlightChapter: (highlight) => highlight.chapterIndex,
             onHighlightTap: (highlight) => tapped = highlight,
             onHighlightDelete: (highlight) => deleted = highlight,
-            onHighlightExport: (items) => exported = items,
+            onExport: (items) => exported = items,
           ),
         ),
       ),
@@ -180,7 +181,9 @@ void main() {
     expect(find.text('第一章\n自己寫的備忘'), findsOneWidget);
 
     await tester.tap(find.byTooltip('匯出'));
-    expect(exported?.map((h) => h.id), [1, 2]);
+    final sorted = [...exported!]
+      ..sort((a, b) => a.chapter.compareTo(b.chapter));
+    expect([for (final item in sorted) item.text], ['前面畫的字', '後面畫的字']);
 
     await tester.tap(find.text('前面畫的字'));
     expect(tapped?.id, 1);
@@ -192,6 +195,47 @@ void main() {
     highlights.value = const [];
     await tester.pumpAndSettle();
     expect(find.text('沒有標註'), findsOneWidget);
+  });
+
+  testWidgets('書籤頁也能匯出；只有書籤、沒有標註時照樣有「匯出」', (tester) async {
+    final chapters = [BookChapter(url: '/c/1', title: '第一章')];
+    final bookmarks = ValueNotifier<List<Bookmark>>([
+      Bookmark(
+        id: 1,
+        bookName: '書',
+        chapterIndex: 0,
+        chapterTitle: '第一章',
+        charOffset: 5,
+        excerpt: '書籤那一句',
+      ),
+    ]);
+    List<BookmarkHighlightExportItem>? exported;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ReaderChaptersDrawer(
+            chapters: chapters,
+            currentChapter: ValueNotifier(0),
+            titleFor: (index) => chapters[index].title,
+            onChapterTap: (_) {},
+            bookmarks: bookmarks,
+            bookmarkChapter: (bookmark) => bookmark.chapterIndex,
+            highlights: ValueNotifier(const []),
+            highlightChapter: (highlight) => highlight.chapterIndex,
+            onExport: (items) => exported = items,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('書籤'));
+    await tester.pumpAndSettle();
+    expect(find.text('1 個'), findsOneWidget);
+    expect(find.byTooltip('匯出'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('匯出'));
+    expect(exported!.single.text, '書籤那一句');
+    expect(exported!.single.chapter, 0);
   });
 
   testWidgets('volumes read before the current one open collapsed; tapping a '
