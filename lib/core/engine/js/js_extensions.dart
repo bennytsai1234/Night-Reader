@@ -426,7 +426,10 @@ class JsExtensions extends JsExtensionsBase {
     runtime.onMessage('sourceGetHeaderMap', (args) {
       if (source == null) return <String, String>{};
       final includeLoginHeader = args is bool ? args : true;
-      return source!.getHeaderMapSync(hasLoginHeader: includeLoginHeader);
+      return AnalyzeUrl.sourceHeaders(
+        source!,
+        loginHeaders: includeLoginHeader,
+      );
     });
 
     // ─── 要等的：快取、Cookie、書源變數（讀資料庫與檔案） ─────────

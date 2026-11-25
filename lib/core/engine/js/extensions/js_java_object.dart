@@ -433,7 +433,9 @@ extension JsJavaObject on JsExtensionsBase {
           },
           // 網站給的原始位元組（java.get／post／head 帶著），其他回應照文字編回。
           bodyAsBytes: function() {
-            if (res && res.bodyBase64 != null) return java.base64DecodeToByteArray(res.bodyBase64);
+            if (res && res.bodyBase64 != null) {
+              return res.bodyBase64 === '' ? [] : java.base64DecodeToByteArray(res.bodyBase64);
+            }
             return java.strToBytes(String(res && res.body != null ? res.body : ''), 'UTF-8');
           },
           parse: function() { return org.jsoup.Jsoup.parse(String(res && res.body != null ? res.body : ''), responseUrl()); },

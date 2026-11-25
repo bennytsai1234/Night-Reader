@@ -251,8 +251,10 @@ extension JsNetworkExtensions on JsExtensions {
   }
 
   /// 書源的標頭（含登入標頭）。
-  Map<String, String> _sourceHeaders() =>
-      source?.getHeaderMapSync() ?? const {};
+  Map<String, String> _sourceHeaders() {
+    final source = this.source;
+    return source == null ? const {} : AnalyzeUrl.sourceHeaders(source);
+  }
 
   String _backstage(
     List<dynamic> payload, {

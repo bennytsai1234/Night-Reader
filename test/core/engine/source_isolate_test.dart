@@ -774,6 +774,24 @@ void main() {
         ),
         't,t,t',
       );
+      // 標頭寫成 JS、或不是標準 JSON 時，也和一般請求一樣讀得到。
+      for (final header in [
+        '@js:JSON.stringify({"X-Source-Token": "t"})',
+        "{'X-Source-Token': 't'}",
+      ]) {
+        expect(
+          await _sourceJs(
+            {
+              'bookSourceUrl': 'https://web.test',
+              'bookSourceName': '網頁',
+              'header': header,
+            },
+            'java.webView(null, "https://web.test/q", null) + "|" + '
+            'source.getHeaderMap()["X-Source-Token"]',
+          ),
+          't|t',
+        );
+      }
     }, skip: quickJsUnavailableReason());
 
     test('java.webView', () async {
@@ -1140,6 +1158,13 @@ void main() {
           '.bodyAsBytes(), function (b) { return b & 255; }).join(",")',
         ),
         '0,128,255',
+      );
+      // 沒有內文的回應（HEAD）是空的位元組。
+      expect(
+        await _evaluateJs(
+          'String(java.head("$baseUrl/raw", {}).bodyAsBytes().length)',
+        ),
+        '0',
       );
     });
 

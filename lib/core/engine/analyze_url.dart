@@ -93,6 +93,7 @@ class AnalyzeUrl {
     this.source,
     this.ruleData,
     Map<String, String>? headers,
+    bool loginHeaders = true,
   }) {
     final optionStart = _paramPattern.firstMatch(baseUrl);
     _givenBaseUrl = optionStart == null
@@ -109,13 +110,27 @@ class AnalyzeUrl {
           ..remove('proxy');
       } else {
         _initSourceHeaders();
-        _initLoginHeaders();
+        if (loginHeaders) _initLoginHeaders();
       }
       initUrl();
     } finally {
       _releaseJsRule();
     }
   }
+
+  /// 書源的標頭，和送出請求時同一套（Legado `getHeaderMap`）：標頭是 JS 時
+  /// 先跑、照 Gson 寬鬆讀、不送 `proxy`；[loginHeaders] 時加上登入標頭。給
+  /// 規則 JS 的 `source.getHeaderMap()` 與用網頁抓（`java.webView`）用。
+  static Map<String, String> sourceHeaders(
+    BaseSource source, {
+    bool loginHeaders = true,
+  }) => Map.of(
+    AnalyzeUrl(
+      source.getKey(),
+      source: source,
+      loginHeaders: loginHeaders,
+    ).headerMap,
+  );
 
   /// 網址選項的開頭：網址之後第一個「逗號接 `{`」。
   static final RegExp _paramPattern = RegExp(r'\s*,\s*(?=\{)');
