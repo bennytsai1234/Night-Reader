@@ -131,6 +131,17 @@ class BookshelfSync extends SyncKind {
     });
   }
 
+  /// 從沒同步過這一筆、雲端那筆是刪除紀錄時，比書上「加進書架的時間」
+  /// （[Book.syncTime]）和雲端刪掉的時間：之後才加的是這台才有的，送上去；
+  /// 先加的照雲端刪掉（同「同步本地書」，ADR 0039）。
+  @override
+  SyncAddedTime get addedTimeOf => _addedTimeOf;
+
+  static int? _addedTimeOf(SyncRecord record) {
+    final time = record.data['syncTime'];
+    return time is int ? time : null;
+  }
+
   /// 書架上每個書名加作者最近讀的那一本（同一本書從兩個書源都加進書架時，
   /// 跟著最近讀的那本），不含本地書。
   Future<Map<String, List<Book>>> _shelf() async {

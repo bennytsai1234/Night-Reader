@@ -25,6 +25,11 @@ abstract class SyncKind {
   /// （ADR 0046），這裡要給頂層或靜態函式，不能是用到這個物件的方法。
   SyncFingerprint get fingerprint => defaultSyncFingerprint;
 
+  /// 這筆內容裡記著的加入時間（書架的加入書架時間）。從沒同步過這一筆、
+  /// 雲端那筆是刪除紀錄時，比它和刪掉的時間決定留著或照雲端刪。沒有的
+  /// 種類回 null，雲端的刪除贏。同 [fingerprint]，在背景 isolate 跑。
+  SyncAddedTime? get addedTimeOf => null;
+
   /// 雲端的這筆能不能現在套用到這台；不能的留在雲端，下次再比。
   bool canApply(String key, SyncRecord? local) => true;
 

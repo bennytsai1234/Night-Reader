@@ -44,6 +44,7 @@ class SyncMergeInput {
     required this.fingerprint,
     required this.hasOwnTime,
     required this.syncsDeletion,
+    this.addedTimeOf,
   });
 
   /// 雲端的每一筆（已拿掉不算數的）。
@@ -60,6 +61,10 @@ class SyncMergeInput {
   final SyncFingerprint fingerprint;
   final bool hasOwnTime;
   final bool syncsDeletion;
+
+  /// 這台一筆在內容裡記著的加入時間（書架的加入書架時間）。只有從沒同步過
+  /// 這一筆、雲端那筆是刪除紀錄時拿來比；沒給的種類照舊，雲端的刪除贏。
+  final SyncAddedTime? addedTimeOf;
 }
 
 /// 合併的結果：雲端要不要改、上次同步的紀錄改成什麼、哪些要套用到這台。
@@ -138,7 +143,9 @@ SyncMergePlan planSyncMerge(SyncMergeInput input) {
 /// - 和上次同步時一樣：沿用上次的時間。
 /// - 改過了（或上次之後才新增的）：算成這次同步的時間。
 /// - 從沒同步過、雲端也有同一筆：時間算 0，內容不同時雲端的贏。剛開始用
-///   同步、或重裝後第一次同步的這台，不拿手上可能是舊的資料蓋掉雲端。
+///   同步、或重裝後第一次同步的這台，不拿手上可能是舊的資料蓋掉雲端。雲端
+///   那筆是刪除紀錄、有給 [SyncMergeInput.addedTimeOf] 的種類改比這筆的
+///   加入時間（[_firstSyncTime]）。
 /// - 上次同步時有、現在沒有：這台刪掉了，補一筆刪除紀錄讓別台跟著刪
 ///   （`syncsDeletion`）。
 Map<String, SyncRecord> timedSyncRecords(SyncMergeInput input) {
@@ -156,13 +163,13 @@ Map<String, SyncRecord> timedSyncRecords(SyncMergeInput input) {
 /// 重讀這台時只算要套用的那幾筆，在主執行緒讀完就比，中間不等別的執行緒，
 /// 讀到比的這段時間不會讓使用者剛改的被蓋掉。
 SyncRecord? timedSyncRecordOf(SyncMergeInput input, String key) {
-  final SyncMergeInput(:remote, :base, :now, :fingerprint) = input;
+  final SyncMergeInput(:base, :now, :fingerprint) = input;
   final record = input.local[key];
   if (input.hasOwnTime) return record;
   final last = base[key];
   if (record != null) {
     final time = switch (last) {
-      null => remote.containsKey(key) ? 0 : now,
+      null => _firstSyncTime(input, key, record),
       _ when fingerprint(record) == last.local => last.time,
       _ => now,
     };
@@ -173,6 +180,20 @@ SyncRecord? timedSyncRecordOf(SyncMergeInput input, String key) {
   return fingerprint(gone) == last.local
       ? SyncRecord(time: last.time, data: const {}, deleted: true)
       : gone;
+}
+
+/// 從沒同步過這一筆時，這台的這筆算成什麼時間。雲端也有同一筆時通常是 0，
+/// 內容不同時雲端的贏；雲端那筆是刪除紀錄時，有給
+/// [SyncMergeInput.addedTimeOf] 的種類改拿這筆自己的加入時間和刪掉的時間
+/// 比：之後才加的算這台才有的、照加入的時間送上去，先加的照雲端刪掉
+/// （同「同步本地書」，ADR 0039）。
+int _firstSyncTime(SyncMergeInput input, String key, SyncRecord record) {
+  final theirs = input.remote[key];
+  if (theirs != null && theirs.deleted) {
+    final added = input.addedTimeOf?.call(record);
+    if (added != null) return added > theirs.time ? added : 0;
+  }
+  return input.remote.containsKey(key) ? 0 : input.now;
 }
 
 bool _sameRecords(Map<String, SyncRecord> a, Map<String, SyncRecord> b) {
