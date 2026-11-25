@@ -809,13 +809,24 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       ..durChapterTitle = chapter.title
       ..charOffset = ms;
     try {
-      final moved = await _books.updateProgress(
-        book.bookUrl,
-        _index,
-        chapter.title,
-        ms,
-      );
-      if (moved != null) book.progressTime = moved;
+      // 播放器開著時書架檢查更新可能已換上新目錄、集數重新編號（書源在前面
+      // 插了幾集）；播放器手上仍是開書時的目錄。寫進資料庫的序號照這一集的
+      // 網址換成目前目錄的，重開才接回同一集；新目錄裡沒有這一集時照播放器
+      // 的序號寫。同文字閱讀器（`ReaderProgressController`）與漫畫閱讀器。
+      final chapters = _chapterStore;
+      int? moved;
+      await chapters.transaction(() async {
+        final index =
+            await chapters.indexOfUrl(book.bookUrl, chapter.url) ?? _index;
+        book.chapterIndex = index;
+        moved = await _books.updateProgress(
+          book.bookUrl,
+          index,
+          chapter.title,
+          ms,
+        );
+      });
+      if (moved case final time?) book.progressTime = time;
     } catch (error, stackTrace) {
       AppLog.e('存收聽進度失敗', error: error, stackTrace: stackTrace);
     }
