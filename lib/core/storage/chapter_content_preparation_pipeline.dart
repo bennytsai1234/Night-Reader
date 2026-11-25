@@ -143,6 +143,9 @@ class ChapterContentPreparationPipeline {
   /// 抓，要重新取得這一章才再試。回傳是不是每張都抓到或確定抓不到；書源
   /// 不在、連不上時為 false，給這本書留「還沒抓圖」的記號，書架自動下載
   /// 照重試規則再補。
+  ///
+  /// 匯入書架檔帶回的正文是別人寫的：插圖網址的主機和書源不同時不帶書源的
+  /// Cookie 與登入標頭，同一個網站照舊帶（ADR 0086）。
   Future<bool> fetchStoredIllustrations(
     String content, {
     BookSource? sourceOverride,
@@ -153,6 +156,7 @@ class ChapterContentPreparationPipeline {
     if ((await BookIllustrationStorage.untriedSources(dir, content)).isEmpty) {
       return true;
     }
+    final fromSource = await BookIllustrationStorage.isFromSource(book);
     final source =
         sourceOverride ??
         getSource?.call() ??
@@ -167,6 +171,7 @@ class ChapterContentPreparationPipeline {
               content,
               dir: dir,
               retryMissing: false,
+              externalContent: !fromSource,
               cancelToken: cancelToken,
             ) ==
             0;
@@ -176,7 +181,9 @@ class ChapterContentPreparationPipeline {
         AppLog.w('補抓插圖失敗 ${book.bookUrl}: $error');
       }
     }
-    if (!complete) await BookIllustrationStorage.markUnfetched(book);
+    if (!complete) {
+      await BookIllustrationStorage.markUnfetched(book, fromSource: fromSource);
+    }
     return complete;
   }
 

@@ -37,6 +37,7 @@ class _PaywalledSite extends BookSourceService {
 /// 插圖在這裡直接抓（不經書源 isolate），記下被叫了幾次。
 class _IllustratedSite extends BookSourceService {
   int fetches = 0;
+  final List<bool> externalContents = [];
 
   @override
   Future<int> fetchIllustrations(
@@ -45,15 +46,18 @@ class _IllustratedSite extends BookSourceService {
     String content, {
     required String dir,
     bool retryMissing = true,
+    bool externalContent = false,
     CancelToken? cancelToken,
   }) {
     fetches += 1;
+    externalContents.add(externalContent);
     return IllustrationFetcher.fetch(
       source,
       book,
       content,
       dir,
       retryMissing: retryMissing,
+      externalContent: externalContent,
       cancelToken: cancelToken,
     );
   }
@@ -78,6 +82,7 @@ class _UnreachableImages extends BookSourceService {
     String content, {
     required String dir,
     bool retryMissing = true,
+    bool externalContent = false,
     CancelToken? cancelToken,
   }) async => 1;
 }
@@ -372,6 +377,39 @@ void main() {
     // 都抓過了（壞的那張記成確定抓不到）：再打開不再抓。
     await illustrated.prepare(chapterIndex: 0, chapter: chapter);
     expect(site.fetches, 1);
+  });
+
+  test('匯入書架檔帶回的正文：補抓插圖當成外來的，不帶書源的登入資料', () async {
+    final root = await Directory.systemTemp.createTemp('pipeline_imported');
+    addTearDown(() => root.delete(recursive: true));
+    AppStoragePaths.useRoots((
+      documents: root.path,
+      support: root.path,
+      temporary: root.path,
+    ));
+    final site = _IllustratedSite();
+    final good = 'data:image/png;base64,${base64Encode(_png)}';
+    final chapter = BookChapter(
+      url: 'https://s.example/c/4.html',
+      title: '第四章',
+      bookUrl: book.bookUrl,
+    );
+    await store.saveRawContent(
+      book: book,
+      chapter: chapter,
+      content: '前文\n<img src="$good">\n後文',
+    );
+    await BookIllustrationStorage.markUnfetched(book, fromSource: false);
+
+    await ChapterContentPreparationPipeline(
+      book: book,
+      contentStore: store,
+      sourceDao: BookSourceDao(db),
+      service: site,
+      getSource: () => source,
+    ).prepare(chapterIndex: 0, chapter: chapter);
+
+    expect(site.externalContents, [true]);
   });
 
   test('content stored while the chapter was free is kept', () async {

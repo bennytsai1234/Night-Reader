@@ -542,6 +542,8 @@ void main() {
 
     expect(result.failedFiles, isEmpty);
     expect(await BookIllustrationStorage.isUnfetched(book), isTrue);
+    // 自己的備份：補抓插圖照舊帶書源的登入資料。
+    expect(await BookIllustrationStorage.isFromSource(book), isTrue);
     expect(await chaptersWithUntriedIllustrations(book), {'c1'});
 
     // 抓過了（這裡當作確定抓不到）：不再排，記號刪掉。

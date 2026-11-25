@@ -408,6 +408,7 @@ class SourceManagerProvider with ChangeNotifier {
             (s) =>
                 s.bookSourceName.toLowerCase().contains(q) ||
                 s.bookSourceUrl.toLowerCase().contains(q) ||
+                (s.bookSourceGroup?.toLowerCase().contains(q) ?? false) ||
                 (s.bookSourceComment?.toLowerCase().contains(q) ?? false),
           )
           .toList();
@@ -1646,7 +1647,7 @@ class SourceManagerProvider with ChangeNotifier {
             a.bookSourceUrl.compareTo(b.bookSourceUrl) * multiplier;
       case 4:
         return (a, b) =>
-            a.lastUpdateTime.compareTo(b.lastUpdateTime) * multiplier;
+            b.lastUpdateTime.compareTo(a.lastUpdateTime) * multiplier;
       default:
         return (a, b) => a.customOrder.compareTo(b.customOrder) * multiplier;
     }

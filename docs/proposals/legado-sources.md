@@ -402,7 +402,7 @@
 
 ### R22 換源的「校驗作者」只留作者完全相同的（少數寫法才碰到）（已修，#555）
 
-- 讀者會碰到：這本書的作者是「張三」，另一個書源寫成「張三（著）」「張三／李四」這類多了字的。Legado 開著校驗作者時留作者「含」張三的，夜讀只留正規化後完全一樣的，那個書源換不過去。夜讀的校驗作者預設開著，碰到的機會比 Legado 多。
+- 讀者會碰到：這本書的作者是「張三」，另一個書源寫成「張三（著）」「張三／李四」這類多了字的。Legado 開著校驗作者時留作者「含」張三的，夜讀只留正規化後完全一樣的，那個書源換不過去。
 - Legado：`L:ui/book/changesource/ChangeBookSourceViewModel.kt:268`（`fName == name && (!checkAuthor || fAuthor.contains(author))`）。
 - 夜讀：`N:lib/core/source_switch/same_book.dart:34-46`（`normalizeSearchText(author) == normalizeSearchText(bookAuthor)`）；自動換源（ADR 0069）與單章借源用同一個判斷。
 
@@ -453,8 +453,8 @@
   - 換源面板：一律抓到目錄才列、回得快的在前（`docs/design/screens.md`「換源面板」，使用者 2026-11-16 在候選圖上選）；Legado 載入目錄、詳情、字數是三個預設關的開關，照讀者的置頂置底與書源順序排。
 - **目錄一次給好幾頁時**：夜讀同時抓 4 頁（`N:lib/core/engine/web_book/web_book_service.dart:31`），其中一頁抓不到就略過、先給抓到的部分，檢查新章節時才整份失敗（同檔 202）；Legado 同時抓的頁數照「線程數」設定（預設 16，`L:model/webBook/BookChapterList.kt:99`），一頁抓不到整份失敗。閱讀時的目錄可能少幾章，讀者看不出來。
 - **校驗不寫回應時間**：Legado 校驗完寫（`L:service/CheckSourceService.kt:151`），夜讀只有搜尋時寫（`N:lib/features/search/search_model.dart` 的 `_smoothedRespondTime`）；書源管理沒有「回應時間」排序，只影響搜尋時先送哪個。
-- **書源管理的小差異**：「按名稱」夜讀照字碼排、Legado 照拼音（`cnCompare`，`L:ui/book/source/manage/BookSourceActivity.kt:343`）；「按更新時間」夜讀舊的在前、Legado 新的在前（同檔 348）；搜尋框 Legado 也比分組名稱。都不是書源抓不抓得到，也不是少一個開關，不知道算哪一類。
-- **換源面板每次重搜、校驗作者預設開**：只在程式裡（`N:lib/features/book_detail/source/book_detail_change_source_provider.dart:63, 141-240`），沒有註解說是刻意的。Legado 有存著的結果就不重搜、按「重新整理」才搜（`L:ui/book/changesource/ChangeBookSourceViewModel.kt:127`），校驗作者預設關。
+- **書源管理的小差異**：「按名稱」夜讀照字碼排、Legado 照拼音（`cnCompare`，`L:ui/book/source/manage/BookSourceActivity.kt:343`）。不是書源抓不抓得到，也不是少一個開關，不知道算哪一類。
+- **換源面板每次重搜**：只在程式裡（`N:lib/features/book_detail/source/book_detail_change_source_provider.dart:32, 143-242`），沒有註解說是刻意的。Legado 有存著的結果就不重搜、按「重新整理」才搜（`L:ui/book/changesource/ChangeBookSourceViewModel.kt:127`）。
 - **不在書架上的書閱讀時預先抓幾章**：書架上的書照 ADR 0008 整本下載；從搜尋直接打開、沒加書架的書，閱讀器往後預先抓幾章沒追到（`N:lib/features/reader/chapter/reader_chapter_repository.dart` 的 `preloadContent` 沒有人呼叫）。Legado 照「預下載章節數」抓後面 10 章。
 - **閱讀時走到卷名那一列**：Legado 不抓網頁，正文是那一列的更新時間欄（`L:model/webBook/WebBook.kt:310-313`）；夜讀下載與校驗會跳過卷名（`N:lib/core/storage/reader_chapter_content_store.dart:9-10`），閱讀器翻到那一列時怎麼處理沒追到。
 

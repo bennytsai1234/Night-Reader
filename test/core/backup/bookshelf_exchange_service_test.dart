@@ -302,7 +302,24 @@ void main() {
     await BookshelfExchangeService().importFromText(file);
 
     expect(await BookIllustrationStorage.isUnfetched(book), isTrue);
+    // 書架檔是別台做的：補抓插圖只對書源同一個網站帶登入資料。
+    expect(await BookIllustrationStorage.isFromSource(book), isFalse);
     expect(await chaptersWithUntriedIllustrations(book), {'$url/0'});
+
+    // 之後別的來源再留記號，外來的記號不會被洗掉。
+    await BookIllustrationStorage.markUnfetched(book);
+    expect(await BookIllustrationStorage.isFromSource(book), isFalse);
+
+    // 都試過了：兩個記號一起刪掉。
+    await File(
+      BookIllustrationStorage.missingPathFor(
+        await BookIllustrationStorage.dirFor(book),
+        'https://i.example/1.png',
+      ),
+    ).create(recursive: true);
+    expect(await chaptersWithUntriedIllustrations(book), isEmpty);
+    expect(await BookIllustrationStorage.isUnfetched(book), isFalse);
+    expect(await BookIllustrationStorage.isFromSource(book), isTrue);
   });
 
   group('和 Legado 互通（K11）', () {
