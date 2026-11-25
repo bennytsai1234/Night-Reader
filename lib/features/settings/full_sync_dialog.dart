@@ -12,12 +12,11 @@ import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 /// 與剛選好同步空間都走這裡。
 Future<void> runFullSync(BuildContext context, SyncService sync) async {
   final messenger = ScaffoldMessenger.of(context);
-  final navigator = Navigator.of(context, rootNavigator: true);
   final done = sync.syncAll();
-  final dialog = showStatefulAppAlert<void>(
+  final dialog = showClosableAppAlert<void>(
     context: context,
     barrierDismissible: false,
-    builder: (context, _, _) => PopScope(
+    builder: (context, _) => PopScope(
       canPop: false,
       child: ValueListenableBuilder<SyncStatus>(
         valueListenable: sync.status,
@@ -40,8 +39,8 @@ Future<void> runFullSync(BuildContext context, SyncService sync) async {
     ),
   );
   final result = await done;
-  navigator.pop();
-  await dialog;
+  dialog.close();
+  await dialog.closed;
   messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(

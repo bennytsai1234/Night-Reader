@@ -166,6 +166,29 @@ void main() {
     expect(store.blobs.keys, [LocalBookSync.originalName('mine', 'txt')]);
   });
 
+  testWidgets('同步完時進度框上面疊著別的畫面：只收自己的進度框', (tester) async {
+    await pump(tester);
+    store.files.remove(LocalBookSync.fileName);
+
+    await tester.tap(find.text('同步本地書'));
+    await settle(tester);
+    await tester.tap(find.text('開始同步'));
+    await settle(tester);
+    // 例如途中點了加入書架的連結，開了書籍詳情。
+    unawaited(
+      Navigator.of(
+        tester.element(find.byType(BackupSyncPage)),
+        rootNavigator: true,
+      ).push(MaterialPageRoute<void>(builder: (_) => const Text('上面的頁'))),
+    );
+    await settle(tester);
+
+    store.gate.complete();
+    await settle(tester);
+    expect(find.text('上面的頁'), findsOneWidget);
+    expect(find.text('同步本地書中', skipOffstage: false), findsNothing);
+  });
+
   test('sizes read as megabytes', () {
     expect(formatMegabytes(0), '0.0 MB');
     expect(formatMegabytes(500), '0.1 MB');

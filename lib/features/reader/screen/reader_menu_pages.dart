@@ -363,11 +363,10 @@ final class ReaderMenuPages {
     // 換目錄前讓舊閱讀器停止寫進度與正文；換好之後它被新的閱讀器取代，
     // 關掉時也不會拿舊目錄把進度寫回去。
     _retire();
-    final navigator = Navigator.of(_context(), rootNavigator: true);
-    final dialog = showStatefulAppAlert<void>(
+    final dialog = showClosableAppAlert<void>(
       context: _context(),
       barrierDismissible: false,
-      builder: (context, _, _) => PopScope(
+      builder: (context, _) => PopScope(
         canPop: false,
         child: AppAlert<void>(
           title: '設定編碼',
@@ -392,8 +391,8 @@ final class ReaderMenuPages {
       AppLog.e('設定編碼失敗', error: error, stackTrace: stackTrace);
       failure = failureMessage('設定編碼', error);
     } finally {
-      navigator.pop();
-      await dialog;
+      dialog.close();
+      await dialog.closed;
     }
     if (!_mounted()) return;
     if (updated == null) {
