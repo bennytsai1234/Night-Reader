@@ -912,6 +912,68 @@ void main() {
     expect(b.sync.status.value.lastSyncAt, isNull, reason: '沒有做完不算全面同步過');
   });
 
+  test('換到另一個同步空間：還沒在那裡全面同步過，不顯示上一個空間的時間', () async {
+    await a.sync.useWebDav((
+      url: 'https://one.example',
+      user: '',
+      password: '',
+    ));
+    await a.sync.syncAll();
+    expect(a.sync.status.value.lastSyncAt, isNotNull);
+
+    await a.sync.useWebDav((
+      url: 'https://other.example',
+      user: '',
+      password: '',
+    ));
+    expect(a.sync.status.value.lastSyncAt, isNull);
+    await a.sync.load();
+    expect(a.sync.status.value.lastSyncAt, isNull, reason: '重進備份與同步頁也一樣');
+  });
+
+  test('只改密碼重連同一個空間：上次全面同步的時間留著；換回原本的空間又算', () async {
+    await a.sync.useWebDav((
+      url: 'https://one.example',
+      user: '',
+      password: '',
+    ));
+    await a.sync.syncAll();
+    final done = a.sync.status.value.lastSyncAt?.millisecondsSinceEpoch;
+    expect(done, isNotNull);
+    final account = (await SyncSettings(a.prefs).webDavAccount())!;
+
+    await a.sync.useWebDav((
+      url: account.url,
+      user: account.user,
+      password: 'new-password',
+    ));
+    expect(a.sync.status.value.lastSyncAt?.millisecondsSinceEpoch, done);
+
+    await a.sync.useWebDav((
+      url: 'https://other.example',
+      user: '',
+      password: '',
+    ));
+    expect(a.sync.status.value.lastSyncAt, isNull);
+    await a.sync.useWebDav(account);
+    expect(a.sync.status.value.lastSyncAt?.millisecondsSinceEpoch, done);
+  });
+
+  test('還原備份把設定換成另一個空間：讀回來不算上一個空間的時間', () async {
+    await a.sync.useWebDav((
+      url: 'https://one.example',
+      user: '',
+      password: '',
+    ));
+    await a.sync.syncAll();
+    expect(a.sync.status.value.lastSyncAt, isNotNull);
+
+    // 還原只寫備份裡有的設定：同步空間換了，這台的時間沒動。
+    await a.prefs.setString('sync.webdav.url', 'https://restored.example');
+    await a.sync.load();
+    expect(a.sync.status.value.lastSyncAt, isNull);
+  });
+
   test('the status stays running through a round asked for mid-sync, and '
       'only reads finished when every round is done', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
