@@ -431,7 +431,13 @@ extension JsJavaObject on JsExtensionsBase {
             var value = response.cookies().get(name);
             return value == null ? null : value;
           },
-          bodyAsBytes: function() { return java.strToBytes(String(res && res.body != null ? res.body : ''), 'UTF-8'); },
+          // 網站給的原始位元組（java.get／post／head 帶著），其他回應照文字編回。
+          bodyAsBytes: function() {
+            if (res && res.bodyBase64 != null) {
+              return res.bodyBase64 === '' ? [] : java.base64DecodeToByteArray(res.bodyBase64);
+            }
+            return java.strToBytes(String(res && res.body != null ? res.body : ''), 'UTF-8');
+          },
           parse: function() { return org.jsoup.Jsoup.parse(String(res && res.body != null ? res.body : ''), responseUrl()); },
           // Legado 只在請求失敗時有 errorBody（內文放在這裡，不在 body）。
           errorBody: function() {

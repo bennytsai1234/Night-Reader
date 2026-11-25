@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:json_path/json_path.dart';
@@ -428,7 +429,10 @@ class JsExtensions extends JsExtensionsBase {
     runtime.onMessage('sourceGetHeaderMap', (args) {
       if (source == null) return <String, String>{};
       final includeLoginHeader = args is bool ? args : true;
-      return source!.getHeaderMapSync(hasLoginHeader: includeLoginHeader);
+      return AnalyzeUrl.sourceHeaders(
+        source!,
+        loginHeaders: includeLoginHeader,
+      );
     });
 
     // ─── 要等的：快取、Cookie、書源變數（讀資料庫與檔案） ─────────
@@ -442,7 +446,7 @@ class JsExtensions extends JsExtensionsBase {
           ? int.tryParse(payload[1].toString()) ?? 0
           : 0;
       return BlockingCall.run(
-        cachedText(url, saveTime, cookieJar: source?.enabledCookieJar == true),
+        cachedText(url, AnalyzeUrl(url, source: source), saveTime),
       );
     });
 
@@ -451,7 +455,7 @@ class JsExtensions extends JsExtensionsBase {
       // 網址抓回來存著；其他是快取資料夾裡的相對路徑（同 Legado）。
       final content = path.startsWith('http')
           ? BlockingCall.run(
-              cachedText(path, 0, cookieJar: source?.enabledCookieJar == true),
+              cachedText(path, AnalyzeUrl(path, source: source), 0),
             ) as String
           : readCacheText(path);
       if (content.trim().isEmpty) {
