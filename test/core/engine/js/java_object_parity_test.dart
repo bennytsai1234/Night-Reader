@@ -149,5 +149,37 @@ void main() {
         '正文|t|https://site.test/',
       );
     }, skip: skip);
+
+    test('沒給頁面網址的 location() 是空的；空文件寫標題補得上 <head>', () {
+      expect(
+        run(
+          "org.jsoup.Jsoup.parse('<base href=\"https://cdn.test/\"><p>a</p>').location()",
+        ),
+        '',
+      );
+      expect(
+        run(
+          "var d = new org.jsoup.nodes.Document(''); d.title('正文'); d.title()",
+        ),
+        '正文',
+      );
+    }, skip: skip);
+
+    test('setContent 交整份網頁，XPath 的絕對路徑照樣查得到', () {
+      const page = "'<html><body><p>正文</p></body></html>'";
+      for (final path in ['/html/body/p/text()', '//body/p/text()']) {
+        expect(
+          run(
+            'java.setContent(org.jsoup.Jsoup.parse($page)); '
+            "java.getString('@XPath:$path')",
+          ),
+          '正文',
+        );
+      }
+    }, skip: skip);
   });
+
+  test('bytesToStr 收 Java 有正負的位元組', () {
+    expect(run("java.bytesToStr([-42, -48], 'GBK')"), '中');
+  }, skip: skip);
 }

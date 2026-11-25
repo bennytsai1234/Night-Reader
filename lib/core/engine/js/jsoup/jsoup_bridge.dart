@@ -41,8 +41,8 @@ class JsoupBridge {
   /// JS 時記下來，之後搬到別處也不變；規則自己做的照它做的是哪一種。
   final Map<dom.Text, bool> _textKinds = Map.identity();
 
-  /// 文件的 `location()`：解析時給的頁面網址（Jsoup `Document.location`），
-  /// 和網頁 `<base href>` 改過的 [_baseUris] 分開。
+  /// 文件的 `location()`：解析時給的頁面網址（Jsoup `Document.location`；
+  /// 沒給是空的），和網頁 `<base href>` 改過的 [_baseUris] 分開。
   final Map<dom.Document, String> _locations = Map.identity();
   int _nextId = 1;
 
@@ -146,7 +146,7 @@ class JsoupBridge {
       }
     }
     setBaseUri(document, effective);
-    if (baseUri != null && baseUri.isNotEmpty) _locations[document] = baseUri;
+    _locations[document] = baseUri ?? '';
     return document;
   }
 
@@ -756,7 +756,7 @@ class JsoupBridge {
         var title = document.querySelector('title');
         if (title == null) {
           title = dom.Element.tag('title');
-          (document.head ?? document.documentElement)?.nodes.add(title);
+          _headOf(document).append(title);
         }
         _setText(title, arg(0));
         return null;
@@ -792,7 +792,7 @@ class JsoupBridge {
     };
     if (created is dom.Document) {
       created.nodes.clear();
-      if (baseUri != null && baseUri.isNotEmpty) _locations[created] = baseUri;
+      _locations[created] = baseUri ?? '';
     }
     setBaseUri(created, baseUri);
     return created;
