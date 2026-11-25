@@ -408,6 +408,9 @@ class Bookmarks extends Table {
   TextColumn get anchor => text().nullable()();
   TextColumn get excerpt => text().withDefault(const Constant(''))();
 
+  /// 記下章節序號時目錄是不是反轉的（schema 22，ADR 0085）；null 是沒記。
+  BoolColumn get tocReversed => boolean().named('tocReversed').nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -437,6 +440,9 @@ class Highlights extends Table {
 
   /// 備忘（schema 12 加的）。
   TextColumn get note => text().withDefault(const Constant(''))();
+
+  /// 同書籤的 tocReversed（schema 22）。
+  BoolColumn get tocReversed => boolean().named('tocReversed').nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

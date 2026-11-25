@@ -128,7 +128,8 @@ class ProgressSync extends SyncKind {
 
   /// 時間用「位置最後移動的時間」，不用最近閱讀時間：開書沒翻頁也會更新
   /// 後者，拿它比新舊，沒動過的這台會蓋掉別台真的讀過的進度。
-  /// [chapterId] 是本地漫畫那一話的章指紋（[chapterIdOf]）。
+  /// [chapterId] 是本地漫畫那一話的章指紋（[chapterIdOf]）。`tocReversed`
+  /// 是章節序號照的目錄方向（反轉目錄，ADR 0085）。
   static SyncRecord recordOf(Book book, {String? chapterId}) => SyncRecord(
     time: book.progressTime,
     data: {
@@ -136,12 +137,14 @@ class ProgressSync extends SyncKind {
       'charOffset': book.charOffset,
       'chapterTitle': book.durChapterTitle ?? '',
       'chapterId': ?chapterId,
+      'tocReversed': book.getReverseToc(),
     },
   );
 
   /// 進度的內容是「哪一章（章名）的第幾個字」。章節序號只是這台目錄裡的
   /// 座標：書源在前面插一章、序號跟著變，讀到的地方沒變，不算改過；沒有
-  /// 章名時才看序號。
+  /// 章名時才看序號。目錄反轉了的也算進去：同名的章（好幾個「番外」）要靠
+  /// 方向和序號分，切了反轉目錄一定送出（ADR 0085）；沒反轉的和舊版的一樣。
   static String fingerprintOf(SyncRecord record) {
     if (record.deleted) return record.fingerprint;
     // 本地漫畫照章指紋：兩台的章名可以不同。
@@ -157,6 +160,7 @@ class ProgressSync extends SyncKind {
     return SyncRecord.fingerprintOf({
       if (hasTitle) 'chapterTitle': title.trim(),
       if (!hasTitle) 'chapterIndex': record.data['chapterIndex'],
+      if (record.data['tocReversed'] == true) 'tocReversed': true,
       'charOffset': record.data['charOffset'],
     });
   }
@@ -188,7 +192,8 @@ class ProgressSync extends SyncKind {
     final position = SyncedProgress.fromRecord(remote);
     final titles = await chapterDao.titlesByBook(book.bookUrl);
     final ids = await _chapterIdsOf(book);
-    final index = position.chapterIndexIn(titles, ids: ids);
+    final reversed = book.getReverseToc();
+    final index = position.chapterIndexIn(titles, ids: ids, reversed: reversed);
     final title = titles.isEmpty ? position.chapterTitle : titles[index];
     await bookDao.applySyncedProgress(
       book.bookUrl,
@@ -204,6 +209,7 @@ class ProgressSync extends SyncKind {
         'charOffset': position.charOffset,
         'chapterTitle': title,
         if (ids != null && ids.isNotEmpty) 'chapterId': ids[index],
+        'tocReversed': reversed,
       },
     );
   }
@@ -217,18 +223,21 @@ class SyncedProgress {
     required this.chapterTitle,
     required this.time,
     this.chapterId = '',
+    this.tocReversed,
   });
 
   factory SyncedProgress.fromRecord(SyncRecord record) {
     int asInt(Object? value) => value is int && value >= 0 ? value : 0;
     final title = record.data['chapterTitle'];
     final id = record.data['chapterId'];
+    final reversed = record.data['tocReversed'];
     return SyncedProgress(
       chapterIndex: asInt(record.data['chapterIndex']),
       charOffset: asInt(record.data['charOffset']),
       chapterTitle: title is String ? title : '',
       chapterId: id is String ? id : '',
       time: record.time,
+      tocReversed: reversed is bool ? reversed : null,
     );
   }
 
@@ -240,33 +249,46 @@ class SyncedProgress {
   final String chapterTitle;
   final int time;
 
-  /// 這台目錄（[titles]）裡對應的章節序號。兩台的書源或目錄版本不同時，
-  /// 同一個序號可能是不同章：先找同名的章（離原序號最近的那個），找不到才
-  /// 照序號，超出目錄就停在最後一章。
+  /// [chapterIndex] 照的目錄方向（反轉目錄，ADR 0085）；null 是舊版送的，
+  /// 當成和這台的書一樣。
+  final bool? tocReversed;
+
+  /// 這台目錄（[titles]，[reversed] 是這台的書反轉了沒）裡對應的章節
+  /// 序號。兩台的書源或目錄版本不同時，同一個序號可能是不同章：先找同名
+  /// 的章（離原序號最近的那個），找不到才照序號，超出目錄就停在最後一章。
+  /// 另一台的目錄方向和這台不同時，序號先從目錄的另一頭數。
   ///
   /// 本地漫畫給了這台每一話的章指紋（[ids]）時先照章指紋找。
-  int chapterIndexIn(List<String> titles, {List<String>? ids}) {
+  int chapterIndexIn(
+    List<String> titles, {
+    List<String>? ids,
+    required bool reversed,
+  }) {
     if (chapterId.isNotEmpty && ids != null) {
       final byId = ids.indexOf(chapterId);
       if (byId >= 0) return byId;
     }
     if (titles.isEmpty) return chapterIndex;
+    final index =
+        tocReversed != null &&
+            tocReversed != reversed &&
+            chapterIndex < titles.length
+        ? titles.length - 1 - chapterIndex
+        : chapterIndex;
     final wanted = chapterTitle.trim();
     if (wanted.isNotEmpty) {
-      if (chapterIndex < titles.length &&
-          titles[chapterIndex].trim() == wanted) {
-        return chapterIndex;
+      if (index < titles.length && titles[index].trim() == wanted) {
+        return index;
       }
       int? best;
       for (var i = 0; i < titles.length; i++) {
         if (titles[i].trim() != wanted) continue;
-        if (best == null ||
-            (i - chapterIndex).abs() < (best - chapterIndex).abs()) {
+        if (best == null || (i - index).abs() < (best - index).abs()) {
           best = i;
         }
       }
       if (best != null) return best;
     }
-    return chapterIndex.clamp(0, titles.length - 1);
+    return index.clamp(0, titles.length - 1);
   }
 }
