@@ -281,6 +281,75 @@ void main() {
     expect(platform.prompts, 2);
   });
 
+  test('the four leave options map to the two stored values', () {
+    expect(
+      AppLeaveChoice.of(cover: false, mode: AppLockMode.off),
+      AppLeaveChoice.none,
+    );
+    expect(
+      AppLeaveChoice.of(cover: true, mode: AppLockMode.off),
+      AppLeaveChoice.coverOnly,
+    );
+    expect(
+      AppLeaveChoice.of(cover: false, mode: AppLockMode.onLeave),
+      AppLeaveChoice.lockOnLeave,
+    );
+    expect(
+      AppLeaveChoice.of(cover: true, mode: AppLockMode.onLeave),
+      AppLeaveChoice.lockOnLeave,
+    );
+    expect(
+      AppLeaveChoice.of(cover: false, mode: AppLockMode.afterFiveMinutes),
+      AppLeaveChoice.lockAfterFiveMinutes,
+    );
+    expect(
+      AppLeaveChoice.of(cover: true, mode: AppLockMode.afterFiveMinutes),
+      AppLeaveChoice.lockAfterFiveMinutes,
+    );
+  });
+
+  testWidgets('picking a leave option writes the two old values', (
+    tester,
+  ) async {
+    await start(tester);
+    final prefs = await SharedPreferences.getInstance();
+    expect(lock.leaveChoice, AppLeaveChoice.none);
+
+    expect(await lock.setLeaveChoice(AppLeaveChoice.coverOnly), isTrue);
+    expect(lock.leaveChoice, AppLeaveChoice.coverOnly);
+    expect(lock.cover, isTrue);
+    expect(lock.mode, AppLockMode.off);
+    expect(prefs.getBool(PreferKey.appCoverOnLeave), isTrue);
+    expect(prefs.getString(PreferKey.appLockMode), AppLockMode.off.name);
+
+    // 從不鎖改成鎖之前先辨識一次。
+    platform.results.add(AppLockAuthResult.passed);
+    expect(await lock.setLeaveChoice(AppLeaveChoice.lockOnLeave), isTrue);
+    expect(lock.leaveChoice, AppLeaveChoice.lockOnLeave);
+    expect(lock.cover, isTrue);
+    expect(lock.mode, AppLockMode.onLeave);
+    expect(prefs.getString(PreferKey.appLockMode), AppLockMode.onLeave.name);
+
+    expect(
+      await lock.setLeaveChoice(AppLeaveChoice.lockAfterFiveMinutes),
+      isTrue,
+    );
+    expect(lock.leaveChoice, AppLeaveChoice.lockAfterFiveMinutes);
+    expect(lock.cover, isTrue);
+    expect(
+      prefs.getString(PreferKey.appLockMode),
+      AppLockMode.afterFiveMinutes.name,
+    );
+    expect(platform.prompts, 1);
+
+    expect(await lock.setLeaveChoice(AppLeaveChoice.none), isTrue);
+    expect(lock.leaveChoice, AppLeaveChoice.none);
+    expect(lock.cover, isFalse);
+    expect(lock.mode, AppLockMode.off);
+    expect(prefs.getBool(PreferKey.appCoverOnLeave), isFalse);
+    expect(prefs.getString(PreferKey.appLockMode), AppLockMode.off.name);
+  });
+
   testWidgets('back does nothing while locked', (tester) async {
     platform.results.add(AppLockAuthResult.failed);
     await start(tester, mode: AppLockMode.onLeave);

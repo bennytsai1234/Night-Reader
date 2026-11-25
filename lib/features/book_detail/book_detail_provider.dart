@@ -872,7 +872,6 @@ class BookDetailProvider extends ChangeNotifier {
     String intro,
     String coverUrl, {
     String? kind,
-    String? customTag,
     String? originName,
     String? tocUrl,
   }) async {
@@ -893,7 +892,7 @@ class BookDetailProvider extends ChangeNotifier {
           : editedIntro;
     }
     next.kind = kind?.trim();
-    next.customTag = customTag?.trim();
+    // 自訂標籤已不在編輯資訊裡；保留資料庫裡原本填過的值。
     if (originName != null && originName.trim().isNotEmpty) {
       next.originName = originName.trim();
     }

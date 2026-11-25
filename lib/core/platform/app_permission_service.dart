@@ -101,7 +101,7 @@ class AppPermissionService {
   );
 
   /// 等待中與完成後的列由同一處組裝，不會因新增權限讓兩邊列數分岔。Face ID
-  /// 只有 iPhone 有（「解鎖才能打開」，ADR 0083；Android 的辨識不用詢問）。
+  /// 只有 iPhone 有（「離開時」選了會解鎖的選項，ADR 0083；Android 的辨識不用詢問）。
   AppPermissionSnapshot _snapshot(
     AppPermissionItem notification,
     AppPermissionItem photos,

@@ -318,7 +318,7 @@
 - [x] **R16、R17　搜尋與照分組篩選（已做，只做搜尋，#600）**：Legado 管理頁可以搜尋名稱或分組、照分組篩選、看未分組的（`legado:data/dao/ReplaceRuleDao.kt:25-35`）。夜讀管理頁是一整條清單，規則多時找不到某一條。要補的話：頁首一個搜尋框，分組篩選可以不做。
 - [ ] **R18　分組管理（不做）**：Legado 可以改分組名、刪分組（`legado:ui/replace/GroupManageDialog.kt`）。夜讀只能一條一條改分組欄。要補的話依附在 R17 之後。
 - [ ] **R15　這一章被哪些規則改過（不做）**：Legado 閱讀選單「有效替換」列出改到這一章的規則（開了繁簡轉換時另列一項），點了直接編輯（`legado:ui/book/read/EffectiveReplacesDialog.kt:46-63`、`legado:help/book/ContentProcessor.kt:146-167`）。夜讀的替換規則面板只寫這本書啟用了幾條；正文被某條規則改壞時，讀者得一條條關掉試。要補的話：替換規則面板加一列「本章套用了哪些」，點了開編輯。
-- [x] **R14　新書預設套不套替換規則（已定）**：Legado 在「其他設定」有「替換淨化預設開啟」（`legado:help/config/AppConfig.kt:472`，預設開）。夜讀的值存在、會同步（`lib/features/settings/settings_provider.dart:76-80`、`lib/core/sync/settings_sync.dart:49`），但沒有任何頁面能改，永遠是開。要補的話預設照舊開，放「閱讀偏好」。
+- [x] **R14　新書預設套不套替換規則（已做，#634）**：Legado 在「其他設定」有「替換淨化預設開啟」（`legado:help/config/AppConfig.kt:472`，預設開）。夜讀在「閱讀偏好」有「新書預設套用替換規則」開關，預設開、會同步；每本書的「本書套用替換規則」沒動過時照它（`lib/features/settings/settings_provider.dart:76-80`、`lib/core/sync/settings_sync.dart:49`）。
 - [x] **R22　匯入前預覽與勾選（已定）**：Legado 匯入規則先列出每一條、已有的同一條預設不勾，可以給這批統一加一個分組（`legado:ui/association/ImportReplaceRuleViewModel.kt:57-82`、`128-138`）。夜讀按下匯入就整包寫進去，同一條（同編號）直接蓋掉這台改過的（`lib/features/association/handlers/association_dialog_helper.dart:134-153`）。書源匯入已經有預覽（同檔 `102-106`），要補的話照書源那一套，已有的預設不勾。
 - [x] **R23　匯出規則（已定）**：Legado 可以把選到的規則匯出成 JSON 分享（`legado:ui/replace/ReplaceRuleActivity.kt:253`）。夜讀沒有匯出，規則只能跟著備份與同步走。要補的話：寫 Legado 讀得懂的格式，布林值寫 `true`／`false`（夜讀現在的 `ReplaceRule.toJson` 寫 `1`／`0`，`lib/core/models/replace_rule.dart:152-167`，Legado 用 Gson 讀布林值會失敗）。
 - [x] **R21　複製、貼上一條規則（已定）**：Legado 編輯頁可以把這條規則複製成 JSON、從剪貼簿貼一條進來（`legado:ui/replace/edit/ReplaceEditActivity.kt`、選單 `replace_edit.xml`）。夜讀要分享一條規則只能整份備份。要補的話併進 R23 一起做。
