@@ -387,7 +387,7 @@
 - Legado：`L:model/webBook/BookContent.kt:66-77`，`title` 規則有結果就寫進章節並 `bookChapterDao.update`。
 - 夜讀：`N:lib/core/engine/web_book/content_parser.dart:44-77` 只讀 `content` 與 `nextContentUrl`；`ContentRule.title` 照收（`N:lib/core/models/source/book_source_rules.dart:249`），整個 `lib/` 沒有地方讀它。
 
-### R20 停用的書源開著「啟用發現」，發現頁不列（少數寫法才碰到）
+### R20 停用的書源開著「啟用發現」，發現頁不列（少數寫法才碰到）（已修，#638）
 
 - 讀者會碰到：讀者把某個書源停用（不想讓它出現在搜尋），但留著「啟用發現」看它的排行與分類。Legado 的「啟用」與「啟用發現」各管各的，發現頁照列；夜讀停用就整個從發現頁消失，「啟用發現」開著也沒用。
 - Legado：`L:data/dao/BookSourceDao.kt:84-88`，發現頁只看 `enabledExplore = 1 and hasExploreUrl = 1`，不看 `enabled`。
