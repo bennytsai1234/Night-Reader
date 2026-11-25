@@ -252,6 +252,9 @@ jobs:
         run: dart run tool/file_names.dart
       - name: Test frame budget compare tool
         run: sh tool/frame_budget_compare_test.sh
+      - name: Test frame viewer tool
+        # 只用標準函式庫；實際做頁面才需要 numpy、Pillow 與 ffmpeg。
+        run: python3 tool/frame_viewer/build_test.py
       - name: Verify validation did not modify tracked source
         if: always()
         run: git diff --exit-code

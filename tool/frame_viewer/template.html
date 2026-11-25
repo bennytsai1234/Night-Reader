@@ -68,7 +68,8 @@
 </div>
 
 <script>
-// 由 tool/frame_viewer/build.py 填入：設定、每段候選的拼圖、每格量測（編在 PNG 裡）。
+// 由 tool/frame_viewer/build.py 填入：設定、每段候選的拼圖、每段候選淺色與深色
+// 各一份量測（編在 PNG 裡）。
 const CONFIG = /*CONFIG*/;
 const SPRITES = /*SPRITES*/;
 const img = new Image();
@@ -102,13 +103,14 @@ function button(label, onclick, on) {
   return b;
 }
 // LIMIT：電腦上動畫中一幀的上限，手機 8.3ms 照 2 倍換算（ADR 0029、0036）。
-const FRAME_MS = Object.values(DATA)[0].frameMs || 16, COLS = 16, [SW, SH] = CONFIG.tile, LIMIT = CONFIG.limitMs || 4.2;
-// 有記回收記憶體（FRAME_GC）時多一排；gcPhoneRatio 是手機上回收比電腦慢幾倍，
-// 照它畫出「換算到手機會超過一格（120Hz）」的線。
-const HAS_GC = Object.values(DATA).some(D => (D.gcNew || []).length);
+const COLS = 16, [SW, SH] = CONFIG.tile, LIMIT = CONFIG.limitMs || 4.2;
+// 量測依候選與淺深各一份（build.py）；有記回收記憶體（FRAME_GC）或建字貼圖
+// （meta.json 的 glyph）時多一排，兩段錄影只要有一段記了就有這一排。
+const THEMES = Object.values(DATA).flatMap(m => Object.values(m));
+const HAS_GC = THEMES.some(D => (D.gcNew || []).length);
+const HAS_GLYPH = THEMES.some(D => (D.glyph || []).length);
+// gcPhoneRatio 是手機上回收比電腦慢幾倍，照它畫出「換算到手機會超過一格（120Hz）」的線。
 const GC_RATIO = CONFIG.gcPhoneRatio, PHONE_FRAME_MS = 1000 / 120;
-// 有記建字貼圖（meta.json 的 glyph：繪製執行緒把新字畫進字貼圖的時間）時多一排。
-const HAS_GLYPH = Object.values(DATA).some(D => (D.glyph || []).length);
 const PHASES = CONFIG.phases || {};
 const labelOf = raw => (PHASES[raw] && PHASES[raw].label) || raw;
 const kindOf = label => (Object.values(PHASES).find(p => p.label === label) || {}).kind || 'still';
@@ -117,12 +119,18 @@ const DESIGNS = CONFIG.designs.map(d => ({ ...d }));
 const SPOTS = CONFIG.spots;
 const SPOT_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-5)', 'var(--chart-6)'];
 let theme = 'light', variant = VARIANTS[0];
+// 每一段錄影的每格多久。兩段錄影由同一次錄製產生，通常一樣；照正在看的那段取。
+let FRAME_MS = THEMES[0] ? (THEMES[0].frameMs || 16) : 16;
 const baseOf = d => d.key + (variant && !d.fixed ? `-${variant.key}` : '');
-const hasDark = DESIGNS.every(d => SPRITES[`${baseOf(d)}-dark`]);
+const dataOf = base => (DATA[base] || {})[theme] || (DATA[base] || {}).light;
+const spriteOf = base => SPRITES[`${base}-${theme}`] || SPRITES[`${base}-light`];
+// 兩段都錄了才能切深色：少了深色的量測，畫面與數字會來自不同段錄影。
+const hasDark = DESIGNS.every(d => SPRITES[`${baseOf(d)}-dark`] && (DATA[baseOf(d)] || {}).dark);
 
 function prepare() {
   for (const d of DESIGNS) {
-    const D = DATA[baseOf(d)];
+    const D = dataOf(baseOf(d));
+    FRAME_MS = D.frameMs || 16;
     d.n = D.n;
     d.f = D.frames.map(([change, ...spots], i) => {
       const gcNew = (D.gcNew || [])[i] ?? 0, gcOld = (D.gcOld || [])[i] ?? 0, glyph = (D.glyph || [])[i] ?? 0;
@@ -175,7 +183,7 @@ const phones = DESIGNS.map((d, di) => {
 function paintPhones(i) {
   DESIGNS.forEach((d, di) => {
     const p = phones[di], k = Math.min(i, d.n - 1);
-    p.shot.style.backgroundImage = `url("${SPRITES[`${baseOf(d)}-${theme}`]}")`;
+    p.shot.style.backgroundImage = `url("${spriteOf(baseOf(d))}")`;
     p.shot.style.backgroundSize = `${COLS * SW}px auto`;
     p.shot.style.backgroundPosition = `${-(k % COLS) * SW}px ${-Math.floor(k / COLS) * SH}px`;
     p.end.textContent = d.endAt >= 0 ? `${CONFIG.end.label} ${(d.endAt * FRAME_MS / 1000).toFixed(2)} 秒` : '';
@@ -339,7 +347,10 @@ const variantButtons = VARIANTS.length > 1 ? VARIANTS.map((v, k) => button(v.lab
 }, k === 0)) : [];
 if (hasDark) {
   const themeBtn = button('深色', () => {
-    theme = theme === 'light' ? 'dark' : 'light'; themeBtn.textContent = theme === 'light' ? '深色' : '淺色'; show(frame);
+    theme = theme === 'light' ? 'dark' : 'light'; themeBtn.textContent = theme === 'light' ? '深色' : '淺色';
+    // 切淺深就是換一段錄影：幀數、階段、圖表與播放範圍都照它的量測重算，
+    // 兩段幀數不同時各自播到自己的最後一幀。
+    prepare(); N = Math.max(...DESIGNS.map(d => d.n)); drawChart(); show(frame);
   });
 }
 function seek(ev) {

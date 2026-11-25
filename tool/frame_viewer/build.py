@@ -11,7 +11,9 @@
 
 候選與檔名：每個候選（`designs`，含「目前」當對照）配上每個變化
 （`variants`，例如兩種間隔；`fixed` 的候選不分變化），淺色、深色各錄一段，
-名稱是「<候選>-<變化>-<light|dark>」。頁面上的段落名稱、各段說明（可依候選
+名稱是「<候選>-<變化>-<light|dark>」。量測依候選與淺深各存一份：頁面切淺深時
+幀數、階段、畫面變化、深淺、主執行緒時間、回收記憶體與建字貼圖都換成正在看的
+那一段錄影，兩段幀數不同時照各自的長度播。頁面上的段落名稱、各段說明（可依候選
 不同，`{variant}` 換成變化的 value、`{欄位}` 換成候選的同名欄位）、要畫深淺
 的位置（手機邏輯座標）與跳轉按鈕都在設定檔裡。`limitMs` 是電腦上動畫中一格的上限，
 不給時是 4.2（手機 8.3ms 照 2 倍換算，ADR 0029、0036）；主執行緒那排每格扣掉閱讀器排版
@@ -22,16 +24,14 @@
 `flutter test --enable-impeller --enable-vmservice` 錄、每格拍畫面時記下繪製執行緒把新字
 畫進字貼圖的時間），頁面多一排「建字貼圖」：不在主執行緒，和主執行緒那排分開看。
 
-需要 ffmpeg、numpy 與 Pillow。
+需要 ffmpeg、numpy 與 Pillow。量測與資料組裝可以用 `python
+tool/frame_viewer/build_test.py` 單獨測（只用標準函式庫）。
 """
 import json
 import math
 import os
 import subprocess
 import sys
-
-import numpy as np
-from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 COLS = 16
@@ -51,11 +51,16 @@ def candidate_names(config):
 
 
 def luminance(frame, x, y):
+    import numpy as np
     patch = frame[max(0, y - 1):y + 2, max(0, x - 1):x + 2, :3].reshape(-1, 3)
     return float((patch @ np.array([0.299, 0.587, 0.114])).mean())
 
 
-def measure(meta, frames, spots):
+def measure(src, meta, spots):
+    """一段錄影每格與上一格差幾個像素、要畫深淺的位置各差多少。"""
+    import numpy as np
+    w, h = meta['width'], meta['height']
+    frames = np.memmap(os.path.join(src, 'frames.rgba'), np.uint8, 'r').reshape(-1, h, w, 4)
     rows = []
     previous = None
     for frame in frames:
@@ -67,18 +72,47 @@ def measure(meta, frames, spots):
             bg = luminance(frame, *spots['background'])
             row += [round(abs(bg - luminance(frame, p['x'], p['y']))) for p in spots['points']]
         rows.append(row)
+    return rows
+
+
+def data_entry(meta, rows):
+    """網頁要的一段量測：這一段自己的幀數與每格資料。"""
+    n = len(rows)
     return {
-        'n': len(frames),
-        'phases': meta['phases'][:len(frames)],
-        'costs': meta['costs'][:len(frames)],
-        'slice': meta.get('slice', [])[:len(frames)],
-        'moving': meta.get('moving', [])[:len(frames)],
+        'n': n,
+        'phases': meta['phases'][:n],
+        'costs': meta['costs'][:n],
+        'slice': meta.get('slice', [])[:n],
+        'moving': meta.get('moving', [])[:n],
         'frameMs': meta.get('frameMs', 16),
-        'gcNew': meta.get('gcNew', [])[:len(frames)],
-        'gcOld': meta.get('gcOld', [])[:len(frames)],
-        'glyph': meta.get('glyph', [])[:len(frames)],
+        'gcNew': meta.get('gcNew', [])[:n],
+        'gcOld': meta.get('gcOld', [])[:n],
+        'glyph': meta.get('glyph', [])[:n],
         'frames': rows,
     }
+
+
+def scan(config, recordings):
+    """設定檔裡每一段有錄影的候選：候選、淺深、資料夾與 meta。"""
+    found = []
+    for base, theme in candidate_names(config):
+        src = os.path.join(recordings, f'{base}-{theme}')
+        meta_path = os.path.join(src, 'meta.json')
+        if not os.path.isfile(meta_path):
+            if theme == 'light':
+                sys.exit(f'缺少錄影：{src}')
+            continue
+        with open(meta_path, encoding='utf-8') as f:
+            found.append((base, theme, src, json.load(f)))
+    return found
+
+
+def collect(found, spots, rows_of=measure):
+    """候選 → 淺色、深色各自一份量測；切換淺深時頁面換成正在看的那一份。"""
+    data = {}
+    for base, theme, src, meta in found:
+        data.setdefault(base, {})[theme] = data_entry(meta, rows_of(src, meta, spots))
+    return data
 
 
 def sprite(path, meta, tile, out):
@@ -92,6 +126,7 @@ def sprite(path, meta, tile, out):
 
 
 def encode_data(data, out):
+    from PIL import Image
     raw = json.dumps(data, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
     # 前兩個像素放長度，之後每個像素的 RGB 各放一個位元組，A 固定 255（不透明
     # 的像素讀回來不會被預乘改掉）。
@@ -110,26 +145,18 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
     count = len(config['designs'])
     tile_w = min(MAX_TILE, (PAGE_WIDTH - PHONE_GAP * (count - 1)) // count)
-    data, sprites, tile = {}, {}, None
-    for base, theme in candidate_names(config):
+    found = scan(config, recordings)
+    data = collect(found, config.get('spots'))
+    sprites, tile = {}, None
+    for base, theme, src, meta in found:
         name = f'{base}-{theme}'
-        src = os.path.join(recordings, name)
-        if not os.path.isfile(os.path.join(src, 'meta.json')):
-            if theme == 'light':
-                sys.exit(f'缺少錄影：{src}')
-            continue
-        with open(os.path.join(src, 'meta.json'), encoding='utf-8') as f:
-            meta = json.load(f)
         w, h = meta['width'], meta['height']
         tile = (tile_w, round(tile_w * h / w / 2) * 2)
         raw = os.path.join(src, 'frames.rgba')
-        frames = np.memmap(raw, np.uint8, 'r').reshape(-1, h, w, 4)
         out = os.path.join(out_dir, f'{name}.webp')
         sprite(raw, meta, tile, out)
         sprites[name] = out.replace('\\', '/')
-        if theme == 'light':
-            data[base] = measure(meta, frames, config.get('spots'))
-        print(name, len(frames), 'frames', os.path.getsize(out) // 1024, 'KB')
+        print(name, len(data[base][theme]['frames']), 'frames', os.path.getsize(out) // 1024, 'KB')
     data_png = os.path.join(out_dir, 'data.png')
     encode_data(data, data_png)
     page_config = {k: config[k] for k in

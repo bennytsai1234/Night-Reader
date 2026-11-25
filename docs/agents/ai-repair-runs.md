@@ -4,14 +4,14 @@
 
 ## 材料
 
-- **案件集**：`test/live/ai_repair_cases.json`，一件只有 `name` 與 `url`，取自 2026-11-13 手機上整批修復時交給 AI 的 67 件。不附預期答案，評的是過程。
+- **案件集**：`test/live/ai_repair_cases.json`，一件只有 `name` 與 `url`，取自手機上整批修復時交給 AI 的書源。不附預期答案，評的是過程。
 - **書源 JSON**：使用者的資料，不進 repo。整份匯出檔在主資料夾的 `.local/ai-repair/export_589_sources.json`，實跑測試照案件的名稱與網址從裡面挑；要更新時從手機拿（`docs/agents/phone.md`「書源原文」）。
 - **金鑰**：主資料夾的 `.local/ai-repair.key`（`C:\Users\benny\Desktop\Folder\projects\Night-Reader\.local\ai-repair.key`），git 忽略，worktree 也讀這一份。已經有就直接用；沒有或服務回金鑰不對時，用 `request_secret`（`delivery: "file"`）跟使用者要，存到這裡。不刪、不上傳、不印出。
-- **服務**：使用者 2026-11-12 定的 `NR_AI_URL=https://opencode.ai/inference/go/openai/v1`、`NR_AI_MODEL=deepseek-v4.1-flash`、`NR_AI_EFFORT=low`。實跑用 `NR_AI_CONCURRENCY=6`（App 是 3）：OpenCode Go 官方文件沒寫並行上限，限制是 5 小時、每週、每月的用量額度；出現 429、「無法確認」或每輪等 AI 明顯變長就退回 4。平日台灣時間 09:00–12:00、14:00–18:00 是它的尖峰，要比耗時的兩輪都在非尖峰跑。
+- **服務**：`NR_AI_URL=https://opencode.ai/inference/go/openai/v1`、`NR_AI_MODEL=deepseek-v4.1-flash`、`NR_AI_EFFORT=low`。實跑用 `NR_AI_CONCURRENCY=6`（App 是 3）：OpenCode Go 官方文件沒寫並行上限，限制是 5 小時、每週、每月的用量額度；出現 429、「無法確認」或每輪等 AI 明顯變長就退回 4。平日台灣時間 09:00–12:00、14:00–18:00 是它的尖峰，要比耗時的兩輪都在非尖峰跑。
 
 ## 一輪怎麼跑
 
-1. **跑**：先用 `NR_ONLY` 跑一件、復盤（技能第 3 步），產出給使用者看過再整批。`test/live/source_repair_batch_live_test.dart`，跑法與環境變數寫在檔頭；`NR_SOURCES` 給匯出檔、`NR_CASES` 給案件集，加 `FLUTTER_TEST_WALL=0`（`tool/flutter_test.sh` 預設 20 分鐘就停，整批沒跑完結果檔不會寫出來）。67 件同時修 6 個約 24 分鐘（2026-11-14），放背景。整批只在開頭與終點跑；中間一個改動只重跑出現過那類問題的件：`NR_ONLY=蜘蛛小说网,🎃涨姿势🎃`，名稱照案件集整個寫（含表情符號），對不上的測試直接停下；同名的會一起跑（饿狼小说有兩件）。
+1. **跑**：先用 `NR_ONLY` 跑一件、復盤（技能第 3 步），產出給使用者看過再整批。`test/live/source_repair_batch_live_test.dart`，跑法與環境變數寫在檔頭；`NR_SOURCES` 給匯出檔、`NR_CASES` 給案件集，加 `FLUTTER_TEST_WALL=0`（`tool/flutter_test.sh` 預設 20 分鐘就停，整批沒跑完結果檔不會寫出來），放背景。整批只在開頭與終點跑；中間一個改動只重跑出現過那類問題的件：`NR_ONLY=蜘蛛小说网,🎃涨姿势🎃`，名稱照案件集整個寫（含表情符號），對不上的測試直接停下；同名的會一起跑（饿狼小说有兩件）。
 2. **整理成表**：測試開頭與結尾都印出完整修復紀錄的資料夾（在暫存資料夾裡）。整個資料夾複製到主資料夾的 `.local/ai-repair/runs/<日期-名稱>/`，再跑 `dart run tool/ai_repair_table.dart <那個資料夾> --out <那個資料夾>/_table.md`：一件一列的評估表。跟上一輪的表比回合數、耗時、快取命中率。
 3. **讀紀錄**：每一件都讀，照表上的成敗分給子代理。一份紀錄大半是整頁原文，先濾掉再從頭讀：
 
