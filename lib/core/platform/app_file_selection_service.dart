@@ -34,7 +34,30 @@ class AppFileSelectionService {
   );
 
   /// 書架加入本地書：可以一次選好幾個檔（L1），取消時是空的清單。
-  Future<List<String>> pickLocalBookPaths() => _pickPaths(_localBook);
+  /// 系統選檔器不一定照副檔名篩選，被篩掉的檔名也一起交回，算進匯入失敗。
+  Future<({List<String> paths, List<String> rejected})>
+  pickLocalBookPaths() async {
+    final picker = _picker ?? _pickFiles;
+    final result = await picker(
+      type: FileType.custom,
+      allowedExtensions: List.unmodifiable(_localBook.allowedExtensions),
+      allowMultiple: true,
+    );
+    if (result == null) {
+      return (paths: const <String>[], rejected: const <String>[]);
+    }
+    final paths = <String>[];
+    final rejected = <String>[];
+    for (final file in result.files) {
+      final path = file.path;
+      if (path == null || path.isEmpty || !_allowed(_localBook, path)) {
+        rejected.add(p.basenameWithoutExtension(file.name));
+        continue;
+      }
+      paths.add(path);
+    }
+    return (paths: paths, rejected: rejected);
+  }
 
   Future<String?> pickBookshelfImportPath() => _pickPath(_bookshelfImport);
 
@@ -45,27 +68,16 @@ class AppFileSelectionService {
   /// 一次選一個檔的匯入。選到的檔還是要照副檔名再驗一次：系統選檔器的
   /// 篩選不是界線。
   Future<String?> _pickPath(_FileSelectionSpec spec) async {
-    final paths = await _pickPaths(spec, allowMultiple: false);
-    return paths.isEmpty ? null : paths.first;
-  }
-
-  Future<List<String>> _pickPaths(
-    _FileSelectionSpec spec, {
-    bool allowMultiple = true,
-  }) async {
     final picker = _picker ?? _pickFiles;
     final result = await picker(
       type: FileType.custom,
       allowedExtensions: List.unmodifiable(spec.allowedExtensions),
-      allowMultiple: allowMultiple,
+      allowMultiple: false,
     );
-    if (result == null) return const [];
-    return [
-      for (final file in result.files)
-        if (file.path case final path?
-            when path.isNotEmpty && _allowed(spec, path))
-          path,
-    ];
+    if (result == null || result.files.isEmpty) return null;
+    final path = result.files.first.path;
+    if (path == null || path.isEmpty || !_allowed(spec, path)) return null;
+    return path;
   }
 
   static bool _allowed(_FileSelectionSpec spec, String path) {

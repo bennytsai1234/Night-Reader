@@ -9,6 +9,7 @@ import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/local_book/txt_parser.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/utils/big5.dart';
+import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/navigation_budget.dart';
@@ -127,6 +128,29 @@ void main() {
       () => getIt<ChapterDao>().getByBook(book.bookUrl),
     );
     expect(chapters!.map((chapter) => chapter.title), ['第一章 開始', '第二章 結束']);
+
+    // 重開後讀到的正文要用新編碼解，不是資料庫裡存著的舊亂碼。
+    final runtime = tester
+        .widget<ReaderTextView>(find.byType(ReaderTextView))
+        .runtime;
+    final content = await tester.runAsync(() => runtime.loadContentAt(0));
+    expect(content!.displayText, contains('甲正文內容'));
+
+    // 舊閱讀器被釋放時不能再照舊目錄寫回進度與錨點。
+    Book? afterDispose;
+    for (var i = 0; i < 100; i++) {
+      afterDispose = await tester.runAsync<Book?>(
+        () => getIt<BookDao>().getByUrl(book.bookUrl),
+      );
+      if (afterDispose?.durChapterTitle == '第一章 開始' &&
+          afterDispose?.readerAnchorJson == null) {
+        break;
+      }
+      await settle(tester, const Duration(milliseconds: 100));
+    }
+    expect(afterDispose!.durChapterTitle, '第一章 開始');
+    expect(afterDispose.charOffset, 0);
+    expect(afterDispose.readerAnchorJson, isNull);
 
     // 關掉 App，讓它留下的資料庫串流與計時器在測試裡收乾淨。
     await tearDownApp(tester);

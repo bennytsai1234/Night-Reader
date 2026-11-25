@@ -7,6 +7,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/local_book/txt_parser.dart';
 import 'package:night_reader/core/models/book/book.dart';
@@ -35,6 +36,7 @@ void main() {
   late ChapterDao chapterDao;
   late BookmarkDao bookmarkDao;
   late HighlightDao highlightDao;
+  late ReaderChapterContentDao contentDao;
 
   setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
@@ -43,6 +45,7 @@ void main() {
     chapterDao = ChapterDao(db);
     bookmarkDao = BookmarkDao(db);
     highlightDao = HighlightDao(db);
+    contentDao = ReaderChapterContentDao(db);
     documents = await Directory.systemTemp.createTemp('local_book_docs');
     picked = await Directory.systemTemp.createTemp('local_book_picked');
     final previous = PathProviderPlatform.instance;
@@ -102,6 +105,19 @@ void main() {
     expect(await add('第一章 乙\n內容'), 'The Hobbit (2)／Tolkien');
   });
 
+  test('匯入本地 TXT 時寫入總章數，書卡的進度線算得出來', () async {
+    final source = await pick('書.txt', '第一章 開始\n內容\n第二章 結束\n內容');
+    final book = await LocalBookService().addToShelf(
+      source,
+      bookDao: bookDao,
+      chapterDao: chapterDao,
+    );
+
+    expect(book, isNotNull);
+    final saved = await bookDao.getByUrl(book!.bookUrl);
+    expect(saved!.totalChapterNum, 2);
+  });
+
   test('手動改編碼：重新解碼分章，閱讀進度、書籤與標註留在同一章', () async {
     final dir = await Directory.systemTemp.createTemp('local_book_charset');
     addTearDown(() async {
@@ -154,6 +170,21 @@ void main() {
       oldOffset,
       readerAnchorJson: '{"chapterIndex":$oldIndex}',
     );
+    // 舊編碼讀過的正文：改好編碼後不能留在正文表裡。
+    final oldContentUrl = '${book.bookUrl}#0';
+    await contentDao.saveContent(
+      contentKey: ReaderChapterContentDao.contentKey(
+        origin: book.origin,
+        bookUrl: book.bookUrl,
+        chapterUrl: oldContentUrl,
+      ),
+      origin: book.origin,
+      bookUrl: book.bookUrl,
+      chapterUrl: oldContentUrl,
+      chapterIndex: 0,
+      content: '舊編碼的亂碼正文',
+      updatedAt: 1,
+    );
     final bookmark = await bookmarkDao.add(
       Bookmark(
         id: 0,
@@ -187,11 +218,20 @@ void main() {
       chapterDao: chapterDao,
       bookmarkDao: bookmarkDao,
       highlightDao: highlightDao,
+      contentDao: contentDao,
     );
 
     expect(updated, isNotNull);
     expect(updated!.charset, 'UTF-16LE');
     expect(updated.readerAnchorJson, isNull);
+    expect(
+      await contentDao.getStoredChapterUrls(
+        origin: book.origin,
+        bookUrl: book.bookUrl,
+      ),
+      isEmpty,
+      reason: '舊編碼存著的正文要清掉',
+    );
     final chapters = await chapterDao.getByBook(book.bookUrl);
     expect(chapters.map((c) => c.title), ['第一章 開始', '第二章 結束', '第三章 後來']);
     // 第二塊的起點在整本的中段，落在「第二章 結束」裡；章內位置照比例
@@ -302,6 +342,7 @@ void main() {
 
     expect(updated!.chapterIndex, 2);
     expect(updated.durChapterTitle, '第三章 轉折');
+    expect(updated.totalChapterNum, 4);
     // 位元組位置在第三章的開頭，章內位置要接近 0，不是舊比例的 7500÷2。
     expect(updated.charOffset, lessThan(10));
     final savedBookmark =
@@ -310,5 +351,98 @@ void main() {
     expect(savedBookmark.chapterIndex, 2);
     expect(savedBookmark.chapterTitle, '第三章 轉折');
     expect(savedBookmark.charOffset, updated.charOffset);
+  });
+
+  test('書籤與標註記的是顯示章名（繁簡轉換後）時，照章名對回舊目錄再換算', () async {
+    final dir = await Directory.systemTemp.createTemp(
+      'local_book_charset_titles',
+    );
+    addTearDown(() async {
+      await LocalBookService().closeOpenFile();
+      await dir.delete(recursive: true);
+    });
+    final file = File(p.join(dir.path, '書.txt'));
+    const chapterLength = 7500;
+    String chapter(String title) {
+      final bodyLength = chapterLength - title.length - 2;
+      return '$title\n${'字' * bodyLength}\n';
+    }
+
+    final text = [
+      chapter('第一章 开始'),
+      chapter('第二章 中间'),
+      chapter('第三章 后来'),
+      chapter('第四章 结束'),
+    ].join();
+    await file.writeAsBytes(EncodingDetect.encodeWithCharset(text, 'UTF-16LE'));
+    final book = Book(
+      bookUrl: 'local://${file.path}',
+      origin: 'local',
+      originName: '本地',
+      name: '書',
+      author: '本地',
+      isInBookshelf: true,
+      charset: 'UTF-16LE',
+    );
+    final parsed = await TxtParser(file).splitChapters(charset: 'UTF-16LE');
+    final chapters = LocalBookService().chaptersOf(book, [
+      for (final chapter in parsed.chapters)
+        (
+          title: chapter['title'] as String,
+          start: chapter['start'] as int,
+          end: chapter['end'] as int,
+        ),
+    ]);
+    await bookDao.upsert(book);
+    await chapterDao.insertChapters(chapters);
+
+    // 開著簡轉繁時留下的書籤記「第三章 後來」；另一筆記原始章名。
+    final displayed = await bookmarkDao.add(
+      Bookmark(
+        id: 0,
+        bookName: book.name,
+        bookAuthor: book.author,
+        chapterIndex: 2,
+        chapterTitle: '第三章 後來',
+        charOffset: 1000,
+        anchor: '{"chapterIndex":2}',
+        excerpt: '顯示章名的一句',
+      ),
+    );
+    final original = await bookmarkDao.add(
+      Bookmark(
+        id: 0,
+        bookName: book.name,
+        bookAuthor: book.author,
+        chapterIndex: 2,
+        chapterTitle: '第三章 后来',
+        charOffset: 1000,
+        anchor: '{"chapterIndex":2}',
+        excerpt: '原始章名的一句',
+      ),
+    );
+
+    final updated = await LocalBookService().changeCharset(
+      (await bookDao.getByUrl(book.bookUrl))!,
+      'UTF-16BE',
+      bookDao: bookDao,
+      chapterDao: chapterDao,
+      bookmarkDao: bookmarkDao,
+    );
+
+    expect(updated!.chapterIndex, 0);
+    final saved = await bookmarkDao.watchByBook(book.name, book.author).first;
+    expect(
+      saved.map((item) => item.id),
+      containsAll([displayed.id, original.id]),
+    );
+    for (final item in saved) {
+      expect(item.chapterIndex, 0, reason: '「${item.chapterTitle}」沒有被搬到新目錄');
+      expect(item.chapterTitle, '正文');
+      expect(item.anchor, isNull);
+    }
+    // 兩筆在同一個位置：都照同一個位元組位置換算，落在同一個新位置。
+    expect(saved.map((item) => item.charOffset).toSet(), hasLength(1));
+    expect(saved.first.charOffset, greaterThan(0));
   });
 }

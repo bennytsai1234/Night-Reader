@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/platform/app_file_selection_service.dart';
 
 void main() {
-  test('本地書一次可以選好幾個檔，只留認得的副檔名', () async {
+  test('本地書一次可以選好幾個檔，只留認得的副檔名，被篩掉的檔名也交回', () async {
     var multiple = false;
     final service = AppFileSelectionService(
       picker:
@@ -22,7 +22,9 @@ void main() {
           },
     );
 
-    expect(await service.pickLocalBookPaths(), [r'C:\書\甲.txt', r'C:\書\乙.epub']);
+    final picked = await service.pickLocalBookPaths();
+    expect(picked.paths, [r'C:\書\甲.txt', r'C:\書\乙.epub']);
+    expect(picked.rejected, ['圖', '雲端']);
     expect(multiple, isTrue, reason: '選檔器要打開多選');
   });
 
@@ -35,6 +37,8 @@ void main() {
       }) async => null,
     );
 
-    expect(await service.pickLocalBookPaths(), isEmpty);
+    final picked = await service.pickLocalBookPaths();
+    expect(picked.paths, isEmpty);
+    expect(picked.rejected, isEmpty);
   });
 }

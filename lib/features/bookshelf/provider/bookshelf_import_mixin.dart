@@ -25,14 +25,17 @@ mixin BookshelfImportMixin on BookshelfProviderBase {
 
   /// 一次加入選好的好幾個檔（書架「加入本地書」的多選）。其中一個失敗不
   /// 影響其他：每一本各自匯入，最後只重讀一次書架。傳回成功的本數與失敗的
-  /// 檔名（不含副檔名）。
+  /// 檔名（不含副檔名）。[onProgress] 每做完一本（含失敗的）呼叫一次。
   Future<({int added, List<String> failed})> importLocalBookPaths(
-    List<String> paths,
-  ) async {
+    List<String> paths, {
+    void Function(int done, int total)? onProgress,
+  }) async {
     isLoading = true;
     notifyListeners();
     var added = 0;
+    var done = 0;
     final failed = <String>[];
+    onProgress?.call(done, paths.length);
     try {
       for (final path in paths) {
         try {
@@ -44,6 +47,9 @@ mixin BookshelfImportMixin on BookshelfProviderBase {
         } catch (error, stackTrace) {
           AppLog.e('匯入本地書失敗: $error', error: error, stackTrace: stackTrace);
           failed.add(p.basenameWithoutExtension(path));
+        } finally {
+          done += 1;
+          onProgress?.call(done, paths.length);
         }
       }
       await loadBooks();

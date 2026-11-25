@@ -88,6 +88,21 @@ void main() {
     expect(shelf, hasLength(2));
   });
 
+  test('多選匯入每一本做完都回報進度，失敗的那一本也算做完', () async {
+    final first = await pick('甲.txt', '第一章 開始\n內容');
+    final missing = p.join(picked.path, '乙.txt');
+    final progress = <(int, int)>[];
+
+    final result = await provider.importLocalBookPaths([
+      first,
+      missing,
+    ], onProgress: (done, total) => progress.add((done, total)));
+
+    expect(result.added, 1);
+    expect(result.failed, ['乙']);
+    expect(progress, [(0, 2), (1, 2), (2, 2)]);
+  });
+
   test('匯入結果的說法：全成功、部分失敗、全失敗', () {
     expect(localBookImportMessage(added: 1, failed: const []), '匯入成功');
     expect(localBookImportMessage(added: 3, failed: const []), '已加入 3 本');

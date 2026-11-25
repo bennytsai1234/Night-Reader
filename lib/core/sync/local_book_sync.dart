@@ -51,6 +51,7 @@ class LocalBookTask {
     this.remoteTime = 0,
     this.chapters = const [],
     this.unrecordedOnly = false,
+    this.charset,
   });
 
   final LocalBookAction action;
@@ -82,6 +83,10 @@ class LocalBookTask {
   /// 不動。雲端記著刪除的那本，再寫一次刪除會把之後重新加入的另一台也當成
   /// 被移出。
   final bool unrecordedOnly;
+
+  /// TXT 的編碼：上傳是這台的，下載是雲端紀錄裡的。舊版寫的紀錄沒有這一欄
+  /// 時是 null，下載照偵測。
+  final String? charset;
 }
 
 /// 一本本地漫畫傳上去、還沒寫進雲端紀錄的話（章指紋），與那本的書名、作者。
@@ -322,6 +327,9 @@ class LocalBookSync {
         addedTime: book.syncTime,
         path: path,
         bookUrls: [book.bookUrl],
+        charset: localBookExtensionFromPath(path) == 'txt'
+            ? book.charset
+            : null,
       );
     }
     return shelf;
@@ -468,6 +476,7 @@ class LocalBookSync {
           'author': task.author,
           'ext': task.extension,
           'size': task.size,
+          'charset': ?task.charset,
         },
       ),
     );
@@ -506,6 +515,7 @@ class LocalBookSync {
         fingerprint: task.fingerprint,
         name: task.name,
         author: task.author,
+        charset: task.charset,
       );
     } catch (_) {
       await _deleteQuietly(path);
@@ -735,12 +745,16 @@ class LocalShelfBook {
     required this.bookUrls,
     this.hasFile = true,
     this.chapters = const [],
+    this.charset,
   });
 
   final String name;
   final String author;
   final String extension;
   final int size;
+
+  /// TXT 的編碼（另台手動選的，或自動偵測的）。EPUB 與本地漫畫是 null。
+  final String? charset;
 
   /// 原檔還在這台手機上（例如還原備份帶回了書，原檔沒帶回來）。
   final bool hasFile;
@@ -763,6 +777,7 @@ class LocalShelfBook {
     bookUrls: [...bookUrls, bookUrl],
     hasFile: hasFile,
     chapters: chapters,
+    charset: charset,
   );
 }
 
@@ -816,6 +831,9 @@ LocalBookSyncPlan planLocalBookSync({
         continue;
       }
       if (alive && mine.hasFile) {
+        // 兩台都有同一個檔：編碼不同也不動這台的目錄。兩邊都沒有「改編碼
+        // 的時間」，分不出誰先改的，自動重分章會蓋掉正在讀的進度；要換成
+        // 另一種編碼，在這台的閱讀器「更多 → 設定編碼」自己換。
         settled[print] = LocalBookSync._entry(theirs.time, mine.extension);
         continue;
       }
@@ -955,6 +973,7 @@ LocalBookTask _localTask(
   path: mine.path,
   bookUrls: mine.bookUrls,
   chapters: mine.chapters,
+  charset: mine.charset,
 );
 
 /// 雲端紀錄裡記著的本地漫畫的每一話（`chapters`：`[[章指紋, 章名], …]`）。
@@ -989,6 +1008,7 @@ LocalBookTask _remoteTask(
     size: data['size'] is int ? data['size'] as int : 0,
     remoteTime: record.time,
     chapters: comicChaptersOf(data),
+    charset: data['charset'] is String ? data['charset'] as String : null,
   );
 }
 

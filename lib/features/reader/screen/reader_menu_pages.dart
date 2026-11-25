@@ -22,6 +22,7 @@ import 'package:night_reader/features/reader/session/reader_open_target.dart';
 import 'package:night_reader/features/reader/use_cases/reader_page_coordinator.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
+import 'package:night_reader/features/settings/sync_status_text.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
@@ -43,6 +44,8 @@ final class ReaderMenuPages {
     required this._remedy,
     required this._changeSource,
     required this._showNotice,
+    required this._retire,
+    required this._resume,
   });
 
   final BuildContext Function() _context;
@@ -55,6 +58,10 @@ final class ReaderMenuPages {
   final ReaderSourceRemedy _remedy;
   final ReaderChangeSource _changeSource;
   final void Function(String message) _showNotice;
+
+  /// 換目錄（改編碼）前讓舊閱讀器停止寫進度與正文，失敗時恢復。
+  final VoidCallback _retire;
+  final VoidCallback _resume;
 
   /// 從選單推一整頁時，等選單滑出畫面（見 [_pushOverMenu]）。
   late final ReaderMenuDeparture _menuDeparture = ReaderMenuDeparture(
@@ -288,11 +295,28 @@ final class ReaderMenuPages {
       ],
     );
     if (!_mounted() || picked == null) return;
-    final Book? updated;
+    // 先寫回畫面這一刻的進度，換編碼後才對得到同一個位置。
+    await _host.flushProgress();
+    if (!_mounted()) return;
+    // 換目錄前讓舊閱讀器停止寫進度與正文；換好之後它被新的閱讀器取代，
+    // 關掉時也不會拿舊目錄把進度寫回去。
+    _retire();
+    final navigator = Navigator.of(_context(), rootNavigator: true);
+    final dialog = showStatefulAppAlert<void>(
+      context: _context(),
+      barrierDismissible: false,
+      builder: (context, _, _) => PopScope(
+        canPop: false,
+        child: AppAlert<void>(
+          title: '設定編碼',
+          content: const SyncProgressView(value: null, label: '正在重新解碼與分章…'),
+          actions: const [],
+        ),
+      ),
+    );
+    Book? updated;
+    String? failure;
     try {
-      // 先寫回畫面這一刻的進度，換編碼後才對得到同一個位置。
-      await _host.flushProgress();
-      if (!_mounted()) return;
       updated = await LocalBookService().changeCharset(
         _book,
         picked,
@@ -300,15 +324,19 @@ final class ReaderMenuPages {
         chapterDao: _host.dependencies.chapterDao,
         bookmarkDao: _host.dependencies.bookmarkDao,
         highlightDao: _host.dependencies.highlightDao,
+        contentDao: _host.dependencies.readerChapterContentDao,
       );
     } catch (error, stackTrace) {
       AppLog.e('設定編碼失敗', error: error, stackTrace: stackTrace);
-      if (_mounted()) _showNotice(failureMessage('設定編碼', error));
-      return;
+      failure = failureMessage('設定編碼', error);
+    } finally {
+      navigator.pop();
+      await dialog;
     }
     if (!_mounted()) return;
     if (updated == null) {
-      _showNotice('設定編碼失敗');
+      _resume();
+      _showNotice(failure ?? '設定編碼失敗');
       return;
     }
     unawaited(

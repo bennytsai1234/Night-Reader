@@ -24,9 +24,24 @@ class ReaderProgressController {
   ReaderLocation? _pendingLocation;
   Future<void>? _activeFlush;
   bool _disposed = false;
+  bool _retired = false;
+
+  /// 目錄要換掉之前（改編碼）：不再排進度、不再寫；已經排著的那筆丟掉，
+  /// 換好的進度由 [LocalBookService.changeCharset] 寫。
+  void retire() {
+    _retired = true;
+    _timer?.cancel();
+    _timer = null;
+    _pendingLocation = null;
+  }
+
+  /// 換目錄失敗、閱讀器照舊時恢復。
+  void resume() {
+    _retired = false;
+  }
 
   void schedule(ReaderLocation location) {
-    if (_disposed) return;
+    if (_disposed || _retired) return;
     _pendingLocation = location.normalized();
     _timer?.cancel();
     _timer = Timer(debounce, () {
@@ -35,12 +50,13 @@ class ReaderProgressController {
   }
 
   Future<void> saveImmediately(ReaderLocation location) async {
-    if (_disposed) return;
+    if (_disposed || _retired) return;
     _pendingLocation = location.normalized();
     await flush();
   }
 
   Future<void> flush() {
+    if (_retired) return Future<void>.value();
     _timer?.cancel();
     final active = _activeFlush;
     if (active != null) {
