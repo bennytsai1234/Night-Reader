@@ -28,6 +28,10 @@ abstract class AssociationBase {
   /// 沒寫類型的連結：先下載內容，再照 [detectImportContent] 判斷。
   Future<void> importUntypedLink(BuildContext context, String url);
 
+  /// 加入書架的連結：[url] 是一本書的詳情頁網址，找到書源、抓到詳情後打開
+  /// 這本書的書籍詳情（同 Legado `AddToBookshelfDialog`）。
+  Future<void> addBookFromLink(BuildContext context, String url);
+
   /// 已經拿到內容（分享的檔案或文字）：照 [detectImportContent] 判斷，判斷完
   /// 跳出對話框就結束（不等讀者按）。[label] 是對話框裡指稱這份內容的名字，
   /// 例如檔名。

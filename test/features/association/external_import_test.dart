@@ -1,15 +1,22 @@
+import 'dart:async';
 import 'dart:io';
+
+import 'package:dio/dio.dart';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/source/book_link_service.dart';
+import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/features/association/association_handler_service.dart';
 import 'package:night_reader/features/association/import_content.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -31,6 +38,33 @@ const _rssSource =
 const _bookSourceLink =
     'yuedu://booksource/importonline?src='
     'https://www.yckceo.com/yuedu/shuyuan/json/id/7720.json';
+
+/// 書的詳情：書名「夜航」；抓完時 [fetched] 完成。網址有 `/hang/` 的開始抓就
+/// 完成 [started]，一直等到被取消，[cancelled] 記下有沒有被取消；有 `/gated/`
+/// 的等 [gate] 完成才抓完。
+class _Details extends BookSourceService {
+  Completer<void> fetched = Completer<void>();
+  Completer<void> started = Completer<void>();
+  Completer<void> gate = Completer<void>();
+  bool cancelled = false;
+
+  @override
+  Future<Book> getBookInfo(
+    BookSource source,
+    Book book, {
+    CancelToken? cancelToken,
+  }) async {
+    if (book.bookUrl.contains('/hang/')) {
+      if (!started.isCompleted) started.complete();
+      await cancelToken!.whenCancel;
+      cancelled = true;
+      throw cancelToken.cancelError!;
+    }
+    if (book.bookUrl.contains('/gated/')) await gate.future;
+    if (!fetched.isCompleted) fetched.complete();
+    return book.copyWith(name: '夜航', author: '某人');
+  }
+}
 
 void main() {
   group('detectImportContent', () {
@@ -177,19 +211,180 @@ void main() {
       expect(find.byType(SnackBar), findsNothing);
     });
 
-    testWidgets('加入書架的連結跳出匯入書架的確認框', (tester) async {
-      final context = await pumpHost(tester);
-      service.handleUri(
-        context,
-        Uri.parse(
-          'legado://import/addToBookshelf?src='
-          'https%3A%2F%2Fexample.com%2Fbooks.json',
-        ),
-      );
-      await tester.pumpAndSettle();
+    group('加入書架的連結（src 是一本書的網址）', () {
+      late AppDatabase db;
+      final details = _Details();
+      final opened = <Book>[];
 
-      expect(find.text('外部匯入'), findsOneWidget);
-      expect(find.text('匯入書架'), findsOneWidget);
+      setUp(() async {
+        opened.clear();
+        details
+          ..cancelled = false
+          ..started = Completer<void>()
+          ..gate = Completer<void>();
+        service.openBookDetail = (_, book) async => opened.add(book);
+        db = AppDatabase.forTesting(NativeDatabase.memory());
+        await BookSourceDao(db).upsert(
+          BookSource(bookSourceUrl: 'https://a.example', bookSourceName: '甲站'),
+        );
+        service.bookLinks = () => BookLinkService(
+          sourceDao: BookSourceDao(db),
+          bookDao: BookDao(db),
+          service: details,
+        );
+      });
+
+      tearDown(() async {
+        service.bookLinks = BookLinkService.new;
+        service.openBookDetail = openBookDetailPage;
+        await db.close();
+      });
+
+      Uri link(String url) => Uri.parse(
+        'legado://import/addToBookshelf?src=${Uri.encodeComponent(url)}',
+      );
+
+      testWidgets('抓到詳情後直接開這本書的書籍詳情（同 Legado），不跳確認框', (tester) async {
+        final context = await pumpHost(tester);
+        service.handleUri(context, link('https://a.example/book/1'));
+        await tester.runAsync(() => details.fetched.future);
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pumpAndSettle();
+
+        expect(find.text('外部匯入'), findsNothing);
+        expect(opened.map((book) => (book.name, book.origin)), [
+          ('夜航', 'https://a.example'),
+        ]);
+        expect(
+          await tester.runAsync(() => BookDao(db).getInBookshelf()),
+          isEmpty,
+          reason: '加不加入書架由讀者在書籍詳情決定',
+        );
+      });
+
+      testWidgets('書架上已經有這本：只提示已在書架，不開詳情', (tester) async {
+        await tester.runAsync(
+          () => BookDao(db).upsert(
+            Book(
+              bookUrl: 'https://a.example/book/2',
+              origin: 'https://a.example',
+              name: '書架上的',
+              isInBookshelf: true,
+            ),
+          ),
+        );
+        final context = await pumpHost(tester);
+        service.handleUri(context, link('https://a.example/book/2'));
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pumpAndSettle();
+
+        expect(opened, isEmpty);
+        expect(find.text('《書架上的》已在書架'), findsOneWidget);
+      });
+
+      testWidgets('找書時開點外面關不掉的進度框，按取消停掉請求、不開詳情', (tester) async {
+        final context = await pumpHost(tester);
+        service.handleUri(context, link('https://a.example/hang/3'));
+        await tester.runAsync(() => details.started.future);
+        // 進度條一直在跑，等不到畫面靜止。
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(find.text('取消'), findsOneWidget);
+        await tester.tapAt(const Offset(4, 4));
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.text('取消'), findsOneWidget, reason: '點外面關不掉');
+
+        await tester.tap(find.text('取消'));
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pumpAndSettle();
+
+        expect(details.cancelled, isTrue);
+        expect(find.text('取消'), findsNothing);
+        expect(opened, isEmpty);
+        expect(find.byType(SnackBar), findsNothing);
+      });
+
+      testWidgets('按返回鍵收掉進度框也停掉請求', (tester) async {
+        final context = await pumpHost(tester);
+        service.handleUri(context, link('https://a.example/hang/5'));
+        await tester.runAsync(() => details.started.future);
+        await tester.pump(const Duration(milliseconds: 500));
+
+        await tester.binding.handlePopRoute();
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pumpAndSettle();
+
+        expect(details.cancelled, isTrue);
+        expect(find.text('取消'), findsNothing);
+        expect(opened, isEmpty);
+      });
+
+      testWidgets('又點了一條連結時，先找到的只收掉自己的進度框', (tester) async {
+        final context = await pumpHost(tester);
+        service.handleUri(context, link('https://a.example/gated/6'));
+        await tester.pump(const Duration(milliseconds: 500));
+        service.handleUri(context, link('https://a.example/hang/7'));
+        await tester.runAsync(() => details.started.future);
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.text('取消'), findsNWidgets(2));
+
+        details.gate.complete();
+        await tester.runAsync(() => details.fetched.future);
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(opened.map((book) => book.bookUrl), [
+          'https://a.example/gated/6',
+        ]);
+        expect(find.text('取消'), findsOneWidget, reason: '第二條還在找');
+        expect(details.cancelled, isFalse);
+      });
+
+      testWidgets('進度框還沒畫出來就找完、上面又疊了別的畫面時，只收自己的', (tester) async {
+        final context = await pumpHost(tester);
+        service.handleUri(context, link('https://a.example/book/8'));
+        // 例如同時在匯入書架，那邊開了自己的進度框。
+        unawaited(
+          Navigator.of(
+            context,
+            rootNavigator: true,
+          ).push(MaterialPageRoute<void>(builder: (_) => const Text('上面的頁'))),
+        );
+        await tester.runAsync(() => details.fetched.future);
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pumpAndSettle();
+
+        expect(find.text('上面的頁'), findsOneWidget);
+        expect(find.text('取消', skipOffstage: false), findsNothing);
+        expect(opened.map((book) => book.bookUrl), [
+          'https://a.example/book/8',
+        ]);
+      });
+
+      testWidgets('進度框被收掉（離開）時也停掉請求', (tester) async {
+        final context = await pumpHost(tester);
+        service.handleUri(context, link('https://a.example/hang/4'));
+        await tester.runAsync(() => details.started.future);
+        // 進度條一直在跑，等不到畫面靜止。
+        await tester.pump(const Duration(milliseconds: 500));
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pump();
+
+        expect(details.cancelled, isTrue);
+        expect(opened, isEmpty);
+      });
+
+      testWidgets('找不到書源時說原因，不跳確認框', (tester) async {
+        final context = await pumpHost(tester);
+        service.handleUri(context, link('https://b.example/book/1'));
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pumpAndSettle();
+
+        expect(find.text('外部匯入'), findsNothing);
+        expect(find.text('加入書架失敗：找不到符合這個網址的書源'), findsOneWidget);
+      });
     });
 
     testWidgets('沒帶 src 的連結不理（同 Legado）', (tester) async {

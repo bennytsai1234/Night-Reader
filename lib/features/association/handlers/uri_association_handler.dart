@@ -10,7 +10,9 @@ import 'association_base.dart';
 /// Legado 的 `OnLineImportActivity`，一定要帶 `src`（沒有就不理），照路徑
 /// 判斷類型，認不得的路徑下載後依內容判斷。
 ///
-///   legado://import/{bookSource|rssSource|replaceRule|addToBookshelf}?src={url}
+///   legado://import/{bookSource|rssSource|replaceRule}?src={url}
+///   legado://import/addToBookshelf?src={一本書的詳情頁網址}：找書源、抓詳情後
+///     打開書籍詳情（[addBookFromLink]）
 ///   yuedu://{booksource|rsssource|replace}/importonline?src={url}
 ///   其他路徑（例如 legado://import/auto?src={url}）：下載後依內容判斷
 ///
@@ -24,11 +26,14 @@ mixin UriAssociationHandler on AssociationBase {
     final src = uri.queryParameters['src'];
     if (src == null || src.isEmpty) return;
 
+    if (uri.path == '/addToBookshelf') {
+      unawaited(addBookFromLink(context, src));
+      return;
+    }
     final kind = switch (uri.path) {
       '/bookSource' => ImportContentKind.bookSource,
       '/rssSource' => ImportContentKind.rssSource,
       '/replaceRule' => ImportContentKind.replaceRule,
-      '/addToBookshelf' => ImportContentKind.bookshelf,
       '/importonline' => switch (uri.host.toLowerCase()) {
         'booksource' => ImportContentKind.bookSource,
         'rsssource' => ImportContentKind.rssSource,

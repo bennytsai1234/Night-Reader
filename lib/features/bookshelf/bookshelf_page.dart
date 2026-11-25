@@ -687,15 +687,14 @@ class _BookshelfPageState extends State<BookshelfPage>
       );
       return;
     }
-    final navigator = Navigator.of(context, rootNavigator: true);
     final progress = ValueNotifier<({String label, double? value})>((
       label: '正在匯入…',
       value: null,
     ));
-    final dialog = showStatefulAppAlert<void>(
+    final dialog = showClosableAppAlert<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context, _, _) => PopScope(
+      builder: (context, _) => PopScope(
         canPop: false,
         child: AppAlert<void>(
           title: '加入本地書',
@@ -725,8 +724,8 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       message = failureMessage('匯入', e);
     } finally {
-      navigator.pop();
-      await dialog;
+      dialog.close();
+      await dialog.closed;
       progress.dispose();
     }
     messenger.showSnackBar(SnackBar(content: UiText(message)));
@@ -1278,7 +1277,6 @@ class _BookshelfPageState extends State<BookshelfPage>
   /// 一個 CBZ。進度框點外面、按返回都關不掉，寫著複製或整理到第幾個。
   Future<void> _pickLocalComic(BookshelfProvider provider) async {
     final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context, rootNavigator: true);
     final temp = await AppStoragePaths.temporaryDir();
     final staging = p.join(
       temp.path,
@@ -1290,10 +1288,10 @@ class _BookshelfPageState extends State<BookshelfPage>
       label: '選好資料夾後開始複製…',
       value: null,
     ));
-    final dialog = showStatefulAppAlert<void>(
+    final dialog = showClosableAppAlert<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context, _, _) => PopScope(
+      builder: (context, _) => PopScope(
         canPop: false,
         child: AppAlert<void>(
           title: '加入本地漫畫',
@@ -1328,8 +1326,8 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (error) {
       message = failureMessage('加入本地漫畫', error);
     } finally {
-      navigator.pop();
-      await dialog;
+      dialog.close();
+      await dialog.closed;
       progress.dispose();
       final dir = Directory(staging);
       if (await dir.exists()) await dir.delete(recursive: true);

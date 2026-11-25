@@ -95,36 +95,81 @@ Future<T?> showStatefulAppAlert<T>({
   );
 }
 
+/// 開一個進度框這類要由程式收掉的提示框，外觀與動畫同 [showStatefulAppAlert]；
+/// 傳回的 [AppAlertHandle] 只收得掉這一個：同時開著好幾個、上面又疊了別的
+/// 畫面時，收「最上面的」會收錯。
+AppAlertHandle<T> showClosableAppAlert<T>({
+  required BuildContext context,
+  required Widget Function(BuildContext context, StateSetter setState) builder,
+  bool barrierDismissible = true,
+}) {
+  final (route, closed) = _pushAlertRoute<T>(
+    context: context,
+    barrierDismissible: barrierDismissible,
+    builder: (context) => StatefulBuilder(builder: builder),
+  );
+  return AppAlertHandle._(route, closed);
+}
+
+/// [showClosableAppAlert] 開的提示框。
+class AppAlertHandle<T> {
+  AppAlertHandle._(this._route, this.closed);
+
+  final Route<T> _route;
+
+  /// 提示框收掉時完成：按了按鈕、按返回鍵、[close]，或被拿掉。
+  final Future<T?> closed;
+
+  /// 只收掉這一個：在最上面時照退場動畫收，被別的畫面蓋住時直接拿掉；已經
+  /// 收掉的不做事。剛開、還沒畫出第一幀時一樣收得到。
+  void close() {
+    final navigator = _route.navigator;
+    if (navigator == null || !_route.isActive) return;
+    if (_route.isCurrent) {
+      navigator.pop();
+    } else {
+      navigator.removeRoute(_route);
+    }
+  }
+}
+
 Future<T?> _showAlertRoute<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  required bool barrierDismissible,
+}) => _pushAlertRoute<T>(
+  context: context,
+  builder: builder,
+  barrierDismissible: barrierDismissible,
+).$2;
+
+/// 推出提示框的路由，傳回路由本身與它收掉時完成的 Future。
+(Route<T>, Future<T?>) _pushAlertRoute<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   required bool barrierDismissible,
 }) {
   final origin = PopupOrigin.of(context);
   final navigator = Navigator.of(origin.context, rootNavigator: true);
-  return navigator.push<T>(
-    _AlertRoute<T>(
-      barrierThemes: InheritedTheme.capture(
-        from: origin.context,
-        to: navigator.context,
-      ),
-      barrierDerive: origin.derive,
-      barrierDismissible: barrierDismissible,
-      barrierLabel: UiLanguageText.convert(context, '關閉'),
-      barrierColor: AppChrome.of(context).barrier,
-      transitionDuration: AppMotion.menu,
-      pageBuilder: (context, _, _) => builder(context),
-      // 提示框在原地出現，只淡入不縮放；是玻璃，所以由玻璃自己連同模糊一起
-      // 淡（ADR 0022）。
-      transitionBuilder: (context, animation, _, child) => GlassReveal(
-        animation: CurvedAnimation(
-          parent: animation,
-          curve: AppMotion.fadeCurve,
-        ),
-        child: child,
-      ),
+  final route = _AlertRoute<T>(
+    barrierThemes: InheritedTheme.capture(
+      from: origin.context,
+      to: navigator.context,
+    ),
+    barrierDerive: origin.derive,
+    barrierDismissible: barrierDismissible,
+    barrierLabel: UiLanguageText.convert(context, '關閉'),
+    barrierColor: AppChrome.of(context).barrier,
+    transitionDuration: AppMotion.menu,
+    pageBuilder: (context, _, _) => builder(context),
+    // 提示框在原地出現，只淡入不縮放；是玻璃，所以由玻璃自己連同模糊一起
+    // 淡（ADR 0022）。
+    transitionBuilder: (context, animation, _, child) => GlassReveal(
+      animation: CurvedAnimation(parent: animation, curve: AppMotion.fadeCurve),
+      child: child,
     ),
   );
+  return (route, navigator.push<T>(route));
 }
 
 /// 提示框的路由（照 [showGeneralDialog]），遮罩跟著當下主題

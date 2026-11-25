@@ -149,6 +149,26 @@ void main() {
     expect(find.textContaining('上次全面同步：'), findsOneWidget);
   });
 
+  testWidgets('全面同步做完時進度框上面疊著別的畫面：只收自己的進度框', (tester) async {
+    await pump(tester);
+
+    await tester.tap(find.text('立即全面同步'));
+    await settle(tester);
+    // 例如途中點了加入書架的連結，開了書籍詳情。
+    unawaited(
+      Navigator.of(
+        tester.element(find.byType(BackupSyncPage)),
+        rootNavigator: true,
+      ).push(MaterialPageRoute<void>(builder: (_) => const Text('上面的頁'))),
+    );
+    await tester.pumpAndSettle();
+
+    store.gate.complete();
+    await settle(tester);
+    expect(find.text('上面的頁'), findsOneWidget);
+    expect(find.text('全面同步中', skipOffstage: false), findsNothing);
+  });
+
   testWidgets('cancelling stops before the next kind', (tester) async {
     await pump(tester);
 

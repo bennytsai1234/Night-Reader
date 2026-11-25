@@ -54,8 +54,8 @@ class FullSyncProgress extends StatelessWidget {
   }
 }
 
-/// 同步進度框裡的一條進度條與一行說明；[value] 是 null 時進度條來回跑。
-/// 全面同步與同步本地書共用。
+/// 進度框裡的一條進度條與一行說明；[value] 是 null 時進度條來回跑。
+/// 同步、加入本地書、加入書架的連結這些進度框共用。
 class SyncProgressView extends StatelessWidget {
   const SyncProgressView({super.key, required this.value, required this.label});
 

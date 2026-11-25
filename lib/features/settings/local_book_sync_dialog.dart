@@ -14,7 +14,6 @@ import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 /// 有沒做成的，列出哪本、為什麼，下次按的時候重做。
 Future<void> runLocalBookSync(BuildContext context, SyncService sync) async {
   final messenger = ScaffoldMessenger.of(context);
-  final navigator = Navigator.of(context, rootNavigator: true);
   void tell(String text) => messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: UiText(text)));
@@ -22,10 +21,11 @@ Future<void> runLocalBookSync(BuildContext context, SyncService sync) async {
   // 比對要補算舊書的指紋、讀雲端的小紀錄，通常一下子；取消就不等它。
   final prepared = _prepare(sync);
   var gaveUp = false;
-  final comparing = showStatefulAppAlert<void>(
+  late final AppAlertHandle<void> comparing;
+  comparing = showClosableAppAlert<void>(
     context: context,
     barrierDismissible: false,
-    builder: (context, _, _) => PopScope(
+    builder: (context, _) => PopScope(
       canPop: false,
       child: AppAlert<bool>(
         title: '同步本地書',
@@ -33,14 +33,14 @@ Future<void> runLocalBookSync(BuildContext context, SyncService sync) async {
         actions: const [AppAlertAction(label: '取消', value: true)],
         onAction: (_) {
           gaveUp = true;
-          navigator.pop();
+          comparing.close();
         },
       ),
     ),
   );
   final (:session, :plan, :error) = await prepared;
-  if (!gaveUp) navigator.pop();
-  await comparing;
+  comparing.close();
+  await comparing.closed;
   if (gaveUp || !context.mounted) return;
   if (error != null) return tell('同步本地書失敗：$error');
   if (session == null || plan == null) return;
@@ -61,10 +61,10 @@ Future<void> runLocalBookSync(BuildContext context, SyncService sync) async {
     onProgress: (value) => progress.value = value,
     cancelled: () => cancelled,
   );
-  final dialog = showStatefulAppAlert<void>(
+  final dialog = showClosableAppAlert<void>(
     context: context,
     barrierDismissible: false,
-    builder: (context, setState, _) => PopScope(
+    builder: (context, setState) => PopScope(
       canPop: false,
       child: AppAlert<bool>(
         title: '同步本地書中',
@@ -90,8 +90,8 @@ Future<void> runLocalBookSync(BuildContext context, SyncService sync) async {
   try {
     result = await done;
   } finally {
-    navigator.pop();
-    await dialog;
+    dialog.close();
+    await dialog.closed;
     progress.dispose();
   }
   // 下載的書接上另一台讀到的地方。
