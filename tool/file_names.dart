@@ -31,6 +31,7 @@ const _reviewed = {
   'lib/core/engine/js/ttf/ttf_tables.dart': 'TTF 字型檔裡的各張表',
   'lib/core/engine/parsers/css/analyze_by_css_support.dart': 'CSS 解析共用的小型別',
   'lib/core/local_book/local_book_fingerprint.dart': '主角是算原檔指紋的函式',
+  'lib/core/local_book/local_book_formats.dart': '主角是認本地書格式的函式',
   'lib/core/models/source/book_source_rules.dart': '書源搜尋、詳情、目錄、正文各段規則',
   'lib/core/network/redirects.dart': '回應的轉址換算（Response 的 extension）',
   'lib/core/source/source_progress.dart': '主角是交回書源工作進度的函式',
