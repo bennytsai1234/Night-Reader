@@ -33,6 +33,7 @@ import 'package:night_reader/core/models/reading/read_record.dart';
 import 'package:night_reader/core/models/book/reader_chapter_content.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
+import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/sync/read_stats_sync.dart';
@@ -75,7 +76,6 @@ class RestoreService {
   final BookmarkDao _bookmarkDao = getIt<BookmarkDao>();
   final HighlightDao _highlightDao = getIt<HighlightDao>();
   final AiFindDao _aiFindDao = getIt<AiFindDao>();
-  final DownloadDao _downloadDao = getIt<DownloadDao>();
   final ReadRecordDao _readRecordDao = getIt<ReadRecordDao>();
   final ReaderChapterContentDao _chapterContentDao =
       getIt<ReaderChapterContentDao>();
@@ -107,6 +107,36 @@ class RestoreService {
       return const RestoreResult.invalid();
     }
 
+    // 備份裡有下載任務的書：正在下載的先停下、等它收尾，整份還原完才照
+    // 還原的資料接著（[DownloadService.holdForRestore]）。
+    final downloadBooks = {
+      for (final file in backup.files)
+        if (_downloadTaskFiles.contains(file.fileName) &&
+            file.decoded is List<dynamic>)
+          for (final item
+              in (file.decoded as List<dynamic>)
+                  .whereType<Map<String, dynamic>>())
+            if (item['bookUrl'] case final String bookUrl) bookUrl,
+    };
+    final releaseDownloads = downloadBooks.isEmpty
+        ? () async {}
+        : await DownloadService().holdForRestore(downloadBooks);
+    try {
+      return await _restore(backup, fromLegado: fromLegado);
+    } finally {
+      await releaseDownloads();
+    }
+  }
+
+  static const Set<String> _downloadTaskFiles = {
+    'downloadTask.json',
+    'downloadTasks.json',
+  };
+
+  Future<RestoreResult> _restore(
+    _DecodedBackup backup, {
+    required bool fromLegado,
+  }) async {
     var restoredAny = false;
     final failedFiles = <String>[];
     // 閱讀紀錄的累計與每日秒數要一起還原，不受 ZIP 裡的檔案順序影響；
@@ -421,7 +451,7 @@ class RestoreService {
             break;
           case 'downloadTask.json':
           case 'downloadTasks.json':
-            await _downloadDao.upsert(DownloadTask.fromJson(item));
+            await getIt<DownloadDao>().upsert(DownloadTask.fromJson(item));
             break;
           case 'readerChapterContent.json':
           case 'readerChapterContents.json':

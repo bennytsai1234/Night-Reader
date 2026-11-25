@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
+
+import 'package:archive/archive.dart';
 
 import 'package:dio/dio.dart';
 import 'package:drift/isolate.dart';
@@ -8,7 +11,9 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/backup/restore_service.dart';
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
@@ -22,6 +27,8 @@ import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/storage/chapter_content_preparation_pipeline.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/network/network_service.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../test_helper.dart';
 
@@ -390,6 +397,91 @@ void main() {
       service.tasks.where((t) => t.bookUrl == book.bookUrl && t.isWaiting),
       hasLength(1),
     );
+  });
+
+  // 還原備份時這本書正在下載：舊的那一輪不能在還原之後把備份裡的狀態蓋掉
+  // （備份裡是暫停的，蓋成完成的話重開後書架自動下載會接著抓）。
+  test('restoring a backup while the book is downloading keeps the backup\'s '
+      'task', () async {
+    SharedPreferences.setMockInitialValues({});
+    final book = Book(
+      bookUrl: '$base/book/restored',
+      origin: '$base/source/restored',
+      name: '還原時正在下載的書',
+      isInBookshelf: true,
+    );
+    final chapters = [
+      for (var i = 0; i < 2; i++)
+        BookChapter(
+          url: '$base/stall/restored/$i',
+          title: '第 $i 章',
+          index: i,
+          bookUrl: book.bookUrl,
+        ),
+    ];
+    await getIt<BookSourceDao>().upsert(
+      BookSource.fromJson({
+        'bookSourceName': '還原',
+        'bookSourceUrl': book.origin,
+      }),
+    );
+    await getIt<BookDao>().upsert(book);
+    await getIt<ChapterDao>().insertChapters(chapters);
+    final service = DownloadService();
+    final running = DownloadTask(
+      bookUrl: book.bookUrl,
+      bookName: book.name,
+      totalCount: 1,
+      startChapterUrl: chapters.first.url,
+      endChapterUrl: chapters.first.url,
+    );
+    service.tasks.add(running);
+    service.isDownloading = true;
+    addTearDown(() {
+      service.isDownloading = false;
+      service.tasks.removeWhere((t) => t.bookUrl == book.bookUrl);
+    });
+    final run = service.processTask(running);
+    await until(() => arrived.contains('/stall/restored/0'), '卡住的請求');
+
+    final archive = Archive();
+    void add(String name, Object json) {
+      final bytes = utf8.encode(jsonEncode(json));
+      archive.addFile(ArchiveFile(name, bytes.length, bytes));
+    }
+
+    add('manifest.json', {'schemaVersion': db.schemaVersion});
+    add('downloadTasks.json', [
+      DownloadTask(
+        bookUrl: book.bookUrl,
+        bookName: book.name,
+        totalCount: 2,
+        status: DownloadTask.statusPaused,
+      ).toJson(),
+    ]);
+    final zip = File(
+      '${(await Directory.systemTemp.createTemp('restore_running')).path}'
+      '/backup.zip',
+    );
+    await zip.writeAsBytes(ZipEncoder().encode(archive));
+
+    await RestoreService().restoreFromZip(zip);
+    await run.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => fail('還原後舊的那一輪還在跑'),
+    );
+
+    final stored = (await getIt<DownloadDao>().getAll()).singleWhere(
+      (t) => t.bookUrl == book.bookUrl,
+    );
+    expect(stored.status, DownloadTask.statusPaused);
+    expect(stored.totalCount, 2);
+    expect(stored.startChapterUrl, isNull, reason: '照備份是整本的任務');
+    final inMemory = service.tasks.singleWhere(
+      (t) => t.bookUrl == book.bookUrl,
+    );
+    expect(inMemory.status, DownloadTask.statusPaused);
+    expect(inMemory.totalCount, 2);
   });
 
   test('a chapter waiting to retry stops when cancelled', () async {
