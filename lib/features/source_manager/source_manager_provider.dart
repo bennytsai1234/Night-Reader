@@ -292,7 +292,16 @@ class SourceManagerProvider with ChangeNotifier {
   int _loadGeneration = 0;
   Object? _loadError;
 
+  /// 篩選：固定的項目（「全部」「已啟用」「漫畫」「沒有異常」…）是名稱本身，
+  /// 分組與校驗標記是 [groupFilter]；分組可以和固定項目同名（照 Legado 書源
+  /// 管理的 `group:`）。
   String filterGroup = '全部';
+
+  static const String _groupFilterPrefix = 'group:';
+
+  /// 只列帶 [group] 這個分組或校驗標記的書源。
+  static String groupFilter(String group) =>
+      '$_groupFilterPrefix${group.trim()}';
   String _searchQuery = '';
   int sortMode = 0;
   bool sortDesc = false;
@@ -355,10 +364,9 @@ class SourceManagerProvider with ChangeNotifier {
       list = list
           .where((s) => _groupLabels(s.bookSourceGroup).isEmpty)
           .toList();
-    } else if (filterGroup != '全部') {
-      list = list
-          .where((s) => _hasGroup(s.bookSourceGroup, filterGroup))
-          .toList();
+    } else if (filterGroup.startsWith(_groupFilterPrefix)) {
+      final group = filterGroup.substring(_groupFilterPrefix.length);
+      list = list.where((s) => _hasGroup(s.bookSourceGroup, group)).toList();
     }
 
     final comparator = _buildComparator();
@@ -1254,8 +1262,8 @@ class SourceManagerProvider with ChangeNotifier {
     if (!_beginBatchOperation()) return;
     try {
       await _dao.renameGroup(normalizedOldName, normalizedNewName);
-      if (filterGroup == normalizedOldName) {
-        filterGroup = normalizedNewName;
+      if (filterGroup == groupFilter(normalizedOldName)) {
+        filterGroup = groupFilter(normalizedNewName);
       }
       await loadSources();
     } finally {
@@ -1267,7 +1275,7 @@ class SourceManagerProvider with ChangeNotifier {
     if (!_beginBatchOperation()) return;
     try {
       await _dao.removeGroupLabel(name);
-      if (filterGroup == name) filterGroup = '全部';
+      if (filterGroup == groupFilter(name)) filterGroup = '全部';
       await loadSources();
     } finally {
       _endBatchOperation();
