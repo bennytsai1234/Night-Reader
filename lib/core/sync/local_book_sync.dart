@@ -737,6 +737,7 @@ class LocalShelfBook {
     required this.path,
     required this.bookUrls,
     this.hasFile = true,
+    this.othersMissingFile = false,
     this.chapters = const [],
   });
 
@@ -748,6 +749,9 @@ class LocalShelfBook {
   /// 原檔還在這台手機上（例如還原備份帶回了書，原檔沒帶回來）。
   final bool hasFile;
 
+  /// 同一個檔的另一筆書原檔不在這台：雲端有就下載補回那一筆。
+  final bool othersMissingFile;
+
   /// 加進書架的時間；和雲端的刪除紀錄比新舊用。
   final int addedTime;
   final String path;
@@ -757,17 +761,13 @@ class LocalShelfBook {
   final List<ComicSyncChapter> chapters;
 
   /// 同一個檔的好幾筆書（照書架順序，最近讀的在前）併成一組：加進書架的
-  /// 時間取最晚的那筆（比雲端刪除晚重新加入的不跟著移出），原檔、大小與
-  /// 每一話取原檔還在、話數最多的那筆（上傳與比對用得到的那份）。
+  /// 時間取最晚的那筆（比雲端刪除晚重新加入的不跟著移出）；原檔與大小取
+  /// 原檔還在的那筆（上傳用得到的那份），其他筆缺原檔的照樣下載補回。
+  /// 本地漫畫的每一話各在自己的資料夾，取書架順序第一筆。
   static LocalShelfBook merge(List<LocalShelfBook> books) {
-    var file = books.first;
-    for (final book in books.skip(1)) {
-      if (book.hasFile && !file.hasFile ||
-          book.hasFile == file.hasFile &&
-              book.chapters.length > file.chapters.length) {
-        file = book;
-      }
-    }
+    final file = books.first.extension == LocalBookSync.comicExtension
+        ? books.first
+        : books.firstWhere((book) => book.hasFile, orElse: () => books.first);
     return LocalShelfBook(
       name: file.name,
       author: file.author,
@@ -777,6 +777,7 @@ class LocalShelfBook {
       path: file.path,
       bookUrls: [for (final book in books) ...book.bookUrls],
       hasFile: file.hasFile,
+      othersMissingFile: books.any((book) => !book.hasFile),
       chapters: file.chapters,
     );
   }
@@ -831,7 +832,7 @@ LocalBookSyncPlan planLocalBookSync({
         }
         continue;
       }
-      if (alive && mine.hasFile) {
+      if (alive && mine.hasFile && !mine.othersMissingFile) {
         settled[print] = LocalBookSync._entry(theirs.time, mine.extension);
         continue;
       }

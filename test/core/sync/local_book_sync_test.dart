@@ -895,15 +895,34 @@ void main() {
         expect(plan.of(LocalBookAction.upload), hasLength(1));
       });
 
+      test('the one whose file is missing still gets it back from the '
+          'cloud', () async {
+        await twoBooks(oldAdded: 1000);
+        store.files[LocalBookSync.fileName] = (
+          SyncDocument({
+            fresh.fileFingerprint!: SyncRecord(
+              time: 2000,
+              data: {'name': '夜航', 'author': '', 'ext': 'txt', 'size': 10},
+            ),
+          }).encode(),
+          1,
+        );
+
+        final plan = await a.localBooks().plan();
+
+        expect(plan.of(LocalBookAction.download), hasLength(1));
+      });
+
       test('the file that is here is uploaded when the other one is '
           'missing', () async {
         await twoBooks(oldAdded: 1000);
 
-        final result = await a.syncLocalBooks();
+        final upload = (await a.localBooks().plan())
+            .of(LocalBookAction.upload)
+            .single;
 
-        expect(result.failures, isEmpty);
-        expect(store.records[fresh.fileFingerprint]?.deleted, isFalse);
-        expect(store.blobs, isNotEmpty);
+        expect(upload.path, LocalBookService.filePathOf(fresh));
+        expect(upload.bookUrls, unorderedEquals([fresh.bookUrl, oldUrl]));
       });
     });
 
