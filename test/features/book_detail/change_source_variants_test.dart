@@ -49,6 +49,42 @@ class _SingleScriptSites extends BookSourceService with ChapterListSites {
   }
 }
 
+/// 同一個書源搜到兩本同名、作者不同的書。
+class _TwoAuthors extends BookSourceService with ChapterListSites {
+  @override
+  Future<List<SearchBook>> searchBooks(
+    BookSource source,
+    String key, {
+    int page = 1,
+    bool Function(String name, String author)? filter,
+    bool Function(int size)? shouldBreak,
+    CancelToken? cancelToken,
+  }) async {
+    final origin = source.bookSourceUrl;
+    if (origin != _twSite || key != '劍來') return [];
+    final results = [
+      SearchBook(
+        bookUrl: '$origin/book',
+        name: '劍來',
+        author: '烽火戲諸侯',
+        origin: origin,
+        originName: origin,
+      ),
+      SearchBook(
+        bookUrl: '$origin/other',
+        name: '劍來',
+        author: '別人',
+        origin: origin,
+        originName: origin,
+      ),
+    ];
+    return [
+      for (final result in results)
+        if (filter == null || filter(result.name, result.author ?? '')) result,
+    ];
+  }
+}
+
 /// 簡體站用簡體書名馬上找到，用繁體書名卻一直沒回應。
 class _HangsOnTraditionalName extends _SingleScriptSites {
   @override
@@ -139,6 +175,28 @@ void main() {
 
     expect(provider.allResults.map((r) => r.origin), [_cnSite]);
     expect(service.searchedKeys, containsAll(['劍來', '剑来']));
+  });
+
+  test('校驗作者預設關，打開才只列作者相同的', () async {
+    final provider = await searchFor(
+      Book(
+        bookUrl: 'https://mine.example/book',
+        origin: 'https://mine.example',
+        name: '劍來',
+        author: '烽火戲諸侯',
+      ),
+      _TwoAuthors(),
+    );
+
+    expect(provider.checkAuthor, isFalse);
+    expect(
+      provider.allResults.map((r) => r.author),
+      containsAll(['烽火戲諸侯', '別人']),
+    );
+
+    provider.checkAuthor = true;
+    await provider.startSearch();
+    expect(provider.allResults.map((r) => r.author), ['烽火戲諸侯']);
   });
 
   test('a book opened from a simplified site finds the traditional-site '

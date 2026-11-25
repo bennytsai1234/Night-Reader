@@ -113,15 +113,25 @@ class BookSourceService {
 
   /// [content]（一章的正文）裡還沒存的插圖抓進 [dir]，回傳還沒抓到、也還
   /// 不能確定抓不到的張數（[IllustrationFetcher]，ADR 0050）。
+  /// [externalContent] 是書架檔帶回來的正文：插圖網址的主機和書源不同時
+  /// 不帶書源的 Cookie 與登入標頭（ADR 0086）。
   Future<int> fetchIllustrations(
     BookSource source,
     Book book,
     String content, {
     required String dir,
     bool retryMissing = true,
+    bool externalContent = false,
     CancelToken? cancelToken,
   }) => _runOnSource(
-    _illustrationTask(source, book, content, dir, retryMissing),
+    _illustrationTask(
+      source,
+      book,
+      content,
+      dir,
+      retryMissing,
+      externalContent,
+    ),
     source: source,
     book: book,
     cancelToken: cancelToken,
@@ -439,6 +449,7 @@ _Work<int> _illustrationTask(
   String content,
   String dir,
   bool retryMissing,
+  bool externalContent,
 ) =>
     (cancelToken) => IllustrationFetcher.fetch(
       source,
@@ -446,6 +457,7 @@ _Work<int> _illustrationTask(
       content,
       dir,
       retryMissing: retryMissing,
+      externalContent: externalContent,
       cancelToken: cancelToken,
     );
 

@@ -119,6 +119,7 @@ class _FakeBookSourceService extends BookSourceService {
     String content, {
     required String dir,
     bool retryMissing = true,
+    bool externalContent = false,
     CancelToken? cancelToken,
   }) async => '<img'.allMatches(content).length;
 }

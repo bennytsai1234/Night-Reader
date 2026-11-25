@@ -62,7 +62,10 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
   String? selectedGroup;
   bool isSearching = false;
   String status = '正在初始化...';
-  bool checkAuthor = true;
+
+  /// 預設不校驗作者（同 Legado `AppConfig.changeSourceCheckAuthor` 預設關）；
+  /// 打開後搜到的作者「含」這本書的作者就列。
+  bool checkAuthor = false;
 
   String _filterQuery = '';
   int _activeSearchId = 0;

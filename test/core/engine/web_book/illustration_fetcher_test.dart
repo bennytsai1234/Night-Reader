@@ -10,6 +10,7 @@ import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
+import 'package:night_reader/core/network/cookie_store.dart';
 import 'package:night_reader/core/network/network_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -195,6 +196,72 @@ void main() {
       isTrue,
     );
     expect(missing.existsSync(), isFalse);
+  });
+
+  test('外來正文的插圖：和書源不同主機時不帶書源的 Cookie 與登入標頭', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final seen = <String, Map<String, String>>{};
+    server.listen((request) async {
+      final headers = <String, String>{};
+      request.headers.forEach((name, values) {
+        headers[name.toLowerCase()] = values.join(', ');
+      });
+      seen[request.uri.path] = headers;
+      request.response.headers.contentType = ContentType('image', 'png');
+      request.response.add(_png);
+      await request.response.close();
+    });
+    final base = 'http://127.0.0.1:${server.port}';
+    // 同一個伺服器換一個主機名稱：網站不同，內容相同。
+    final other = 'http://localhost:${server.port}';
+    final foreign = BookSource.fromJson({
+      'bookSourceName': '書架檔',
+      'bookSourceUrl': base,
+      'loginUrl': 'https://login.example',
+      'header': '{"Referer":"$base/"}',
+    });
+    await foreign.putLoginHeader('{"Authorization":"Bearer secret"}');
+    await CookieStore().setCookie(base, 'sid=secret');
+    addTearDown(() async {
+      await foreign.removeLoginHeader();
+      await CookieStore().removeCookie(base);
+    });
+
+    final images = p.join(dir.path, 'images');
+    final pending = await HttpOverrides.runWithHttpOverrides(
+      () => IllustrationFetcher.fetch(
+        foreign,
+        Book(bookUrl: '$base/book/1', origin: base),
+        '<img src="$base/a.png"><img src="$other/b.png">',
+        images,
+        externalContent: true,
+      ),
+      _RealHttp(),
+    );
+
+    expect(pending, 0);
+    // 同一個網站：照舊帶登入資料。
+    expect(seen['/a.png']!['authorization'], 'Bearer secret');
+    expect(seen['/a.png']!['cookie'], contains('sid=secret'));
+    // 不同的網站：照樣抓，但不帶書源的 Cookie 與登入標頭。
+    expect(seen['/b.png']!['authorization'], isNull);
+    expect(seen['/b.png']!['cookie'], isNull);
+    // 書源的標頭照舊，網站才不會擋盜連。
+    expect(seen['/b.png']!['referer'], '$base/');
+
+    // 正常抓正文的插圖（不是書架檔帶回來的）照舊帶登入資料，別的主機也一樣。
+    await HttpOverrides.runWithHttpOverrides(
+      () => IllustrationFetcher.fetch(
+        foreign,
+        Book(bookUrl: '$base/book/1', origin: base),
+        '<img src="$other/c.png">',
+        images,
+      ),
+      _RealHttp(),
+    );
+    expect(seen['/c.png']!['authorization'], 'Bearer secret');
+    expect(seen['/c.png']!['cookie'], contains('sid=secret'));
   });
 
   test('書源的 imageDecode 先解抓到的位元組，src 是圖的網址', () async {

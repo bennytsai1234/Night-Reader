@@ -7,6 +7,7 @@ import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/utils/illustration_markers.dart';
@@ -23,17 +24,24 @@ abstract final class IllustrationFetcher {
   ///
   /// 同一張圖可能有好幾處同時在抓（閱讀器與下載在不同的書源 isolate）：
   /// 每次寫進自己的暫存檔再換名，誰先寫好都是完整的圖。
+  ///
+  /// [externalContent]：正文是別台分享的書架檔帶回來的，插圖網址可能是別人
+  /// 寫的。網址的主機和書源網址的主機不同時照樣抓，但不帶書源的 Cookie 與
+  /// 登入標頭（[AnalyzeUrl] 的 `sourceCookie`、`loginHeaders`），同一個網站
+  /// 照舊帶（ADR 0086）。
   static Future<int> fetch(
     BookSource source,
     Book book,
     String content,
     String dir, {
     bool retryMissing = true,
+    bool externalContent = false,
     CancelToken? cancelToken,
   }) async {
     final sources = IllustrationMarkers.sourcesOf(content).toSet();
     if (sources.isEmpty) return 0;
     await Directory(dir).create(recursive: true);
+    final sourceHost = siteHost(source.bookSourceUrl);
     void throwIfCancelled() {
       if (cancelToken?.cancelError case final cancelled?) throw cancelled;
     }
@@ -50,12 +58,17 @@ abstract final class IllustrationFetcher {
         await missing.create();
       }
 
+      final withLoginData =
+          !externalContent ||
+          (sourceHost != null && siteHost(src) == sourceHost);
       final Uint8List fetched;
       try {
         fetched = await AnalyzeUrl(
           src,
           source: source,
           ruleData: book,
+          loginHeaders: withLoginData,
+          sourceCookie: withLoginData,
         ).getByteArray(cancelToken: cancelToken);
       } on DioException catch (error) {
         if (error.type == DioExceptionType.cancel) rethrow;

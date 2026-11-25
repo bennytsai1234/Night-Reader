@@ -65,6 +65,10 @@ class AnalyzeUrl {
   String method = 'GET';
   final Map<String, String> headerMap = {};
 
+  /// 送不送書源網址網域存的 Cookie（[loginHeaders] 管登入標頭）：外來的
+  /// 插圖網址和書源不同網站時不送。
+  final bool sourceCookie;
+
   /// 網址選項的 `body`；給的是 JSON 物件或陣列時轉成 JSON 文字。
   String? body;
   String? charset;
@@ -104,6 +108,7 @@ class AnalyzeUrl {
     this.chapter,
     Map<String, String>? headers,
     bool loginHeaders = true,
+    this.sourceCookie = true,
   }) {
     final optionStart = _paramPattern.firstMatch(baseUrl);
     _givenBaseUrl = optionStart == null
@@ -766,11 +771,11 @@ class AnalyzeUrl {
 
   /// 存著的 Cookie 併進請求（Legado `setCookie`）：書源網址的網域存的（登入
   /// 標頭、登入頁存下的在這裡，書源打別的網域時照樣帶著，Legado 的
-  /// `domain`），再加這次請求網域存的；規則或網址選項給的同名優先。只有一邊
-  /// 有、規則也沒給時照原字串送。
+  /// `domain`；外來插圖網址不帶，見 `sourceCookie`），再加這次請求網域存的；
+  /// 規則或網址選項給的同名優先。只有一邊有、規則也沒給時照原字串送。
   Future<void> _mergeStoredCookie() async {
     final store = CookieStore();
-    final sourceKey = source?.getKey();
+    final sourceKey = sourceCookie ? source?.getKey() : null;
     final ofSource = sourceKey == null || sourceKey.isEmpty
         ? ''
         : await store.getCookie(sourceKey);

@@ -83,6 +83,23 @@ void main() {
     });
   });
 
+  test('外來的網址不帶書源的 Cookie 與登入標頭', () async {
+    await CookieStore().setCookie('https://www.novel.test', 'sid=login');
+    final s = source();
+    await s.putLoginHeader('{"Authorization":"Bearer t"}');
+    addTearDown(s.removeLoginHeader);
+
+    final request = await AnalyzeUrl(
+      'https://api.other.test/search?k=1',
+      source: s,
+      loginHeaders: false,
+      sourceCookie: false,
+    ).playbackRequest();
+
+    expect(request.headers['Cookie'], isNull);
+    expect(request.headers['Authorization'], isNull);
+  });
+
   test('登入標頭存的 Cookie 登出後清乾淨', () async {
     await CookieStore().setCookie('https://www.novel.test', 'old=1');
     final s = source();

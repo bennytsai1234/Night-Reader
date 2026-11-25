@@ -39,6 +39,7 @@ class _ImagesDown extends BookSourceService {
     String content, {
     required String dir,
     bool retryMissing = true,
+    bool externalContent = false,
     CancelToken? cancelToken,
   }) async => 1;
 }

@@ -335,7 +335,12 @@ class BookshelfExchangeService {
           updatedAt: content.updatedAt,
         )) {
           contents++;
-          await BookIllustrationStorage.markUnfetchedIfIllustrated(content);
+          // 書架檔可能是別人做的：插圖網址的主機和書源不同時不帶登入資料
+          // （ADR 0086）。
+          await BookIllustrationStorage.markUnfetchedIfIllustrated(
+            content,
+            fromSource: false,
+          );
         }
       }
     }
