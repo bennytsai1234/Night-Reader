@@ -66,6 +66,7 @@ class ReaderTextView extends StatefulWidget {
     this.onBookmarkText,
     this.marks,
     this.onHighlightText,
+    this.onReadAloudText,
     this.highlights,
     this.onHighlightTap,
     this.highlightColor = const Color(0xFFFFC857),
@@ -120,6 +121,10 @@ class ReaderTextView extends StatefulWidget {
   /// 選字選單「⋮」裡的「標註」：把選到的字畫上標註
   /// （[ReaderTextSelection.asHighlight]）。沒給就不顯示這個按鈕。
   final ValueChanged<SelectionHighlight>? onHighlightText;
+
+  /// 選字選單「⋮」裡的「朗讀」：從選取開頭那一句的句首開始念
+  /// （[ReaderTextSelection.asSpeechStart]）。沒給就不顯示這個按鈕。
+  final ValueChanged<ReaderLocation>? onReadAloudText;
 
   /// 這本書的標註，在字上畫底色或底線（[HighlightMarksOverlay]）。
   final ValueListenable<List<ReaderHighlightMark>>? highlights;
@@ -1615,6 +1620,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
             onHighlight: widget.onHighlightText == null
                 ? null
                 : (selection) => widget.onHighlightText!(selection.asHighlight),
+            onReadAloud: widget.onReadAloudText,
             highlightColor: widget.highlightColor,
             child: _whileControls(
               (controlsVisible, child) => ReaderPointerTapLayer(
