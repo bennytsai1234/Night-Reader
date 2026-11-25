@@ -324,20 +324,28 @@ class _ComicReaderPageState extends State<ComicReaderPage>
   Future<void> _save(ComicLocation location) async {
     final title = _titleOf(location.chapterIndex);
     final index = location.chapterIndex;
-    final url = index >= 0 && index < _chapters.length
-        ? _chapters[index].url
+    final chapter = index >= 0 && index < _chapters.length
+        ? _chapters[index]
         : null;
     // 閱讀器開著時檢查更新可能已換上新目錄、話數重新編號（書源在前面插了
     // 幾話）；閱讀器手上仍是開書時的目錄。寫進資料庫的序號照章節網址換成
-    // 目前目錄的（書源換了網址的照換目錄時記下的新網址，[MovedChapters]），
-    // 下次開書才落在同一話；新目錄裡沒有這一話時照閱讀器的序號寫。同文字
-    // 閱讀器（`ReaderProgressController`）。
+    // 目前目錄的（書源換了網址的照換目錄時記下的新網址，換了網址又換了
+    // 話數、只認得話名的照話名，[MovedChapters]），下次開書才落在同一話；
+    // 新目錄裡沒有這一話時照閱讀器的序號寫。同文字閱讀器
+    // （`ReaderProgressController`）。
     final chapterDao = getIt<ChapterDao>();
     int? movedAt;
     await chapterDao.transaction(() async {
-      final stored = url == null
+      final stored = chapter == null
           ? null
-          : await MovedChapters.indexOf(chapterDao, _book.bookUrl, url);
+          : await MovedChapters.indexOf(
+              chapterDao,
+              _book.bookUrl,
+              chapter.url,
+              title: chapter.title,
+              oldIndex: index,
+              oldTotalCount: _chapters.length,
+            );
       movedAt = await getIt<BookDao>().updateProgress(
         _book.bookUrl,
         stored ?? index,

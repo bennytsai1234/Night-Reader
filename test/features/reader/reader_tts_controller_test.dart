@@ -35,6 +35,9 @@ class _FakeChapterDao extends Fake implements ChapterDao {
   Future<int?> indexOfUrl(String bookUrl, String url) async => null;
 
   @override
+  Future<List<BookChapter>> getByBook(String bookUrl) async => const [];
+
+  @override
   Future<T> transaction<T>(
     Future<T> Function() action, {
     bool requireNew = false,

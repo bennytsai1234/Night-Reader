@@ -213,6 +213,12 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 比不上就是被之後的動作取代了。同一個階段（例如連按兩次下一集都在
   /// 載入這一集）也要分得出是哪一次，所以不收進階段。
   int _generation = 0;
+
+  /// 正在換到哪一集：目錄選集、上一集、下一集按下去就記下，存好這一集的
+  /// 進度、[_load] 接下它才清掉。等的這段時間上一集播完、回到前景接另一台
+  /// 的進度都不接手，讀者選的那一集一定贏；停止、開了別本時跟著清掉。
+  int? _switchingTo;
+
   DateTime? _lastSaved;
   bool _markedOpen = false;
 
@@ -396,11 +402,17 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 哪，再從頭播那一集。按下去就換一次 [_generation]：之前還在做的載入與
   /// 換集作廢；存的這段時間停止、開了別本或又換了集就不換，最後按的那一次
   /// 算數。
+  ///
+  /// 換集就是要出聲，先記成要播；存的這段時間按了暫停（系統的暫停鍵、定時
+  /// 到了）載好才不出聲。上一集播完、回到前景接另一台的進度看 [_switchingTo]，
+  /// 不接手。
   Future<void> _switchTo(int index) async {
     final generation = ++_generation;
+    _switchingTo = index;
+    _wantPlay = true;
     await _saveProgress();
     if (generation != _generation) return;
-    await _load(index, start: Duration.zero, play: true);
+    await _load(index, start: Duration.zero);
   }
 
   Future<List<BookChapter>> _loadChapters(BookSource source, Book book) async {
@@ -484,6 +496,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     bool stale() => generation != _generation;
     final chapter = _chapters[index];
     _index = index;
+    if (_switchingTo == index) _switchingTo = null;
     _duration = null;
     _request = null;
     position.value = start;
@@ -698,6 +711,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     _prefetched = null;
     _request = null;
     _wantPlay = false;
+    _switchingTo = null;
     _buffering = false;
     _phase = AudiobookPhase.idle;
     _failure = null;
@@ -715,6 +729,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     if (_phase != AudiobookPhase.playing && _phase != AudiobookPhase.paused) {
       return;
     }
+    // 正在換到別集（等存進度）：讀者選的那一集算數，不自動接下一集。
+    if (_switchingTo != null) return;
     final generation = _generation;
     switch (_mode) {
       case AudiobookPlayMode.singleLoop:
@@ -837,15 +853,23 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     try {
       // 播放器開著時書架檢查更新可能已換上新目錄、集數重新編號（書源在前面
       // 插了幾集）；播放器手上仍是開書時的目錄。寫進資料庫的序號照這一集的
-      // 網址換成目前目錄的（書源換了網址的照換目錄時記下的新網址，
-      // [MovedChapters]），重開才接回同一集；新目錄裡沒有這一集時照播放器
-      // 的序號寫。同文字閱讀器（`ReaderProgressController`）與漫畫閱讀器。
+      // 網址換成目前目錄的（書源換了網址的照換目錄時記下的新網址，換了網址
+      // 又換了集數、只認得集名的照集名，[MovedChapters]），重開才接回同一
+      // 集；新目錄裡沒有這一集時照播放器的序號寫。同文字閱讀器
+      // （`ReaderProgressController`）與漫畫閱讀器。
       final chapters = _chapterStore;
       int? moved;
       await chapters.transaction(() async {
         // 手上的書照舊記播放器目錄的序號：換源照這份目錄估位置。
         final index =
-            await MovedChapters.indexOf(chapters, book.bookUrl, chapter.url) ??
+            await MovedChapters.indexOf(
+              chapters,
+              book.bookUrl,
+              chapter.url,
+              title: chapter.title,
+              oldIndex: indexAtSave,
+              oldTotalCount: _chapters.length,
+            ) ??
             indexAtSave;
         moved = await _books.updateProgress(
           book.bookUrl,
@@ -885,16 +909,16 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 回到前景時沒在播：另一台聽到較新的地方就跳過去（停在那裡，不自動播）。
   Future<void> _catchUpAfterResume() async {
     final book = _book;
-    // 開書中、打不開（沒有目錄）跳不過去；不跳就不記成同步過，下次還會再
-    // 抓到。
-    if (book == null || !_canCatchUp) return;
+    // 開書中、打不開（沒有目錄）跳不過去；正在換集（等存進度）時讀者選的
+    // 那一集算數；不跳就不記成同步過，下次還會再抓到。
+    if (book == null || !_canCatchUp || _switchingTo != null) return;
     final since = _commands;
     final pulled = await _sync.pullProgress(book.bookUrl);
     if (pulled == null || !pulled.isCurrent || !isCurrent(book)) return;
     // 抓的這段時間按了什麼（播放、暫停、換集、拖動）：照使用者按的，不跳。
     // 還在等系統接手、重載還沒出聲時，階段、集數與位置都還沒變，只看得出
     // 按過。
-    if (_commands != since || !_canCatchUp) return;
+    if (_commands != since || !_canCatchUp || _switchingTo != null) return;
     final index = _playable(
       pulled.progress.chapterIndexIn([
         for (final chapter in _chapters) chapter.title,
@@ -904,10 +928,18 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     if (index != _index ||
         (at - position.value).inMilliseconds.abs() > nearMs) {
       await _load(index, start: at, play: false);
-      // 載入途中停止、開了別本或換了集：沒接上，不記成同步過。
-      if (!isCurrent(book) || _index != index) return;
+    }
+    // 載入途中停止、開了別本或換了集（在目錄選了別集）：沒接上，不記成
+    // 同步過，下次回到前景再抓。
+    if (_commands != since ||
+        _switchingTo != null ||
+        !isCurrent(book) ||
+        _index != index) {
+      return;
     }
     await _saveProgress();
+    // 存進度的途中又按了什麼：這次接的進度沒留住，同樣不記。
+    if (_commands != since || _switchingTo != null) return;
     await pulled.commit(ProgressSync.recordOf(book));
   }
 
