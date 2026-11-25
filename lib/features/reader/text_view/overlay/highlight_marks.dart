@@ -6,11 +6,13 @@ import 'package:night_reader/features/reader/session/reader_location.dart';
 
 /// 正文裡一個標註：[location] 是開頭（章節序號已經對到這台的目錄，章內
 /// 第幾個字還要照那一章目前的正文解析），往後畫 [length] 個字，段落分隔
-/// 不算。
+/// 不算。沒有錨點的（從 Legado 的備份轉來的）[unanchoredQuote] 是記下的
+/// 原文，畫之前照它核對位置；有錨點的是 null。
 typedef ReaderHighlightMark = ({
   int id,
   ReaderLocation location,
   int length,
+  String? unanchoredQuote,
   HighlightColor color,
   HighlightStyle style,
 });

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart'
     show ValueListenable, visibleForTesting;
 import 'package:flutter/widgets.dart';
 
+import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
 import 'package:night_reader/features/reader/chapter/reader_content.dart';
 import 'package:night_reader/features/reader/features/tts/reader_tts_highlight.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
@@ -116,23 +117,27 @@ final class ReaderMarkGeometry {
           !identical(cached.blocks, blocks) ||
           cached.revision != revision) {
         final range = highlightRangeIn(mark, blocks);
-        final world = pipeline.geometry.lineBoxesChecked(
-          mark.location.chapterIndex,
-          range.start,
-          range.end,
-        );
+        final world = range == null
+            ? null
+            : pipeline.geometry.lineBoxesChecked(
+                mark.location.chapterIndex,
+                range.start,
+                range.end,
+              );
         // 那一段還沒排好：這次不畫、不記，排好後文件索引換版再算。
-        if (world.boxes.isEmpty) continue;
+        if (world != null && world.boxes.isEmpty) continue;
+        // 那一章找不到原文的也記下（空的範圍），同一份正文不再每幀找一次。
         cached = (
           mark: mark,
           blocks: blocks,
           revision: revision,
-          range: range,
-          boxes: world.boxes,
-          complete: world.complete,
+          range: range ?? const ChapterTextRange(0, 0),
+          boxes: world?.boxes ?? const <LineBox>[],
+          complete: world?.complete ?? true,
         );
         _highlightBoxes[mark.id] = cached;
       }
+      if (cached.range.isEmpty) continue;
       // 跨好幾屏的標註有幾段的排版不在手上（畫面外丟掉了）時，記下的框
       // 缺了那幾段；每幀只算畫面上看得到的那一段，捲回來的段落照樣畫到。
       // 排齊的照記下的框，只畫畫面上的那幾行。
@@ -172,7 +177,7 @@ final class ReaderMarkGeometry {
               identical(cached.blocks, hit.blocks)
           ? cached.range
           : highlightRangeIn(mark, hit.blocks);
-      if (hit.offset >= range.start && hit.offset < range.end) {
+      if (range != null && range.containsOffset(hit.offset)) {
         if (found == null || mark.id > found) found = mark.id;
       }
     }
@@ -196,9 +201,10 @@ final class ReaderMarkGeometry {
 
   /// 標註在那一章正文裡的範圍：開頭照錨點找回（正文變了照前後原文），往
   /// 後數記下的那麼多個字，段落分隔不算（分段和畫的時候不同也畫到同一段
-  /// 字的結尾），不超出那一章。
+  /// 字的結尾），不超出那一章。沒有錨點的照記下的原文核對，見
+  /// [_unanchoredRangeIn]；那一章找不到原文時是 null，不畫。
   @visibleForTesting
-  static ChapterTextRange highlightRangeIn(
+  static ChapterTextRange? highlightRangeIn(
     ReaderHighlightMark mark,
     ChapterBlocks blocks,
   ) {
@@ -208,6 +214,9 @@ final class ReaderMarkGeometry {
       displayText: text,
       contentHash: blocks.contentHash,
     ).clamp(0, text.length - 1).toInt();
+    if (mark.unanchoredQuote case final quote?) {
+      return _unanchoredRangeIn(text, quote, near: start);
+    }
     var end = start;
     var remaining = math.max(1, mark.length);
     while (end < text.length && remaining > 0) {
@@ -216,6 +225,69 @@ final class ReaderMarkGeometry {
     }
     return ChapterTextRange(start, end);
   }
+
+  /// 沒有錨點的標註（從 Legado 的備份轉來的）：Legado 記的位置算進章名與
+  /// 段首縮排、正文也可能和這台不同（替換規則、書源），原文更可能被讀者
+  /// 在 Legado 的書籤裡改過，所以記下的位置不一定就是 [quote]。在那一章
+  /// 找 [quote]，空白與換行不算（Legado 選到的字含段首縮排），取離記下的
+  /// 位置 [near] 最近的一處（位置上就是原文時就是那裡）；找不到是 null。
+  ///
+  /// 正文照閱讀設定的繁簡轉換顯示，原文是 Legado 畫面上的寫法：[quote]
+  /// 原樣、簡轉繁、繁轉簡（和正文同一套轉換）各找一次，讀者怎麼切換都
+  /// 對得上。找的是畫面上的正文，轉換後字數變了也不用換算位置。
+  static ChapterTextRange? _unanchoredRangeIn(
+    String text,
+    String quote, {
+    required int near,
+  }) {
+    final wanted = {
+      for (final convertType in const [0, 1, 2])
+        String.fromCharCodes(
+          _converter
+              .convert(quote, convertType: convertType)
+              .codeUnits
+              .where((unit) => !_isBlank(unit)),
+        ),
+    }..remove('');
+    if (wanted.isEmpty) return null;
+    // 去掉空白後的正文，記下每個字在原本正文裡的位置。
+    final kept = <int>[];
+    final positions = <int>[];
+    for (var i = 0; i < text.length; i++) {
+      final unit = text.codeUnitAt(i);
+      if (_isBlank(unit)) continue;
+      kept.add(unit);
+      positions.add(i);
+    }
+    final haystack = String.fromCharCodes(kept);
+    ChapterTextRange? best;
+    var bestDistance = 0;
+    for (final words in wanted) {
+      for (
+        var at = haystack.indexOf(words);
+        at >= 0;
+        at = haystack.indexOf(words, at + 1)
+      ) {
+        final start = positions[at];
+        final distance = (start - near).abs();
+        if (best == null || distance < bestDistance) {
+          best = ChapterTextRange(start, positions[at + words.length - 1] + 1);
+          bestDistance = distance;
+        }
+      }
+    }
+    return best;
+  }
+
+  static const ChineseTextConverter _converter = ChineseTextConverter();
+
+  /// 空白與換行，含全形空白（段首縮排）。
+  static bool _isBlank(int unit) =>
+      unit <= 0x20 ||
+      unit == 0xA0 ||
+      unit == 0x3000 ||
+      unit == 0xFEFF ||
+      (unit >= 0x2000 && unit <= 0x200B);
 
   static LineBox _scrolled(LineBox box, double scroll) => LineBox(
     left: box.left,

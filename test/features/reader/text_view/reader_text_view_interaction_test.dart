@@ -2010,6 +2010,7 @@ void main() {
         id: 1,
         location: ReaderLocation(chapterIndex: 0, charOffset: 10),
         length: 2000,
+        unanchoredQuote: null,
         color: HighlightColor.amber,
         style: HighlightStyle.fill,
       ),
