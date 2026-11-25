@@ -349,8 +349,8 @@ class BookDetailProvider extends ChangeNotifier {
     _switchedBookUrl = event.toBookUrl;
   }
 
-  /// 從閱讀器回到這頁：閱讀器把進度、加入書架與換源都寫進資料庫，這裡照
-  /// 資料庫裡的這本書重新顯示。閱讀器沒加入書架就退出時，書與目錄已經刪
+  /// 從閱讀器回到這頁（閱讀器把進度、加入書架與換源都寫進資料庫），或這頁
+  /// 匯出本地書時重寫了目錄與進度之後：照資料庫裡的這本書重新顯示。閱讀器沒加入書架就退出時，書與目錄已經刪
   /// 掉，照舊顯示手上的書（不在書架上）。
   Future<void> reloadAfterReading() async {
     if (_disposed || !hasReadyWorld) return;

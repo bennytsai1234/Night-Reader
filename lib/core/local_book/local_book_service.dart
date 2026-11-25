@@ -456,7 +456,7 @@ class LocalBookService {
 
   /// [book]（EPUB）現在轉好的文字的章節範圍。轉法改過（[EpubParser.textVersion]
   /// 不同）或轉好的文字不見了就先重轉；不是 EPUB、原檔不在或重轉失敗時
-  /// 回傳 null。閱讀器開書時拿它對資料庫裡的章節（ADR 0050）。
+  /// 回傳 null。拿它對資料庫裡的章節（[syncEpubChapters]，ADR 0050）。
   Future<List<LocalChapterRange>?> currentEpubChapters(Book book) async {
     final path = filePathOf(book);
     if (localBookExtensionFromPath(path) != 'epub') return null;
@@ -497,6 +497,62 @@ class LocalBookService {
   /// [ranges] 換成存進資料庫的章節。
   List<BookChapter> chaptersOf(Book book, List<LocalChapterRange> ranges) =>
       _chapters(book, ranges);
+
+  /// 本地 EPUB 轉法改過（例如開始留插圖，ADR 0050；標出分卷）或轉好的文字
+  /// 不見了時重轉（[currentEpubChapters]），資料庫裡的目錄 [chapters] 對不上
+  /// 新的章節範圍就換掉，存著的舊正文清掉。每章的字不變；章數變了（多了
+  /// 只有卷名的分卷）時閱讀進度照章名對到新目錄的同一章，和目錄一起寫回
+  /// 去。閱讀器開書與匯出全書前都先跑這一次。
+  ///
+  /// 回傳現在的目錄；換過時 `replaced` 是換掉的舊目錄（閱讀器拿來把開書的
+  /// 位置對過去），沒換時是 null。不是 EPUB 時照原樣回傳；讀不到檔案時丟出
+  /// [FileSystemException]。
+  Future<({List<BookChapter> chapters, List<BookChapter>? replaced})>
+  syncEpubChapters(
+    Book book,
+    List<BookChapter> chapters, {
+    required BookDao bookDao,
+    required ChapterDao chapterDao,
+    ReaderChapterContentDao? contentDao,
+  }) async {
+    final ranges = await currentEpubChapters(book);
+    if (ranges == null || chaptersMatch(chapters, ranges)) {
+      return (chapters: chapters, replaced: null);
+    }
+    final refreshed = _chapters(book, ranges);
+    if (refreshed.isEmpty) return (chapters: chapters, replaced: null);
+    final int index;
+    if (chapters.isEmpty) {
+      index = book.chapterIndex.clamp(0, refreshed.length - 1);
+    } else {
+      final old = book.chapterIndex.clamp(0, chapters.length - 1);
+      index = alignChapterIndex(
+        oldIndex: old,
+        oldTitle: chapters[old].title,
+        oldTotalCount: chapters.length,
+        newChapters: refreshed,
+      );
+    }
+    await bookDao.transaction(() async {
+      await chapterDao.replaceByBook(book.bookUrl, refreshed);
+      if (index != book.chapterIndex || refreshed.length != chapters.length) {
+        await bookDao.writeFields(
+          book,
+          BooksCompanion(
+            chapterIndex: Value(index),
+            durChapterTitle: Value(refreshed[index].title),
+            totalChapterNum: Value(refreshed.length),
+          ),
+        );
+      }
+    });
+    book
+      ..chapterIndex = index
+      ..durChapterTitle = refreshed[index].title
+      ..totalChapterNum = refreshed.length;
+    await contentDao?.deleteByBook(book.origin, book.bookUrl);
+    return (chapters: refreshed, replaced: chapters);
+  }
 
   /// 解析本地書籍並回傳 Book + chapters（不做持久化）。書名與作者從
   /// [pickedName]（使用者選的檔名，不含副檔名；沒給時用 [path] 的）拆，見
@@ -876,6 +932,8 @@ class LocalBookService {
     if (ext == 'epub' && !await file.exists()) {
       final List<LocalChapterRange> ranges;
       try {
+        // 讀章時開著的舊文字檔要先關掉，Windows 上才換得掉。
+        await closeOpenFile();
         ranges = (await EpubParser.convert(path, textPath)).chapters;
       } on EpubFormatException catch (error) {
         throw LocalBookContentException('讀取本地書籍失敗: ${error.message}');

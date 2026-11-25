@@ -1,11 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/backup/export_book_service.dart';
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/local_book/epub_parser.dart';
 import 'package:night_reader/core/models/book/book.dart';
@@ -245,6 +252,9 @@ class _DirPathProvider extends PathProviderPlatform {
 
   @override
   Future<String?> getApplicationDocumentsPath() async => path;
+
+  @override
+  Future<String?> getTemporaryPath() async => path;
 }
 
 void main() {
@@ -523,6 +533,66 @@ void main() {
     );
 
     expect(await LocalBookService().getContent(result.book, first), '第一章\n甲');
+  });
+
+  test('轉好的文字不見時不開書直接匯出全書，每一章都是自己的字', () async {
+    final path = await write('lost-export.epub', _volumes());
+    final result = (await LocalBookService().importBook(path))!;
+    await File(await LocalBookService.epubTextPath(result.book)).delete();
+    // 舊轉法的目錄：沒有分卷，範圍照舊轉法、各差一章。
+    final old = [
+      for (final (i, c) in result.chapters.skip(1).indexed)
+        c.copyWith(
+          index: i,
+          url: '${result.book.bookUrl}#$i',
+          start: result.chapters[i].start,
+          end: result.chapters[i].end,
+        ),
+    ];
+    final book = result.book
+      ..isInBookshelf = true
+      ..chapterIndex = 1
+      ..durChapterTitle = '第二章'
+      ..totalChapterNum = 2;
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.bookDao.upsert(book);
+    await db.chapterDao.insertChapters(old);
+    await GetIt.instance.reset();
+    GetIt.instance
+      ..registerSingleton<BookDao>(db.bookDao)
+      ..registerSingleton<ChapterDao>(db.chapterDao)
+      ..registerSingleton<BookSourceDao>(db.bookSourceDao)
+      ..registerSingleton<ReaderChapterContentDao>(db.readerChapterContentDao);
+    addTearDown(GetIt.instance.reset);
+    const share = MethodChannel('dev.fluttercommunity.plus/share');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          share,
+          (_) async => 'dev.fluttercommunity.plus/share/unavailable',
+        );
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(share, null),
+    );
+
+    await ExportBookService().exportToTxt(
+      book,
+      present: (chapter, raw) async => (title: chapter.title, text: raw),
+    );
+
+    final exported = await (await AppStoragePaths.shareExportFile('分卷之書.txt'))
+        .readAsString();
+    expect(exported, contains('第二章\n乙'));
+    expect('甲'.allMatches(exported), hasLength(1));
+    expect((await db.chapterDao.getByBook(book.bookUrl)).map((c) => c.title), [
+      '第一卷',
+      '第一章',
+      '第二章',
+    ]);
+    final stored = (await db.bookDao.getByUrl(book.bookUrl))!;
+    expect(stored.chapterIndex, 2);
+    expect(stored.totalChapterNum, 3);
   });
 
   test('卷名和第一章指向同一個檔案時，正文只出現一次', () async {
