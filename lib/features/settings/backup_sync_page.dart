@@ -16,7 +16,6 @@ import 'package:night_reader/features/settings/restore_confirm_dialog.dart';
 import 'package:night_reader/features/settings/sync_space_page.dart';
 import 'package:night_reader/features/settings/sync_status_text.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 import 'package:share_plus/share_plus.dart';
@@ -28,8 +27,12 @@ class BackupSyncPage extends StatefulWidget {
   State<BackupSyncPage> createState() => _BackupSyncPageState();
 }
 
+enum _ArchiveAction { backup, restore }
+
 class _BackupSyncPageState extends State<BackupSyncPage> {
-  bool _isProcessing = false;
+  /// 正在建立備份或還原；那一列的列尾轉圈，兩列都暫時不能按。
+  _ArchiveAction? _running;
+  bool get _isProcessing => _running != null;
   bool _loaded = false;
 
   final SyncService _sync = SyncService.instance;
@@ -161,6 +164,9 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
                 ),
                 title: '建立備份',
                 enabled: !_isProcessing,
+                trailing: _running == _ArchiveAction.backup
+                    ? const _RowSpinner()
+                    : null,
                 onTap: _isProcessing ? null : _handleManualBackup,
               ),
               GroupedRow(
@@ -170,22 +176,20 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
                 ),
                 title: '從備份檔還原',
                 enabled: !_isProcessing,
+                trailing: _running == _ArchiveAction.restore
+                    ? const _RowSpinner()
+                    : null,
                 onTap: _isProcessing ? null : _handleManualRestore,
               ),
             ],
           ),
-          if (_isProcessing)
-            const Padding(
-              padding: EdgeInsets.only(top: AppSpacing.xl),
-              child: Center(child: CircularProgressIndicator()),
-            ),
         ],
       ),
     );
   }
 
   Future<void> _handleManualBackup() async {
-    setState(() => _isProcessing = true);
+    setState(() => _running = _ArchiveAction.backup);
     try {
       final file = await BackupService().createBackupZip();
       if (!mounted) return;
@@ -203,7 +207,7 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
             .showSnackBar(SnackBar(content: UiText(failureMessage('備份', e))));
       }
     } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      if (mounted) setState(() => _running = null);
     }
   }
 
@@ -217,7 +221,7 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
     if (choice == null || !mounted) return;
 
     final file = File(path);
-    setState(() => _isProcessing = true);
+    setState(() => _running = _ArchiveAction.restore);
     try {
       final result = await RestoreService().restoreFromZip(
         file,
@@ -242,7 +246,18 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
             .showSnackBar(SnackBar(content: UiText(failureMessage('還原', e))));
       }
     } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      if (mounted) setState(() => _running = null);
     }
   }
+}
+
+/// 列尾的小轉圈（同「檢查更新」那一列）。
+class _RowSpinner extends StatelessWidget {
+  const _RowSpinner();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.square(
+    dimension: 18,
+    child: CircularProgressIndicator(strokeWidth: 2),
+  );
 }

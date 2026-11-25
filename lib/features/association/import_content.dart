@@ -6,16 +6,19 @@ import 'package:night_reader/features/source_manager/source_manager_provider.dar
 
 /// 外部匯入的內容類型。
 enum ImportContentKind {
-  bookSource('辨識為書源資料'),
-  rssSource('這是訂閱源，夜讀只支援書源，無法匯入'),
-  replaceRule('辨識為替換規則'),
-  theme('辨識為閱讀主題，但目前沒有可用的主題匯入流程'),
-  bookshelf('辨識為書架資料');
+  bookSource('匯入書源？', '下一步再挑要匯入哪些。'),
+  rssSource('無法匯入', '這是訂閱源，夜讀只支援書源。'),
+  replaceRule('匯入替換規則？', '下一步再挑要匯入哪些。'),
+  theme('無法匯入', '這是閱讀主題，夜讀沒有主題匯入。'),
+  bookshelf('匯入書架？', '檔裡的書加進書架，已有的不重複加。');
 
-  const ImportContentKind(this.description);
+  const ImportContentKind(this.title, this.consequence);
 
-  /// 外部匯入對話框裡說明這份內容是什麼的那一行。
-  final String description;
+  /// 外部匯入提示框的標題：能匯入的直接問，不能的寫狀態。
+  final String title;
+
+  /// 標題下面那一句：按下去之後會怎樣，或為什麼不能匯入。
+  final String consequence;
 }
 
 /// 判斷好的外部匯入內容（[detectImportContent]）。

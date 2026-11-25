@@ -66,6 +66,13 @@ class _Details extends BookSourceService {
   }
 }
 
+/// 外部匯入的提示框（不分類型）。
+final _importDialogTitle = find.byWidgetPredicate(
+  (widget) =>
+      widget is Text &&
+      ImportContentKind.values.any((kind) => kind.title == widget.data),
+);
+
 void main() {
   group('detectImportContent', () {
     Future<ImportContentKind?> kindOf(String text) async =>
@@ -183,8 +190,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('外部匯入'), findsOneWidget);
-      expect(find.textContaining('辨識為書源資料'), findsOneWidget);
+      expect(find.text('匯入書源？'), findsOneWidget);
+      expect(find.textContaining('下一步再挑要匯入哪些'), findsOneWidget);
       expect(find.text('匯入書源'), findsOneWidget);
       expect(find.text('無法辨識'), findsNothing);
       expect(find.byType(SnackBar), findsNothing);
@@ -206,7 +213,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('外部匯入'), findsOneWidget);
+      expect(find.text('匯入書源？'), findsOneWidget);
       expect(find.text('無法辨識'), findsNothing);
       expect(find.byType(SnackBar), findsNothing);
     });
@@ -251,7 +258,7 @@ void main() {
         await tester.runAsync(() => Future<void>.delayed(Duration.zero));
         await tester.pumpAndSettle();
 
-        expect(find.text('外部匯入'), findsNothing);
+        expect(_importDialogTitle, findsNothing);
         expect(opened.map((book) => (book.name, book.origin)), [
           ('夜航', 'https://a.example'),
         ]);
@@ -382,7 +389,7 @@ void main() {
         await tester.runAsync(() => Future<void>.delayed(Duration.zero));
         await tester.pumpAndSettle();
 
-        expect(find.text('外部匯入'), findsNothing);
+        expect(_importDialogTitle, findsNothing);
         expect(find.text('加入書架失敗：找不到符合這個網址的書源'), findsOneWidget);
       });
     });
@@ -397,7 +404,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('外部匯入'), findsNothing);
+      expect(_importDialogTitle, findsNothing);
       expect(find.byType(SnackBar), findsNothing);
     });
 
@@ -412,8 +419,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.text('無法匯入'), findsOneWidget);
       expect(find.textContaining('這是訂閱源'), findsOneWidget);
-      expect(find.text('取消'), findsOneWidget);
+      expect(find.text('關閉'), findsOneWidget);
       expect(find.text('匯入書源'), findsNothing);
     });
 
@@ -435,7 +443,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.textContaining('7720.json'), findsOneWidget);
-      expect(find.textContaining('辨識為書源資料'), findsOneWidget);
+      expect(find.textContaining('下一步再挑要匯入哪些'), findsOneWidget);
 
       await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
@@ -447,7 +455,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.textContaining('分享的文字'), findsOneWidget);
-      expect(find.textContaining('辨識為書源資料'), findsOneWidget);
+      expect(find.textContaining('下一步再挑要匯入哪些'), findsOneWidget);
     });
 
     testWidgets('分享的書源先開匯入預覽：這台的比檔案新時預設不覆蓋', (tester) async {
