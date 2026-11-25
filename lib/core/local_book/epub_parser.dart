@@ -85,6 +85,15 @@ class EpubParser {
     }
   }
 
+  /// [epubPath] 書裡寫的書名；沒寫或讀不出來時是 null。
+  static Future<String?> readTitle(String epubPath) => Isolate.run(() {
+    try {
+      return _withArchive(epubPath, (archive) => _Package.read(archive).title);
+    } on EpubFormatException {
+      return null;
+    }
+  });
+
   /// 在另一個 isolate 把 [epubPath] 轉成一段一行的 UTF-8 純文字寫到
   /// [textPath]，回傳書名、作者、封面與章節。
   ///

@@ -20,6 +20,7 @@ import 'core/chinese/chinese_display.dart';
 import 'core/chinese/ui_language.dart';
 import 'core/di/injection.dart';
 import 'core/database/dao/book_dao.dart';
+import 'core/local_book/local_book_service.dart';
 import 'core/storage/app_storage_paths.dart';
 import 'core/storage/reader_layout_cache.dart';
 import 'app_providers.dart';
@@ -329,6 +330,16 @@ void _restoreWebViewUserAgent(SharedPreferences prefs) {
 /// 刪掉書架以外的書留下的資料（剛開 App，還沒有詳情或閱讀器開著），再刪
 /// 資料庫裡已經沒有的書、以及其他 App 版本留下的閱讀排版快取。
 Future<void> _pruneStoredBooks() async {
+  try {
+    // 上次更新本地書原檔時被關掉的，先收尾或退回（讀本地書之前也會等它）。
+    await LocalBookService.recoverOnce(getIt<BookDao>());
+  } catch (e, stack) {
+    AppLog.e(
+      'Recover local book updates failed: $e',
+      error: e,
+      stackTrace: stack,
+    );
+  }
   try {
     await BookStorageService().discardUnshelvedBooks();
   } catch (e, stack) {
