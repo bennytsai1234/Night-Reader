@@ -6,6 +6,7 @@ import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
+import 'package:night_reader/core/playback/audio_focus.dart';
 import 'package:night_reader/core/playback/system_playback.dart';
 import 'package:night_reader/core/playback/tts_service.dart';
 import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
@@ -21,6 +22,9 @@ import 'package:night_reader/features/reader/session/reader_runtime.dart';
 import 'package:night_reader/features/reader/use_cases/coordinators/reader_chapter_navigation_resolver.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// 要不到音訊焦點、沒有開始念時的提示。
+const String noAudioFocusNotice = '通話中或其他聲音正在播放，朗讀已暫停';
+
 abstract class ReaderTtsEngine extends ChangeNotifier {
   bool get isPlaying;
   double get rate;
@@ -31,8 +35,11 @@ abstract class ReaderTtsEngine extends ChangeNotifier {
   /// 每念完一段送出一次。
   Stream<void> get completions;
 
-  /// 念一段沒念出來時送出一次（引擎沒開好、不收這句、念的途中出錯）。
-  Stream<void> get failures;
+  /// 念一段沒念出來時送出一次，帶著原因（引擎出錯，或要不到音訊焦點）。
+  Stream<TtsFailure> get failures;
+
+  /// 被別的聲音打斷、打斷結束、拔耳機。
+  Stream<AudioFocusChange> get audioFocusChanges;
 
   Future<void> speak(String text);
   Future<void> stop();
@@ -68,7 +75,10 @@ class ReaderSystemTtsEngine extends ReaderTtsEngine {
   Stream<void> get completions => _service.completions;
 
   @override
-  Stream<void> get failures => _service.failures;
+  Stream<TtsFailure> get failures => _service.failures;
+
+  @override
+  Stream<AudioFocusChange> get audioFocusChanges => _service.audioFocusChanges;
 
   @override
   Future<void> speak(String text) => _service.speak(text);
@@ -109,7 +119,10 @@ class ReaderTtsController extends ChangeNotifier
     _completionSubscription = _tts.completions.listen(
       (_) => _handleSpeechCompleted(),
     );
-    _failureSubscription = _tts.failures.listen((_) => _handleSpeechFailed());
+    _failureSubscription = _tts.failures.listen(_handleSpeechFailed);
+    _audioFocusSubscription = _tts.audioFocusChanges.listen(
+      _handleAudioFocusChange,
+    );
   }
 
   final ReaderRuntime runtime;
@@ -117,7 +130,8 @@ class ReaderTtsController extends ChangeNotifier
   final bool _ownsTtsEngine;
   final SystemPlayback _playback;
   late final StreamSubscription<void> _completionSubscription;
-  late final StreamSubscription<void> _failureSubscription;
+  late final StreamSubscription<TtsFailure> _failureSubscription;
+  late final StreamSubscription<AudioFocusChange> _audioFocusSubscription;
 
   /// 念過的章節顯示的章名（含繁簡轉換與替換規則），系統播放資訊的標題用。
   final Map<int, String> _chapterTitles = <int, String>{};
@@ -205,6 +219,163 @@ class ReaderTtsController extends ChangeNotifier
     }
   }
 
+  /// 面板的上一句、下一句能不能按：念著一句或暫停在那句時才按得動；
+  /// 沒在朗讀與換章載入中不按。暫停中按了和上一章、下一章一樣開始念。
+  @override
+  bool get canSkipSentence => _state is _Speaking || _state is _Paused;
+
+  /// 上一句：照這一章的分句往前一句，這一章的第一句時換到上一章的最後
+  /// 一句（同上一章跳過付費章節）。
+  @override
+  Future<void> skipToPreviousSentence() => _skipSentence(-1);
+
+  /// 下一句：照這一章的分句往後一句，這一章念完時換到下一章的第一句
+  /// （同下一章跳過付費章節）。
+  @override
+  Future<void> skipToNextSentence() => _skipSentence(1);
+
+  Future<void> _skipSentence(int delta) async {
+    // 被打斷停下時按的：先拿掉打斷結束時接著念，下面要等載入，這段期間打斷
+    // 結束也不從原位置念，按的這一下說了算。
+    _stopAutoResume();
+    final pressed = _state;
+    final chapterIndex = _chapterIndex;
+    if (chapterIndex == null || pressed is _Loading) return;
+
+    final at = switch (pressed) {
+      final _Speaking speaking => speaking,
+      final _Paused paused => paused.position,
+      _Idle() || _Loading() => null,
+    };
+    if (at == null) {
+      // 停在要念的那一章開頭（換章載入中暫停）：下一句就是從那裡念起。
+      if (delta < 0) {
+        await _skipToPreviousChapterEnd(chapterIndex, pressed);
+      } else if (pressed case final _Paused paused) {
+        await _readFromAfterStopping(
+          _Loading(paused.resumeAt, highlight: paused.highlight),
+        );
+      }
+      return;
+    }
+
+    final target = at.index + delta;
+    if (target >= 0 && target < at.segments.length) {
+      await _readFromAfterStopping(
+        _Loading(
+          ReaderLocation(
+            chapterIndex: at.segment.chapterIndex,
+            charOffset: at.segments[target].startCharOffset,
+          ),
+          highlight: at.segment,
+        ),
+      );
+      return;
+    }
+    if (delta < 0) {
+      await _skipToEarlierSentence(at.segment, pressed);
+      return;
+    }
+    final next = _chapterAfter(chapterIndex, 1);
+    if (next == null) return;
+    await _readFromAfterStopping(
+      _Loading(_chapterStart(next), highlight: _highlightSegment),
+    );
+  }
+
+  /// 這一章第一句的上一句：朗讀可能從章節中間開始，這一章的句子清單只從
+  /// 那裡往後，要在整章的分句裡找它前面那一句；這一章前面沒有了才換到
+  /// 上一章的最後一句。
+  Future<void> _skipToEarlierSentence(
+    ReaderTtsSegment current,
+    _TtsState pressed,
+  ) async {
+    final ReaderContent content;
+    try {
+      content = await runtime.loadContentForTts(
+        _chapterStart(current.chapterIndex),
+      );
+    } catch (_) {
+      return;
+    }
+    if (!_isStillOn(pressed)) return;
+    final start = _sentenceBefore(content.displayText, current.startCharOffset);
+    if (start == null) {
+      await _skipToPreviousChapterEnd(current.chapterIndex, pressed);
+      return;
+    }
+    if (!_isStillOn(pressed)) return;
+    await _readFromAfterStopping(
+      _Loading(
+        ReaderLocation(chapterIndex: current.chapterIndex, charOffset: start),
+        highlight: current,
+      ),
+    );
+  }
+
+  /// [chapterIndex] 之前第一個有可念正文的章的最後一句，跳過付費章節與沒有
+  /// 正文的章；前面都沒有時不動。
+  Future<void> _skipToPreviousChapterEnd(
+    int chapterIndex,
+    _TtsState pressed,
+  ) async {
+    var chapter = _chapterAfter(chapterIndex, -1);
+    while (chapter != null) {
+      if (!_isStillOn(pressed)) return;
+      final ReaderContent content;
+      try {
+        content = await runtime.loadContentForTts(_chapterStart(chapter));
+      } catch (_) {
+        return;
+      }
+      if (!_isStillOn(pressed)) return;
+      final segments = _segmentsFor(
+        text: content.displayText,
+        chapterIndex: chapter,
+        startOffset: 0,
+      );
+      if (segments.isNotEmpty) {
+        final last = segments.last;
+        await _readFromAfterStopping(
+          _Loading(
+            ReaderLocation(
+              chapterIndex: chapter,
+              charOffset: last.startCharOffset,
+            ),
+            highlight: _highlightSegment,
+          ),
+        );
+        return;
+      }
+      chapter = _chapterAfter(chapter, -1);
+    }
+  }
+
+  /// [text] 裡 [offset] 之前最後一句有可念文字的分句的句首；沒有是 null。
+  /// 分句與朗讀同一個 [ReaderTtsSegmenter]。
+  static int? _sentenceBefore(String text, int offset) {
+    final segments = const ReaderTtsSegmenter().segment(
+      text: text,
+      chapterIndex: 0,
+      startOffset: 0,
+    );
+    for (var i = segments.length - 1; i >= 0; i -= 1) {
+      final segment = segments[i];
+      if (segment.endCharOffset > offset) continue;
+      if (ReaderTtsSpeechText.prepare(segment.text).isNotEmpty) {
+        return segment.startCharOffset;
+      }
+    }
+    return null;
+  }
+
+  bool _isStillOn(_TtsState state) => !_disposed && identical(_state, state);
+
+  /// 選字選單「⋮」裡的「朗讀」：從 [location] 那一句開始念；暫停中按了從
+  /// 那裡接著念，正在念時換過去。
+  Future<void> startFromSelection(ReaderLocation location) =>
+      _readFromAfterStopping(_Loading(location, highlight: _highlightSegment));
+
   /// 選單上的定時鍵：和播放列一樣；開始時照記住的定時倒數（定時關閉就不
   /// 定時）。
   Future<void> toggleTimed() => toggle();
@@ -290,18 +461,42 @@ class ReaderTtsController extends ChangeNotifier
           context: ErrorDescription('speaking a TTS segment'),
         ),
       );
-      _handleSpeechFailed();
+      _handleSpeechFailed(TtsFailure.engine);
       return;
     }
     if (_isCurrent(speaking)) notifyListeners();
   }
 
-  /// 引擎沒念出這一句：停在這句、說一聲，播放鍵從這句重試；不留在朗讀中
-  /// 卻沒有聲音。只在念一句時算數。
-  void _handleSpeechFailed() {
+  /// 引擎沒念出這一句、或要不到音訊焦點沒開始念：停在這句、說一聲，播放鍵
+  /// 從這句重試；不留在朗讀中卻沒有聲音。只在念一句時算數。
+  void _handleSpeechFailed(TtsFailure reason) {
     if (_disposed || _state is! _Speaking) return;
     _pause();
-    runtime.emitUserNotice('朗讀引擎出錯，已暫停');
+    runtime.emitUserNotice(switch (reason) {
+      TtsFailure.engine => '朗讀引擎出錯，已暫停',
+      TtsFailure.noAudioFocus => noAudioFocusNotice,
+    });
+  }
+
+  /// 系統的聲音（同 Legado）：被打斷（來電、語音助理、別的 App 開始播）時
+  /// 停在這句，打斷結束時接著念；拔耳機、打斷結束時系統說不用接著播，就只
+  /// 停。焦點整個 App 一份，有聲書在播時也會收到，所以只在朗讀中算數，接著
+  /// 念只接被打斷停下的那一次（[_Paused.untilRegained]）。
+  void _handleAudioFocusChange(AudioFocusChange change) {
+    if (_disposed) return;
+    AppLog.d('朗讀收到音訊焦點 ${change.name}：${_phaseLabel(phase)}');
+    switch (change) {
+      case AudioFocusChange.interrupted:
+        _pause(untilRegained: true);
+      case AudioFocusChange.lost:
+        _pause();
+      case AudioFocusChange.regained:
+        if (_state case final _Paused paused when paused.untilRegained) {
+          unawaited(
+            _load(_Loading(paused.resumeAt, highlight: paused.highlight)),
+          );
+        }
+    }
   }
 
   /// 念完一段只在念一句時算數：載入中、暫停後引擎補報的念完不理。
@@ -508,17 +703,22 @@ class ReaderTtsController extends ChangeNotifier
     visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
   );
 
-  /// 暫停（面板、定時鍵、定時到了、系統或耳機按了暫停、另一方開始播）：
-  /// 停在目前這句，播放鍵從這句開頭接著念；要念的那一章還在載入時，停在要
-  /// 念的位置（按了上一章、下一章或自動換章是那一章開頭）。已經暫停就不動，
-  /// 停的位置不變。用停止而不是引擎的暫停：句與句之間引擎沒有在念，暫停不
-  /// 會生效，下一句照樣會開始。
-  void _pause() {
+  /// 暫停（面板、定時鍵、定時到了、系統或耳機按了暫停、另一方開始播、被
+  /// 別的聲音打斷、拔耳機）：停在目前這句，播放鍵從這句開頭接著念；要念的
+  /// 那一章還在載入時，停在要念的位置（按了上一章、下一章或自動換章是那一
+  /// 章開頭）。已經暫停就不動，停的位置不變；只是被打斷停下的，再收到別的
+  /// 暫停就不在打斷結束時接著念。用停止而不是引擎的暫停：句與句之間引擎沒
+  /// 有在念，暫停不會生效，下一句照樣會開始。
+  ///
+  /// [untilRegained]：被打斷停下的，打斷結束時接著念。
+  void _pause({bool untilRegained = false}) {
+    if (!untilRegained) _stopAutoResume();
     final paused = switch (_state) {
       _Idle() || _Paused() => null,
       final _Loading loading => _Paused(
         loading.location,
         highlight: loading.highlight,
+        untilRegained: untilRegained,
       ),
       final _Speaking speaking => _Paused(
         ReaderLocation(
@@ -526,12 +726,25 @@ class ReaderTtsController extends ChangeNotifier
           charOffset: speaking.segment.startCharOffset,
         ),
         highlight: speaking.segment,
+        position: speaking,
+        untilRegained: untilRegained,
       ),
     };
     if (paused == null) return;
     _state = paused;
     unawaited(_tts.stop());
     notifyListeners();
+  }
+
+  /// 被打斷停下的：之後打斷結束不再自己接著念，停的位置不變。
+  void _stopAutoResume() {
+    if (_state case final _Paused paused when paused.untilRegained) {
+      _state = _Paused(
+        paused.resumeAt,
+        highlight: paused.highlight,
+        position: paused.position,
+      );
+    }
   }
 
   void _handleRuntimeChanged() {
@@ -574,6 +787,7 @@ class ReaderTtsController extends ChangeNotifier
     _playback.release(this);
     unawaited(_completionSubscription.cancel());
     unawaited(_failureSubscription.cancel());
+    unawaited(_audioFocusSubscription.cancel());
     _tts.removeListener(_handleTtsChanged);
     unawaited(_tts.stop());
     if (_ownsTtsEngine) _tts.dispose();
@@ -615,10 +829,19 @@ final class _Speaking extends _TtsState {
       index + 1 < segments.length ? _Speaking(segments, index + 1) : null;
 }
 
-/// 停在 [resumeAt]，播放鍵從這裡接著念；[highlight] 是停的那句。
+/// 停在 [resumeAt]，播放鍵從這裡接著念；[highlight] 是停的那句，
+/// [position] 是停在這一句時這一章的分句與位置（換章載入中暫停時是 null）。
+/// [untilRegained] 是被別的聲音打斷停下的，打斷結束時接著念。
 final class _Paused extends _TtsState {
-  _Paused(this.resumeAt, {this.highlight});
+  _Paused(
+    this.resumeAt, {
+    this.highlight,
+    this.position,
+    this.untilRegained = false,
+  });
 
   final ReaderLocation resumeAt;
   final ReaderTtsSegment? highlight;
+  final _Speaking? position;
+  final bool untilRegained;
 }

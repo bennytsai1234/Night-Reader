@@ -586,6 +586,10 @@ class _ReaderPageState extends State<ReaderPage>
                   ? (selection) =>
                         unawaited(_coordinator.addHighlight(selection))
                   : null,
+              onReadAloudText: _host.tts == null
+                  ? null
+                  : (location) =>
+                        unawaited(_host.tts!.startFromSelection(location)),
               highlights: _host.highlights.marks,
               onHighlightTap: _host.highlights.available
                   ? (id) => unawaited(_showHighlight(id))

@@ -296,6 +296,11 @@ Future<void> _runPostFirstFrameStartupTasks() async {
 /// 開 App 的進場播完才做的清理，不和進場搶主執行緒（ADR 0018）。
 void _runPostLaunchTasks() {
   unawaited(_cleanupLegacyCustomFontArtifacts());
+  unawaited(
+    AppStoragePaths.removeLegacyRuleData().catchError(
+      (Object e) => AppLog.w('Cleanup legacy rule data failed: $e'),
+    ),
+  );
   unawaited(_pruneStoredBooks());
   unawaited(PunctuationInk.onLaunchSettled());
   // 進搜尋頁的第一幀就畫得出過去的找書與搜尋紀錄。

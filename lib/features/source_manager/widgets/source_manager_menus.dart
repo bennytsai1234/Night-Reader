@@ -11,6 +11,7 @@ class SourceManagerMenus {
     '全部',
     '已啟用',
     '已停用',
+    SourceManagerProvider.canLoginFilter,
     '已啟用發現',
     '已停用發現',
     '無分組',

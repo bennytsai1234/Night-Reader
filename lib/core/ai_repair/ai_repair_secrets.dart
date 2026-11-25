@@ -6,6 +6,7 @@ import '../models/source/book_source.dart';
 import '../network/cookie_store.dart';
 import '../network/network_service.dart';
 import '../network/secret_text.dart';
+import '../network/source_proxy.dart';
 import '../diagnostics/app_log_service.dart';
 
 /// 送給 AI 的內容裡換掉秘密的那段字。
@@ -17,7 +18,7 @@ const int _minSecretLength = 6;
 /// 這個書源的秘密（ADR 0054：登入資料、Cookie 與書源變數不送）：登入表單
 /// 填的內容、登入標頭、夜讀存的網站 Cookie（書源的與網路層 Cookie 罐裡這個
 /// 網站的）、書源變數，與書源標頭裡的
-/// Cookie、Authorization。它們不在書源 JSON 裡，但抓網頁時照常帶上，值會出現
+/// Cookie、Authorization 與代理（帳號密碼）。它們抓網頁時照常帶上，值會出現
 /// 在試抓的網址、除錯紀錄與錯誤訊息裡，送出前用 [redactAiRepairSecrets]
 /// 換掉。讀不到的那一種略過：書源抓網頁時同樣讀不到。
 Future<Set<String>> aiRepairSecretsOf(BookSource source) async {
@@ -122,7 +123,8 @@ Set<String> aiRepairLiveCookieSecrets(Iterable<String> urls) => {
       if (value.trim().length >= _minSecretLength) value.trim(),
 };
 
-/// 書源標頭（JSON 物件）裡的 Cookie 與 Authorization：整段與 Cookie 的每個值。
+/// 書源標頭（JSON 物件）裡的 Cookie、Authorization 與代理：整段、Cookie 的
+/// 每個值與代理的帳號密碼。
 Iterable<String> _sensitiveHeaderValues(String? header) sync* {
   if (header == null || header.trim().isEmpty) return;
   final Object? decoded;
@@ -141,6 +143,8 @@ Iterable<String> _sensitiveHeaderValues(String? header) sync* {
       yield '$value';
       final parts = '$value'.split(' ');
       if (parts.length == 2) yield parts.last;
+    } else if (name == 'proxy' && value != null) {
+      yield* SourceProxy.secretsOf('$value');
     }
   }
 }
