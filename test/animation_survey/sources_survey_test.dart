@@ -204,10 +204,11 @@ void main() {
         await step('點第一筆書源：進編輯頁', () => tester.tap(_firstTile));
         await step('返回書源管理（離開編輯頁）', () => goBack(tester));
 
-        // 長按一筆：列出單一書源的選單，點除錯進除錯頁（不按開始），返回。
+        // 長按一筆：列出單一書源的選單，點除錯先跳出除錯關鍵字的提示框（不按
+        // 開始除錯），返回關掉它。
         await step('長按第一筆書源：開選單', () => tester.longPress(_firstTile));
-        await step('長按選單：除錯書源', () => _tapTop(tester, '除錯書源'));
-        await step('返回書源管理（離開除錯頁）', () => goBack(tester));
+        await step('長按選單：除錯書源（跳出除錯關鍵字提示框）', () => _tapTop(tester, '除錯書源'));
+        await step('返回書源管理（關掉除錯關鍵字提示框）', () => goBack(tester));
 
         await step('返回我的（離開書源管理）', () => goBack(tester));
       },

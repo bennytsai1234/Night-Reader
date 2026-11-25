@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:just_audio/just_audio.dart';
+import 'package:night_reader/core/playback/audio_focus.dart';
 
 /// 有聲書播放器背後的播放引擎。實際用 `just_audio`（[JustAudioEngine]），
 /// 測試換成假的。
@@ -40,7 +41,7 @@ abstract interface class AudioEngine {
 }
 
 class JustAudioEngine implements AudioEngine {
-  JustAudioEngine() : _player = AudioPlayer() {
+  JustAudioEngine() : _player = _createPlayer() {
     // 播放途中的錯誤（分段請求、網路、解碼）just_audio 0.10 起從
     // errorStream 送，不再當成播放事件的錯誤。
     _subscriptions.add(
@@ -48,6 +49,13 @@ class JustAudioEngine implements AudioEngine {
         if (!_errors.isClosed) _errors.add(error);
       }),
     );
+  }
+
+  /// 焦點的打斷由 just_audio 自己處理；建立前先讓 App 的音訊焦點開始聽，
+  /// 有聲書拿著焦點時來電，朗讀才知道還在通話中（[AudioFocus]）。
+  static AudioPlayer _createPlayer() {
+    AudioFocus.instance.startWatching();
+    return AudioPlayer();
   }
 
   final AudioPlayer _player;

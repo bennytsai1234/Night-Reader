@@ -188,6 +188,7 @@ typedef SearchBookLoader = Future<List<SearchBook>> Function(
   BookSource source,
   String key, {
   CancelToken? cancelToken,
+  int page,
 });
 
 /// SearchModel - 多書源並行搜尋引擎
@@ -249,6 +250,10 @@ class SearchModel {
   /// 和併進結果在同一處，記下的與畫面上的不會對不上。
   void Function(BookSource source, List<SearchBook> books)? onSourceSearched;
 
+  /// 一個書源這一頁搜完時呼叫，[books] 是精準搜尋過濾前搜到的書：有沒有
+  /// 下一頁照它判斷（第 1 頁全被精準搜尋濾掉，符合的可能在第 2 頁）。
+  void Function(BookSource source, List<SearchBook> books)? onSourcePage;
+
   /// 每個書源送出前等它：放到背景的搜尋先等閱讀時的抓章（ADR 0070）。
   Future<void> Function()? beforeSource;
 
@@ -284,17 +289,22 @@ class SearchModel {
 
   /// 搜 [sources]；[initialResults] 是先放進結果的書：合併卡（重試失敗書源）
   /// 或逐源原始結果（接著搜暫停的搜尋）都可以。
+  ///
+  /// [pages] 是各書源（網址）這次搜第幾頁，沒列的搜第 1 頁（接著搜下一頁，
+  /// 同 Legado `SearchModel.searchPage`）。
   Future<void> searchSources({
     required String key,
     required List<BookSource> sources,
     required bool precisionSearch,
     List<SearchBook> initialResults = const [],
+    Map<String, int> pages = const {},
   }) async {
     await _searchSources(
       key: key,
       sources: sources,
       precisionSearch: precisionSearch,
       initialResults: initialResults,
+      pages: pages,
     );
   }
 
@@ -303,6 +313,7 @@ class SearchModel {
     required List<BookSource> sources,
     required bool precisionSearch,
     List<SearchBook> initialResults = const [],
+    Map<String, int> pages = const {},
   }) async {
     cancelSearch();
 
@@ -367,6 +378,7 @@ class SearchModel {
           await _searchSingleSource(
             source,
             key,
+            pages[source.bookSourceUrl] ?? 1,
             precisionSearch,
             generation,
             cancelToken,
@@ -408,6 +420,7 @@ class SearchModel {
   Future<void> _searchSingleSource(
     BookSource source,
     String key,
+    int page,
     bool precisionSearch,
     int generation,
     CancelToken cancelToken,
@@ -421,7 +434,7 @@ class SearchModel {
 
     try {
       final stopwatch = Stopwatch()..start();
-      final books = await _searchKeyVariants(source, key, cancelToken);
+      final books = await _searchKeyVariants(source, key, page, cancelToken);
       final elapsed = stopwatch.elapsedMilliseconds;
       respondTimes[source.bookSourceUrl] = _smoothedRespondTime(
         source.respondTime,
@@ -445,6 +458,7 @@ class SearchModel {
         if (stale()) return;
       }
       onSourceSearched?.call(source, filteredBooks);
+      onSourcePage?.call(source, books);
       if (filteredBooks.isNotEmpty) {
         // 合併結果：書源常常幾個一起回來，合併與通知頁面集中在一段時間內
         // 做一次（見 [_publishDelay]）。
@@ -479,12 +493,13 @@ class SearchModel {
   Future<List<SearchBook>> _searchKeyVariants(
     BookSource source,
     String key,
+    int page,
     CancelToken cancelToken,
   ) async {
     (Object, StackTrace)? firstError;
     final found = await Future.wait([
       for (final variant in searchKeyVariants(key))
-        _searchSource(source, variant, cancelToken: cancelToken)
+        _searchSource(source, variant, cancelToken: cancelToken, page: page)
             .timeout(const Duration(seconds: sourceWaitSeconds))
             .then<List<SearchBook>?>(
               (books) => books,
