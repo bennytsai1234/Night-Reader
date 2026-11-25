@@ -97,6 +97,13 @@ void main() {
       eval('java.toURL("../c?k=v", "https://a.com/x/y/z").pathname'),
       '/x/c',
     );
+    // java.net.URL 的 IPv6 主機帶方括號。
+    expect(
+      eval(
+        'var v = java.toURL("http://[::1]:8080/a"); v.host + "|" + v.origin',
+      ),
+      '[::1]|http://[::1]:8080',
+    );
   }, skip: skip);
 
   test('source.login runs the login program in the login URL', () {
