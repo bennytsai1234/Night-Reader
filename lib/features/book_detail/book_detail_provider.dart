@@ -953,14 +953,26 @@ class BookDetailProvider extends ChangeNotifier {
     }
   }
 
+  /// 第幾次換封面：存封面要等下載，先選的晚到時不蓋掉後選的。
+  int _coverEdit = 0;
+
   Future<BookDetailOperationResult> updateCover(String url) async {
+    final edit = ++_coverEdit;
     final next = Book.fromJson(Map<String, dynamic>.from(_book.toJson()));
     next.customCoverUrl = url.trim();
     next.customCoverLocalPath = null;
     try {
       await _coverStorage.ensureDisplayCoverStored(next);
+      // 等的時候又換了一次封面，或換源換成了另一本：這次的結果不要了。
+      if (edit != _coverEdit || _book.bookUrl != next.bookUrl) {
+        return BookDetailOperationResult.success('封面已更新');
+      }
       await _bookDao.saveCover(next);
-      _book = next;
+      // 只換封面：等的時候改過的其他資訊（自動檢查更新、書名）照手上的。
+      _book
+        ..customCoverUrl = next.customCoverUrl
+        ..customCoverLocalPath = next.customCoverLocalPath
+        ..coverLocalPath = next.coverLocalPath;
       AppEventBus().fire(AppEventBus.upBookshelf);
       notifyListeners();
       return BookDetailOperationResult.success('封面已更新');
