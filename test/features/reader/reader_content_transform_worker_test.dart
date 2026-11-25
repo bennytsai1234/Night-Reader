@@ -117,6 +117,7 @@ void main() {
           chapter: BookChapter(url: 'c', title: '第一章'),
           rawContent: raw,
           enabledRules: const [],
+          chineseConvertType: 0,
         );
         expect(
           sources.paragraphs,
@@ -222,6 +223,133 @@ void main() {
 
       final result = await worker.process(_args(rules: [_after.toJson()]));
       expect(result['content'], '　　開頭。\n　　第二段。');
+    });
+  });
+
+  // 先轉繁簡再套規則（同 Legado），規則的字也轉成顯示的寫法（ADR 0084）。
+  group('繁簡轉換與替換規則的先後', () {
+    const s2t = 1;
+    Map<String, Object?> converting(List<ReplaceRule> rules) => {
+      ..._args(
+        rules: [for (final rule in rules) rule.toJson()],
+        rawContent: '她的头发很长。\n广告词结束。',
+      ),
+      'chapterTitle': '第一章 求月票',
+      'chineseConvertType': s2t,
+    };
+
+    test('照畫面上的繁體寫的規則對得到簡體原文', () async {
+      final result = await worker.process(
+        converting([
+          ReplaceRule(pattern: '廣告詞結束。', replacement: '', isRegex: false),
+          ReplaceRule(
+            pattern: r' ?求月票$',
+            replacement: '',
+            scopeTitle: true,
+            scopeContent: false,
+          ),
+        ]),
+      );
+      expect(result['content'], '　　她的頭髮很長。');
+      expect(result['displayTitle'], '第一章');
+    });
+
+    test('照原文的簡體寫的規則照樣對得到，換上的字照字面放（同 Legado）', () async {
+      final result = await worker.process(
+        converting([
+          ReplaceRule(pattern: '头发', replacement: '这是', isRegex: false),
+          ReplaceRule(pattern: r'(广告)词', replacement: r'$1语'),
+        ]),
+      );
+      expect(result['content'], '　　她的这是很長。\n　　廣告语結束。');
+    });
+
+    Map<String, Object?> chapter(
+      String raw,
+      List<ReplaceRule> rules, {
+      int convertType = s2t,
+      String title = '第一章',
+    }) => {
+      ..._args(
+        rules: [for (final rule in rules) rule.toJson()],
+        rawContent: raw,
+      ),
+      'chapterTitle': title,
+      'chineseConvertType': convertType,
+    };
+
+    test('照畫面建的規則（選字隱藏「干擾。」）照字面對得到，不再轉一次變字', () async {
+      final result = await worker.process(
+        chapter('前文。\n干扰。', [
+          ReplaceRule(pattern: '干擾。', replacement: '', isRegex: false),
+        ]),
+      );
+      expect(result['content'], '　　前文。');
+    });
+
+    test('換成「襯托」，正文就是「襯托」', () async {
+      final result = await worker.process(
+        chapter('前文。\n后文。', [
+          ReplaceRule(pattern: '前文', replacement: '襯托', isRegex: false),
+        ]),
+      );
+      expect(result['content'], '　　襯托。\n　　後文。');
+    });
+
+    test('標題規則寫繁體時，正文開頭重複的章名照樣去得掉', () async {
+      final result = await worker.process(
+        chapter('第一章 风起\n正文开始。', [
+          ReplaceRule(
+            pattern: '【廣告】',
+            replacement: '',
+            isRegex: false,
+            scopeTitle: true,
+            scopeContent: false,
+          ),
+        ], title: '第一章 风起【广告】'),
+      );
+      expect(result['content'], '　　正文開始。');
+      expect(result['displayTitle'], '第一章 風起');
+    });
+
+    test('關掉繁簡轉換時照字面比：簡轉繁下建的繁體規則對不到簡體原文', () async {
+      final result = await worker.process(
+        chapter('她的头发很长。', [
+          ReplaceRule(pattern: '頭髮', replacement: '', isRegex: false),
+        ], convertType: 0),
+      );
+      expect(result['content'], '　　她的头发很长。');
+    });
+
+    test('同一條規則的兩種寫法每一處只換一次，不把剛換上的字再換一次', () async {
+      final result = await worker.process(
+        chapter('我爱看小说。', [
+          ReplaceRule(pattern: '小说|小說', replacement: '網路小說', scopeTitle: true),
+        ], title: '第一章 小说'),
+      );
+      expect(result['content'], '　　我愛看網路小說。');
+      expect(result['displayTitle'], '第一章 網路小說');
+    });
+
+    test('選字找原文用的段落也是轉過的寫法', () async {
+      final sources = await ReaderContentTransformer.ruleStageParagraphs(
+        book: Book(bookUrl: 'b', name: '測試書', origin: 'local')
+          ..readConfig = ReadConfig(useReplaceRule: true),
+        chapter: BookChapter(url: 'c', title: '第一章'),
+        rawContent: '她的头发很长。\n广告词结束。',
+        enabledRules: [
+          ReplaceRule(pattern: '廣告詞結束。', replacement: '', isRegex: false),
+        ],
+        chineseConvertType: s2t,
+      );
+      expect(sources.paragraphs, ['她的頭髮很長。']);
+      expect(
+        await ReaderContentTransformer.sourceParagraphs(
+          rawContent: '她的头发很长。\n广告词结束。',
+          chineseConvertType: s2t,
+        ),
+        ['她的頭髮很長。', '廣告詞結束。'],
+      );
     });
   });
 }

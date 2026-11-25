@@ -17,6 +17,9 @@ class ProgressWriteQueue<T extends Object> {
   final Duration debounce;
   final Duration maxWait;
 
+  /// 還有排著、還沒開始寫的位置。
+  bool get hasPending => _pending != null;
+
   Timer? _idleTimer;
   Timer? _deadlineTimer;
   T? _pending;

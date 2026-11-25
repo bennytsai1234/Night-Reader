@@ -131,6 +131,39 @@ class Highlight {
     'tocReversed': ?tocReversed,
   };
 
+  /// Legado 備份裡寫了附註的書籤（`bookmark.json` 一筆，有 `content`）換成的
+  /// 標註：畫在書籤記的原文（`bookText`，選字加的是選到的字、從選單加的是
+  /// 那一頁的字）上，附註是備忘。沒有錨點：位置照 Legado 的算法記，閱讀器
+  /// 畫之前照原文核對。編號是建立時間（`time`）的毫秒乘 1000，和這台畫的
+  /// 標註（`BookmarkDao.newId`）一起照建立時間排。夜讀 2026-09 以前的備份
+  /// 書籤欄位同 Legado，附註一樣是讀者寫的話，也走這裡。不是這種書籤（現在
+  /// 的夜讀書籤有 `excerpt`）、沒有附註或沒有原文時是 null，照書籤讀。
+  static Highlight? fromLegadoBookmark(Map<String, dynamic> json) {
+    if (json.containsKey('excerpt')) return null;
+    String readString(String key) {
+      final value = json[key];
+      return value is String ? value : '';
+    }
+
+    final note = readString('content').trim();
+    final quote = readString('bookText');
+    final time = readJsonInt(json['time'], fallback: 0);
+    final bookName = readString('bookName');
+    if (note.isEmpty || quote.trim().isEmpty || time <= 0 || bookName.isEmpty) {
+      return null;
+    }
+    return Highlight(
+      id: time * 1000,
+      bookName: bookName,
+      bookAuthor: readString('bookAuthor'),
+      chapterIndex: readJsonInt(json['chapterIndex'], fallback: 0),
+      chapterTitle: readString('chapterName'),
+      charOffset: readJsonInt(json['chapterPos'], fallback: 0),
+      quote: quote,
+      note: note,
+    );
+  }
+
   factory Highlight.fromJson(Map<String, dynamic> json) {
     String readString(String key) {
       final value = json[key];

@@ -169,6 +169,7 @@ class LocalBookSync {
     this._run = runLocalBookWorkInBackground,
     DateTime Function()? clock,
     bool Function(String key)? isOpen,
+    this._syncProgress,
   }) : _books = books ?? LocalBookService(),
        _clock = clock ?? DateTime.now,
        _isOpen = isOpen ?? _never;
@@ -186,6 +187,11 @@ class LocalBookSync {
   final LocalBookWorkRunner _run;
   final DateTime Function() _clock;
   final bool Function(String key) _isOpen;
+
+  /// 同步一次閱讀進度（[SyncService] 給的）。上傳原檔之前先送：讀者把書更新
+  /// 成新版的檔時指紋換了，另一台下載新檔、同步進度時才拿得到這台讀到的
+  /// 地方（L12）。
+  final Future<void> Function()? _syncProgress;
 
   static bool _never(String key) => false;
 
@@ -274,6 +280,8 @@ class LocalBookSync {
   /// 兩邊都有的書這時就記成同步過（[LocalBookSyncPlan.settled]）：不用做事
   /// 也要記，之後這台移出書架才分得出是這台移出的。
   Future<LocalBookSyncPlan> plan() async {
+    // 更新原檔換到一半被關掉的書先收好，原檔才不會被當成不見了。
+    await LocalBookService.recoverOnce(_bookDao);
     await fillLocalBookFingerprints(_bookDao, run: _run);
     var local = await _shelf();
     final file = await _store.read(fileName);
@@ -381,15 +389,28 @@ class LocalBookSync {
     var stopped = false;
     // 這一輪已經上傳、改寫過雲端紀錄的書。
     final uploaded = <String>{};
+    // 這一輪有沒傳上去的書：刪雲端舊檔的留到下次（更新成新版的書，舊檔要
+    // 等新檔與它的紀錄都寫上去才刪，不然另一台照刪除紀錄移出舊書、又沒有
+    // 新檔可以加入）。分不出哪個刪除是哪本的舊檔，所以全部留著；上次同步的
+    // 紀錄沒動，下次按的時候照樣排得出來。
+    var uploadFailed = false;
+    var progressSent = false;
     for (final (index, task) in plan.tasks.indexed) {
       if (cancelled?.call() ?? false) {
         stopped = true;
         break;
       }
+      if (task.action == LocalBookAction.deleteRemote && uploadFailed) {
+        continue;
+      }
       onProgress?.call((step: index + 1, total: plan.tasks.length, task: task));
       try {
         switch (task.action) {
           case LocalBookAction.upload:
+            if (!progressSent) {
+              progressSent = true;
+              await _syncProgress?.call();
+            }
             // 原檔傳上去、小紀錄還沒寫成時先記著：這台之後移出書架的話，
             // 下次按的時候照它刪掉雲端沒人記著的原檔。已經同步過的（本地
             // 漫畫補了幾話）留著上次的時間：傳不上去時雲端紀錄沒變，移出
@@ -430,12 +451,15 @@ class LocalBookSync {
         done++;
       } on SyncStoreException catch (error) {
         failures.add((task: task, reason: error.message));
+        if (task.action == LocalBookAction.upload) uploadFailed = true;
         if (error.wholeSpace) break;
       } on LocalBookSyncException catch (error) {
         failures.add((task: task, reason: error.message));
+        if (task.action == LocalBookAction.upload) uploadFailed = true;
       } catch (error, stackTrace) {
         AppLog.e('同步本地書失敗：${task.name}', error: error, stackTrace: stackTrace);
         failures.add((task: task, reason: _reasonOf(error)));
+        if (task.action == LocalBookAction.upload) uploadFailed = true;
       }
     }
     if (shelfChanged) AppEventBus().fire(AppEventBus.upBookshelf);

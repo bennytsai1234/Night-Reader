@@ -13,6 +13,7 @@ import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'association_base.dart';
 
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/features/bookshelf/local_book_update_prompt.dart';
 
 /// AssociationHandlerService 的檔案分享與解析邏輯擴展
 mixin FileAssociationHandler on AssociationBase {
@@ -53,7 +54,10 @@ mixin FileAssociationHandler on AssociationBase {
       final fileName = p.basename(path);
       final imported = await context
           .read<BookshelfProvider>()
-          .importLocalBookPath(path);
+          .importLocalBookPath(
+            path,
+            askUpdate: (existing) => askLocalBookUpdate(context, existing),
+          );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

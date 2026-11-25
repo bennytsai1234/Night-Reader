@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
@@ -8,7 +9,9 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/features/bookshelf/local_book_update_prompt.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -101,6 +104,56 @@ void main() {
     expect(result.added, 1);
     expect(result.failed, ['乙']);
     expect(progress, [(0, 2), (1, 2), (2, 2)]);
+  });
+
+  test('同名、同格式、內容不同的檔照提示框的回答更新同一本', () async {
+    await provider.importLocalBookPaths([await pick('連載.txt', '第一章 開始\n內容')]);
+    final asked = <String>[];
+
+    final result = await provider.importLocalBookPaths(
+      [await pick('連載.txt', '第一章 開始\n內容\n第二章 新的\n新內容')],
+      askUpdate: (existing) async {
+        asked.add(existing.name);
+        return true;
+      },
+    );
+
+    expect(asked, ['連載']);
+    expect(result.added, 1);
+    final shelf = await bookDao.getInBookshelf();
+    expect(shelf, hasLength(1));
+    expect(shelf.single.totalChapterNum, 2);
+  });
+
+  testWidgets('更新的提示框：按「更新」是更新，按「另加一本」或關掉是另加', (tester) async {
+    final answers = <bool>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async => answers.add(
+              await askLocalBookUpdate(
+                context,
+                Book(bookUrl: 'local://連載.txt', name: '連載', author: '某人'),
+              ),
+            ),
+            child: const Text('匯入'),
+          ),
+        ),
+      ),
+    );
+
+    for (final label in ['更新', '另加一本']) {
+      await tester.tap(find.text('匯入'));
+      await tester.pumpAndSettle();
+      expect(find.text('更新《連載》？'), findsOneWidget);
+      // 同名的只會有一本（多本時不問），寫上作者分得出是哪一本。
+      expect(find.textContaining('作者：某人'), findsOneWidget);
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+    }
+
+    expect(answers, [true, false]);
   });
 
   test('匯入結果的說法：全成功、部分失敗、全失敗', () {

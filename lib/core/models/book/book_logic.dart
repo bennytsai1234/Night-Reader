@@ -56,12 +56,14 @@ extension BookLogic on Book {
   /// 同一章。
   ///
   /// 書源在中間插入或刪除章節後序號會位移，所以依章節網址找回那一章，章內
-  /// 位置照舊。那一章已不在新目錄裡，才照標題、章號與比例估計（同換源），
-  /// 章內位置只在綁得住原文時保留。舊目錄沒有這一章時無從對應，進度不動。
-  /// 回傳進度有沒有變。
+  /// 位置照舊。那一章換了網址時照 [moved]（舊網址 → 新網址，換目錄時已認出
+  /// 的同一章，`mergeFetchedToc`）；都不在新目錄裡才照標題、章號與比例估計
+  /// （同換源）。換了網址的章內位置只在綁得住原文時保留。舊目錄沒有這一章
+  /// 時無從對應，進度不動。回傳進度有沒有變。
   bool realignProgress(
     List<BookChapter> toc, {
     required List<BookChapter> oldToc,
+    Map<String, String> moved = const {},
   }) {
     BookChapter? oldChapter;
     for (final chapter in oldToc) {
@@ -77,12 +79,18 @@ extension BookLogic on Book {
       durChapterTitle = toc[sameChapter].title;
       return true;
     }
-    final alignedIndex = alignChapterIndex(
-      oldIndex: chapterIndex,
-      oldTitle: oldChapter.title,
-      oldTotalCount: oldToc.length,
-      newChapters: toc,
-    );
+    final movedUrl = moved[oldUrl];
+    final movedIndex = movedUrl == null
+        ? -1
+        : toc.indexWhere((c) => c.url == movedUrl);
+    final alignedIndex = movedIndex >= 0
+        ? movedIndex
+        : alignChapterIndex(
+            oldIndex: chapterIndex,
+            oldTitle: oldChapter.title,
+            oldTotalCount: oldToc.length,
+            newChapters: toc,
+          );
     // 同名不代表正文相同（例如書源搬家後改了內容），所以即使落在同一個
     // 序號，章內位置也照錨點決定。
     final anchor = _migratedReaderAnchor(alignedIndex);

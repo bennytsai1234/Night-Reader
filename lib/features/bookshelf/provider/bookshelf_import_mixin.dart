@@ -1,4 +1,6 @@
 import 'package:night_reader/core/comic/comic_chapter_files.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
@@ -7,14 +9,22 @@ import 'package:path/path.dart' as p;
 
 import 'bookshelf_provider_base.dart';
 
+/// 書架上已經有同名、同格式的本地書，要不要更新那本（傳回 true 是更新，
+/// [LocalBookService.addToShelf]）。
+typedef AskLocalBookUpdate = Future<bool> Function(Book existing);
+
 /// BookshelfProvider 的本地書籍匯入邏輯擴展
 mixin BookshelfImportMixin on BookshelfProviderBase {
-  /// 書架上已經有同一個檔（原檔指紋相同）也算成功，不再加一次。
-  Future<bool> importLocalBookPath(String path) async {
+  /// 書架上已經有同一個檔（原檔指紋相同）也算成功，不再加一次。有同名、
+  /// 同格式、內容不同的書時問 [askUpdate]。
+  Future<bool> importLocalBookPath(
+    String path, {
+    AskLocalBookUpdate? askUpdate,
+  }) async {
     isLoading = true;
     notifyListeners();
     try {
-      if (!await _importOne(path)) return false;
+      if (!await _importOne(path, askUpdate)) return false;
       await loadBooks();
       return true;
     } finally {
@@ -29,6 +39,7 @@ mixin BookshelfImportMixin on BookshelfProviderBase {
   Future<({int added, List<String> failed})> importLocalBookPaths(
     List<String> paths, {
     void Function(int done, int total)? onProgress,
+    AskLocalBookUpdate? askUpdate,
   }) async {
     isLoading = true;
     notifyListeners();
@@ -39,7 +50,7 @@ mixin BookshelfImportMixin on BookshelfProviderBase {
     try {
       for (final path in paths) {
         try {
-          if (await _importOne(path)) {
+          if (await _importOne(path, askUpdate)) {
             added += 1;
           } else {
             failed.add(p.basenameWithoutExtension(path));
@@ -61,8 +72,9 @@ mixin BookshelfImportMixin on BookshelfProviderBase {
   }
 
   /// 一個檔加入書架：單一個 CBZ／ZIP 是只有一話的本地漫畫（ADR 0052），
-  /// 其他照 TXT／EPUB 匯入。成功（包含書架上已經有同一個檔）回傳 true。
-  Future<bool> _importOne(String path) async {
+  /// 其他照 TXT／EPUB 匯入。成功（包含書架上已經有同一個檔、選了更新同名
+  /// 的那本）回傳 true。
+  Future<bool> _importOne(String path, AskLocalBookUpdate? askUpdate) async {
     if (ComicChapterFiles.isArchive(path)) {
       return await importLocalComic(path) != null;
     }
@@ -70,6 +82,10 @@ mixin BookshelfImportMixin on BookshelfProviderBase {
       path,
       bookDao: bookDao,
       chapterDao: chapterDao,
+      contentDao: getIt.isRegistered<ReaderChapterContentDao>()
+          ? getIt<ReaderChapterContentDao>()
+          : null,
+      askUpdate: askUpdate,
     );
     return book != null;
   }
