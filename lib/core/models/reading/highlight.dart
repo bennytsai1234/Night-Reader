@@ -58,6 +58,7 @@ class Highlight {
     this.color = HighlightColor.amber,
     this.style = HighlightStyle.fill,
     this.note = '',
+    this.tocReversed,
   });
 
   /// 編號的配法同書籤（`BookmarkDao.newId`）：兩台各自新增的不撞號。
@@ -68,6 +69,10 @@ class Highlight {
   /// 這台目錄裡的章節序號；目錄變了以 [chapterTitle] 為準。
   final int chapterIndex;
   final String chapterTitle;
+
+  /// 記下 [chapterIndex] 時這本書的目錄是不是反轉的（同書籤，ADR 0085）；
+  /// null 是沒記，當成和這本書現在一樣。
+  final bool? tocReversed;
 
   /// 標註開頭是章內第幾個字（正文顯示文字的位置）。
   final int charOffset;
@@ -95,6 +100,7 @@ class Highlight {
     HighlightColor? color,
     HighlightStyle? style,
     String? note,
+    bool? tocReversed,
   }) => Highlight(
     id: id ?? this.id,
     bookName: bookName ?? this.bookName,
@@ -107,6 +113,7 @@ class Highlight {
     color: color ?? this.color,
     style: style ?? this.style,
     note: note ?? this.note,
+    tocReversed: tocReversed ?? this.tocReversed,
   );
 
   Map<String, dynamic> toJson() => {
@@ -121,6 +128,7 @@ class Highlight {
     'color': color.name,
     'style': style.name,
     'note': note,
+    'tocReversed': ?tocReversed,
   };
 
   /// Legado 備份裡寫了附註的書籤（`bookmark.json` 一筆，有 `content`）換成的
@@ -175,6 +183,9 @@ class Highlight {
       color: HighlightColor.parse(json['color']),
       style: HighlightStyle.parse(json['style']),
       note: readString('note'),
+      tocReversed: json['tocReversed'] is bool
+          ? json['tocReversed'] as bool
+          : null,
     );
   }
 }

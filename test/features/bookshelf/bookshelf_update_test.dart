@@ -590,6 +590,37 @@ void main() {
       expect(await ChapterDao(db).getByBook(book.bookUrl), hasLength(3));
     });
 
+    test(
+      'a book with its TOC reversed keeps it reversed after a check',
+      () async {
+        final book = onlineBook()..readConfig = ReadConfig(reverseToc: true);
+        await bookDao.upsert(book);
+
+        await provider.checkBookUpdate(book);
+
+        final toc = await ChapterDao(db).getByBook(book.bookUrl);
+        expect(toc.map((c) => c.title), ['第三章', '第二章', '第一章']);
+      },
+    );
+
+    test('reversing the TOC while a check fetches it still stores it '
+        'reversed', () async {
+      // 檢查開始時還沒反轉（照書源的順序抓），寫回前讀者打開了反轉目錄。
+      final fetching = onlineBook();
+      await bookDao.upsert(
+        fetching.copyWith()..readConfig = ReadConfig(reverseToc: true),
+      );
+
+      await provider.checkBookUpdate(fetching);
+
+      final toc = await ChapterDao(db).getByBook(fetching.bookUrl);
+      expect(toc.map((c) => c.title), ['第三章', '第二章', '第一章']);
+      expect(
+        (await bookDao.getByUrl(fetching.bookUrl))!.readConfig!.reverseToc,
+        isTrue,
+      );
+    });
+
     test('chapters the source dropped leave the TOC', () async {
       final book = onlineBook();
       await bookDao.upsert(book);

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/models/book/chapter_alignment.dart';
 import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/features/reader/features/bookmark/reader_bookmarks.dart';
 import 'package:night_reader/features/reader/text_view/overlay/highlight_marks.dart';
@@ -51,7 +52,11 @@ class ReaderHighlights extends ValueNotifier<List<Highlight>> {
             id: highlight.id,
             location: locationOf(
               highlight,
-              chapterIndex: chapterIndexIn(highlight, chapters),
+              chapterIndex: chapterIndexIn(
+                highlight,
+                chapters,
+                reversed: _book.getReverseToc(),
+              ),
             ),
             // 段落分隔不算：分段和畫的時候不同也畫到同一段字的結尾。
             length: highlight.quote.replaceAll('\n', '').length,
@@ -95,6 +100,7 @@ class ReaderHighlights extends ValueNotifier<List<Highlight>> {
         quote: quote,
         color: latest?.color ?? HighlightColor.amber,
         style: latest?.style ?? HighlightStyle.fill,
+        tocReversed: _book.getReverseToc(),
       ),
     );
   }
@@ -106,12 +112,17 @@ class ReaderHighlights extends ValueNotifier<List<Highlight>> {
       _dao?.deleteByIds([highlight.id]);
 
   /// 標註在這台目錄（[chapters]）裡是第幾章（同書籤）。
-  static int chapterIndexIn(Highlight highlight, List<BookChapter> chapters) =>
-      chapterIndexByTitle(
-        chapterIndex: highlight.chapterIndex,
-        chapterTitle: highlight.chapterTitle,
-        chapters: chapters,
-      );
+  static int chapterIndexIn(
+    Highlight highlight,
+    List<BookChapter> chapters, {
+    required bool reversed,
+  }) => chapterIndexByTitle(
+    chapterIndex: highlight.chapterIndex,
+    chapterTitle: highlight.chapterTitle,
+    countedReversed: highlight.tocReversed,
+    reversed: reversed,
+    chapters: chapters,
+  );
 
   /// 標註開頭的位置：記下的錨點，章節序號換成這台目錄裡的（同書籤）。
   static ReaderLocation locationOf(
