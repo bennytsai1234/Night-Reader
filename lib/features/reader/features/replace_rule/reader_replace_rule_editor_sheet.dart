@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
@@ -141,7 +142,11 @@ class _ReaderReplaceRuleEditorSheetState
     );
     unawaited(
       _preview
-          .run([rule], _testInputCtrl.text)
+          .run(
+            [rule],
+            _testInputCtrl.text,
+            chineseConvertType: ChineseDisplay.mode.value,
+          )
           .then(
             (result) {
               if (!mounted || result == null) return;

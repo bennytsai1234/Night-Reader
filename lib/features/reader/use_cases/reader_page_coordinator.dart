@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
@@ -360,6 +359,7 @@ class ReaderPageCoordinator {
                 book.name,
                 book.origin,
               ),
+              chineseConvertType: runtime.repository.currentChineseConvert(),
             );
       final found = stage == null ? null : selectionSourceOf(selection, stage);
       if (found == null) {
@@ -552,8 +552,8 @@ class ReaderPageCoordinator {
     }
   }
 
-  /// 替換規則即時測試的預設文字：畫面頂端那一段的原文（套用替換規則之前，
-  /// 規則才測得出效果）。原文存在手機裡才有；取不到時回傳 null。
+  /// 替換規則即時測試的預設文字：畫面頂端那一段的原文（轉過繁簡、套用替換
+  /// 規則之前，規則才測得出效果）。原文存在手機裡才有；取不到時回傳 null。
   Future<String?> _replaceTestSample() async {
     final runtime = _host.runtime;
     final contentDao = _host.dependencies.readerChapterContentDao;
@@ -572,9 +572,13 @@ class ReaderPageCoordinator {
       return null;
     }
     if (raw == null) return null;
-    // 讀到時面板常還在滑入：整章切段落與段落修復在另一個 isolate 做，不算
-    // 整章的雜湊。
-    final paragraphs = await _sourceParagraphsInBackground(raw);
+    // 讀到時面板常還在滑入：整章切段落、段落修復與繁簡轉換在另一個
+    // isolate 做，不算整章的雜湊。
+    final convertType = runtime.repository.currentChineseConvert();
+    final paragraphs = await ReaderContentTransformer.sourceParagraphs(
+      rawContent: raw,
+      chineseConvertType: convertType,
+    );
     if (paragraphs.isEmpty) return null;
     final shown = runtime.repository.cachedContent(location.chapterIndex);
     final index = shown == null
@@ -596,6 +600,7 @@ class ReaderPageCoordinator {
           book.name,
           book.origin,
         ),
+        chineseConvertType: convertType,
       );
       return sourceParagraphAt(paragraphs, stage.paragraphs, index);
     } catch (error, stack) {
@@ -603,10 +608,6 @@ class ReaderPageCoordinator {
       return paragraphs[index.clamp(0, paragraphs.length - 1)];
     }
   }
-
-  /// 靜態函式建立的閉包只帶著 [raw] 進另一個 isolate，不帶這個協調器。
-  static Future<List<String>> _sourceParagraphsInBackground(String raw) =>
-      Isolate.run(() => ReaderContent.sourceParagraphsOf(raw));
 
   /// 音量鍵翻頁：音量下是下一頁、音量上是上一頁。
   Future<void> movePage({required bool forward}) => _movePage(forward: forward);

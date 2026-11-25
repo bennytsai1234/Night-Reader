@@ -16,6 +16,7 @@ import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/chinese/chinese_utils.dart';
+import 'package:night_reader/core/chinese/rule_script.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_deadline.dart';
 
 import 'content_re_segmenter.dart';
@@ -785,6 +786,7 @@ class ReaderContentTransformer {
     final rawContent = args['rawContent'] as String? ?? '';
     final useReplaceRules = args['useReplaceRules'] as bool? ?? true;
     final reSegmentEnabled = args['reSegmentEnabled'] as bool? ?? true;
+    final convertType = args['chineseConvertType'] as int? ?? 0;
     final rules = _rulesFrom(args);
     final titleRules = _titleRulesOf(rules, bookName, bookOrigin);
     final content = _processContent(
@@ -796,12 +798,14 @@ class ReaderContentTransformer {
       titleRules: titleRules,
       useReplaceRules: useReplaceRules,
       reSegmentEnabled: reSegmentEnabled,
+      convertType: convertType,
       onRule: onRule,
     );
     final displayTitle = _processTitle(
       chapterTitle: chapterTitle,
       rules: titleRules,
       useReplaceRules: useReplaceRules,
+      convertType: convertType,
       onRule: onRule,
     );
 
@@ -811,15 +815,18 @@ class ReaderContentTransformer {
   /// 這一章正文在替換規則全部套用之後、排版整理之前的樣子：每一段和
   /// [ReaderContent.paragraphs] 一一對應，加上每兩段之間的字（見
   /// [RuleStageText]）。接在既有規則之後的新規則看到的就是這些字（選字
-  /// 「隱藏」「替換」用它找原文）。在另一個 isolate 處理，整章跑規則的
-  /// 正規表示式不佔畫面執行緒。
+  /// 「隱藏」「替換」用它找原文），已經照 [chineseConvertType] 轉過繁簡，
+  /// 和畫面上的寫法一樣。在處理正文的 worker 裡做（字典在那裡），整章跑
+  /// 規則的正規表示式不佔畫面執行緒。
   static Future<RuleStageText> ruleStageParagraphs({
     required Book book,
     required BookChapter chapter,
     required String rawContent,
     required List<ReplaceRule> enabledRules,
-  }) {
-    final args = <String, Object?>{
+    required int chineseConvertType,
+  }) async {
+    final result = await ReaderContentTransformWorker.instance.process({
+      'stage': 'rules',
       'bookName': book.name,
       'bookOrigin': book.origin,
       'chapterTitle': chapter.title,
@@ -827,22 +834,30 @@ class ReaderContentTransformer {
       'rulesJson': enabledRules.map((rule) => rule.toJson()).toList(),
       'useReplaceRules': book.getUseReplaceRule(),
       'reSegmentEnabled': book.getReSegment(),
-    };
-    return Isolate.run(() {
-      try {
-        return _ruleStageParagraphsInBackground(args);
-      } finally {
-        disposeReplacementJs();
-      }
+      'chineseConvertType': chineseConvertType,
     });
+    return result['stage']! as RuleStageText;
+  }
+
+  /// 一章原文的段落（[ReaderContent.sourceParagraphsOf]），照
+  /// [chineseConvertType] 轉過繁簡：替換規則測試框的預設文字，是規則看到
+  /// 的寫法。在處理正文的 worker 裡做。
+  static Future<List<String>> sourceParagraphs({
+    required String rawContent,
+    required int chineseConvertType,
+  }) async {
+    final result = await ReaderContentTransformWorker.instance.process({
+      'stage': 'source',
+      'rawContent': rawContent,
+      'chineseConvertType': chineseConvertType,
+    });
+    return result['paragraphs']! as List<String>;
   }
 
   static RuleStageText _ruleStageParagraphsInBackground(
-    Map<String, Object?> args,
-  ) {
-    // 在 Isolate.run 開的 isolate 跑，同 [ReaderContentTransformWorker] 沒有
-    // rootBundle。
-    fetchPolyfillSource ??= '';
+    Map<String, Object?> args, {
+    _RuleProgress? onRule,
+  }) {
     final bookName = args['bookName'] as String? ?? '';
     final bookOrigin = args['bookOrigin'] as String? ?? '';
     final chapterTitle = args['chapterTitle'] as String? ?? '';
@@ -868,6 +883,8 @@ class ReaderContentTransformer {
       titleRules: _titleRulesOf(rules, bookName, bookOrigin),
       useReplaceRules: useReplaceRules,
       reSegmentEnabled: args['reSegmentEnabled'] as bool? ?? true,
+      convertType: args['chineseConvertType'] as int? ?? 0,
+      onRule: onRule,
     );
     // 換行統一成 \n 之後的每個位置在 [text] 裡的位置（\r\n 算一個換行）。
     final normalizedAt = <int>[];
@@ -957,6 +974,17 @@ class ReaderContentTransformer {
     return result;
   }
 
+  /// [rules] 轉成正文顯示的寫法（[ReplaceRuleScript.inScript]），保留每條在
+  /// `rulesJson` 的位置（逾時計時照它找規則）。
+  static Iterable<ReplaceRule> _inScript(
+    Iterable<ReplaceRule> rules,
+    int convertType,
+  ) => rules.map((rule) {
+    final converted = rule.inScript(convertType);
+    if (!identical(converted, rule)) converted._sourceIndex = rule._sourceIndex;
+    return converted;
+  });
+
   static List<ReplaceRule> _titleRulesOf(
     List<ReplaceRule> rules,
     String bookName,
@@ -980,6 +1008,7 @@ class ReaderContentTransformer {
     required List<ReplaceRule> titleRules,
     required bool useReplaceRules,
     required bool reSegmentEnabled,
+    required int convertType,
     _RuleProgress? onRule,
   }) {
     final content = normalizeTypography(
@@ -993,6 +1022,7 @@ class ReaderContentTransformer {
           titleRules: titleRules,
           useReplaceRules: useReplaceRules,
           reSegmentEnabled: reSegmentEnabled,
+          convertType: convertType,
           onRule: onRule,
         ),
       ),
@@ -1011,7 +1041,9 @@ class ReaderContentTransformer {
   }
 
   /// 去掉開頭重複的章名與分頁留下的頁碼（[removePageLeftovers]）、重新分段、
-  /// 每行 trim 並套用替換規則；排版整理之前。
+  /// 繁簡轉換（[convertType]），再每行 trim 並套用替換規則；排版整理之前。
+  /// 先轉再套規則同 Legado（`ContentProcessor.getContent`），規則的字也轉成
+  /// 同一個寫法（[ReplaceRuleScript.inScript]，ADR 0084）。
   static String _applyRules({
     required String bookName,
     required String bookOrigin,
@@ -1021,6 +1053,7 @@ class ReaderContentTransformer {
     required List<ReplaceRule> titleRules,
     required bool useReplaceRules,
     required bool reSegmentEnabled,
+    required int convertType,
     _RuleProgress? onRule,
   }) {
     if (rawContent.isEmpty) {
@@ -1048,10 +1081,12 @@ class ReaderContentTransformer {
     if (duplicateTitleMatch != null) {
       content = content.substring(duplicateTitleMatch.end);
     } else if (useReplaceRules && titleRules.isNotEmpty) {
+      // 同 Legado：正文還沒轉繁簡，章名也照原文套規則來比。
       final displayTitle = _processTitle(
         chapterTitle: chapterTitle,
         rules: titleRules,
         useReplaceRules: true,
+        convertType: 0,
         onRule: onRule,
       );
       if (displayTitle.trim().isNotEmpty && displayTitle != chapterTitle) {
@@ -1081,6 +1116,11 @@ class ReaderContentTransformer {
       );
     }
 
+    content = const ChineseTextConverter().convert(
+      content,
+      convertType: convertType,
+    );
+
     if (useReplaceRules) {
       final buffer = StringBuffer();
       final lines = content.split('\n');
@@ -1090,9 +1130,14 @@ class ReaderContentTransformer {
       }
       content = _applyEach(
         buffer.toString(),
-        rules.where(
-          (rule) =>
-              rule.appliesToContent(bookName: bookName, bookOrigin: bookOrigin),
+        _inScript(
+          rules.where(
+            (rule) => rule.appliesToContent(
+              bookName: bookName,
+              bookOrigin: bookOrigin,
+            ),
+          ),
+          convertType,
         ),
         onRule: onRule,
       );
@@ -1101,17 +1146,23 @@ class ReaderContentTransformer {
     return content;
   }
 
+  /// 章名：先轉繁簡（[convertType]）再套標題規則，同 Legado
+  /// `BookChapter.getDisplayTitle`。
   static String _processTitle({
     required String chapterTitle,
     required List<ReplaceRule> rules,
     required bool useReplaceRules,
+    required int convertType,
     _RuleProgress? onRule,
   }) {
-    var displayTitle = chapterTitle.replaceAll(RegExp(r'[\r\n]'), '');
+    var displayTitle = const ChineseTextConverter().convert(
+      chapterTitle.replaceAll(RegExp(r'[\r\n]'), ''),
+      convertType: convertType,
+    );
     if (useReplaceRules) {
       displayTitle = _applyEach(
         displayTitle,
-        rules.where((rule) => rule.pattern.isNotEmpty),
+        _inScript(rules.where((rule) => rule.pattern.isNotEmpty), convertType),
         onRule: onRule,
         keep: (next) => next.trim().isNotEmpty,
       );
@@ -1403,26 +1454,46 @@ class ReaderContentTransformWorker {
           if (id == null || rawArgs is! Map) return;
           try {
             final args = Map<String, Object?>.from(rawArgs);
+            void onRule(int? index) => replyPort.send(('rule', id, index));
+            switch (args['stage']) {
+              case 'rules':
+                replyPort.send(<String, Object?>{
+                  'id': id,
+                  'ok': true,
+                  'result': <String, Object?>{
+                    'stage':
+                        ReaderContentTransformer._ruleStageParagraphsInBackground(
+                          args,
+                          onRule: onRule,
+                        ),
+                  },
+                });
+                return;
+              case 'source':
+                const converter = ChineseTextConverter();
+                final convertType = args['chineseConvertType'] as int? ?? 0;
+                replyPort.send(<String, Object?>{
+                  'id': id,
+                  'ok': true,
+                  'result': <String, Object?>{
+                    'paragraphs': [
+                      for (final paragraph in ReaderContent.sourceParagraphsOf(
+                        args['rawContent'] as String? ?? '',
+                      ))
+                        converter.convert(paragraph, convertType: convertType),
+                    ],
+                  },
+                });
+                return;
+            }
             final extracted = IllustrationMarkers.extract(
               args['rawContent'] as String? ?? '',
             );
             args['rawContent'] = extracted.text;
             final result = ReaderContentTransformer._processInBackground(
               args,
-              onRule: (index) => replyPort.send(('rule', id, index)),
+              onRule: onRule,
             );
-            final convertType = args['chineseConvertType'] as int? ?? 0;
-            if (convertType != 0) {
-              const converter = ChineseTextConverter();
-              result['displayTitle'] = converter.convert(
-                result['displayTitle'] as String? ?? '',
-                convertType: convertType,
-              );
-              result['content'] = converter.convert(
-                result['content'] as String? ?? '',
-                convertType: convertType,
-              );
-            }
             // worker 和主 isolate 同一個 isolate group，成品直接傳回去。
             result['document'] = ReaderContent.fromRaw(
               chapterIndex: args['chapterIndex'] as int? ?? 0,

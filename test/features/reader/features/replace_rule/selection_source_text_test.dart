@@ -87,6 +87,7 @@ void main() {
       chapter: BookChapter(url: 'c', title: title),
       rawContent: raw,
       enabledRules: rules,
+      chineseConvertType: 0,
     );
     expect(sources.paragraphs, hasLength(before.length));
     final source = sources.paragraphs[paragraph];
@@ -127,6 +128,7 @@ void main() {
       chapter: BookChapter(url: 'c', title: title),
       rawContent: raw,
       enabledRules: rules,
+      chineseConvertType: 0,
     );
     final found = selectionSourceOf((
       chapterIndex: 0,
@@ -233,6 +235,7 @@ void main() {
       chapter: BookChapter(url: 'c', title: '第一章'),
       rawContent: raw,
       enabledRules: const [],
+      chineseConvertType: 0,
     );
     expect(stage.paragraphs, ['前文。', '後文。']);
     ParagraphPiece piece(int index, String text, int start, int end) =>
@@ -376,6 +379,7 @@ void main() {
         chapter: BookChapter(url: 'c', title: '第一章'),
         rawContent: raw,
         enabledRules: rules,
+        chineseConvertType: 0,
       );
       return sourceParagraphAt(
         ReaderContent.sourceParagraphsOf(raw),
