@@ -237,7 +237,7 @@ void main() {
         );
       });
 
-      testWidgets('書架上已經有這本：開它的書籍詳情', (tester) async {
+      testWidgets('書架上已經有這本：只提示已在書架，不開詳情', (tester) async {
         await tester.runAsync(
           () => BookDao(db).upsert(
             Book(
@@ -253,9 +253,8 @@ void main() {
         await tester.runAsync(() => Future<void>.delayed(Duration.zero));
         await tester.pumpAndSettle();
 
-        expect(opened.map((book) => (book.name, book.isInBookshelf)), [
-          ('書架上的', true),
-        ]);
+        expect(opened, isEmpty);
+        expect(find.text('加入書架失敗：《書架上的》已在書架'), findsOneWidget);
       });
 
       testWidgets('找不到書源時說原因，不跳確認框', (tester) async {

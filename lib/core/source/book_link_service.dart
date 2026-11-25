@@ -32,13 +32,15 @@ class BookLinkService {
   /// 書源規則裡網址後面接選項的寫法（`網址,{…}`），同 `AnalyzeUrl`。
   static final RegExp _optionPattern = RegExp(r'\s*,\s*(?=\{)');
 
-  /// 書架上已經有這本就是那本。否則照順序試這些書源，第一個抓得到詳情的
-  /// 就是：網址的選項註明的書源（`origin`）、書源網址就是這個網址的網站的
-  /// 啟用書源、詳情頁網址規則（`bookUrlPattern`）整個符合這個網址的啟用書源
-  /// （照書源排序）。不是網址、都抓不到時丟 [BookLinkException]。
+  /// 照順序試這些書源，第一個抓得到詳情的就是：網址的選項註明的書源
+  /// （`origin`）、書源網址就是這個網址的網站的啟用書源、詳情頁網址規則
+  /// （`bookUrlPattern`）整個符合這個網址的啟用書源（照書源排序）。書架上
+  /// 已經有這本、不是網址、都抓不到時丟 [BookLinkException]。
   Future<Book> findBook(String url) async {
     final onShelf = await _bookDao.getByUrl(url);
-    if (onShelf != null && onShelf.isInBookshelf) return onShelf;
+    if (onShelf != null && onShelf.isInBookshelf) {
+      throw BookLinkException('《${onShelf.name}》已在書架');
+    }
     final baseUrl = _baseUrl(url);
     if (baseUrl == null) throw BookLinkException('書的網址格式不對');
 
