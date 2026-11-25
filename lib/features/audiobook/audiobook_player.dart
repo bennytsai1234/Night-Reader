@@ -371,9 +371,11 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   }
 
   /// 使用者換到第 [index] 集（目錄選集、上一集、下一集）：先存好這一集聽到
-  /// 哪，再從頭播那一集。存的這段時間停止、開了別本或又換了集就不換。
+  /// 哪，再從頭播那一集。按下去就換一次 [_generation]：之前還在做的載入與
+  /// 換集作廢；存的這段時間停止、開了別本或又換了集就不換，最後按的那一次
+  /// 算數。
   Future<void> _switchTo(int index) async {
-    final generation = _generation;
+    final generation = ++_generation;
     await _saveProgress();
     if (generation != _generation) return;
     await _load(index, start: Duration.zero, play: true);
