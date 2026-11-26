@@ -280,6 +280,10 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
   /// 存閱讀器的位置；最近閱讀時間一律更新（書架照它排）。位置真的移動了
   /// （換了章名或字的位置）才更新 [Book.progressTime] 並傳回它，否則傳回
   /// null：開書沒翻頁、目錄重新編號只改了章節序號，都不算移動。
+  ///
+  /// [Book.progressTime] 只往後走（[_later]）：接過另一台的進度後它可能是
+  /// 那台的時間，這台時鐘比較慢的話，照這台的現在寫會比它早，另一台會把
+  /// 這次移動當成舊資料。
   Future<int?> updateProgress(
     String bookUrl,
     int chapterIndex,
@@ -303,10 +307,44 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
           visualOffsetPx: Value(_normalizeVisualOffsetPx(visualOffsetPx)),
           readerAnchorJson: Value(readerAnchorJson),
           durChapterTime: Value(now),
-          progressTime: moved ? Value(now) : const Value.absent(),
+          progressTime: moved
+              ? Value(_later(now, current.progressTime))
+              : const Value.absent(),
         ),
       );
-      return moved ? now : null;
+      return moved ? _later(now, current.progressTime) : null;
+    });
+  }
+
+  /// 位置移動的時間：這台的現在，但至少比上一次晚 1 毫秒。
+  static int _later(int now, int previous) =>
+      now > previous ? now : previous + 1;
+
+  /// 閱讀器接到另一台的進度、跳過去存好之後：位置移動的時間記成這台的
+  /// 現在與那一筆的時間（[syncedTime]）較晚的那個，不比原本的早。傳回
+  /// 記下的時間；書不在資料庫裡是 null。
+  ///
+  /// 跳轉走一般存檔（[updateProgress]），時間是這台的；這台時鐘比另一台
+  /// 慢時會比那一筆早，上次同步的紀錄會被當成不是這一本的（`ProgressSync
+  /// .baseHolds`），之後這台往前讀的也會被另一台當成舊資料。
+  Future<int?> markProgressSynced(String bookUrl, {required int syncedTime}) {
+    return transaction(() async {
+      final current = await (select(
+        books,
+      )..where((t) => t.bookUrl.equals(bookUrl))).getSingleOrNull();
+      if (current == null) return null;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final time = [
+        now,
+        syncedTime,
+        current.progressTime,
+      ].reduce((a, b) => a > b ? a : b);
+      if (time != current.progressTime) {
+        await (update(books)..where((t) => t.bookUrl.equals(bookUrl))).write(
+          BooksCompanion(progressTime: Value(time)),
+        );
+      }
+      return time;
     });
   }
 

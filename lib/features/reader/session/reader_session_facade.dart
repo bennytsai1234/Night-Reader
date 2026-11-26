@@ -31,7 +31,11 @@ class ReaderSessionFacade {
         ? location
         : ReaderOpenTarget.resume(book).location;
     book.durChapterTime = DateTime.now().millisecondsSinceEpoch;
-    book.progressTime = book.durChapterTime;
+    // 位置移動的時間只往後走：接過另一台的進度後它可能是那台的時間，這台
+    // 時鐘比較慢時照這台的現在寫，另一台會把這一筆當成舊資料（ADR 0039）。
+    book.progressTime = book.durChapterTime > book.progressTime
+        ? book.durChapterTime
+        : book.progressTime + 1;
     if (book.syncTime == 0) {
       book.syncTime = DateTime.now().millisecondsSinceEpoch;
     }

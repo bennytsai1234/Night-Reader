@@ -564,7 +564,7 @@ void main() {
 
   test('開書還在等上次聽到哪時選了別集：播選的那集，這本書照樣登記為開著', () async {
     final ready = Completer<void>();
-    sync.ready = ready.future;
+    sync.pullGate = ready;
     final opening = player.open(book);
     await pumpEventQueue();
 
@@ -578,9 +578,9 @@ void main() {
     expect(sync.opened, [book.bookUrl]);
   });
 
-  test('開書等同步時停止，不把傳進來的舊進度蓋回資料庫', () async {
+  test('開書等雲端進度時停止，不把傳進來的舊進度蓋回資料庫', () async {
     final ready = Completer<void>();
-    sync.ready = ready.future;
+    sync.pullGate = ready;
     final opening = player.open(book);
     await pumpEventQueue();
 
@@ -1235,6 +1235,200 @@ void main() {
     expect(player.playing, isFalse);
     expect(engine.playing, isFalse);
     expect(sync.commits, 1);
+  });
+
+  /// App 退到背景再回到前景。
+  Future<void> backToForeground() async {
+    TestWidgetsFlutterBinding.instance
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+  }
+
+  PulledProgress cloudAt(int chapter, int ms, {int time = 1}) => PulledProgress(
+    SyncedProgress(
+      chapterIndex: chapter,
+      charOffset: ms,
+      chapterTitle: '第 $chapter 集',
+      time: time,
+    ),
+    (_) async => sync.commits++,
+  );
+
+  test('回到前景時暫停中：另一台在同一集只差 3 秒，也跳到那一毫秒', () async {
+    await player.open(book);
+    await player.pause();
+    sync.pulled = cloudAt(2, 98000);
+    final opening = engine.nextOpen;
+    await backToForeground();
+    await opening.timeout(const Duration(seconds: 5));
+    await pumpEventQueue();
+
+    expect(engine.opened.last.$2, const Duration(milliseconds: 98000));
+    expect(player.position.value, const Duration(milliseconds: 98000));
+    expect(sync.commits, 1);
+  });
+
+  test('回到前景時暫停中：位置完全一樣不重載，照樣記成同步過', () async {
+    await player.open(book);
+    await player.pause();
+    final opens = engine.opened.length;
+    sync.pulled = cloudAt(2, 95000);
+    await backToForeground();
+    await pumpEventQueue();
+
+    expect(engine.opened.length, opens);
+    expect(sync.commits, 1);
+  });
+
+  test('接過另一台的進度後，位置移動的時間不比那一筆早', () async {
+    await player.open(book);
+    await player.pause();
+    final ahead = DateTime.now().millisecondsSinceEpoch + 3600000;
+    sync.pulled = cloudAt(3, 1000, time: ahead);
+    final opening = engine.nextOpen;
+    await backToForeground();
+    await opening.timeout(const Duration(seconds: 5));
+    await pumpEventQueue();
+
+    expect(sync.commits, 1);
+    expect((await stored()).progressTime, ahead);
+    expect(player.book!.progressTime, ahead);
+  });
+
+  test('回到前景接進度時那一集播不出來：不記成同步過', () async {
+    await player.open(book);
+    await player.pause();
+    engine.failingOpens.add('https://audio.test/ep3.mp3');
+    sync.pulled = cloudAt(3, 1000);
+    final opening = engine.nextOpen;
+    await backToForeground();
+    await opening.timeout(const Duration(seconds: 5));
+    await pumpEventQueue();
+
+    expect(player.phase, AudiobookPhase.failed);
+    expect(player.chapterIndex, 3, reason: '換到那一集才發現播不出來');
+    expect(sync.commits, 0);
+  });
+
+  test('接著上次聽的地方開書時抓雲端進度：等得到就從另一台聽到的地方開', () async {
+    sync.pulled = PulledProgress(
+      const SyncedProgress(
+        chapterIndex: 3,
+        charOffset: 1000,
+        chapterTitle: '第 3 集',
+        time: 1,
+      ),
+      (_) async => sync.commits++,
+      applyStored: () async {
+        await bookDao.applySyncedProgress(
+          book.bookUrl,
+          chapterIndex: 3,
+          chapterTitle: '第 3 集',
+          charOffset: 1000,
+          time: 1,
+        );
+        return ProgressSync.recordOf(await stored());
+      },
+    );
+    await player.open(book);
+    await pumpEventQueue();
+
+    expect(sync.opened, [book.bookUrl]);
+    expect(sync.pulls, 1);
+    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep3.mp3');
+    expect(engine.opened.single.$2, const Duration(milliseconds: 1000));
+    expect(sync.commits, 1);
+  });
+
+  test('從目錄點某一集開書：不抓雲端進度', () async {
+    await player.open(book, chapterIndex: 1);
+    expect(sync.pulls, 0);
+  });
+
+  test('開書時雲端進度晚到：先照這台的位置播，沒按過什麼就換過去、照樣播著', () async {
+    final gate = Completer<void>();
+    sync
+      ..pullGate = gate
+      ..pulled = cloudAt(3, 1000);
+    await player.open(book);
+    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep2.mp3');
+    expect(player.playing, isTrue);
+
+    final opening = engine.nextOpen;
+    gate.complete();
+    await opening.timeout(const Duration(seconds: 5));
+    await pumpEventQueue();
+
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/ep3.mp3');
+    expect(engine.opened.last.$2, const Duration(milliseconds: 1000));
+    expect(player.playing, isTrue);
+    expect(sync.commits, 1);
+  });
+
+  test('開書時雲端進度晚到、這台播著已經過了那裡：不倒回去', () async {
+    final gate = Completer<void>();
+    sync
+      ..pullGate = gate
+      ..pulled = cloudAt(1, 1000);
+    await player.open(book);
+    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep2.mp3');
+    expect(player.playing, isTrue);
+
+    gate.complete();
+    await pumpEventQueue();
+
+    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep2.mp3');
+    expect(sync.commits, 0);
+  });
+
+  test('開書時雲端進度晚到、這之前按過暫停：照這台的，不換過去', () async {
+    final gate = Completer<void>();
+    sync
+      ..pullGate = gate
+      ..pulled = cloudAt(3, 1000);
+    await player.open(book);
+    await player.pause();
+    gate.complete();
+    await pumpEventQueue();
+
+    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep2.mp3');
+    expect(sync.commits, 0);
+  });
+
+  test('播著時每 60 秒送一次進度，暫停時存好馬上送', () async {
+    var now = DateTime(2026, 11, 26, 20);
+    final timed = AudiobookPlayer(
+      engine: () => engine,
+      bookDao: bookDao,
+      chapterDao: ChapterDao(db),
+      sourceDao: BookSourceDao(db),
+      sourceService: source,
+      sync: sync,
+      playback: playback,
+      audioFocus: focus,
+      random: Random(1),
+      now: () => now,
+    );
+    addTearDown(timed.dispose);
+    await timed.open(book);
+    await pumpEventQueue();
+    final before = sync.progressFirstRequests;
+    expect(sync.hideUploaders, contains(timed));
+
+    for (var second = 5; second <= 125; second += 5) {
+      now = now.add(const Duration(seconds: 5));
+      engine.advance(Duration(milliseconds: 95000 + second * 1000));
+      await pumpEventQueue();
+    }
+    expect(sync.progressFirstRequests - before, 2, reason: '60 秒、120 秒各一次');
+
+    await timed.pause();
+    expect(sync.progressFirstRequests - before, 3);
+
+    await timed.stop();
+    expect(sync.hideUploaders, isNot(contains(timed)));
   });
 
   test('回到前景接進度的途中按播放重載失敗的那一集：照按的播，不接另一台', () async {

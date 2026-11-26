@@ -65,6 +65,7 @@ class FakeAudioEngine implements AudioEngine {
     opened.add((uri, start));
     _opens.add(null);
     await openGate?.future;
+    if (failingOpens.contains(uri.toString())) throw StateError('播不出來');
     lastHeaders = headers;
     position = start;
     duration = const Duration(minutes: 20);
@@ -84,6 +85,9 @@ class FakeAudioEngine implements AudioEngine {
 
   /// 給了就等它才開好這一集（載入中的那段時間）。
   Completer<void>? openGate;
+
+  /// 開這幾個網址時失敗（那一集播不出來）。
+  final Set<String> failingOpens = {};
 
   @override
   Future<void> pause() async {
@@ -288,20 +292,27 @@ class FakeSync extends Fake implements SyncService {
   final List<String> opened = [];
   final List<String> closed = [];
 
-  /// 開 App 的同步還沒做完閱讀進度：開書等它。
-  Future<void>? ready;
-
-  @override
-  Future<void>? get progressReady => ready;
-
   @override
   void openBook(Book book) => opened.add(book.bookUrl);
 
   @override
   void closeBook(Book book) => closed.add(book.bookUrl);
 
+  /// 要求進度優先送出的次數。
+  int progressFirstRequests = 0;
+
   @override
-  void requestSyncProgressFirst() {}
+  void requestSyncProgressFirst() => progressFirstRequests++;
+
+  /// 登記成退到背景時自己送進度的閱讀器與播放器。
+  final Set<Object> hideUploaders = {};
+
+  @override
+  void uploadsOnHide(Object owner, bool on) =>
+      on ? hideUploaders.add(owner) : hideUploaders.remove(owner);
+
+  /// 抓了幾次雲端進度。
+  int pulls = 0;
 
   /// 回到前景時抓到的、另一台較新的進度；記下有沒有被記成同步過。
   PulledProgress? pulled;
@@ -312,6 +323,7 @@ class FakeSync extends Fake implements SyncService {
 
   @override
   Future<PulledProgress?> pullProgress(String bookUrl) async {
+    pulls++;
     await pullGate?.future;
     return pulled;
   }

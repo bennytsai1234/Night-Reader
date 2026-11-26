@@ -22,6 +22,9 @@ class _BookDao extends Fake implements BookDao {
   int reads = 0;
   int writes = 0;
 
+  /// 存進度失敗（磁碟滿了）。
+  bool failWrites = false;
+
   @override
   Future<Book?> getByUrl(String url) async {
     reads++;
@@ -37,8 +40,21 @@ class _BookDao extends Fake implements BookDao {
     double visualOffsetPx = 0.0,
     String? readerAnchorJson,
   }) async {
+    if (failWrites) throw StateError('存不進去');
     writes++;
     return null;
+  }
+
+  /// 跳到雲端進度後記下的時間（[markProgressSynced] 的 syncedTime）。
+  final List<int> synced = [];
+
+  @override
+  Future<int?> markProgressSynced(
+    String bookUrl, {
+    required int syncedTime,
+  }) async {
+    synced.add(syncedTime);
+    return syncedTime;
   }
 }
 
@@ -58,20 +74,31 @@ class _ChapterDao extends Fake implements ChapterDao {
 
 class _SourceDao extends Fake implements BookSourceDao {}
 
-/// 背景同步：[progress] 是這次同步做完閱讀進度那一步的時候，null 是沒在
-/// 同步。
 class _Sync extends Fake implements SyncService {
-  Completer<void>? progress;
   final List<String> opened = [];
 
-  /// 閱讀器回到前景時抓到的雲端進度；null 是沒有比較新的。
+  /// 閱讀器開書、回到前景時抓到的雲端進度；null 是沒有比較新的。
   PulledProgress? pulled;
 
-  @override
-  Future<PulledProgress?> pullProgress(String bookUrl) async => pulled;
+  /// 抓雲端進度要等外面放行（網路慢）。
+  Completer<void>? pullGate;
+
+  /// 抓了幾次雲端進度。
+  int pulls = 0;
 
   @override
-  Future<void>? get progressReady => progress?.future;
+  Future<PulledProgress?> pullProgress(String bookUrl) async {
+    pulls++;
+    await pullGate?.future;
+    return pulled;
+  }
+
+  /// 登記成退到背景時自己送進度的閱讀器。
+  final Set<Object> hideUploaders = {};
+
+  @override
+  void uploadsOnHide(Object owner, bool on) =>
+      on ? hideUploaders.add(owner) : hideUploaders.remove(owner);
 
   @override
   void openBook(Book book) => opened.add(book.bookUrl);
@@ -182,29 +209,54 @@ void main() {
     return progressSync;
   }
 
-  test('a book tapped while the sync is still on progress opens where the '
-      'other phone was', () async {
-    sync.progress = Completer();
+  /// 另一台在第 [chapter] 章第 [offset] 個字；[stored] 給了的話，開書前
+  /// 接上時寫進這台的資料庫。
+  PulledProgress pulledAt(
+    int chapter,
+    int offset, {
+    void Function()? onCommit,
+    bool stores = false,
+  }) => PulledProgress(
+    SyncedProgress(
+      chapterIndex: chapter,
+      charOffset: offset,
+      chapterTitle: '第 $chapter 章',
+      time: 7,
+    ),
+    (_) async => onCommit?.call(),
+    applyStored: stores
+        ? () async {
+            bookDao.stored = book.copyWith(
+              chapterIndex: chapter,
+              charOffset: offset,
+              progressTime: 7,
+            );
+            return ProgressSync.recordOf(bookDao.stored!);
+          }
+        : null,
+  );
+
+  test('resuming pulls the cloud progress first and opens where the other '
+      'phone was', () async {
+    var commits = 0;
+    sync.pulled = pulledAt(3, 40, stores: true, onCommit: () => commits++);
     final progressSync = start();
 
-    final opening = progressSync.openLocation(runtime);
-    await pumpEventQueue();
-    expect(sync.opened, isEmpty, reason: '等同步的這段時間，背景還能改這本書');
-
-    // 同步把另一台的進度寫進資料庫。
-    bookDao.stored = book.copyWith(chapterIndex: 3, charOffset: 40);
-    sync.progress!.complete();
-    final at = await opening;
+    final at = await progressSync.openLocation(runtime);
     await runtime.openBook(at: at);
+    await pumpEventQueue();
 
-    expect(sync.opened, [book.bookUrl]);
+    expect(sync.opened, [book.bookUrl], reason: '先記成開著，背景的同步不改這本');
+    expect(sync.pulls, 1);
     expect(runtime.state.visibleLocation.chapterIndex, 3);
     expect(runtime.state.visibleLocation.charOffset, 40);
+    expect(book.progressTime, 7);
+    expect(commits, 1);
   });
 
-  test('progress later than the grace: opens at this phone\'s position, '
+  test('cloud progress later than the grace: opens at this phone\'s position, '
       'marked open so the sync leaves it alone', () async {
-    sync.progress = Completer();
+    sync.pullGate = Completer();
     final progressSync = start();
 
     final at = await progressSync.openLocation(runtime);
@@ -238,18 +290,19 @@ void main() {
     expect(at?.visualOffsetPx, 24);
   });
 
-  test('opening a chapter picked from the table of contents does not wait '
-      'or read the saved position', () async {
-    sync.progress = Completer();
+  test('opening a chapter picked from the table of contents does not pull, '
+      'wait or read the saved position', () async {
+    sync.pullGate = Completer();
     final progressSync = start(openTarget: ReaderOpenTarget.chapterStart(4));
 
     expect(sync.opened, [book.bookUrl]);
     expect(await progressSync.openLocation(runtime), isNull);
+    expect(sync.pulls, 0);
     expect(bookDao.reads, 0);
   });
 
   test('closing the reader while waiting ends the wait at once', () async {
-    sync.progress = Completer();
+    sync.pullGate = Completer();
     final progressSync = ReaderProgressSync(
       book: book,
       runtime: () => runtime,
@@ -262,7 +315,7 @@ void main() {
     progressSync.dispose();
 
     expect(await opening.timeout(const Duration(milliseconds: 100)), isNull);
-    expect(sync.opened, isEmpty);
+    expect(bookDao.reads, 0);
   });
 
   test('a chapter picked before the book opened is where it opens', () async {
@@ -272,6 +325,48 @@ void main() {
     );
 
     expect(runtime.state.visibleLocation.chapterIndex, 4);
+  });
+
+  group('uploading while reading', () {
+    test('an opened reader watches the saved position and leaves the '
+        'background upload to itself until it closes', () async {
+      final progressSync = start()..bookOpened();
+      await runtime.openBook();
+
+      expect(sync.hideUploaders, contains(progressSync));
+      expect(runtime.progressController.onMoved, isNotNull);
+      expect(runtime.progressController.onActivity, isNotNull);
+
+      progressSync.retire();
+      expect(sync.hideUploaders, isEmpty, reason: '換目錄時不上傳，交給主畫面');
+      progressSync.resume();
+      expect(sync.hideUploaders, contains(progressSync));
+
+      progressSync.dispose();
+      expect(sync.hideUploaders, isEmpty);
+      expect(runtime.progressController.onMoved, isNull);
+    });
+  });
+
+  testWidgets('a saved move followed by 8 still seconds asks for the '
+      'progress to go up', (tester) async {
+    final progressSync = ReaderProgressSync(
+      book: book,
+      runtime: () => runtime,
+      onJumped: (_) {},
+      bookDao: bookDao,
+      sync: sync,
+    )..start();
+    progressSync.bookOpened();
+    await tester.runAsync(runtime.openBook);
+
+    runtime.progressController.onMoved!();
+    await tester.pump(const Duration(seconds: 7));
+    expect(sync.progressFirstRequests, 0);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(sync.progressFirstRequests, 1);
+    progressSync.dispose();
   });
 
   group('leaving the reader', () {
@@ -322,12 +417,12 @@ void main() {
       (_) async => commits++,
     );
 
-    /// 開書時同步的進度還沒好，等滿 [ReaderProgressSync.openGrace] 照這台
+    /// 開書時雲端進度還沒抓到，等滿 [ReaderProgressSync.openGrace] 照這台
     /// 的位置開了。
     Future<ReaderProgressSync> openWhileSyncing() async {
       commits = 0;
       jumped.clear();
-      sync.progress = Completer();
+      sync.pullGate = Completer();
       final progressSync = start(onJumped: jumped.add);
       final at = await progressSync.openLocation(runtime);
       expect(at, isNull);
@@ -343,24 +438,25 @@ void main() {
 
       // 進度晚到（超過等待的 0.5 秒）：另一台讀到第 3 章。
       sync.pulled = cloudAt(3, 40);
-      sync.progress!.complete();
+      sync.pullGate!.complete();
       await pumpEventQueue();
 
       expect(runtime.state.visibleLocation.chapterIndex, 3);
       expect(runtime.state.visibleLocation.charOffset, 40);
       expect(jumped.map((it) => it.chapterIndex), [1], reason: '提示可以回到原處');
       expect(commits, 1);
+      expect(bookDao.synced, [1], reason: '時間記成不比雲端那一筆早');
     });
 
-    test('the sync finished before the book was positioned: still catches '
+    test('the pull finished before the book was positioned: still catches '
         'up', () async {
-      sync.progress = Completer();
+      sync.pullGate = Completer();
       commits = 0;
       jumped.clear();
       final progressSync = start(onJumped: jumped.add);
       await progressSync.openLocation(runtime);
       sync.pulled = cloudAt(3, 40);
-      sync.progress!.complete();
+      sync.pullGate!.complete();
       await runtime.openBook();
       progressSync.bookOpened();
       await pumpEventQueue();
@@ -378,7 +474,7 @@ void main() {
       );
 
       sync.pulled = cloudAt(3, 40);
-      sync.progress!.complete();
+      sync.pullGate!.complete();
       await pumpEventQueue();
 
       expect(runtime.state.visibleLocation.chapterIndex, 1);
@@ -387,11 +483,11 @@ void main() {
       expect(commits, 0);
     });
 
-    test('the sync ended without anything newer: nothing happens', () async {
+    test('the pull ended without anything newer: nothing happens', () async {
       final progressSync = await openWhileSyncing();
       progressSync.bookOpened();
 
-      sync.progress!.complete();
+      sync.pullGate!.complete();
       await pumpEventQueue();
 
       expect(runtime.state.visibleLocation.chapterIndex, 1);
@@ -400,11 +496,11 @@ void main() {
     });
 
     test('progress that came in time needs no catching up', () async {
-      sync.progress = Completer();
+      sync.pullGate = Completer();
+      sync.pulled = pulledAt(3, 40, stores: true);
       final progressSync = start();
       final opening = progressSync.openLocation(runtime);
-      bookDao.stored = book.copyWith(chapterIndex: 3, charOffset: 40);
-      sync.progress!.complete();
+      sync.pullGate!.complete();
       await runtime.openBook(at: await opening);
       sync.pulled = cloudAt(4, 0);
       progressSync.bookOpened();
@@ -461,18 +557,26 @@ void main() {
       expect(commits, 1);
     });
 
-    test(
-      'a position within the near range does not jump but is recorded',
-      () async {
-        await openReader();
-        sync.pulled = cloudAt(1, 50);
+    test('a position only a few characters away still jumps there', () async {
+      await openReader();
+      sync.pulled = cloudAt(1, 50);
 
-        await backToForeground();
+      await backToForeground();
 
-        expect(jumped, isEmpty);
-        expect(commits, 1);
-      },
-    );
+      expect(runtime.state.visibleLocation.charOffset, 50);
+      expect(jumped.map((it) => it.charOffset), [10]);
+      expect(commits, 1);
+    });
+
+    test('the very same position does not jump but is recorded', () async {
+      await openReader();
+      sync.pulled = cloudAt(1, 10);
+
+      await backToForeground();
+
+      expect(jumped, isEmpty);
+      expect(commits, 1);
+    });
 
     test('scrolling in the same chapter while the jump is loading cancels '
         'it: no notice, not recorded as synced', () async {
@@ -498,6 +602,18 @@ void main() {
       expect(jumped, isEmpty);
       expect(commits, 0, reason: '沒記成同步過，下次回到前景還會再抓到雲端的位置');
       expect(runtime.state.visibleLocation.charOffset, 200);
+    });
+
+    test('a jump whose position cannot be saved is not recorded', () async {
+      await openReader();
+      sync.pulled = cloudAt(3, 5);
+      bookDao.failWrites = true;
+
+      await backToForeground();
+
+      expect(jumped, isEmpty);
+      expect(commits, 0);
+      expect(bookDao.synced, isEmpty);
     });
 
     test('a chapter that cannot be loaded does not jump or record', () async {

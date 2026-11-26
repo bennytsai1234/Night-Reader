@@ -202,4 +202,17 @@ void main() {
     expect(saved.chapterIndex, 2);
     expect(ReaderOpenTarget.resume(saved).location.chapterIndex, 2);
   });
+
+  test('adding to the shelf after taking over a faster-clocked phone keeps the '
+      'progress time moving forward', () async {
+    // 接過另一台（時鐘比這台快）的進度：位置移動的時間是那台的，比這台
+    // 的現在晚。加入書架不能把它拉回這台的現在，不然另一台會把這一筆
+    // 當成舊資料、再把自己的舊位置寫回來。
+    final ahead = DateTime.now().millisecondsSinceEpoch + 60000;
+    final book = unshelvedBook()..progressTime = ahead;
+
+    final saved = await addToShelf(book, reading);
+
+    expect(saved.progressTime, greaterThan(ahead));
+  });
 }

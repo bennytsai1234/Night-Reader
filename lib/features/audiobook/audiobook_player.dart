@@ -82,9 +82,10 @@ const String audiobookNoAudioFocusNotice = '通話中或其他聲音正在播放
 /// 播放器畫面、離開播放器時的圓鈕、通知與鎖定畫面都看它。
 ///
 /// 收聽進度記「章＋第幾毫秒」，毫秒存在 [Book.charOffset]，跟著閱讀進度
-/// 同步：播著時每 [saveInterval] 存一次，暫停、換集、停止、App 退到背景
-/// 時也存；回到前景時沒在播就接上另一台較新的進度，同一集差 [nearMs]
-/// 以內不跳。
+/// 同步，誰新用誰：播著時每 [saveInterval] 存一次、每 [uploadInterval] 送
+/// 一次，暫停時存好馬上送，換集、停止、App 退到背景時也存好再送；接著上次
+/// 聽的地方開書時、回到前景時沒在播，抓這本書的雲端進度，比這台新就換到
+/// 那一集的那一毫秒。
 class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   AudiobookPlayer({
     AudioEngine Function()? engine,
@@ -118,8 +119,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 播著時多久存一次進度。
   static const Duration saveInterval = Duration(seconds: 5);
 
-  /// 同一集兩台差這麼多以內不跳（對應文字書的 100 字）。
-  static const int nearMs = 10000;
+  /// 播著時多久把進度送上去一次，另一台切過去時接得上。
+  static const Duration uploadInterval = Duration(seconds: 60);
 
   /// 倒退、快轉一次跳多少，和通知的跳秒一致。
   static const Duration skipStep = SystemPlayback.skipInterval;
@@ -220,6 +221,10 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   int? _switchingTo;
 
   DateTime? _lastSaved;
+
+  /// 播著時上次送進度的時間（[uploadInterval]）；暫停、停止時清掉，再播時
+  /// 重新數。
+  DateTime? _lastSent;
   bool _markedOpen = false;
 
   /// 這一集的音訊請求（網址與標頭）；還沒解析好時是 null。
@@ -368,8 +373,12 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       _chapters = chapters;
       var start = Duration.zero;
       var index = chapterIndex ?? book.chapterIndex;
+      Future<PulledProgress?>? lateProgress;
       if (chapterIndex == null) {
-        final stored = await _resumePosition(book);
+        // 先記成開著：背景的同步不再改這本，由開書時抓的那一筆決定。
+        _markOpen(book);
+        final (stored, late) = await _resumePosition(book);
+        lateProgress = late;
         if (generation != _generation) {
           // 等的時候在目錄選了別集（[_switchTo]）：播選的那集，這本書照樣
           // 算開著；停止或開了別本時 [_book] 已經換掉。
@@ -384,7 +393,11 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       }
       _markOpen(book);
       _ensureLifecycle();
-      await _load(_playable(index), start: start);
+      final since = _commands;
+      final opened = await _load(_playable(index), start: start);
+      if (opened && lateProgress != null) {
+        unawaited(_catchUpLate(book, lateProgress, since));
+      }
     } catch (error, stackTrace) {
       if (generation != _generation) return;
       _fail(failureMessage('開啟有聲書', error, stackTrace));
@@ -429,18 +442,31 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     return fetched;
   }
 
-  /// 接著上次聽的地方：開 App 或回到 App 的那次同步還沒做完閱讀進度就等它
-  /// （最多 [openGrace]），再讀這台資料庫裡的位置（ADR 0039）。
-  Future<Book> _resumePosition(Book book) async {
-    final ready = _sync.progressReady;
-    if (ready != null) {
-      await ready.timeout(openGrace, onTimeout: () {});
+  /// 接著上次聽的地方：抓這本書的雲端進度，最多等 [openGrace]，等到了而且
+  /// 比這台新就先寫進這台的資料庫，再讀資料庫裡的位置（ADR 0039）。等不及
+  /// 的話照這台的位置開，一併傳回還在抓的那一次，晚到時接上
+  /// （[_catchUpLate]）。
+  Future<(Book, Future<PulledProgress?>?)> _resumePosition(Book book) async {
+    final pulling = _sync.pullProgress(book.bookUrl);
+    Future<PulledProgress?>? late;
+    if (await settlesWithin(pulling, openGrace)) {
+      try {
+        await (await pulling)?.applyBeforeOpen();
+      } catch (error, stackTrace) {
+        AppLog.e('接上雲端進度失敗', error: error, stackTrace: stackTrace);
+      }
+    } else {
+      late = pulling;
     }
     try {
-      return await _books.getByUrl(book.bookUrl) ?? book;
+      final stored = await _books.getByUrl(book.bookUrl);
+      if (stored == null) return (book, late);
+      // 手上的書之後可能整筆寫回資料庫，位置移動的時間要跟著。
+      book.progressTime = stored.progressTime;
+      return (stored, late);
     } catch (error, stackTrace) {
       AppLog.e('讀收聽紀錄失敗', error: error, stackTrace: stackTrace);
-      return book;
+      return (book, late);
     }
   }
 
@@ -476,12 +502,16 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
 
   /// 換到第 [index] 集、停在 [start]。[play] 是這次要不要出聲（使用者換集、
   /// 重播是要，回到前景接另一台的進度是不要）；null 照使用者現在的意思（開書、
-  /// 播完接下一集）。載入途中按的播放或暫停蓋過它，載好照最後的意思播不播。
-  Future<void> _load(int index, {required Duration start, bool? play}) async {
+  /// 播完接下一集、開書後接上晚到的進度）。載入途中按的播放或暫停蓋過它，
+  /// 載好照最後的意思播不播。傳回這一集有沒有開好：播不出來、被之後的開書、
+  /// 換集、停止取代都是 false。
+  Future<bool> _load(int index, {required Duration start, bool? play}) async {
     final book = _book;
     final source = _source;
     // 目錄還沒讀到或沒讀成時沒有集可換（[_previousPlayable]）。
-    if (book == null || source == null || index >= _chapters.length) return;
+    if (book == null || source == null || index >= _chapters.length) {
+      return false;
+    }
     // 換集先讓上一集停聲：新的一集抓不到時，不會畫面停在新集、耳朵還聽著
     // 舊集，舊集的位置也不會記到新集上。
     // 等上一集停聲的這段時間停止了、開了別本或又換了集：不再往下做，這時的
@@ -489,7 +519,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     final entry = _generation;
     final previous = _engine;
     if (previous != null && previous.playing) await previous.pause();
-    if (entry != _generation) return;
+    if (entry != _generation) return false;
     if (play != null) _wantPlay = play;
     final generation = ++_generation;
     // 載入途中被之後的開書、換集、停止取代：這次載入不再往下做。
@@ -505,7 +535,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     try {
       // 下載好的集放本機檔（ADR 0055），不再問書源。
       final local = await _downloadedFile(book, chapter);
-      if (stale()) return;
+      if (stale()) return false;
       final prefetched = _prefetched;
       final request = local != null
           ? AudioRequest(url: local.uri.toString(), headers: const {})
@@ -515,7 +545,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
           : await ReadingFetches.instance.track(
               () => _sourceService.getAudioRequest(source, book, chapter),
             );
-      if (stale()) return;
+      if (stale()) return false;
       _prefetched = null;
       _request = request;
       await engine.open(
@@ -523,9 +553,9 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
         headers: request.headers,
         start: start,
       );
-      if (stale()) return;
+      if (stale()) return false;
       await engine.setSpeed(_speed);
-      if (stale()) return;
+      if (stale()) return false;
       _duration = engine.duration;
       _moveTo(engine.playing ? AudiobookPhase.playing : AudiobookPhase.paused);
       if (_wantPlay) await _startPlaying(engine);
@@ -533,10 +563,12 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       _publish();
       unawaited(_saveProgress());
       unawaited(_prefetch(generation));
+      return !stale();
     } catch (error, stackTrace) {
-      if (stale()) return;
+      if (stale()) return false;
       _fail(failureMessage('播放', error, stackTrace));
       _publish();
+      return false;
     }
   }
 
@@ -611,11 +643,14 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     }
   }
 
+  /// 暫停：存好進度馬上送，另一台切過去時接得上。
   Future<void> pause() async {
     _commands++;
     _wantPlay = false;
+    _lastSent = null;
     await _engine?.pause();
     await _saveProgress();
+    if (_book != null) _sync.requestSyncProgressFirst();
   }
 
   Future<void> toggle() => playing ? pause() : play();
@@ -713,6 +748,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     _wantPlay = false;
     _switchingTo = null;
     _buffering = false;
+    _lastSent = null;
     _phase = AudiobookPhase.idle;
     _failure = null;
     sleepTimer.sync(active: false, running: false);
@@ -721,6 +757,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       _sync.closeBook(book);
       _markedOpen = false;
     }
+    _sync.uploadsOnHide(this, false);
     _sync.requestSyncProgressFirst();
   }
 
@@ -798,8 +835,21 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     position.value = at;
     final last = _lastSaved;
     if (playing && (last == null || _now().difference(last) >= saveInterval)) {
-      unawaited(_saveProgress());
+      unawaited(
+        _uploadDue()
+            ? _saveProgress().whenComplete(_sync.requestSyncProgressFirst)
+            : _saveProgress(),
+      );
     }
+  }
+
+  /// 播著時到了該送進度的時候（[uploadInterval]）。剛開始播時從這時起算。
+  bool _uploadDue() {
+    final now = _now();
+    final last = _lastSent;
+    if (last != null && now.difference(last) < uploadInterval) return false;
+    _lastSent = now;
+    return last != null;
   }
 
   void _onDuration(Duration? duration) {
@@ -838,12 +888,13 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 現在聽到哪寫進書與資料庫（換源前用：照它對到新書源的同一集）。
   Future<void> saveProgress() => _saveProgress();
 
-  Future<void> _saveProgress() async {
-    if (_phase == AudiobookPhase.opening) return;
+  /// 存好這一集聽到哪；傳回有沒有存成。
+  Future<bool> _saveProgress() async {
+    if (_phase == AudiobookPhase.opening) return false;
     final book = _book;
     final indexAtSave = _index;
     final chapter = this.chapter;
-    if (book == null || chapter == null) return;
+    if (book == null || chapter == null) return false;
     final ms = position.value.inMilliseconds;
     _lastSaved = _now();
     book
@@ -879,21 +930,27 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
         );
       });
       if (moved case final time?) book.progressTime = time;
+      return true;
     } catch (error, stackTrace) {
       AppLog.e('存收聽進度失敗', error: error, stackTrace: stackTrace);
+      return false;
     }
   }
 
   void _markOpen(Book book) {
+    if (_markedOpen) return;
     _sync.openBook(book);
+    _sync.uploadsOnHide(this, true);
     _markedOpen = true;
   }
 
   void _ensureLifecycle() {
     _lifecycle ??= AppLifecycleListener(
-      onHide: () => unawaited(
-        _saveProgress().whenComplete(_sync.requestSyncProgressFirst),
-      ),
+      onHide: () {
+        // 停止之後沒有要送的，退到背景由主畫面照常同步。
+        if (_book == null) return;
+        unawaited(_saveProgress().whenComplete(_sync.requestSyncProgressFirst));
+      },
       onShow: () => unawaited(_catchUpAfterResume()),
     );
   }
@@ -919,15 +976,55 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     // 還在等系統接手、重載還沒出聲時，階段、集數與位置都還沒變，只看得出
     // 按過。
     if (_commands != since || !_canCatchUp || _switchingTo != null) return;
-    final index = _playable(
-      pulled.progress.chapterIndexIn([
-        for (final chapter in _chapters) chapter.title,
-      ], reversed: book.getReverseToc()),
-    );
+    await _jumpToPulled(book, pulled, since, play: false);
+  }
+
+  /// 開書時雲端進度還沒抓到、先照這台的位置開了（開好就播）：抓到時讀者
+  /// 沒按過什麼（[since] 之後，播著時位置自己往前走不算），就換到另一台
+  /// 聽到的地方，照樣播著。
+  Future<void> _catchUpLate(
+    Book book,
+    Future<PulledProgress?> pulling,
+    int since,
+  ) async {
+    final pulled = await pulling;
+    if (pulled == null || !pulled.isCurrent || !isCurrent(book)) return;
+    if (_commands != since || _switchingTo != null) return;
+    if (_phase != AudiobookPhase.playing && _phase != AudiobookPhase.paused) {
+      return;
+    }
+    // 播著的這段時間已經聽過另一台停的地方：這台才是最新的，不倒回去。
+    if (_phase == AudiobookPhase.playing && !_aheadOfHere(book, pulled)) return;
+    await _jumpToPulled(book, pulled, since);
+  }
+
+  /// 另一台停的地方（集、毫秒）在這台正在播的位置之後。
+  bool _aheadOfHere(Book book, PulledProgress pulled) {
+    final index = _pulledIndex(book, pulled);
+    return index > _index ||
+        (index == _index &&
+            pulled.progress.charOffset > position.value.inMilliseconds);
+  }
+
+  int _pulledIndex(Book book, PulledProgress pulled) => _playable(
+    pulled.progress.chapterIndexIn([
+      for (final chapter in _chapters) chapter.title,
+    ], reversed: book.getReverseToc()),
+  );
+
+  /// 換到另一台聽到的那一集的那一毫秒，位置完全一樣才不動；接上、存好才
+  /// 記成同步過。[play] 同 [_load]。
+  Future<void> _jumpToPulled(
+    Book book,
+    PulledProgress pulled,
+    int since, {
+    bool? play,
+  }) async {
+    final index = _pulledIndex(book, pulled);
     final at = Duration(milliseconds: pulled.progress.charOffset);
-    if (index != _index ||
-        (at - position.value).inMilliseconds.abs() > nearMs) {
-      await _load(index, start: at, play: false);
+    if (index != _index || at != position.value) {
+      // 那一集播不出來、被別的動作取代：沒接上，不記成同步過，下次再抓。
+      if (!await _load(index, start: at, play: play)) return;
     }
     // 載入途中停止、開了別本或換了集（在目錄選了別集）：沒接上，不記成
     // 同步過，下次回到前景再抓。
@@ -937,9 +1034,22 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
         _index != index) {
       return;
     }
-    await _saveProgress();
+    if (!await _saveProgress()) return;
     // 存進度的途中又按了什麼：這次接的進度沒留住，同樣不記。
-    if (_commands != since || _switchingTo != null) return;
+    if (_commands != since || _switchingTo != null || !isCurrent(book)) return;
+    try {
+      // 存檔記的是這台的時間；記成不比雲端那一筆早，之後往前聽的才比另一台
+      // 記的新（`BookDao.markProgressSynced`）。
+      final time = await _books.markProgressSynced(
+        book.bookUrl,
+        syncedTime: pulled.progress.time,
+      );
+      if (time == null) return;
+      book.progressTime = time;
+    } catch (error, stackTrace) {
+      AppLog.e('存收聽進度失敗', error: error, stackTrace: stackTrace);
+      return;
+    }
     await pulled.commit(ProgressSync.recordOf(book));
   }
 

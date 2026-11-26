@@ -257,6 +257,14 @@ class _Phone {
   Future<Book> book(String url) async => (await books.getByUrl(url))!;
 }
 
+/// 等日常的同步（含途中補跑的輪次）做完。
+Future<void> _settled(SyncService sync) async {
+  await pumpEventQueue();
+  while (sync.status.value.running) {
+    await pumpEventQueue();
+  }
+}
+
 void main() {
   // 刪書源時會清它在快取裡的登入資料，快取找存放的資料夾要用到。
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -448,13 +456,92 @@ void main() {
     },
   );
 
+  test('progress pulled before the book opens is written here and recorded '
+      'as synced', () async {
+    await a.addBook(
+      'a-src',
+      toc: toc,
+      chapterIndex: 3,
+      charOffset: 9,
+      time: 200,
+    );
+    await b.addBook('b-src', toc: toc, time: 100);
+    await a.sync.syncAll();
+
+    b.sync.openBook(await b.book('b-src'));
+    final pulled = await b.sync.pullProgress('b-src');
+    expect(await pulled!.applyBeforeOpen(), isTrue);
+    final book = await b.book('b-src');
+    expect(book.chapterIndex, 3);
+    expect(book.charOffset, 9);
+
+    await _settled(b.sync);
+    final writes = store.writes;
+    await b.sync.syncAll();
+    expect(store.writes, writes, reason: '記成同步過，不當成這台的改動再送');
+    expect(await b.sync.pullProgress('b-src'), isNull);
+  });
+
+  test(
+    'a phone whose clock runs behind takes the other phone\'s progress, '
+    'reads on, and the other phone follows instead of pulling it back',
+    () async {
+      // A 的時鐘比 B 快一小時。
+      final ahead = DateTime.now().millisecondsSinceEpoch + 3600000;
+      await a.addBook('a-src', toc: toc, chapterIndex: 2, time: ahead);
+      await b.addBook('b-src', toc: toc, time: 100);
+      await a.sync.syncAll();
+
+      // B 開著這本，接到 A 的進度、跳過去存好（存檔記的是 B 的時間）。
+      final opened = await b.book('b-src');
+      b.sync.openBook(opened);
+      final pulled = await b.sync.pullProgress('b-src');
+      expect(await b.books.updateProgress('b-src', 2, '第二章', 0), isNotNull);
+      final time = await b.books.markProgressSynced(
+        'b-src',
+        syncedTime: pulled!.progress.time,
+      );
+      expect(time, greaterThanOrEqualTo(ahead));
+      await pulled.commit(ProgressSync.recordOf(await b.book('b-src')));
+
+      // B 接著往前讀，再同步。
+      final moved = await b.books.updateProgress('b-src', 3, '第三章', 50);
+      expect(moved, greaterThan(ahead), reason: '時間只往後走');
+      b.sync.closeBook(opened);
+      await b.sync.syncAll();
+      expect((await b.book('b-src')).durChapterTitle, '第三章', reason: '沒被拉回去');
+
+      await a.sync.syncAll();
+      final there = await a.book('a-src');
+      expect(there.durChapterTitle, '第三章');
+      expect(there.charOffset, 50);
+    },
+  );
+
+  test('going to the background while a reader is open leaves the upload to '
+      'it: one round, not two', () async {
+    await b.addBook('b-src', toc: toc, time: 100);
+    await b.sync.syncAll();
+    final reads = store.reads['progress.json'] ?? 0;
+    final reader = Object();
+
+    b.sync.uploadsOnHide(reader, true);
+    b.sync.syncBeforeBackground();
+    await _settled(b.sync);
+    expect(store.reads['progress.json'] ?? 0, reads);
+
+    b.sync.uploadsOnHide(reader, false);
+    b.sync.syncBeforeBackground();
+    await _settled(b.sync);
+    expect(store.reads['progress.json'], reads + 1);
+  });
+
   test('nothing configured: nothing happens', () async {
     final idle = SyncService(
       settings: SyncSettings(),
       storeFactory: (space, _, _) => space == SyncSpace.none ? null : store,
     );
     await idle.start();
-    expect(idle.progressReady, isNull, reason: '開書不等');
     await idle.syncAll();
     expect(await idle.pullProgress('x'), isNull);
     expect(store.writes, 0);
@@ -564,8 +651,6 @@ void main() {
     await b.sync.start();
     expect((await b.book('b-src')).chapterIndex, 2);
     b.sync.syncAfterResume();
-    await b.sync.progressReady!.timeout(const Duration(seconds: 5));
-    expect(b.sync.progressReady, isNull);
     b.sync.syncBeforeBackground();
     b.sync.requestSyncProgressFirst();
     await pumpEventQueue();
@@ -629,10 +714,9 @@ void main() {
     await a.books.updateProgress('a-src', 3, '第三章', 9);
     await a.sync.syncAll();
     b.sync.syncAfterResume();
-    final ready = b.sync.progressReady!;
     stuck.complete();
     await full;
-    await ready;
+    await _settled(b.sync);
 
     expect((await b.book('b-src')).durChapterTitle, '第三章');
   });
@@ -704,26 +788,22 @@ void main() {
     }
   });
 
-  test(
-    'the reader stops waiting for progress when the space is down',
-    () async {
-      final down = _FailingStore()
-        ..failing['progress.json'] = const SyncStoreException('連不上同步空間');
-      final service = SyncService(
-        settings: SyncSettings(),
-        bases: SyncBaseStorage(
-          directory: () async => Directory('${baseDir.path}/down'),
-        ),
-        storeFactory: (_, _, _) => down,
-        kinds: (service) => [a.progress(service)],
-      );
+  test('a space that is down reports the error', () async {
+    final down = _FailingStore()
+      ..failing['progress.json'] = const SyncStoreException('連不上同步空間');
+    final service = SyncService(
+      settings: SyncSettings(),
+      bases: SyncBaseStorage(
+        directory: () async => Directory('${baseDir.path}/down'),
+      ),
+      storeFactory: (_, _, _) => down,
+      kinds: (service) => [a.progress(service)],
+    );
 
-      await service.start();
+    await service.start();
 
-      expect(service.progressReady, isNull);
-      expect(service.status.value.error, '連不上同步空間');
-    },
-  );
+    expect(service.status.value.error, '連不上同步空間');
+  });
 
   test('a full sync asked for on hearing "stopping" is not cancelled by the '
       'cancel that caused it', () async {
@@ -753,125 +833,6 @@ void main() {
 
     expect(await first, isA<FullSyncStopped>());
     expect(await again!, isA<FullSyncDone>());
-  });
-
-  group('coming back while an earlier sync is still running', () {
-    setUp(() async {
-      await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
-      await a.sync.syncAll();
-      await b.addBook('b-src', toc: toc, time: 100);
-    });
-
-    test('the reader waits for the round asked for on coming back, not the '
-        'one that read the cloud before', () async {
-      // 退到背景的那一輪讀雲端時卡住；這時回到 App，下一輪讀雲端也卡住。
-      final earlier = Completer<void>();
-      final later = Completer<void>();
-      final laterReading = Completer<void>();
-      var reads = 0;
-      store.beforeNextRead = (name) {
-        if (name != 'progress.json') return null;
-        reads++;
-        if (reads == 1) return earlier.future;
-        laterReading.complete();
-        return later.future;
-      };
-      b.sync.syncBeforeBackground();
-      // 等它真的讀到雲端才回到 App；只等一輪事件，CI 上前一輪常還沒開始讀，
-      // 回到 App 時要求的就是它，測的就不是這件事。
-      while (reads == 0) {
-        await pumpEventQueue();
-      }
-      b.sync.syncAfterResume();
-      final ready = b.sync.progressReady!;
-      var readyDone = false;
-      unawaited(ready.then((_) => readyDone = true));
-
-      earlier.complete();
-      await laterReading.future;
-      await pumpEventQueue();
-      expect(readyDone, isFalse, reason: '前一輪讀的是回到 App 之前的雲端');
-
-      later.complete();
-      await ready;
-      while (b.sync.status.value.running) {
-        await pumpEventQueue();
-      }
-    });
-
-    test('coming back while the launch sync reads the cloud waits for the '
-        'next round too', () async {
-      final earlier = Completer<void>();
-      final later = Completer<void>();
-      final laterReading = Completer<void>();
-      var reads = 0;
-      store.beforeNextRead = (name) {
-        if (name != 'progress.json') return null;
-        reads++;
-        if (reads == 1) return earlier.future;
-        laterReading.complete();
-        return later.future;
-      };
-      final launch = b.sync.start();
-      while (reads == 0) {
-        await pumpEventQueue();
-      }
-      final atLaunch = b.sync.progressReady!;
-      b.sync.syncAfterResume();
-      final ready = b.sync.progressReady!;
-      var readyDone = false;
-      var atLaunchDone = false;
-      unawaited(ready.then((_) => readyDone = true));
-      unawaited(atLaunch.then((_) => atLaunchDone = true));
-
-      earlier.complete();
-      await laterReading.future;
-      await pumpEventQueue();
-      expect(readyDone, isFalse);
-      expect(atLaunchDone, isFalse, reason: '開 App 時就在等的也等新的一輪');
-
-      later.complete();
-      await ready;
-      await atLaunch;
-      await launch;
-    });
-
-    test(
-      'coming back as the last sync reports done waits for the new round',
-      () async {
-        final later = Completer<void>();
-        final laterReading = Completer<void>();
-        Future<void>? ready;
-        void onStatus() {
-          if (b.sync.status.value.running || ready != null) return;
-          store.beforeNextRead = (name) {
-            if (name != 'progress.json') return null;
-            laterReading.complete();
-            return later.future;
-          };
-          b.sync.syncAfterResume();
-          ready = b.sync.progressReady;
-        }
-
-        b.sync.status.addListener(onStatus);
-        addTearDown(() => b.sync.status.removeListener(onStatus));
-        b.sync.syncProgress();
-        while (ready == null) {
-          await pumpEventQueue();
-        }
-        var readyDone = false;
-        unawaited(ready!.then((_) => readyDone = true));
-        await laterReading.future;
-        await pumpEventQueue();
-        expect(readyDone, isFalse, reason: '新的一輪還沒讀到雲端');
-
-        later.complete();
-        await ready;
-        while (b.sync.status.value.running) {
-          await pumpEventQueue();
-        }
-      },
-    );
   });
 
   test('a full sync asked for when the last round reports done runs, and the '
@@ -1700,7 +1661,7 @@ void main() {
         await a.sync.syncAll();
 
         b.sync.syncAfterResume();
-        await b.sync.progressReady;
+        await _settled(b.sync);
         var book = await b.book('x');
         var stored = await b.chapters.getByBook('x');
         expect(book.getReverseToc(), isFalse);
