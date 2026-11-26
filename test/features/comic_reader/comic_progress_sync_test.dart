@@ -11,7 +11,43 @@ import 'package:night_reader/features/comic_reader/comic_strip_view.dart';
 
 import '../audiobook/audiobook_test_doubles.dart';
 
-class _NoBookDao extends Fake implements BookDao {}
+class _BookDao extends Fake implements BookDao {
+  Book? stored;
+
+  @override
+  Future<Book?> getByUrl(String url) async => stored;
+
+  /// 跳到雲端進度後記下的時間。
+  final List<int> synced = [];
+
+  @override
+  Future<int?> markProgressSynced(
+    String bookUrl, {
+    required int syncedTime,
+  }) async {
+    synced.add(syncedTime);
+    return syncedTime;
+  }
+}
+
+/// 另一台在第 [chapter] 話第 [page] 張；記成同步過時 [commits] 加一。
+PulledProgress _cloudAt(int chapter, int page, void Function() onCommit) =>
+    PulledProgress(
+      SyncedProgress(
+        chapterIndex: chapter,
+        charOffset: page,
+        chapterTitle: '第${chapter + 1}話',
+        time: 9,
+      ),
+      (_) async => onCommit(),
+    );
+
+/// App 退到背景再回到前景。
+void _backToForeground() => TestWidgetsFlutterBinding.instance
+  ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+  ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+  ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+  ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -38,12 +74,15 @@ void main() {
       final jumps = <(int, int)>[];
       final progress = ComicProgressSync(
         book: Book(bookUrl: 'https://comic.test/b', name: '長圖', origin: 'x'),
-        bookDao: _NoBookDao(),
+        bookDao: _BookDao(),
         current: () => here,
         flush: () async {},
         titles: () => const ['第1話', '第2話'],
         ids: () => const ['c1', 'c2'],
-        jumpTo: (chapter, page) => jumps.add((chapter, page)),
+        jumpTo: (chapter, page) async {
+          jumps.add((chapter, page));
+          return true;
+        },
         resumes: false,
         sync: sync,
       )..start();
@@ -64,12 +103,135 @@ void main() {
     });
   }
 
-  test('另一台在同一話差 1 張以內不跳，換話或差更多才跳', () {
+  test('另一台不在同一張就跳，同一張不跳', () {
     const here = ComicLocation(3, 10, fraction: 0.4);
     expect(ComicProgressSync.shouldJump(here, 3, 10), isFalse);
-    expect(ComicProgressSync.shouldJump(here, 3, 11), isFalse);
-    expect(ComicProgressSync.shouldJump(here, 3, 9), isFalse);
-    expect(ComicProgressSync.shouldJump(here, 3, 12), isTrue);
+    expect(ComicProgressSync.shouldJump(here, 3, 11), isTrue);
+    expect(ComicProgressSync.shouldJump(here, 3, 9), isTrue);
     expect(ComicProgressSync.shouldJump(here, 4, 10), isTrue);
+  });
+
+  group('接另一台的進度', () {
+    late _BookDao bookDao;
+    late FakeSync sync;
+    late ComicLocation here;
+    late List<(int, int)> jumps;
+    late bool lands;
+    var commits = 0;
+
+    setUp(() {
+      bookDao = _BookDao();
+      sync = FakeSync();
+      here = const ComicLocation(0, 0, fraction: 0.1);
+      jumps = [];
+      lands = true;
+      commits = 0;
+    });
+
+    ComicProgressSync open({bool resumes = false}) {
+      final book = Book(
+        bookUrl: 'https://comic.test/b',
+        name: '長圖',
+        origin: 'x',
+      );
+      bookDao.stored = book;
+      final progress = ComicProgressSync(
+        book: book,
+        bookDao: bookDao,
+        current: () => here,
+        flush: () async {},
+        titles: () => const ['第1話', '第2話'],
+        ids: () => const ['c1', 'c2'],
+        jumpTo: (chapter, page) async {
+          jumps.add((chapter, page));
+          if (lands) here = ComicLocation(chapter, page);
+          return lands;
+        },
+        resumes: resumes,
+        sync: sync,
+      )..start();
+      addTearDown(progress.dispose);
+      return progress;
+    }
+
+    test('跳到了那一話那一張：記成同步過，時間不比那一筆早', () async {
+      open().bookOpened();
+      sync.pulled = _cloudAt(1, 3, () => commits++);
+      _backToForeground();
+      await pumpEventQueue();
+
+      expect(jumps, [(1, 3)]);
+      expect(commits, 1);
+      expect(bookDao.synced, [9]);
+    });
+
+    test('那一話載不下來、落到別話：不記成同步過', () async {
+      lands = false;
+      open().bookOpened();
+      sync.pulled = _cloudAt(1, 3, () => commits++);
+      _backToForeground();
+      await pumpEventQueue();
+
+      expect(jumps, [(1, 3)]);
+      expect(commits, 0);
+      expect(bookDao.synced, isEmpty);
+    });
+
+    test('開書時雲端進度晚到：先照這台的位置開，讀者沒捲就跳過去', () async {
+      sync
+        ..pullGate = Completer<void>()
+        ..pulled = _cloudAt(1, 2, () => commits++);
+      final progress = open(resumes: true);
+      final at = await progress.openLocation();
+      expect(at?.chapterIndex, 0);
+      expect(sync.opened, ['https://comic.test/b']);
+      progress.bookOpened();
+
+      sync.pullGate!.complete();
+      await pumpEventQueue();
+
+      expect(jumps, [(1, 2)]);
+      expect(commits, 1);
+    });
+
+    test('開書時雲端進度晚到、讀者已經捲過：不跳', () async {
+      sync
+        ..pullGate = Completer<void>()
+        ..pulled = _cloudAt(1, 2, () => commits++);
+      final progress = open(resumes: true);
+      await progress.openLocation();
+      progress.bookOpened();
+      here = const ComicLocation(0, 1);
+
+      sync.pullGate!.complete();
+      await pumpEventQueue();
+
+      expect(jumps, isEmpty);
+      expect(commits, 0);
+    });
+
+    testWidgets('讀書途中位置變了、畫面停住 8 秒才送；一直在捲就不送', (tester) async {
+      final progress = open()..bookOpened();
+      progress.moved();
+      for (var i = 0; i < 10; i++) {
+        progress.located();
+        await tester.pump(const Duration(seconds: 1));
+      }
+      expect(sync.progressFirstRequests, 0);
+
+      // 最後一次捲動之後至少停住 8 秒才送（最晚 16 秒）。
+      await tester.pump(const Duration(seconds: 8));
+      expect(sync.progressFirstRequests, 0);
+      await tester.pump(const Duration(seconds: 8));
+      await tester.pump();
+      expect(sync.progressFirstRequests, 1);
+      progress.dispose();
+    });
+
+    test('從目錄點某一話開書：不抓', () async {
+      final progress = open();
+      expect(await progress.openLocation(), isNull);
+      expect(sync.pulls, 0);
+    });
   });
 }

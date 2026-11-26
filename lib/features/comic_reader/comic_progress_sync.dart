@@ -5,16 +5,20 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
+import 'package:night_reader/core/sync/reading_upload_pacer.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 
 import 'comic_strip_view.dart';
 
-/// 漫畫閱讀器這一頭的進度同步，規則同文字閱讀器（ADR 0039、0052）：
-/// - 接著上次讀的地方開書時，開 App 的那次同步還沒做完就等它（最多
-///   [openGrace]），再照這台資料庫裡的位置開。
-/// - 回到前景時抓這本書的雲端進度，比這台新、而且從那之後沒捲過，就跳過去；
-///   同一話差 [nearPages] 張以內不跳。
-/// - 退到背景、離開閱讀器時存好進度再上傳。
+/// 漫畫閱讀器這一頭的進度同步，規則同文字閱讀器（ADR 0039、0052）：誰新
+/// 用誰。
+/// - 接著上次讀的地方開書時抓這本書的雲端進度，最多等 [openGrace]：等到了
+///   而且比這台新就照它開；等不及先照這台的位置開，晚到時讀者還沒捲就跳
+///   過去。從目錄或詳情點了某一話開書不抓。
+/// - 回到前景時再抓一次，比這台新、而且抓的途中沒捲過，就跳到那一話那一張；
+///   位置完全一樣才不動。
+/// - 讀書途中畫面停住時上傳（[ReadingUploadPacer]）；退到背景、離開閱讀器
+///   時存好進度再上傳。
 class ComicProgressSync {
   ComicProgressSync({
     required this.book,
@@ -25,13 +29,11 @@ class ComicProgressSync {
     required this.ids,
     required this.jumpTo,
     this.resumes = true,
+    this._busy,
     SyncService? sync,
   }) : _sync = sync ?? SyncService.instance;
 
   static const Duration openGrace = Duration(milliseconds: 500);
-
-  /// 同一話差這麼多張以內不跳（使用者 2026-11-09 選，對應文字書的 100 字）。
-  static const int nearPages = 1;
 
   final Book book;
   final BookDao bookDao;
@@ -48,22 +50,36 @@ class ComicProgressSync {
   /// 這台每一話的章指紋（目錄的網址）：本地漫畫照它對另一台的那一話。
   final List<String> Function() ids;
 
-  /// 跳到另一台的位置。
-  final void Function(int chapterIndex, int pageIndex) jumpTo;
+  /// 跳到另一台的位置；傳回有沒有落在那一話那一張（那一話載不下來、換到
+  /// 別話就是 false）。
+  final Future<bool> Function(int chapterIndex, int pageIndex) jumpTo;
 
   /// 接著上次讀的地方開書（不是從目錄或詳情點了某一話）。
   final bool resumes;
   final SyncService _sync;
 
+  /// 畫面還在動（自動捲動中）。
+  final bool Function()? _busy;
+
+  late final ReadingUploadPacer _pacer = ReadingUploadPacer(
+    upload: _upload,
+    busy: _busy,
+  );
+
   AppLifecycleListener? _lifecycle;
+
+  /// 開書時等不及的那次抓取：進度晚到時，書已經開在這台的位置了。
+  Future<PulledProgress?>? _lateProgress;
   bool _marked = false;
   bool _opened = false;
   bool _disposed = false;
+  bool _foreground = true;
 
   /// 開書失敗後重試會再呼叫一次，只註冊一次。
   void start() {
     if (!resumes) _markOpen();
     _lifecycle ??= AppLifecycleListener(onShow: _onShow, onHide: _onHide);
+    _sync.uploadsOnHide(this, true);
   }
 
   void _markOpen() {
@@ -72,20 +88,30 @@ class ComicProgressSync {
     _sync.openBook(book);
   }
 
-  /// 開書前呼叫：要開在哪裡（這台資料庫裡、等過同步的位置）；從目錄點的
-  /// 或讀不到時是 null。
+  /// 開書前呼叫：要開在哪裡（這台資料庫裡的位置，抓得到比這台新的雲端
+  /// 進度時先寫進去）；從目錄點的或讀不到時是 null。
   Future<({int chapterIndex, int pageIndex, double fraction})?>
   openLocation() async {
     if (!resumes) return null;
-    final ready = _sync.progressReady;
-    if (ready != null) {
-      await Future.any([ready, Future<void>.delayed(openGrace)]);
+    // 先記成開著：背景的同步不再改這本，由這裡抓的那一筆決定。
+    _markOpen();
+    final pulling = _sync.pullProgress(book.bookUrl);
+    if (await settlesWithin(pulling, openGrace)) {
+      if (_disposed) return null;
+      try {
+        await (await pulling)?.applyBeforeOpen();
+      } catch (error, stackTrace) {
+        AppLog.e('接上雲端進度失敗', error: error, stackTrace: stackTrace);
+      }
+    } else {
+      _lateProgress = pulling;
     }
     if (_disposed) return null;
-    _markOpen();
     try {
       final stored = await bookDao.getByUrl(book.bookUrl);
       if (stored == null) return null;
+      // 記憶體裡的書之後可能整筆寫回資料庫，位置移動的時間要跟著。
+      book.progressTime = stored.progressTime;
       return (
         chapterIndex: stored.chapterIndex,
         pageIndex: stored.charOffset,
@@ -101,29 +127,75 @@ class ComicProgressSync {
   void bookOpened() {
     _opened = true;
     _markOpen();
+    if (_foreground) _pacer.start();
+    final late = _lateProgress;
+    _lateProgress = null;
+    if (late != null) unawaited(_catchUp(late));
   }
 
-  void _onShow() => unawaited(_pullAfterResume());
+  /// 畫面上的位置變了（捲動中也會一直呼叫）。
+  void located() => _pacer.activity();
+
+  /// 存進度時位置真的移動了。
+  void moved() => _pacer.moved();
+
+  /// 開書時雲端進度還沒抓到、先照這台的位置開了：抓到時讀者還沒捲就跳過去。
+  Future<void> _catchUp(Future<PulledProgress?> pulling) async {
+    final since = current();
+    if (since == null) return;
+    await _jumpIfStill(await pulling, since);
+  }
+
+  void _onShow() {
+    _foreground = true;
+    if (_opened && !_disposed) _pacer.start();
+    unawaited(_pullAfterResume());
+  }
 
   Future<void> _pullAfterResume() async {
     if (!_opened || _disposed) return;
-    await flush();
+    try {
+      await flush();
+    } catch (error, stackTrace) {
+      AppLog.e('存進度失敗', error: error, stackTrace: stackTrace);
+    }
     final since = current();
     if (since == null) return;
-    final pulled = await _sync.pullProgress(book.bookUrl);
+    await _jumpIfStill(await _sync.pullProgress(book.bookUrl), since);
+  }
+
+  /// 抓到比這台新的進度、而且從 [since] 之後沒捲過（同一張長圖裡往下讀也
+  /// 算），就跳到那一話那一張。
+  Future<void> _jumpIfStill(PulledProgress? pulled, ComicLocation since) async {
     if (pulled == null || !pulled.isCurrent || _disposed) return;
-    // 抓的途中讀者捲過（同一張長圖裡往下讀也算）就不跳。
     final now = current();
-    if (now == null || now != since) return;
+    if (now == null || !sameSpot(now, since)) return;
     final index = pulled.progress.chapterIndexIn(
       titles(),
       ids: ids(),
       reversed: book.getReverseToc(),
     );
     final page = pulled.progress.charOffset;
-    if (shouldJump(now, index, page)) jumpTo(index, page);
-    await flush();
-    if (_disposed) return;
+    if (shouldJump(now, index, page)) {
+      // 那一話載不下來、不能讀而換到別話、張數不夠：沒接上，不記成同步過，
+      // 下次回到前景再抓。
+      if (!await jumpTo(index, page) || _disposed) return;
+    }
+    try {
+      await flush();
+      if (_disposed) return;
+      // 跳轉存檔記的是這台的時間；記成不比雲端那一筆早，之後往前讀的才比
+      // 另一台記的新（`BookDao.markProgressSynced`）。
+      final time = await bookDao.markProgressSynced(
+        book.bookUrl,
+        syncedTime: pulled.progress.time,
+      );
+      if (time == null || _disposed) return;
+      book.progressTime = time;
+    } catch (error, stackTrace) {
+      AppLog.e('存進度失敗', error: error, stackTrace: stackTrace);
+      return;
+    }
     await pulled.commit(
       ProgressSync.recordOf(
         book,
@@ -132,12 +204,23 @@ class ComicProgressSync {
     );
   }
 
-  /// 另一台在第 [chapterIndex] 話第 [pageIndex] 張，這台要不要跳過去。
+  /// 另一台在第 [chapterIndex] 話第 [pageIndex] 張，這台要不要跳過去：
+  /// 不在同一張就跳。
   static bool shouldJump(ComicLocation here, int chapterIndex, int pageIndex) =>
-      chapterIndex != here.chapterIndex ||
-      (pageIndex - here.pageIndex).abs() > nearPages;
+      chapterIndex != here.chapterIndex || pageIndex != here.pageIndex;
 
-  void _onHide() => _upload();
+  /// 讀者沒捲過：同一話同一張，那張圖讀到的幾成也一樣。開書還原到那張圖
+  /// 的幾成時，換算回來會差一點點，不算捲過。
+  static bool sameSpot(ComicLocation a, ComicLocation b) =>
+      a.chapterIndex == b.chapterIndex &&
+      a.pageIndex == b.pageIndex &&
+      (a.fraction - b.fraction).abs() < 0.01;
+
+  void _onHide() {
+    _foreground = false;
+    _pacer.stop();
+    _upload();
+  }
 
   void _upload() {
     unawaited(
@@ -153,8 +236,11 @@ class ComicProgressSync {
   }
 
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
+    _pacer.dispose();
     _lifecycle?.dispose();
+    _sync.uploadsOnHide(this, false);
     if (_marked) _sync.closeBook(book);
     _upload();
   }

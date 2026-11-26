@@ -138,12 +138,13 @@ class _ComicReaderPageState extends State<ComicReaderPage>
   late final ComicProgressSync _sync = ComicProgressSync(
     book: _book,
     bookDao: getIt<BookDao>(),
-    current: () => _location,
+    current: () => _model == null ? null : _readingLocation,
     flush: _flush,
     titles: () => [for (final chapter in _chapters) chapter.title],
     ids: () => [for (final chapter in _chapters) chapter.url],
-    jumpTo: (chapter, page) => _jumpTo(chapter, pageIndex: page),
+    jumpTo: _jumpToSynced,
     resumes: widget.startChapter == null,
+    busy: () => _autoScrolling.value,
   );
 
   Book get _book => widget.book;
@@ -209,7 +210,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       await _routeSettled();
       if (!mounted) return;
       _sync.start();
-      // 接著上次讀的地方開：等開 App 的同步做完一下，照同步後的位置開。
+      // 接著上次讀的地方開：先抓這本的雲端進度一下，比這台新就照它開。
       final resume = await _sync.openLocation();
       if (!mounted) return;
       final start = widget.startChapter;
@@ -319,6 +320,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     _currentChapter.value = location.chapterIndex;
     _refreshProgress(location.chapterIndex, location.pageIndex);
     _progressWrites.schedule(location);
+    _sync.located();
   }
 
   Future<void> _save(ComicLocation location) async {
@@ -360,7 +362,10 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       ..visualOffsetPx = location.fraction
       ..durChapterTitle = title
       ..durChapterTime = DateTime.now().millisecondsSinceEpoch;
-    if (movedAt case final time?) _book.progressTime = time;
+    if (movedAt case final time?) {
+      _book.progressTime = time;
+      _sync.moved();
+    }
   }
 
   Future<void> _flush() => _progressWrites.flush();
@@ -401,9 +406,16 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     if (model == null) return;
     _stopAutoScroll();
     model.jumpTo(chapterIndex, pageIndex: pageIndex);
-    _currentChapter.value = chapterIndex;
-    _refreshProgress(chapterIndex, pageIndex);
-    _onLocation(ComicLocation(chapterIndex, pageIndex));
+    // 那一話不能讀時錨點換到別話：記錨點落在的地方，不是要的那一話。
+    _onLocation(ComicLocation(model.anchorChapter, model.anchorPage));
+  }
+
+  /// 跳到另一台的位置，傳回錨點有沒有落在那一話那一張。
+  Future<bool> _jumpToSynced(int chapterIndex, int pageIndex) {
+    final model = _model;
+    if (model == null) return Future.value(false);
+    _jumpTo(chapterIndex, pageIndex: pageIndex);
+    return model.landsAt(chapterIndex, pageIndex);
   }
 
   /// 上一話、下一話：跳過分卷標題與付費章節（[BookChapter.isSkippedWhenReading]）。

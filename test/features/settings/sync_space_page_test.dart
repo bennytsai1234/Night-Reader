@@ -249,7 +249,6 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
 
     expect(store.reads, 0);
-    expect(sync.progressReady, isNull);
     gate.complete();
     await settle(tester);
 

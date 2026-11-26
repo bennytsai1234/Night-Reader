@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/comic/comic_chapter_files.dart';
 
@@ -214,6 +216,32 @@ class ComicStripModel extends ChangeNotifier {
     _load(_anchorChapter);
   }
 
+  /// 這次跳章（[jumpTo] 之後馬上呼叫）的錨點那一話載好或載不下來時完成：
+  /// 傳回錨點是不是落在第 [chapterIndex] 話第 [pageIndex] 張。那一話載不
+  /// 下來、不能讀而換到別話、張數不夠移到最後一張、等的途中又跳了別處或
+  /// 關掉了，都是 false。
+  Future<bool> landsAt(int chapterIndex, int pageIndex) async {
+    final generation = _generation;
+    while (!_disposed && generation == _generation) {
+      final state = _chapters[_anchorChapter];
+      if (state is ComicChapterFailed) return false;
+      if (state is ComicChapterReady && _hi >= _lo) {
+        return _anchorChapter == chapterIndex && _anchorPage == pageIndex;
+      }
+      await (_changed ??= Completer<void>()).future;
+    }
+    return false;
+  }
+
+  /// 等下一次變動的（[landsAt]）；通知或關掉時放掉。
+  Completer<void>? _changed;
+
+  void _releaseWaiters() {
+    final changed = _changed;
+    _changed = null;
+    changed?.complete();
+  }
+
   /// 預載範圍伸到內容下面了：接上下一話。上次載不下來的不自動再試：捲動
   /// 每一幀都會問，失敗、重畫、再試會一直打書源；使用者按「重試」才再載
   /// （[retry]）。只在 [prefetchAround] 先拿時失敗的，捲到這裡再試一次。
@@ -407,11 +435,13 @@ class ComicStripModel extends ChangeNotifier {
 
   void _notify() {
     if (!_disposed) notifyListeners();
+    _releaseWaiters();
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _releaseWaiters();
     super.dispose();
   }
 }

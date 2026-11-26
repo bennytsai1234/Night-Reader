@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/comic_reader/comic_strip_model.dart';
 
@@ -122,5 +124,80 @@ void main() {
     expect((model.anchorChapter, model.anchorPage), (2, 7));
     expect(model.anchorMoved, isFalse);
     model.dispose();
+  });
+
+  group('a jump to another phone\'s position knows where it landed', () {
+    test('the chapter and page it asked for', () async {
+      final model = ComicStripModel(
+        source: FakeComicSource(),
+        chapterCount: 3,
+        chapterIndex: 0,
+      )..start();
+      addTearDown(model.dispose);
+      await _idle();
+
+      model.jumpTo(2, pageIndex: 3);
+      expect(await model.landsAt(2, 3), isTrue);
+    });
+
+    test('a chapter that fails to load', () async {
+      final source = FakeComicSource()..failingChapters.add(2);
+      final model = ComicStripModel(
+        source: source,
+        chapterCount: 3,
+        chapterIndex: 0,
+      )..start();
+      addTearDown(model.dispose);
+      await _idle();
+
+      model.jumpTo(2, pageIndex: 1);
+      expect(await model.landsAt(2, 1), isFalse);
+    });
+
+    test('a chapter that cannot be read moves the anchor to another', () async {
+      final model = ComicStripModel(
+        source: FakeComicSource(),
+        chapterCount: 3,
+        chapterIndex: 0,
+        isReadable: (index) => index != 1,
+      )..start();
+      addTearDown(model.dispose);
+      await _idle();
+
+      model.jumpTo(1, pageIndex: 2);
+      expect(model.anchorChapter, 2);
+      expect(await model.landsAt(1, 2), isFalse);
+    });
+
+    test('a page past the end of the chapter', () async {
+      final model = ComicStripModel(
+        source: FakeComicSource(pagesPerChapter: 4),
+        chapterCount: 3,
+        chapterIndex: 0,
+      )..start();
+      addTearDown(model.dispose);
+      await _idle();
+
+      model.jumpTo(1, pageIndex: 9);
+      expect(await model.landsAt(1, 9), isFalse);
+    });
+
+    test('another jump while it loads', () async {
+      final source = FakeComicSource();
+      source.chapterGates[2] = Completer<void>();
+      final model = ComicStripModel(
+        source: source,
+        chapterCount: 3,
+        chapterIndex: 0,
+      )..start();
+      addTearDown(model.dispose);
+      await _idle();
+
+      model.jumpTo(2, pageIndex: 1);
+      final landing = model.landsAt(2, 1);
+      model.jumpTo(0);
+      source.chapterGates[2]!.complete();
+      expect(await landing, isFalse);
+    });
   });
 }

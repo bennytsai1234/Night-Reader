@@ -67,4 +67,45 @@ void main() {
     expect(moved, isNotNull);
     expect((await dao.getByUrl('u'))!.progressTime, moved);
   });
+
+  group('progress time only moves forward', () {
+    late BookDao dao;
+    // 從另一台接來的時間，比這台的時鐘快一小時。
+    final ahead = DateTime.now().millisecondsSinceEpoch + 3600000;
+
+    setUp(() async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      dao = BookDao(db);
+      await dao.upsert(
+        Book(
+          bookUrl: 'u',
+          name: '夜航',
+          durChapterTitle: '第一章',
+          progressTime: ahead,
+        ),
+      );
+    });
+
+    test('a move after a time from a faster clock is later than it', () async {
+      expect(await dao.updateProgress('u', 0, '第一章', 40), ahead + 1);
+      expect((await dao.getByUrl('u'))!.progressTime, ahead + 1);
+    });
+
+    test('marking a jump to synced progress takes the later of now and the '
+        'synced time, never earlier than before', () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      expect(await dao.markProgressSynced('u', syncedTime: 5), ahead);
+      expect(
+        await dao.markProgressSynced('u', syncedTime: ahead + 7),
+        ahead + 7,
+      );
+      await dao.upsert((await dao.getByUrl('u'))!.copyWith(progressTime: 5));
+      expect(
+        await dao.markProgressSynced('u', syncedTime: 6),
+        greaterThanOrEqualTo(now),
+      );
+      expect(await dao.markProgressSynced('missing', syncedTime: 6), isNull);
+    });
+  });
 }

@@ -78,25 +78,67 @@ class SyncStatus {
   );
 }
 
-/// 閱讀器開書或回到前景時抓到、比這台新的進度。跳過去、存好位置之後，用
-/// 存下的那一筆（[ProgressSync.recordOf]）呼叫 [commit]，把它記成和雲端那筆
-/// 同步過，離開時不會再當成新的改動上傳；之後又讀了的話，和它比得出來。
-/// 沒跳成（取不到那一章、被別的操作取代）就不要呼叫，下次還會再抓到。
+/// 閱讀器開書或回到前景時抓到、比這台新的進度。跳過去、存好位置之後，把
+/// 位置移動的時間記成 `BookDao.markProgressSynced` 傳回的、再用存下的那一筆
+/// （[ProgressSync.recordOf]）呼叫 [commit]，把它記成和雲端那筆同步過，離開
+/// 時不會再當成新的改動上傳；之後又讀了的話，和它比得出來。沒跳成（取不
+/// 到那一章、落到別章、被別的操作取代、存檔失敗）就不要呼叫，下次還會再
+/// 抓到。開書前就抓到的用 [applyBeforeOpen]。
 class PulledProgress {
-  PulledProgress(this.progress, this._commit, {bool Function()? isCurrent})
-    : _isCurrent = isCurrent ?? _always;
+  PulledProgress(
+    this.progress,
+    this._commit, {
+    bool Function()? isCurrent,
+    Future<SyncRecord?> Function()? applyStored,
+  }) : _isCurrent = isCurrent ?? _always,
+       _applyStored = applyStored ?? _nothing;
 
   final SyncedProgress progress;
   final Future<void> Function(SyncRecord applied) _commit;
   final bool Function() _isCurrent;
+  final Future<SyncRecord?> Function() _applyStored;
 
   static bool _always() => true;
+
+  static Future<SyncRecord?> _nothing() async => null;
 
   /// 抓的這段時間沒有換同步空間、也沒停用：換過的話抓到的是舊空間的進度，
   /// 不能跳過去，不然之後會被當成這台的新進度送進新的空間。
   bool get isCurrent => _isCurrent();
 
   Future<void> commit(SyncRecord applied) => _commit(applied);
+
+  /// 開書前（這本書還沒顯示）就抓到：像整次同步套用關著的書一樣，把位置
+  /// 寫進這台的資料庫，記成同步過，閱讀器再照資料庫的位置開。傳回寫成了
+  /// 沒有。記成同步過要等正在跑的那輪同步做完，不等它：那輪看到的這台位置
+  /// 已經和雲端一樣，不會上傳也不會套用。
+  Future<bool> applyBeforeOpen() async {
+    if (!isCurrent) return false;
+    final applied = await _applyStored();
+    if (applied == null) return false;
+    unawaited(
+      commit(applied).catchError((Object error, StackTrace stackTrace) {
+        AppLog.e('記下同步紀錄失敗', error: error, stackTrace: stackTrace);
+      }),
+    );
+    return true;
+  }
+}
+
+/// 等 [future]（開書時抓雲端進度），最多 [limit]；傳回它有沒有在時限內完成
+/// （失敗也算完成）。
+Future<bool> settlesWithin(Future<Object?> future, Duration limit) {
+  final done = Completer<bool>();
+  final timer = Timer(limit, () {
+    if (!done.isCompleted) done.complete(false);
+  });
+  unawaited(
+    future.then<void>((_) {}, onError: (Object _) {}).whenComplete(() {
+      timer.cancel();
+      if (!done.isCompleted) done.complete(true);
+    }),
+  );
+  return done.future;
 }
 
 /// 同步現在在哪個階段（`docs/state-machines.md`「同步」）。
@@ -234,6 +276,9 @@ class SyncService {
   /// 與使用者改的資料等關掉後下次同步）。
   final Set<String> _openBooks = {};
 
+  /// 退到背景時自己存好進度再送的閱讀器與播放器（[uploadsOnHide]）。
+  final Set<Object> _hideUploaders = {};
+
   /// 換同步空間或停用時加一：之前抓到、還沒 commit 的進度屬於舊的空間，
   /// 不再記進上次同步的紀錄。
   int _generation = 0;
@@ -297,8 +342,7 @@ class SyncService {
   /// 書名加作者是 [key] 的書正開在閱讀器裡（[openBook]）。
   bool isBookOpen(String key) => _openBooks.contains(key);
 
-  /// 全面同步的順序：閱讀進度最先，正在等的閱讀器先拿到另一台讀到的地方
-  /// （[progressReady]）。書源先到，書架上新加的書才
+  /// 全面同步的順序：閱讀進度最先。書源先到，書架上新加的書才
   /// 找得到書源；書先加進書架，進度才套用得上，所以書架之後再同步一次進度
   /// （只在中間有套用改動時，[_syncOnce]）。
   static List<SyncKind> _defaultKinds(SyncService service) => [
@@ -426,10 +470,10 @@ class SyncService {
 
   void closeBook(Book book) => _openBooks.remove(ProgressSync.keyOf(book));
 
-  /// 日常的同步（開 App、回到前景、退到背景、離開閱讀器）：只同步閱讀進度，
-  /// 不等結果。其他資料在主執行緒上比對很重，開書時跟著跑會讓動畫掉幀，
-  /// 只在使用者按「立即全面同步」時同步（[syncAll]，ADR 0046）。正在同步
-  /// 時，跑完再補一次。
+  /// 日常的同步（開 App、回到前景、退到背景、離開閱讀器、讀書途中畫面停住
+  /// 時）：只同步閱讀進度，不等結果。其他資料在主執行緒上比對很重，開書時
+  /// 跟著跑會讓動畫掉幀，只在使用者按「立即全面同步」時同步（[syncAll]，
+  /// ADR 0046）。正在同步時，跑完再補一次。
   void syncProgress() => unawaited(_requestProgress());
 
   /// 全面同步：書架、書源、替換規則、設定、登入資料……全部種類。使用者在
@@ -464,10 +508,23 @@ class SyncService {
     }
   }
 
-  /// App 進入背景時同步本機改動；Google 帳號選取造成的暫停不算。
+  /// App 進入背景時同步本機改動；Google 帳號選取造成的暫停不算。閱讀器或
+  /// 播放器開著時由它們存好進度再送（[uploadsOnHide]），這裡不另排一輪：
+  /// 退到背景只同步一輪，而且讀的是存好之後的進度。
   void syncBeforeBackground() {
-    if (_authorizingGoogleDrive) return;
+    if (_authorizingGoogleDrive || _hideUploaders.isNotEmpty) return;
     syncProgress();
+  }
+
+  /// [owner]（閱讀器、播放器）開著、退到背景時會自己存好進度再
+  /// [requestSyncProgressFirst]：[on] 是 true 時登記，關掉或不再上傳時傳
+  /// false。
+  void uploadsOnHide(Object owner, bool on) {
+    if (on) {
+      _hideUploaders.add(owner);
+    } else {
+      _hideUploaders.remove(owner);
+    }
   }
 
   /// 離開閱讀器、剛存好閱讀進度時用：同步閱讀進度，而且優先送出。正在全面
@@ -539,69 +596,31 @@ class SyncService {
   /// 完成」時又要求同步的，會開新的一段，不會拿到這一段的 future。
   void _finishRun() {
     _run = null;
-    // 沒設定同步空間、或沒走到閱讀進度就失敗了，開書也不再等。先取下這一段
-    // 的等待再通知：聽到通知才回到 App 的，等的是新的一段。
-    final waiting = _progressPending;
-    _progressPending = null;
     status.value = status.value.copyWith(
       phase: SyncPhase.idle,
       clearProgress: true,
     );
-    waiting?.complete();
   }
 
   /// 開 App 進場播完時：讀出設定、同步一次閱讀進度，並開始數這台的改動
   /// （[_watchEdits]）。
   Future<void> start() async {
-    _expectProgress();
     try {
       await load();
     } catch (error, stackTrace) {
       AppLog.e('讀同步設定失敗', error: error, stackTrace: stackTrace);
-      _progressDone();
       return;
     }
     _watchEdits();
     await _requestProgress();
   }
 
-  /// App 回到前景：同步閱讀進度，把別台在這段時間讀到的地方接過來。開書等
-  /// 它做完（[progressReady]）。
+  /// App 回到前景：同步閱讀進度，把別台在這段時間讀到的地方接過來。開著
+  /// 的書由閱讀器自己抓（[pullProgress]）。
   void syncAfterResume() {
     if (_authorizingGoogleDrive) return;
-    _expectProgress();
     syncProgress();
   }
-
-  /// 開 App 或回到前景後，閱讀進度還沒同步完時是這次同步做完進度那一步的
-  /// 時候；其他時候是 null。
-  Completer<void>? _progressPending;
-
-  /// 開始等下一個進度那一步。已經有人在等的，換成新的、和新的一起放掉：
-  /// 正在做的那一步讀的可能是這次要求之前的雲端。
-  void _expectProgress() {
-    final earlier = _progressPending;
-    final waiting = _progressPending = Completer<void>();
-    if (earlier != null) unawaited(waiting.future.then(earlier.complete));
-  }
-
-  void _progressDone() {
-    _progressPending?.complete();
-    _progressPending = null;
-  }
-
-  /// 進度那一步做完：開始時就在等的（[waiting]）才放掉。這一步開始之後才
-  /// 等的（讀雲端時回到 App），等的是排在後面的那一輪。
-  void _progressStepDone(Completer<void>? waiting) {
-    if (waiting != null && identical(waiting, _progressPending)) {
-      _progressDone();
-    }
-  }
-
-  /// 開 App 或回到前景後的這次同步，閱讀進度那一步做完（不論成功、失敗或
-  /// 沒設定同步空間）時完成；已經做完就是 null。開書等它，書就開在另一台
-  /// 讀到的地方，開書本身不連網。
-  Future<void>? get progressReady => _progressPending?.future;
 
   final List<StreamSubscription<void>> _edits = [];
 
@@ -670,7 +689,6 @@ class SyncService {
           status.value = status.value.copyWith(
             progress: (kind: kind.name, step: index + 1, total: kinds.length),
           );
-          final waiting = kind is ProgressSync ? _progressPending : null;
           final kindTimer = Stopwatch()..start();
           try {
             if (await _syncKind(store, kind)) {
@@ -694,7 +712,6 @@ class SyncService {
               (elapsed) => elapsed + kindTimer.elapsedMilliseconds,
               ifAbsent: () => kindTimer.elapsedMilliseconds,
             );
-            if (kind is ProgressSync) _progressStepDone(waiting);
           }
           if (run.progressFirst) {
             run.progressFirst = false;
@@ -847,7 +864,7 @@ class SyncService {
   static String? _printOf(SyncFingerprint fingerprint, SyncRecord? record) =>
       record == null ? null : fingerprint(record);
 
-  /// 閱讀器開著、App 回到前景時抓這本書的雲端進度（整次同步不改開著的
+  /// 閱讀器開書、App 回到前景時抓這本書的雲端進度（整次同步不改開著的
   /// 書）：比這台的新才傳回，否則 null。連不上、沒設定同步空間也是 null，
   /// 閱讀器照常停在原處。
   ///
@@ -894,6 +911,11 @@ class SyncService {
         SyncedProgress.fromRecord(theirs),
         (applied) => _commitPulled(key, theirs, applied, generation),
         isCurrent: () => generation == _generation,
+        applyStored: () async {
+          final current = await bookDao.getByUrl(bookUrl);
+          if (current == null) return null;
+          return _progress.applyTo(current, theirs);
+        },
       );
     } catch (error, stackTrace) {
       AppLog.e('抓雲端進度失敗', error: error, stackTrace: stackTrace);

@@ -33,6 +33,12 @@ class ReaderProgressController {
   bool _disposed = false;
   bool _retired = false;
   ReaderLocation? _lastWritten;
+
+  /// 捲動中記下位置、或馬上存一筆時呼叫（讀書途中上傳看畫面停住了沒）。
+  void Function()? onActivity;
+
+  /// 存好的這一筆位置真的移動了（[BookDao.updateProgress] 傳回時間）時呼叫。
+  void Function()? onMoved;
   late final StreamSubscription<String> _moves;
 
   void retire() {
@@ -46,11 +52,13 @@ class ReaderProgressController {
 
   void schedule(ReaderLocation location) {
     if (_disposed || _retired) return;
+    onActivity?.call();
     _queue.schedule(location.normalized());
   }
 
   Future<void> saveImmediately(ReaderLocation location) async {
     if (_disposed || _retired) return;
+    onActivity?.call();
     await _queue.saveImmediately(location.normalized());
   }
 
@@ -127,7 +135,10 @@ class ReaderProgressController {
     book.readerAnchorJson = anchorJson;
     book.durChapterTime = DateTime.now().millisecondsSinceEpoch;
     // 記憶體裡的書之後可能整筆寫回資料庫，位置移動的時間要跟著。
-    if (movedAt case final time?) book.progressTime = time;
+    if (movedAt case final time?) {
+      book.progressTime = time;
+      onMoved?.call();
+    }
   }
 
   void dispose() {
