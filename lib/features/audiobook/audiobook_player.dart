@@ -993,8 +993,24 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     if (_phase != AudiobookPhase.playing && _phase != AudiobookPhase.paused) {
       return;
     }
+    // 播著的這段時間已經聽過另一台停的地方：這台才是最新的，不倒回去。
+    if (_phase == AudiobookPhase.playing && !_aheadOfHere(book, pulled)) return;
     await _jumpToPulled(book, pulled, since);
   }
+
+  /// 另一台停的地方（集、毫秒）在這台正在播的位置之後。
+  bool _aheadOfHere(Book book, PulledProgress pulled) {
+    final index = _pulledIndex(book, pulled);
+    return index > _index ||
+        (index == _index &&
+            pulled.progress.charOffset > position.value.inMilliseconds);
+  }
+
+  int _pulledIndex(Book book, PulledProgress pulled) => _playable(
+    pulled.progress.chapterIndexIn([
+      for (final chapter in _chapters) chapter.title,
+    ], reversed: book.getReverseToc()),
+  );
 
   /// 換到另一台聽到的那一集的那一毫秒，位置完全一樣才不動；接上、存好才
   /// 記成同步過。[play] 同 [_load]。
@@ -1004,11 +1020,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     int since, {
     bool? play,
   }) async {
-    final index = _playable(
-      pulled.progress.chapterIndexIn([
-        for (final chapter in _chapters) chapter.title,
-      ], reversed: book.getReverseToc()),
-    );
+    final index = _pulledIndex(book, pulled);
     final at = Duration(milliseconds: pulled.progress.charOffset);
     if (index != _index || at != position.value) {
       // 那一集播不出來、被別的動作取代：沒接上，不記成同步過，下次再抓。

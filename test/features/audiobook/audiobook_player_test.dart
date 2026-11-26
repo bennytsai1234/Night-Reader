@@ -1367,6 +1367,22 @@ void main() {
     expect(sync.commits, 1);
   });
 
+  test('開書時雲端進度晚到、這台播著已經過了那裡：不倒回去', () async {
+    final gate = Completer<void>();
+    sync
+      ..pullGate = gate
+      ..pulled = cloudAt(1, 1000);
+    await player.open(book);
+    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep2.mp3');
+    expect(player.playing, isTrue);
+
+    gate.complete();
+    await pumpEventQueue();
+
+    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep2.mp3');
+    expect(sync.commits, 0);
+  });
+
   test('開書時雲端進度晚到、這之前按過暫停：照這台的，不換過去', () async {
     final gate = Completer<void>();
     sync

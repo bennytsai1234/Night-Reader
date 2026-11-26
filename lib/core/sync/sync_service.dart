@@ -106,7 +106,14 @@ class PulledProgress {
   /// 不能跳過去，不然之後會被當成這台的新進度送進新的空間。
   bool get isCurrent => _isCurrent();
 
-  Future<void> commit(SyncRecord applied) => _commit(applied);
+  /// 寫不成只記日誌、不丟出來：沒記成同步過，下次同步照指紋比對還是對得上。
+  Future<void> commit(SyncRecord applied) async {
+    try {
+      await _commit(applied);
+    } catch (error, stackTrace) {
+      AppLog.e('記下同步紀錄失敗', error: error, stackTrace: stackTrace);
+    }
+  }
 
   /// 開書前（這本書還沒顯示）就抓到：像整次同步套用關著的書一樣，把位置
   /// 寫進這台的資料庫，記成同步過，閱讀器再照資料庫的位置開。傳回寫成了
@@ -116,11 +123,7 @@ class PulledProgress {
     if (!isCurrent) return false;
     final applied = await _applyStored();
     if (applied == null) return false;
-    unawaited(
-      commit(applied).catchError((Object error, StackTrace stackTrace) {
-        AppLog.e('記下同步紀錄失敗', error: error, stackTrace: stackTrace);
-      }),
-    );
+    unawaited(commit(applied));
     return true;
   }
 }
