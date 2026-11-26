@@ -72,7 +72,7 @@ class ReaderBottomMenu extends StatelessWidget {
     this.horizontalInset = AppGrouped.margin,
     this.onAutoPageSettings,
     this.onReplaceRuleSettings,
-    this.onTimedTtsSettings,
+    this.onStopTts,
     this.onDayNightSettings,
   });
 
@@ -103,10 +103,12 @@ class ReaderBottomMenu extends StatelessWidget {
   final VoidCallback onReplaceRule;
 
   /// 圓鈕長按：開那顆鈕的完整設定頁（自動翻頁→閱讀偏好、替換規則→規則
-  /// 管理、定時朗讀→朗讀與語音、日夜切換→外觀與主題）。
+  /// 管理、日夜切換→外觀與主題）；定時朗讀鈕長按是結束朗讀（[onStopTts]）。
   final VoidCallback? onAutoPageSettings;
   final VoidCallback? onReplaceRuleSettings;
-  final VoidCallback? onTimedTtsSettings;
+
+  /// 定時朗讀鈕長按：結束朗讀。沒在朗讀時長按不做事。
+  final VoidCallback? onStopTts;
   final VoidCallback? onDayNightSettings;
   final VoidCallback onPrevChapter;
   final VoidCallback onNextChapter;
@@ -218,7 +220,7 @@ class ReaderBottomMenu extends StatelessWidget {
           accent: menuStyle.accent,
           accentMuted: menuStyle.accentMuted,
           onPressed: onTimedTts,
-          onLongPress: onTimedTtsSettings,
+          onLongPress: ttsPhase == ReaderTtsPhase.idle ? null : onStopTts,
         )
       else
         GlassIconButton(

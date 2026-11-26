@@ -16,7 +16,6 @@ import 'package:night_reader/core/storage/books_in_use.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/features/settings/appearance_settings_page.dart';
-import 'package:night_reader/features/settings/tts_settings_page.dart';
 import 'package:night_reader/shared/navigation/status_bar.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/features/reader/text_view/core/progress_snapshot.dart';
@@ -496,9 +495,7 @@ class _ReaderPageState extends State<ReaderPage>
                       unawaited(_menuPages.openReadingPreferences()),
                   onReplaceRuleSettings: () =>
                       unawaited(_menuPages.openReplaceRulePage()),
-                  onTimedTtsSettings: () => unawaited(
-                    _menuPages.openSettingsPage(const TtsSettingsPage()),
-                  ),
+                  onStopTts: () => unawaited(_host.tts?.stop()),
                   onDayNightSettings: () => unawaited(
                     _menuPages.openSettingsPage(const AppearanceSettingsPage()),
                   ),
