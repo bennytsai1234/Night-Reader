@@ -263,6 +263,17 @@ void main() {
         onLocked: () => locked++,
       );
 
+      // 不是估計那一章的付費章節也畫鎖頭。
+      expect(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('第二章'),
+            matching: find.byType(BookTocChapterRow),
+          ),
+          matching: find.byType(LockedChapterIcon),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.text('第一卷'));
       await tester.tap(find.text('第二章'));
       expect(picked, isEmpty);
