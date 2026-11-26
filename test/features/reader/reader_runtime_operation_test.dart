@@ -742,6 +742,54 @@ void main() {
     expect(runtime.takeUserNotice()?.message, '目標章節暫時無法取得');
   });
 
+  test('a relayout before the book starts opening only changes the layout '
+      'the book opens with', () async {
+    // 開書前（例如等雲端進度的那段）版面變了：不先排一次正文，否則開書時
+    // 又排一次，骨架長出、換上正文後又被紙蓋回去重長一次。
+    final runtime = makeRuntime([chapter(0), chapter(1)]);
+    addTearDown(runtime.dispose);
+    final restores = <ReaderLocation>[];
+    runtime.registerViewportRestore(Object(), (location) async {
+      restores.add(location);
+      return true;
+    });
+
+    await runtime.applyPresentation(spec: specWithFontSize(22));
+    expect(restores, isEmpty);
+    expect(runtime.state.lifecycle, ReaderLifecycle.cold);
+
+    await runtime.openBook();
+
+    expect(restores, hasLength(1));
+    expect(runtime.state.lifecycle, ReaderLifecycle.ready);
+    expect(
+      runtime.state.layoutSpec.layoutSignature,
+      specWithFontSize(22).layoutSignature,
+    );
+  });
+
+  test('a jump before the book starts opening is laid out once, by the '
+      'open', () async {
+    // 例如換頁動畫期間就從目錄點了別章：開書直接開在那一章，不先排一次。
+    final runtime = makeRuntime([chapter(0), chapter(1)]);
+    addTearDown(runtime.dispose);
+    final restores = <ReaderLocation>[];
+    runtime.registerViewportRestore(Object(), (location) async {
+      restores.add(location);
+      return true;
+    });
+
+    final jump = runtime.jumpToChapter(1);
+    await pumpEventQueue();
+    expect(restores, isEmpty);
+
+    await runtime.openBook();
+    await jump;
+
+    expect(restores.map((location) => location.chapterIndex), [1]);
+    expect(runtime.state.visibleLocation.chapterIndex, 1);
+  });
+
   test('internal viewport ownership violation is exposed as a bug', () async {
     final runtime = makeRuntime([chapter(0), chapter(1)]);
     addTearDown(runtime.dispose);

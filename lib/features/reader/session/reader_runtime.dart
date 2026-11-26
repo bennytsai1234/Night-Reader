@@ -78,10 +78,15 @@ class ReaderRuntime extends ChangeNotifier {
   /// 開書的位置，開書前跳章失敗時也回到這裡（[openBook]）。
   ReaderLocation _initialLocation;
 
-  /// 開書開始了沒有（[openBook]）；開始之前的跳章記在 [_jumpedBeforeOpen]，
-  /// 開書時開在那裡，不蓋掉使用者的選擇。
+  /// 開書開始了沒有（[openBook]）。開始之前不排正文，只記下要怎麼開：跳章
+  /// 記在 [_jumpedBeforeOpen]，開書時開在那裡，不蓋掉使用者的選擇；版面
+  /// 變了換掉開書要用的版面（[applyPresentation]）。先排了的話，開書會再排
+  /// 一次，骨架長出、換上正文後又被紙蓋回去重長一次。
   bool _openStarted = false;
   ReaderLocation? _jumpedBeforeOpen;
+
+  /// 開書做完（含取不到正文）或閱讀器關掉時完成；開書前的跳章等它。
+  final Completer<void> _openFinished = Completer<void>();
   final ReaderStateMachine stateMachine;
   final ChangeNotifier _viewportGeometryNotifier = ChangeNotifier();
 
@@ -259,6 +264,14 @@ class ReaderRuntime extends ChangeNotifier {
   /// [chapterTitle]（從書籤開書）時，讀到目錄後照章名對到這台目錄的那一章：
   /// 開書前目錄可能還沒抓，位置裡的章節序號是別處的座標。
   Future<void> openBook({ReaderLocation? at, String? chapterTitle}) async {
+    try {
+      await _openBook(at: at, chapterTitle: chapterTitle);
+    } finally {
+      if (!_openFinished.isCompleted) _openFinished.complete();
+    }
+  }
+
+  Future<void> _openBook({ReaderLocation? at, String? chapterTitle}) async {
     _openStarted = true;
     if (at != null) _initialLocation = at.normalized();
     final jumped = _jumpedBeforeOpen;
@@ -337,6 +350,12 @@ class ReaderRuntime extends ChangeNotifier {
       if (stateMachine.updateViewportSpec(spec)) {
         _viewportGeometryNotifier.notifyListeners();
       }
+      return;
+    }
+    if (!_openStarted) {
+      // 還沒開書、沒有排好的正文：開書直接照新的版面排。
+      stateMachine.replaceLayoutBeforeOpen(spec);
+      notifyListeners();
       return;
     }
 
@@ -641,6 +660,7 @@ class ReaderRuntime extends ChangeNotifier {
       'Reader jump operation id=${token.id} '
       'target=${location.chapterIndex}',
     );
+    if (!_openStarted) return _jumpWithOpen(location, immediateSave);
     try {
       if (settled != null) {
         await settled;
@@ -666,6 +686,22 @@ class ReaderRuntime extends ChangeNotifier {
     } catch (error, stackTrace) {
       _rethrowOperationFailure(token, error, stackTrace);
     }
+  }
+
+  /// 開書前的跳章（[beginJumpOperation] 已記下目標）：不先排，等開書開在
+  /// 那裡。傳回開書有沒有停在目標那一章。
+  Future<bool> _jumpWithOpen(
+    ReaderLocation location,
+    bool immediateSave,
+  ) async {
+    await _openFinished.future;
+    if (disposed || !state.hasStableWorld) return false;
+    final target = location.normalized(chapterCount: repository.chapterCount);
+    if (state.visibleLocation.chapterIndex != target.chapterIndex) return false;
+    if (immediateSave) {
+      await viewportBridge.saveProgressLocation(state.visibleLocation);
+    }
+    return true;
   }
 
   Future<bool> _positionViewport({
@@ -760,6 +796,7 @@ class ReaderRuntime extends ChangeNotifier {
   @override
   void dispose() {
     disposed = true;
+    if (!_openFinished.isCompleted) _openFinished.complete();
     repository.dispose();
     progressController.dispose();
     _viewportGeometryNotifier.dispose();

@@ -104,6 +104,23 @@ class ReaderStateMachine {
     return true;
   }
 
+  /// 開書之前（還沒排過正文）版面變了：換成 [spec]，開書直接照它排。換了
+  /// 排版的照常換一代，正文層跟著換掉照舊版面準備的東西。
+  void replaceLayoutBeforeOpen(ReaderLayoutSpec spec) {
+    if (state.hasStableWorld) {
+      throw StateError(
+        'A laid-out Reader world must relayout through an operation.',
+      );
+    }
+    final relayout = spec.layoutSignature != state.layoutSpec.layoutSignature;
+    state = state.copyWith(
+      layoutSpec: spec,
+      layoutGeneration: relayout
+          ? state.layoutGeneration + 1
+          : state.layoutGeneration,
+    );
+  }
+
   bool isCurrent(ReaderOperationToken token) {
     final current = _currentOperation;
     return current != null &&
