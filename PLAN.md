@@ -18,8 +18,8 @@
 
 ## 第六階段：發正式版
 
-- **接手本機四條舊分支留下的**：書源程式抓網路文字檔（`java.cacheFile`、`importScript`、jsLib）照 Legado 偵測編碼、取消時停下，另補三處既有測試的漏網情境；四條舊分支本身等使用者確認再刪（分支 fix/rule-js-cache-file-encoding）。
-- **發正式版**：`v0.4.2-beta.388` 之後又合了 #667、#668（兩台交替讀接上最新的準確位置），先等使用者說「發測試版」再發一次；使用者用過沒問題、說「發正式版」時，照 `docs/agents/release.md` 發。
+- **刪掉本機四條舊分支**：`fix/download-remove-while-paused`、`fix/audit-ui-527a`、`fix/local-book-original-files`、`fix/rule-js-529` 只在主資料夾本機，還有用的已由 #669 搬進 `beta`；刪了找不回，等使用者說「刪」。
+- **發正式版**：`v0.4.2-beta.388` 之後又合了 #667、#668（兩台交替讀接上最新的準確位置）、#669（書源程式抓的 GBK 文字檔不再亂碼）、#670（定時朗讀鈕長按結束朗讀），先等使用者說「發測試版」再發一次；使用者用過沒問題、說「發正式版」時，照 `docs/agents/release.md` 發。
 
 ## 正式版之後
 
