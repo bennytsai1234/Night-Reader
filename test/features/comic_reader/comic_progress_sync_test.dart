@@ -53,7 +53,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   // 回到前景抓另一台的進度；抓的途中讀者在同一張長圖裡往下讀了，另一台的
-  // 位置就不再跳過去（同一張的幾成也算動過）。
+  // 位置就不再問（同一張的幾成也算動過）。
   for (final (moved, label) in [
     (const ComicLocation(0, 0, fraction: 0.6), '同一張往下讀'),
     (null, '沒動'),
@@ -72,6 +72,7 @@ void main() {
         );
       var here = const ComicLocation(0, 0, fraction: 0.1);
       final jumps = <(int, int)>[];
+      final suggestions = <Future<void> Function()>[];
       final progress = ComicProgressSync(
         book: Book(bookUrl: 'https://comic.test/b', name: '長圖', origin: 'x'),
         bookDao: _BookDao(),
@@ -83,6 +84,7 @@ void main() {
           jumps.add((chapter, page));
           return true;
         },
+        onProgressSuggestion: suggestions.add,
         resumes: false,
         sync: sync,
       )..start();
@@ -99,6 +101,13 @@ void main() {
       sync.pullGate!.complete();
       await pumpEventQueue();
 
+      if (moved == null) {
+        expect(jumps, isEmpty, reason: '正文已經在畫面上，先問');
+        expect(suggestions, hasLength(1));
+        await suggestions.single();
+      } else {
+        expect(suggestions, isEmpty);
+      }
       expect(jumps, moved == null ? [(0, 4)] : isEmpty);
     });
   }
@@ -116,6 +125,7 @@ void main() {
     late FakeSync sync;
     late ComicLocation here;
     late List<(int, int)> jumps;
+    late List<Future<void> Function()> suggestions;
     late bool lands;
     var commits = 0;
 
@@ -124,6 +134,7 @@ void main() {
       sync = FakeSync();
       here = const ComicLocation(0, 0, fraction: 0.1);
       jumps = [];
+      suggestions = [];
       lands = true;
       commits = 0;
     });
@@ -147,6 +158,7 @@ void main() {
           if (lands) here = ComicLocation(chapter, page);
           return lands;
         },
+        onProgressSuggestion: suggestions.add,
         resumes: resumes,
         sync: sync,
       )..start();
@@ -154,30 +166,61 @@ void main() {
       return progress;
     }
 
-    test('跳到了那一話那一張：記成同步過，時間不比那一筆早', () async {
+    test('跳到了那一話那一張：先問，按了才跳、記成同步過，時間不比那一筆早', () async {
       open().bookOpened();
       sync.pulled = _cloudAt(1, 3, () => commits++);
       _backToForeground();
       await pumpEventQueue();
+
+      expect(jumps, isEmpty);
+      expect(suggestions, hasLength(1));
+      await suggestions.single();
 
       expect(jumps, [(1, 3)]);
       expect(commits, 1);
       expect(bookDao.synced, [9]);
     });
 
-    test('那一話載不下來、落到別話：不記成同步過', () async {
+    test('那一話載不下來、落到別話：按了也不記成同步過', () async {
       lands = false;
       open().bookOpened();
       sync.pulled = _cloudAt(1, 3, () => commits++);
       _backToForeground();
       await pumpEventQueue();
 
+      expect(suggestions, hasLength(1));
+      await suggestions.single();
+
       expect(jumps, [(1, 3)]);
       expect(commits, 0);
       expect(bookDao.synced, isEmpty);
     });
 
-    test('開書時雲端進度晚到：先照這台的位置開，讀者沒捲就跳過去', () async {
+    test('位置完全一樣：不出提示，照舊記成同步過', () async {
+      open().bookOpened();
+      sync.pulled = _cloudAt(0, 0, () => commits++);
+      _backToForeground();
+      await pumpEventQueue();
+
+      expect(suggestions, isEmpty);
+      expect(jumps, isEmpty);
+      expect(commits, 1);
+    });
+
+    test('點書當下就開始抓，換頁動畫播完沿用同一次', () async {
+      sync.pullGate = Completer<void>();
+      final progress = open(resumes: true);
+
+      expect(sync.pulls, 1, reason: '點書當下就開始抓，不等換頁動畫');
+
+      final opening = progress.openLocation();
+      expect(sync.pulls, 1, reason: '動畫播完沿用同一次抓取，不再另發');
+
+      sync.pullGate!.complete();
+      await opening;
+    });
+
+    test('開書時雲端進度晚到：先照這台的位置開，讀者沒捲就出提示，按了才跳', () async {
       sync
         ..pullGate = Completer<void>()
         ..pulled = _cloudAt(1, 2, () => commits++);
@@ -190,11 +233,15 @@ void main() {
       sync.pullGate!.complete();
       await pumpEventQueue();
 
+      expect(jumps, isEmpty, reason: '正文已經在畫面上，先問');
+      expect(suggestions, hasLength(1));
+      await suggestions.single();
+
       expect(jumps, [(1, 2)]);
       expect(commits, 1);
     });
 
-    test('開書時雲端進度晚到、讀者已經捲過：不跳', () async {
+    test('開書時雲端進度晚到、讀者已經捲過：不出提示、不跳', () async {
       sync
         ..pullGate = Completer<void>()
         ..pulled = _cloudAt(1, 2, () => commits++);
@@ -206,8 +253,39 @@ void main() {
       sync.pullGate!.complete();
       await pumpEventQueue();
 
+      expect(suggestions, isEmpty);
       expect(jumps, isEmpty);
       expect(commits, 0);
+    });
+
+    test('開書前就抓到：直接開在雲端的位置，不出提示', () async {
+      sync
+        ..pullGate = Completer<void>()
+        ..pulled = PulledProgress(
+          const SyncedProgress(
+            chapterIndex: 1,
+            charOffset: 3,
+            chapterTitle: '第2話',
+            time: 9,
+          ),
+          (_) async => commits++,
+          applyStored: () async {
+            bookDao.stored = bookDao.stored!.copyWith(
+              chapterIndex: 1,
+              charOffset: 3,
+              progressTime: 9,
+            );
+            return ProgressSync.recordOf(bookDao.stored!);
+          },
+        );
+      final progress = open(resumes: true);
+      final opening = progress.openLocation();
+      sync.pullGate!.complete();
+      final at = await opening;
+
+      expect(at?.chapterIndex, 1);
+      expect(at?.pageIndex, 3);
+      expect(suggestions, isEmpty);
     });
 
     testWidgets('讀書途中位置變了、畫面停住 8 秒才送；一直在捲就不送', (tester) async {

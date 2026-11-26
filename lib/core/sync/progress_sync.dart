@@ -60,19 +60,13 @@ class ProgressSync extends SyncKind {
         entry.value,
         chapterId: chapterIdOf(
           entry.value,
-          await _chapterIdsOf(entry.value) ?? const [],
+          await chapterIdsOf(entry.value, chapterDao) ?? const [],
         ),
       ),
   };
 
-  /// 本地漫畫每一話的章指紋（目錄的網址，ADR 0052）；其他書是 null。
-  Future<List<String>?> _chapterIdsOf(Book book) async =>
-      book.isLocal && book.bookKind == BookSourceKind.comic
-      ? [for (final c in await chapterDao.getByBook(book.bookUrl)) c.url]
-      : null;
-
   /// 本地漫畫讀到的那一話的章指紋：兩台的章名、排序可以不同，同一話的
-  /// 指紋一樣（ADR 0052）。[ids] 是這本的 [_chapterIdsOf]；其他書是 null。
+  /// 指紋一樣（ADR 0052）。[ids] 是這本的 [chapterIdsOf]；其他書是 null。
   static String? chapterIdOf(Book book, List<String> ids) {
     if (!book.isLocal || book.bookKind != BookSourceKind.comic) return null;
     if (ids.isEmpty) return null;
@@ -118,6 +112,9 @@ class ProgressSync extends SyncKind {
       // 補算指紋之前讀的，用書名加作者登記開著，兩個鍵都看。
       if (record.deleted || _isOpen(key)) continue;
       if (books[key] case final book? when !_isOpen(nameKeyOf(book))) {
+        // 雲端比較新，但讀到的位置在這台前面或一樣：另一台可能刻意往回
+        // 讀，不把這台拉回去（使用者 2026-11-26）。雲端那筆留著，下次再比。
+        if (!await isAheadOn(book, record)) continue;
         applied[key] = await applyTo(book, record);
       }
     }
@@ -165,6 +162,56 @@ class ProgressSync extends SyncKind {
     });
   }
 
+  /// 本地漫畫每一話的章指紋（目錄的網址，ADR 0052）；其他書是 null。
+  static Future<List<String>?> chapterIdsOf(
+    Book book,
+    ChapterDao chapterDao,
+  ) async => book.isLocal && book.bookKind == BookSourceKind.comic
+      ? [for (final c in await chapterDao.getByBook(book.bookUrl)) c.url]
+      : null;
+
+  /// 雲端那筆 [remote] 是否在 [book] 讀到的地方之後（閱讀順序）：章在後面，
+  /// 或同一章的字數更多（文字是字、漫畫是張、有聲書是毫秒）。位置一樣或
+  /// 在前面都不算。只比位置，不比新舊；呼叫端先用 [decideSync] 判新舊。
+  ///
+  /// 存著的目錄永遠是閱讀順序（反轉目錄由 `BookTocReverser` 翻好，ADR
+  /// 0085），[SyncedProgress.chapterIndexIn] 會把另一台的序號方向對回這台
+  /// 存著的序號，所以序號大的就是讀者實際閱讀時後面的章。
+  static bool isAhead({
+    required Book book,
+    required SyncRecord remote,
+    required List<String> titles,
+    List<String>? ids,
+  }) {
+    if (remote.deleted) return false;
+    final position = SyncedProgress.fromRecord(remote);
+    // 兩台目錄方向相反、雲端的序號超出這台的目錄、章名也對不到：換算不出
+    // 是哪一章，不算在後面（寧可不接，也不把前面的章當成後面）。
+    final reversedThere = position.tocReversed;
+    if (reversedThere != null &&
+        reversedThere != book.getReverseToc() &&
+        position.chapterId.isEmpty &&
+        position.chapterIndex >= titles.length &&
+        !titles.any((title) => title.trim() == position.chapterTitle.trim())) {
+      return false;
+    }
+    final index = position.chapterIndexIn(
+      titles,
+      ids: ids,
+      reversed: book.getReverseToc(),
+    );
+    return index > book.chapterIndex ||
+        (index == book.chapterIndex && position.charOffset > book.charOffset);
+  }
+
+  /// [isAhead] 的這台版本：讀這本書的目錄與本地漫畫的章指紋再比。
+  Future<bool> isAheadOn(Book book, SyncRecord remote) async => isAhead(
+    book: book,
+    remote: remote,
+    titles: await chapterDao.titlesByBook(book.bookUrl),
+    ids: await chapterIdsOf(book, chapterDao),
+  );
+
   /// 書架上每個身分（[keyOf]）最近讀的那一本。同一本書從兩個書源都加進書架
   /// 時，同步只跟著最近讀的那本。還沒有指紋的本地書（這一版以前匯入的）先
   /// 在背景 isolate 補算，進度才照指紋對上。
@@ -191,7 +238,7 @@ class ProgressSync extends SyncKind {
   Future<SyncRecord> applyTo(Book book, SyncRecord remote) async {
     final position = SyncedProgress.fromRecord(remote);
     final titles = await chapterDao.titlesByBook(book.bookUrl);
-    final ids = await _chapterIdsOf(book);
+    final ids = await chapterIdsOf(book, chapterDao);
     final reversed = book.getReverseToc();
     final index = position.chapterIndexIn(titles, ids: ids, reversed: reversed);
     final title = titles.isEmpty ? position.chapterTitle : titles[index];

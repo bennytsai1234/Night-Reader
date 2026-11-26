@@ -210,7 +210,7 @@ class _ReaderPageState extends State<ReaderPage>
     _progressSync = ReaderProgressSync(
       book: widget.book,
       runtime: () => _host.runtime,
-      onJumped: _showSyncHint,
+      onProgressSuggestion: _showSyncHint,
       bookDao: _host.dependencies.bookDao,
       openTarget: widget.openTarget,
     )..start();
@@ -275,22 +275,19 @@ class _ReaderPageState extends State<ReaderPage>
     super.dispose();
   }
 
-  /// 跳到另一台的進度後，提示顯示期間停在的位置；一翻頁、捲動就收起提示。
+  /// 問要不要跳到另一台的進度時，畫面停在的位置；一翻頁、捲動就收起提示。
   ReaderLocation? _syncHintAt;
 
-  static const String _syncHintMessage = '已接上另一台的進度';
+  static const String _syncHintMessage = '另一台讀到較新的地方';
 
-  void _showSyncHint(ReaderLocation previous) {
+  void _showSyncHint(Future<void> Function() jump) {
     final runtime = _host.runtime;
     if (!mounted || runtime == null) return;
     _syncHintAt = runtime.state.visibleLocation;
     _showNotice(
       _syncHintMessage,
-      action: (
-        label: '回到原處',
-        onPressed: () => unawaited(runtime.jumpToLocation(previous)),
-      ),
-      duration: const Duration(seconds: 3),
+      action: (label: '跳過去', onPressed: () => unawaited(jump())),
+      duration: const Duration(seconds: 6),
     );
   }
 

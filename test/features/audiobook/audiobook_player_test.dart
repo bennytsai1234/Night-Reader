@@ -670,9 +670,12 @@ void main() {
     expect(engine.playing, isFalse);
   });
 
-  test('回到前景接另一台的進度、還在載入時按播放：載好就播', () async {
+  test('回到前景先問，按了之後載入時按播放：載好就播', () async {
     await player.open(book);
     await player.pause();
+    final suggestions = <AudiobookProgressSuggestion>[];
+    final subscription = player.progressSuggestions.listen(suggestions.add);
+    addTearDown(subscription.cancel);
     sync.pulled = PulledProgress(
       SyncedProgress(
         chapterIndex: 1,
@@ -690,11 +693,17 @@ void main() {
       ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
       ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await pumpEventQueue();
+    expect(player.phase, AudiobookPhase.paused);
+    expect(suggestions, hasLength(1));
+
+    final jumping = suggestions.single.jump();
+    await pumpEventQueue();
     expect(player.phase, AudiobookPhase.loading);
     await player.play();
     final opening = engine.nextOpen;
     source.gate!.complete();
     await opening.timeout(const Duration(seconds: 5));
+    await jumping;
     await pumpEventQueue();
 
     expect(player.chapterIndex, 1);
@@ -1207,9 +1216,12 @@ void main() {
     expect(player.error, isNull);
   });
 
-  test('回到前景時暫停中：另一台聽到別集，跳過去停著、記成同步過', () async {
+  test('回到前景時暫停中：另一台聽到別集，先問，按了才跳過去停著、記成同步過', () async {
     await player.open(book);
     await player.pause();
+    final suggestions = <AudiobookProgressSuggestion>[];
+    final subscription = player.progressSuggestions.listen(suggestions.add);
+    addTearDown(subscription.cancel);
     sync.pulled = PulledProgress(
       SyncedProgress(
         chapterIndex: 3,
@@ -1219,13 +1231,21 @@ void main() {
       ),
       (_) async => sync.commits++,
     );
-    final opening = engine.nextOpen;
     final binding = TestWidgetsFlutterBinding.instance;
     binding
       ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
       ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
       ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
       ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await pumpEventQueue();
+
+    expect(suggestions, hasLength(1));
+    expect(suggestions.single.message, '另一台聽到較新的地方');
+    expect(player.chapterIndex, 2, reason: '正文已經在畫面上，先問');
+    expect(sync.commits, 0);
+
+    final opening = engine.nextOpen;
+    await suggestions.single.jump();
     await opening.timeout(const Duration(seconds: 5));
     await pumpEventQueue();
 
@@ -1256,12 +1276,21 @@ void main() {
     (_) async => sync.commits++,
   );
 
-  test('回到前景時暫停中：另一台在同一集只差 3 秒，也跳到那一毫秒', () async {
+  test('回到前景時暫停中：另一台在同一集只差 3 秒，問了按了才跳到那一毫秒', () async {
     await player.open(book);
     await player.pause();
+    final suggestions = <AudiobookProgressSuggestion>[];
+    final subscription = player.progressSuggestions.listen(suggestions.add);
+    addTearDown(subscription.cancel);
     sync.pulled = cloudAt(2, 98000);
-    final opening = engine.nextOpen;
     await backToForeground();
+    await pumpEventQueue();
+
+    expect(suggestions, hasLength(1));
+    expect(engine.opened.last.$2, const Duration(milliseconds: 95000));
+
+    final opening = engine.nextOpen;
+    await suggestions.single.jump();
     await opening.timeout(const Duration(seconds: 5));
     await pumpEventQueue();
 
@@ -1270,14 +1299,18 @@ void main() {
     expect(sync.commits, 1);
   });
 
-  test('回到前景時暫停中：位置完全一樣不重載，照樣記成同步過', () async {
+  test('回到前景時暫停中：位置完全一樣不重載、不出提示，照樣記成同步過', () async {
     await player.open(book);
     await player.pause();
+    final suggestions = <AudiobookProgressSuggestion>[];
+    final subscription = player.progressSuggestions.listen(suggestions.add);
+    addTearDown(subscription.cancel);
     final opens = engine.opened.length;
     sync.pulled = cloudAt(2, 95000);
     await backToForeground();
     await pumpEventQueue();
 
+    expect(suggestions, isEmpty);
     expect(engine.opened.length, opens);
     expect(sync.commits, 1);
   });
@@ -1285,10 +1318,16 @@ void main() {
   test('接過另一台的進度後，位置移動的時間不比那一筆早', () async {
     await player.open(book);
     await player.pause();
+    final suggestions = <AudiobookProgressSuggestion>[];
+    final subscription = player.progressSuggestions.listen(suggestions.add);
+    addTearDown(subscription.cancel);
     final ahead = DateTime.now().millisecondsSinceEpoch + 3600000;
     sync.pulled = cloudAt(3, 1000, time: ahead);
-    final opening = engine.nextOpen;
     await backToForeground();
+    await pumpEventQueue();
+
+    final opening = engine.nextOpen;
+    await suggestions.single.jump();
     await opening.timeout(const Duration(seconds: 5));
     await pumpEventQueue();
 
@@ -1300,10 +1339,16 @@ void main() {
   test('回到前景接進度時那一集播不出來：不記成同步過', () async {
     await player.open(book);
     await player.pause();
+    final suggestions = <AudiobookProgressSuggestion>[];
+    final subscription = player.progressSuggestions.listen(suggestions.add);
+    addTearDown(subscription.cancel);
     engine.failingOpens.add('https://audio.test/ep3.mp3');
     sync.pulled = cloudAt(3, 1000);
-    final opening = engine.nextOpen;
     await backToForeground();
+    await pumpEventQueue();
+
+    final opening = engine.nextOpen;
+    await suggestions.single.jump();
     await opening.timeout(const Duration(seconds: 5));
     await pumpEventQueue();
 
@@ -1347,7 +1392,132 @@ void main() {
     expect(sync.pulls, 0);
   });
 
-  test('開書時雲端進度晚到：先照這台的位置播，沒按過什麼就換過去、照樣播著', () async {
+  test('播放器頁一打開就先抓雲端進度，開書時沿用同一次', () async {
+    final gate = Completer<void>();
+    sync.pullGate = gate;
+    player.prefetchProgress(book);
+    expect(sync.pulls, 1, reason: '點書當下就開始抓，不等換頁動畫');
+
+    final opening = player.open(book);
+    await pumpEventQueue();
+    expect(sync.pulls, 1, reason: '開書沿用同一次抓取，不再另發');
+
+    gate.complete();
+    await opening;
+    await pumpEventQueue();
+  });
+
+  test('開書時雲端進度晚到：先照這台的位置播，先問，按了才換過去、照樣播著', () async {
+    final gate = Completer<void>();
+    sync
+      ..pullGate = gate
+      ..pulled = cloudAt(3, 1000);
+    final suggestions = <AudiobookProgressSuggestion>[];
+    final subscription = player.progressSuggestions.listen(suggestions.add);
+    addTearDown(subscription.cancel);
+    await player.open(book);
+    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep2.mp3');
+    expect(player.playing, isTrue);
+
+    gate.complete();
+    await pumpEventQueue();
+
+    expect(suggestions, hasLength(1));
+    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep2.mp3');
+    expect(sync.commits, 0);
+
+    final opening = engine.nextOpen;
+    await suggestions.single.jump();
+    await opening.timeout(const Duration(seconds: 5));
+    await pumpEventQueue();
+
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/ep3.mp3');
+    expect(engine.opened.last.$2, const Duration(milliseconds: 1000));
+    expect(player.playing, isTrue);
+    expect(sync.commits, 1);
+  });
+
+  test('提示出現之後按過暫停，再按「跳過去」不換集、不記成同步過', () async {
+    final gate = Completer<void>();
+    sync
+      ..pullGate = gate
+      ..pulled = cloudAt(3, 1000);
+    final suggestions = <AudiobookProgressSuggestion>[];
+    final subscription = player.progressSuggestions.listen(suggestions.add);
+    addTearDown(subscription.cancel);
+    await player.open(book);
+    gate.complete();
+    await pumpEventQueue();
+    expect(suggestions, hasLength(1));
+
+    await player.pause();
+    final opened = engine.opened.length;
+    await suggestions.single.jump();
+    await pumpEventQueue();
+
+    expect(engine.opened, hasLength(opened), reason: '讀者按過別的，照讀者的');
+    expect(player.chapterIndex, isNot(3));
+    expect(sync.commits, 0);
+  });
+
+  test('開書時雲端進度晚到、這台播著已經過了那裡：不出提示、不倒回去', () async {
+    final gate = Completer<void>();
+    sync
+      ..pullGate = gate
+      ..pulled = cloudAt(1, 1000);
+    final suggestions = <AudiobookProgressSuggestion>[];
+    final subscription = player.progressSuggestions.listen(suggestions.add);
+    addTearDown(subscription.cancel);
+    await player.open(book);
+    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep2.mp3');
+    expect(player.playing, isTrue);
+
+    gate.complete();
+    await pumpEventQueue();
+
+    expect(suggestions, isEmpty);
+    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep2.mp3');
+    expect(sync.commits, 0);
+  });
+
+  test('開書時雲端進度晚到、這之前按過暫停：不出提示，照這台的', () async {
+    final gate = Completer<void>();
+    sync
+      ..pullGate = gate
+      ..pulled = cloudAt(3, 1000);
+    final suggestions = <AudiobookProgressSuggestion>[];
+    final subscription = player.progressSuggestions.listen(suggestions.add);
+    addTearDown(subscription.cancel);
+    await player.open(book);
+    await player.pause();
+    gate.complete();
+    await pumpEventQueue();
+
+    expect(suggestions, isEmpty);
+    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep2.mp3');
+    expect(sync.commits, 0);
+  });
+
+  test('播放器頁沒開著：回到前景抓到較新的進度照原本直接換過去，不提示', () async {
+    await player.open(book);
+    await player.pause();
+    sync.pulled = cloudAt(3, 1000);
+    final opening = engine.nextOpen;
+    TestWidgetsFlutterBinding.instance
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await opening.timeout(const Duration(seconds: 5));
+    await pumpEventQueue();
+
+    expect(player.chapterIndex, 3);
+    expect(player.position.value, const Duration(milliseconds: 1000));
+    expect(player.playing, isFalse);
+    expect(sync.commits, 1);
+  });
+
+  test('開書時雲端進度晚到、播放器頁沒開著：照原本直接換過去、照樣播著', () async {
     final gate = Completer<void>();
     sync
       ..pullGate = gate
@@ -1365,36 +1535,6 @@ void main() {
     expect(engine.opened.last.$2, const Duration(milliseconds: 1000));
     expect(player.playing, isTrue);
     expect(sync.commits, 1);
-  });
-
-  test('開書時雲端進度晚到、這台播著已經過了那裡：不倒回去', () async {
-    final gate = Completer<void>();
-    sync
-      ..pullGate = gate
-      ..pulled = cloudAt(1, 1000);
-    await player.open(book);
-    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep2.mp3');
-    expect(player.playing, isTrue);
-
-    gate.complete();
-    await pumpEventQueue();
-
-    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep2.mp3');
-    expect(sync.commits, 0);
-  });
-
-  test('開書時雲端進度晚到、這之前按過暫停：照這台的，不換過去', () async {
-    final gate = Completer<void>();
-    sync
-      ..pullGate = gate
-      ..pulled = cloudAt(3, 1000);
-    await player.open(book);
-    await player.pause();
-    gate.complete();
-    await pumpEventQueue();
-
-    expect(engine.opened.single.$1.toString(), 'https://audio.test/ep2.mp3');
-    expect(sync.commits, 0);
   });
 
   test('播著時每 60 秒送一次進度，暫停時存好馬上送', () async {

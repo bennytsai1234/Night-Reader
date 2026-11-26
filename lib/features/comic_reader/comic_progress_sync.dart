@@ -10,13 +10,14 @@ import 'package:night_reader/core/sync/sync_service.dart';
 
 import 'comic_strip_view.dart';
 
-/// 漫畫閱讀器這一頭的進度同步，規則同文字閱讀器（ADR 0039、0052）：誰新
-/// 用誰。
-/// - 接著上次讀的地方開書時抓這本書的雲端進度，最多等 [openGrace]：等到了
-///   而且比這台新就照它開；等不及先照這台的位置開，晚到時讀者還沒捲就跳
-///   過去。從目錄或詳情點了某一話開書不抓。
-/// - 回到前景時再抓一次，比這台新、而且抓的途中沒捲過，就跳到那一話那一張；
-///   位置完全一樣才不動。
+/// 漫畫閱讀器這一頭的進度同步，規則同文字閱讀器（ADR 0039、0052）：雲端
+/// 那筆比較新、而且讀到的地方在這台後面，才接。
+/// - 接著上次讀的地方開書時，點書當下就先抓這本書的雲端進度；換頁動畫播完
+///   最多等 [openGrace]：等到了而且比這台新就照它開；等不及先照這台的位置
+///   開，正文已經在畫面上之後才到的話先問要不要跳過去，不自己跳。從目錄或
+///   詳情點了某一話開書不抓。
+/// - 回到前景時再抓一次，比這台新、而且抓的途中沒捲過，就問要不要跳到那一
+///   話那一張；沒按就不跳、不記成同步過。位置完全一樣才不動。
 /// - 讀書途中畫面停住時上傳（[ReadingUploadPacer]）；退到背景、離開閱讀器
 ///   時存好進度再上傳。
 class ComicProgressSync {
@@ -28,6 +29,7 @@ class ComicProgressSync {
     required this.titles,
     required this.ids,
     required this.jumpTo,
+    required this.onProgressSuggestion,
     this.resumes = true,
     this._busy,
     SyncService? sync,
@@ -54,6 +56,10 @@ class ComicProgressSync {
   /// 別話就是 false）。
   final Future<bool> Function(int chapterIndex, int pageIndex) jumpTo;
 
+  /// 正文已經在畫面上之後才抓到比這台新的進度：交給頁面問要不要跳過去，
+  /// 按了才執行傳進去的動作（會再確認讀者沒動過、還是同一筆）。
+  final void Function(Future<void> Function() jump) onProgressSuggestion;
+
   /// 接著上次讀的地方開書（不是從目錄或詳情點了某一話）。
   final bool resumes;
   final SyncService _sync;
@@ -68,8 +74,14 @@ class ComicProgressSync {
 
   AppLifecycleListener? _lifecycle;
 
+  /// 點書當下就開始抓的那一次；換頁動畫播完的 [openLocation] 改用它。
+  Future<PulledProgress?>? _openingPull;
+
   /// 開書時等不及的那次抓取：進度晚到時，書已經開在這台的位置了。
   Future<PulledProgress?>? _lateProgress;
+
+  /// 問過幾次要不要跳：換下一則之後，前一個按鈕按了也不動。
+  int _suggestions = 0;
   bool _marked = false;
   bool _opened = false;
   bool _disposed = false;
@@ -77,9 +89,22 @@ class ComicProgressSync {
 
   /// 開書失敗後重試會再呼叫一次，只註冊一次。
   void start() {
-    if (!resumes) _markOpen();
+    // 開書失敗後重試：上一次留下的抓取可能已經過時（或是當時沒抓到），重抓。
+    final retry = _lifecycle != null;
+    if (!resumes) {
+      _markOpen();
+    } else if (retry || _openingPull == null) {
+      // 點書當下就開始抓，換頁動畫播完時直接用這一次，多賺動畫的時間。
+      _openingPull = _sync.pullProgress(book.bookUrl);
+    }
     _lifecycle ??= AppLifecycleListener(onShow: _onShow, onHide: _onHide);
     _sync.uploadsOnHide(this, true);
+  }
+
+  /// 頁面一打開就先抓雲端進度；還沒到換頁動畫播完時不用等。
+  void prefetch() {
+    if (!resumes || _openingPull != null) return;
+    _openingPull = _sync.pullProgress(book.bookUrl);
   }
 
   void _markOpen() {
@@ -95,7 +120,8 @@ class ComicProgressSync {
     if (!resumes) return null;
     // 先記成開著：背景的同步不再改這本，由這裡抓的那一筆決定。
     _markOpen();
-    final pulling = _sync.pullProgress(book.bookUrl);
+    final pulling = _openingPull ?? _sync.pullProgress(book.bookUrl);
+    _openingPull = null;
     if (await settlesWithin(pulling, openGrace)) {
       if (_disposed) return null;
       try {
@@ -139,11 +165,12 @@ class ComicProgressSync {
   /// 存進度時位置真的移動了。
   void moved() => _pacer.moved();
 
-  /// 開書時雲端進度還沒抓到、先照這台的位置開了：抓到時讀者還沒捲就跳過去。
+  /// 開書時雲端進度還沒抓到、先照這台的位置開了：抓到時讀者還沒捲就問
+  /// 要不要跳過去。
   Future<void> _catchUp(Future<PulledProgress?> pulling) async {
     final since = current();
     if (since == null) return;
-    await _jumpIfStill(await pulling, since);
+    await _offerCatchUp(await pulling, since);
   }
 
   void _onShow() {
@@ -161,11 +188,38 @@ class ComicProgressSync {
     }
     final since = current();
     if (since == null) return;
-    await _jumpIfStill(await _sync.pullProgress(book.bookUrl), since);
+    await _offerCatchUp(await _sync.pullProgress(book.bookUrl), since);
   }
 
-  /// 抓到比這台新的進度、而且從 [since] 之後沒捲過（同一張長圖裡往下讀也
-  /// 算），就跳到那一話那一張。
+  /// 正文已經在畫面上才抓到比這台新的進度：位置一樣就照舊記成同步過；
+  /// 不一樣就先問要不要跳過去，不自己跳。
+  Future<void> _offerCatchUp(
+    PulledProgress? pulled,
+    ComicLocation since,
+  ) async {
+    if (pulled == null || !pulled.isCurrent || _disposed) return;
+    final now = current();
+    if (now == null || !sameSpot(now, since)) return;
+    final index = pulled.progress.chapterIndexIn(
+      titles(),
+      ids: ids(),
+      reversed: book.getReverseToc(),
+    );
+    final page = pulled.progress.charOffset;
+    if (shouldJump(now, index, page)) {
+      final suggestion = ++_suggestions;
+      onProgressSuggestion(() async {
+        // 換過一則提示（讀者又動了、回到前景又抓到）：前一個按鈕不再有用。
+        if (suggestion != _suggestions) return;
+        await _jumpIfStill(pulled, since);
+      });
+      return;
+    }
+    await _jumpIfStill(pulled, since);
+  }
+
+  /// 按了「跳過去」：讀者從 [since] 之後沒捲過、還是同一筆、同一個同步
+  /// 空間，就跳到那一話那一張，存好、記成同步過。
   Future<void> _jumpIfStill(PulledProgress? pulled, ComicLocation since) async {
     if (pulled == null || !pulled.isCurrent || _disposed) return;
     final now = current();
