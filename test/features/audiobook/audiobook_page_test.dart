@@ -16,6 +16,8 @@ import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/playback/audio_focus.dart';
+import 'package:night_reader/core/sync/progress_sync.dart';
+import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/features/audiobook/audiobook_page.dart';
 import 'package:night_reader/features/audiobook/audiobook_player.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -51,13 +53,14 @@ class _World {
   final BookSourceDao sources;
   final engine = FakeAudioEngine();
   final focusSession = FakeAudioFocusSession();
+  final sync = FakeSync();
   late final AudiobookPlayer player = AudiobookPlayer(
     engine: () => engine,
     bookDao: books,
     chapterDao: chapters,
     sourceDao: sources,
     sourceService: FakeAudioSourceService(),
-    sync: FakeSync(),
+    sync: sync,
     playback: RecordingPlayback(),
     audioFocus: AudioFocus(platform: focusSession),
     random: Random(1),
@@ -368,6 +371,57 @@ void main() {
     expect(find.textContaining('播放失敗：需要登入才聽得到這一集'), findsOneWidget);
     // 這個書源沒有登入，提示旁不給「登入」。
     expect(find.widgetWithText(SnackBarAction, '登入'), findsNothing);
+    await close(tester);
+  });
+
+  testWidgets('a newer position on the other phone asks before jumping', (
+    tester,
+  ) async {
+    final book = _book();
+    world = _World(AppDatabase.forTesting(NativeDatabase.memory()));
+    await tester.runAsync(() async {
+      await world.addSource();
+      await world.addBook(book);
+    });
+
+    // 雲端進度晚到：開書先照這台的位置播，正文（集數清單）已經在畫面上。
+    final gate = Completer<void>();
+    world.sync
+      ..pullGate = gate
+      ..pulled = PulledProgress(
+        const SyncedProgress(
+          chapterIndex: 3,
+          charOffset: 1000,
+          chapterTitle: '第 4 集',
+          time: 1,
+        ),
+        (_) async => world.sync.commits++,
+      );
+    await open(tester, book);
+    await settle(tester);
+    expect(world.player.chapterIndex, 0);
+
+    gate.complete();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.text('另一台聽到較新的地方'), findsOneWidget);
+    expect(find.widgetWithText(SnackBarAction, '跳過去'), findsOneWidget);
+    expect(world.player.chapterIndex, 0, reason: '還沒按，不自己跳');
+
+    await tester.tap(find.text('跳過去'));
+    for (var i = 0; i < 100 && world.sync.commits == 0; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(world.player.chapterIndex, 3);
+    expect(world.sync.commits, 1);
     await close(tester);
   });
 

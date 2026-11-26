@@ -78,14 +78,32 @@ enum AudiobookPhase {
 /// 要不到音訊焦點（例如通話中）時不播，提示這一句。
 const String audiobookNoAudioFocusNotice = '通話中或其他聲音正在播放，有聲書已暫停';
 
+/// 正文已經在畫面上之後才抓到另一台較新的進度，提示這一句。
+const String audiobookNewerProgressNotice = '另一台聽到較新的地方';
+
+/// 播放器頁開著時，抓到另一台較新的進度就交給它問要不要跳過去。頁面沒
+/// 開著時沒人聽，照原本直接換過去。
+class AudiobookProgressSuggestion {
+  const AudiobookProgressSuggestion({
+    required this.message,
+    required this.jump,
+  });
+
+  final String message;
+
+  /// 按了「跳過去」才執行；會再確認讀者沒按過什麼、還是同一筆。
+  final Future<void> Function() jump;
+}
+
 /// 有聲書的播放（ADR 0055）。整個 App 一個，離開播放器畫面照樣在播；
 /// 播放器畫面、離開播放器時的圓鈕、通知與鎖定畫面都看它。
 ///
 /// 收聽進度記「章＋第幾毫秒」，毫秒存在 [Book.charOffset]，跟著閱讀進度
-/// 同步，誰新用誰：播著時每 [saveInterval] 存一次、每 [uploadInterval] 送
-/// 一次，暫停時存好馬上送，換集、停止、App 退到背景時也存好再送；接著上次
-/// 聽的地方開書時、回到前景時沒在播，抓這本書的雲端進度，比這台新就換到
-/// 那一集的那一毫秒。
+/// 同步：雲端那筆比較新、而且聽到的地方在這台後面才接。播著時每
+/// [saveInterval] 存一次、每 [uploadInterval] 送一次，暫停時存好馬上送，
+/// 換集、停止、App 退到背景時也存好再送；接著上次聽的地方開書時、回到前景
+/// 時沒在播，抓這本書的雲端進度，比這台新又在後面：播放器頁開著就問要不要
+/// 換到那一集的那一毫秒，頁沒開著照原本直接換過去。
 class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   AudiobookPlayer({
     AudioEngine Function()? engine,
@@ -234,6 +252,9 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 預先解析好的下一集音訊請求。
   ({int index, AudioRequest request})? _prefetched;
 
+  /// 播放器頁一打開就先抓的這本書雲端進度；開書時直接等這一個。
+  ({String bookUrl, Future<PulledProgress?> pulling})? _prefetchedProgress;
+
   /// 使用者要不要出聲：載入中按了暫停（或定時到了、別的播放接手），載入完
   /// 就不自己開始播；暫停時在接手系統播放的那一下按了暫停也不出聲。開書中、
   /// 載入這一集、暫停時都可能是要或不要，所以不是一個階段。
@@ -278,6 +299,17 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   Stream<String> get notices => _notices.stream;
   final StreamController<String> _notices =
       StreamController<String>.broadcast();
+
+  /// 抓到另一台較新的進度時交給播放器頁問要不要跳過去。只有播放器頁聽；
+  /// 沒開著時沒人聽，照原本直接換過去（不影響畫面上的正文）。
+  Stream<AudiobookProgressSuggestion> get progressSuggestions =>
+      _progressSuggestions.stream;
+  final StreamController<AudiobookProgressSuggestion> _progressSuggestions =
+      StreamController<AudiobookProgressSuggestion>.broadcast();
+
+  /// 使用者按過幾次（播放、暫停、拖動、換集、停止）：問要不要跳的提示在
+  /// 按了什麼之後收起。
+  int get interactions => _commands;
 
   /// 換到 [phase]：收聽計時與定時跟著出聲與否，畫面重畫。系統播放資訊由
   /// 呼叫的地方決定交不交（載入這一集時刻意不交，停在上一集）。
@@ -331,6 +363,17 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   }
 
   // --- 開書與選集 ---
+
+  /// 播放器頁一打開就先抓這本書的雲端進度，開書時直接等這一個抓取；同一本
+  /// 已經開著時不用抓（開書也不會再抓）。
+  void prefetchProgress(Book book) {
+    if (isCurrent(book) && _phase != AudiobookPhase.openFailed) return;
+    if (_prefetchedProgress?.bookUrl == book.bookUrl) return;
+    _prefetchedProgress = (
+      bookUrl: book.bookUrl,
+      pulling: _sync.pullProgress(book.bookUrl),
+    );
+  }
 
   /// 開 [book] 來聽。同一本已經開著時不打斷，給了 [chapterIndex] 才換到那一集；
   /// 沒給時接著上次聽的地方。同一本上次連目錄都沒開成時重開一次（重試）。
@@ -447,7 +490,11 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 的話照這台的位置開，一併傳回還在抓的那一次，晚到時接上
   /// （[_catchUpLate]）。
   Future<(Book, Future<PulledProgress?>?)> _resumePosition(Book book) async {
-    final pulling = _sync.pullProgress(book.bookUrl);
+    final prefetched = _prefetchedProgress;
+    _prefetchedProgress = null;
+    final pulling = prefetched != null && prefetched.bookUrl == book.bookUrl
+        ? prefetched.pulling
+        : _sync.pullProgress(book.bookUrl);
     Future<PulledProgress?>? late;
     if (await settlesWithin(pulling, openGrace)) {
       try {
@@ -963,7 +1010,9 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     _ => false,
   };
 
-  /// 回到前景時沒在播：另一台聽到較新的地方就跳過去（停在那裡，不自動播）。
+  /// 回到前景時沒在播：另一台聽到較新的地方，播放器頁開著就先問要不要跳
+  /// 過去（停在那裡，不自動播）；頁沒開著（只剩收聽圓鈕）照原本直接換過去，
+  /// 不動畫面上的正文。沒按就不跳、不記成同步過。
   Future<void> _catchUpAfterResume() async {
     final book = _book;
     // 開書中、打不開（沒有目錄）跳不過去；正在換集（等存進度）時讀者選的
@@ -972,16 +1021,20 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     final since = _commands;
     final pulled = await _sync.pullProgress(book.bookUrl);
     if (pulled == null || !pulled.isCurrent || !isCurrent(book)) return;
-    // 抓的這段時間按了什麼（播放、暫停、換集、拖動）：照使用者按的，不跳。
+    // 抓的這段時間按了什麼（播放、暫停、換集、拖動）：照使用者按的，不問。
     // 還在等系統接手、重載還沒出聲時，階段、集數與位置都還沒變，只看得出
     // 按過。
     if (_commands != since || !_canCatchUp || _switchingTo != null) return;
-    await _jumpToPulled(book, pulled, since, play: false);
+    if (_progressSuggestions.hasListener) {
+      _offerProgress(book, pulled, since, play: false);
+    } else {
+      await _jumpToPulled(book, pulled, since, play: false);
+    }
   }
 
   /// 開書時雲端進度還沒抓到、先照這台的位置開了（開好就播）：抓到時讀者
-  /// 沒按過什麼（[since] 之後，播著時位置自己往前走不算），就換到另一台
-  /// 聽到的地方，照樣播著。
+  /// 沒按過什麼（[since] 之後，播著時位置自己往前走不算），播放器頁開著就
+  /// 問要不要換到另一台聽到的地方，照樣播著；頁沒開著照原本直接換過去。
   Future<void> _catchUpLate(
     Book book,
     Future<PulledProgress?> pulling,
@@ -995,7 +1048,33 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     }
     // 播著的這段時間已經聽過另一台停的地方：這台才是最新的，不倒回去。
     if (_phase == AudiobookPhase.playing && !_aheadOfHere(book, pulled)) return;
-    await _jumpToPulled(book, pulled, since);
+    if (_progressSuggestions.hasListener) {
+      _offerProgress(book, pulled, since);
+    } else {
+      await _jumpToPulled(book, pulled, since);
+    }
+  }
+
+  /// 正文已經在畫面上才抓到比這台新的進度：位置一樣就照舊記成同步過；
+  /// 不一樣就交給播放器頁問，不自己跳。頁面沒開著時沒人聽。
+  void _offerProgress(
+    Book book,
+    PulledProgress pulled,
+    int since, {
+    bool? play,
+  }) {
+    final index = _pulledIndex(book, pulled);
+    final at = Duration(milliseconds: pulled.progress.charOffset);
+    if (index == _index && at == position.value) {
+      unawaited(_jumpToPulled(book, pulled, since, play: play));
+      return;
+    }
+    _progressSuggestions.add(
+      AudiobookProgressSuggestion(
+        message: audiobookNewerProgressNotice,
+        jump: () => _jumpToPulled(book, pulled, since, play: play),
+      ),
+    );
   }
 
   /// 另一台停的地方（集、毫秒）在這台正在播的位置之後。
@@ -1155,6 +1234,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     sleepTimer.dispose();
     position.dispose();
     unawaited(_notices.close());
+    unawaited(_progressSuggestions.close());
     super.dispose();
   }
 }

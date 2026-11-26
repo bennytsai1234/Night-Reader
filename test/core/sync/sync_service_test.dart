@@ -230,6 +230,7 @@ class _Phone {
     String name = '夜航',
     String author = '某人',
     int type = 0,
+    bool reverseToc = false,
   }) async {
     await books.upsert(
       Book(
@@ -246,6 +247,7 @@ class _Phone {
         durChapterTime: time,
         progressTime: time,
         syncTime: addedTime,
+        readConfig: reverseToc ? (ReadConfig()..reverseToc = true) : null,
       ),
     );
     await chapters.insertChapters([
@@ -328,6 +330,170 @@ void main() {
 
     expect(store.writes, writes);
     expect((await a.book('a-src')).chapterIndex, 2);
+  });
+
+  group('only accepts cloud progress that is ahead in the book', () {
+    test('a newer position behind this phone is not pulled', () async {
+      await a.addBook(
+        'a-src',
+        toc: toc,
+        chapterIndex: 0,
+        charOffset: 0,
+        time: 200,
+      );
+      await b.addBook(
+        'b-src',
+        toc: toc,
+        chapterIndex: 2,
+        charOffset: 50,
+        time: 100,
+      );
+      await a.sync.syncAll();
+
+      expect(await b.sync.pullProgress('b-src'), isNull);
+    });
+
+    test('a newer position behind this phone is not applied in the '
+        'background either, and the cloud keeps it', () async {
+      await a.addBook(
+        'a-src',
+        toc: toc,
+        chapterIndex: 0,
+        charOffset: 0,
+        time: 200,
+      );
+      await b.addBook(
+        'b-src',
+        toc: toc,
+        chapterIndex: 2,
+        charOffset: 50,
+        time: 100,
+      );
+      await a.sync.syncAll();
+      final cloud = store.files['progress.json']!.$1;
+
+      await b.sync.syncAll();
+      expect((await b.book('b-src')).chapterIndex, 2, reason: '不把這台拉回去');
+      expect(store.files['progress.json']!.$1, cloud, reason: '雲端不被這台蓋掉');
+
+      // 下次再比也一樣：沒套用就不記成同步過，也不把這台的舊位置送上去。
+      await b.sync.syncAll();
+      expect(store.files['progress.json']!.$1, cloud);
+      expect((await b.book('b-src')).chapterIndex, 2);
+    });
+
+    test('a newer position at the same place is not pulled', () async {
+      await a.addBook(
+        'a-src',
+        toc: toc,
+        chapterIndex: 1,
+        charOffset: 10,
+        time: 200,
+      );
+      await b.addBook(
+        'b-src',
+        toc: toc,
+        chapterIndex: 1,
+        charOffset: 10,
+        time: 100,
+      );
+      await a.sync.syncAll();
+
+      expect(await b.sync.pullProgress('b-src'), isNull);
+    });
+
+    test('more characters in the same chapter are pulled', () async {
+      await a.addBook(
+        'a-src',
+        toc: toc,
+        chapterIndex: 1,
+        charOffset: 50,
+        time: 200,
+      );
+      await b.addBook(
+        'b-src',
+        toc: toc,
+        chapterIndex: 1,
+        charOffset: 10,
+        time: 100,
+      );
+      await a.sync.syncAll();
+
+      final pulled = await b.sync.pullProgress('b-src');
+      expect(pulled, isNotNull);
+      expect(pulled!.progress.chapterIndex, 1);
+      expect(pulled.progress.charOffset, 50);
+    });
+
+    test('a later chapter is pulled', () async {
+      await a.addBook(
+        'a-src',
+        toc: toc,
+        chapterIndex: 3,
+        charOffset: 0,
+        time: 200,
+      );
+      await b.addBook(
+        'b-src',
+        toc: toc,
+        chapterIndex: 1,
+        charOffset: 10,
+        time: 100,
+      );
+      await a.sync.syncAll();
+
+      final pulled = await b.sync.pullProgress('b-src');
+      expect(pulled, isNotNull);
+      expect(pulled!.progress.chapterIndex, 3);
+    });
+
+    test('a reversed table of contents counts the other phone\'s chapter '
+        'numbers from the other end', () async {
+      await a.addBook(
+        'a-src',
+        toc: const ['A0', 'A1', 'A2', 'A3'],
+        chapterIndex: 1,
+        time: 200,
+      );
+      await b.addBook(
+        'b-src',
+        toc: const ['B0', 'B1', 'B2', 'B3'],
+        reverseToc: true,
+        time: 100,
+      );
+      await a.sync.syncAll();
+
+      final pulled = await b.sync.pullProgress('b-src');
+      expect(pulled, isNotNull, reason: '另一台的序號 1 從這台數是 2，在後面');
+      expect(
+        pulled!.progress.chapterIndexIn(const [
+          'B0',
+          'B1',
+          'B2',
+          'B3',
+        ], reversed: true),
+        2,
+      );
+    });
+
+    test('a reversed table of contents does not pull a mirrored position '
+        'that is at this phone', () async {
+      await a.addBook(
+        'a-src',
+        toc: const ['A0', 'A1', 'A2', 'A3'],
+        chapterIndex: 3,
+        time: 200,
+      );
+      await b.addBook(
+        'b-src',
+        toc: const ['B0', 'B1', 'B2', 'B3'],
+        reverseToc: true,
+        time: 100,
+      );
+      await a.sync.syncAll();
+
+      expect(await b.sync.pullProgress('b-src'), isNull);
+    });
   });
 
   group('a book taken off the shelf and added back', () {
@@ -1183,7 +1349,8 @@ void main() {
         {'novel': BookSourceKind.novel, 'comic': BookSourceKind.comic},
       );
 
-      // 只在 A 讀漫畫，B 的小說不跟著跳。
+      // 只在 A 讀漫畫（往回讀到第 0 章），B 的小說不跟著跳；漫畫的新進度
+      // 在這台前面，B 也不往回跳（使用者 2026-11-26）。
       final comic = await a.book('comic');
       await a.books.upsert(
         comic
@@ -1193,7 +1360,7 @@ void main() {
       );
       await a.sync.syncAll();
       await b.sync.syncAll();
-      expect((await b.book('comic')).chapterIndex, 0);
+      expect((await b.book('comic')).chapterIndex, 3, reason: '較新但在這台前面，不往回跳');
       expect((await b.book('novel')).chapterIndex, 1);
     });
 

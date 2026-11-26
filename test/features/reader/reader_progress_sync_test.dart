@@ -139,6 +139,11 @@ void main() {
   late Set<int> unavailable;
 
   setUp(() {
+    // 前面有測試停在背景（hidden），先回到前景，免得回到前景的流程多跑一次。
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     restore = (_) async => true;
     unavailable = {};
     bookDao = _BookDao();
@@ -195,12 +200,15 @@ void main() {
 
   ReaderProgressSync start({
     ReaderOpenTarget? openTarget,
-    void Function(ReaderLocation previous)? onJumped,
+    List<Future<void> Function()>? suggestions,
   }) {
     final progressSync = ReaderProgressSync(
       book: book,
       runtime: () => runtime,
-      onJumped: onJumped ?? (_) => fail('開書不提示'),
+      onProgressSuggestion: (jump) {
+        if (suggestions == null) fail('沒有要問要不要跳');
+        suggestions.add(jump);
+      },
       bookDao: bookDao,
       openTarget: openTarget,
       sync: sync,
@@ -252,6 +260,19 @@ void main() {
     expect(runtime.state.visibleLocation.charOffset, 40);
     expect(book.progressTime, 7);
     expect(commits, 1);
+  });
+
+  test('pulling starts as the reader opens and the wait reuses it', () async {
+    sync.pullGate = Completer();
+    final progressSync = start();
+
+    expect(sync.pulls, 1, reason: '點書當下就開始抓，不等換頁動畫');
+
+    final opening = progressSync.openLocation(runtime);
+    expect(sync.pulls, 1, reason: '動畫播完沿用同一次抓取，不再另發');
+
+    sync.pullGate!.complete();
+    await opening;
   });
 
   test('cloud progress later than the grace: opens at this phone\'s position, '
@@ -306,7 +327,7 @@ void main() {
     final progressSync = ReaderProgressSync(
       book: book,
       runtime: () => runtime,
-      onJumped: (_) {},
+      onProgressSuggestion: (_) {},
       bookDao: bookDao,
       sync: sync,
     )..start();
@@ -353,7 +374,7 @@ void main() {
     final progressSync = ReaderProgressSync(
       book: book,
       runtime: () => runtime,
-      onJumped: (_) {},
+      onProgressSuggestion: (_) {},
       bookDao: bookDao,
       sync: sync,
     )..start();
@@ -374,7 +395,7 @@ void main() {
       final progressSync = ReaderProgressSync(
         book: book,
         runtime: () => runtime,
-        onJumped: (_) {},
+        onProgressSuggestion: (_) {},
         bookDao: bookDao,
         sync: sync,
       )..start();
@@ -405,7 +426,7 @@ void main() {
 
   group('progress that arrives after the book opened', () {
     var commits = 0;
-    final jumped = <ReaderLocation>[];
+    final suggestions = <Future<void> Function()>[];
 
     PulledProgress cloudAt(int chapter, int offset) => PulledProgress(
       SyncedProgress(
@@ -421,17 +442,16 @@ void main() {
     /// 的位置開了。
     Future<ReaderProgressSync> openWhileSyncing() async {
       commits = 0;
-      jumped.clear();
+      suggestions.clear();
       sync.pullGate = Completer();
-      final progressSync = start(onJumped: jumped.add);
+      final progressSync = start(suggestions: suggestions);
       final at = await progressSync.openLocation(runtime);
       expect(at, isNull);
       await runtime.openBook(at: at);
       return progressSync;
     }
 
-    test('the reader has not moved: it catches up with the other phone and '
-        'says so', () async {
+    test('the reader has not moved: it asks before jumping', () async {
       final progressSync = await openWhileSyncing();
       progressSync.bookOpened();
       expect(runtime.state.visibleLocation.chapterIndex, 1);
@@ -441,19 +461,26 @@ void main() {
       sync.pullGate!.complete();
       await pumpEventQueue();
 
+      expect(runtime.state.visibleLocation.chapterIndex, 1);
+      expect(runtime.state.visibleLocation.charOffset, 10);
+      expect(suggestions, hasLength(1), reason: '正文已經在畫面上，先問');
+      expect(commits, 0);
+      expect(bookDao.synced, isEmpty);
+
+      await suggestions.single();
+
       expect(runtime.state.visibleLocation.chapterIndex, 3);
       expect(runtime.state.visibleLocation.charOffset, 40);
-      expect(jumped.map((it) => it.chapterIndex), [1], reason: '提示可以回到原處');
       expect(commits, 1);
       expect(bookDao.synced, [1], reason: '時間記成不比雲端那一筆早');
     });
 
-    test('the pull finished before the book was positioned: still catches '
-        'up', () async {
+    test('the pull finished before the book was positioned: still asks '
+        'after the book shows', () async {
       sync.pullGate = Completer();
       commits = 0;
-      jumped.clear();
-      final progressSync = start(onJumped: jumped.add);
+      suggestions.clear();
+      final progressSync = start(suggestions: suggestions);
       await progressSync.openLocation(runtime);
       sync.pulled = cloudAt(3, 40);
       sync.pullGate!.complete();
@@ -461,6 +488,9 @@ void main() {
       progressSync.bookOpened();
       await pumpEventQueue();
 
+      expect(runtime.state.visibleLocation.chapterIndex, 1);
+      expect(suggestions, hasLength(1));
+      await suggestions.single();
       expect(runtime.state.visibleLocation.chapterIndex, 3);
       expect(commits, 1);
     });
@@ -479,7 +509,7 @@ void main() {
 
       expect(runtime.state.visibleLocation.chapterIndex, 1);
       expect(runtime.state.visibleLocation.charOffset, 300);
-      expect(jumped, isEmpty);
+      expect(suggestions, isEmpty);
       expect(commits, 0);
     });
 
@@ -491,14 +521,28 @@ void main() {
       await pumpEventQueue();
 
       expect(runtime.state.visibleLocation.chapterIndex, 1);
-      expect(jumped, isEmpty);
+      expect(suggestions, isEmpty);
       expect(commits, 0);
+    });
+
+    test('the same position is recorded without asking', () async {
+      final progressSync = await openWhileSyncing();
+      progressSync.bookOpened();
+
+      sync.pulled = cloudAt(1, 10);
+      sync.pullGate!.complete();
+      await pumpEventQueue();
+
+      expect(runtime.state.visibleLocation.charOffset, 10);
+      expect(suggestions, isEmpty);
+      expect(commits, 1);
     });
 
     test('progress that came in time needs no catching up', () async {
       sync.pullGate = Completer();
       sync.pulled = pulledAt(3, 40, stores: true);
-      final progressSync = start();
+      suggestions.clear();
+      final progressSync = start(suggestions: suggestions);
       final opening = progressSync.openLocation(runtime);
       sync.pullGate!.complete();
       await runtime.openBook(at: await opening);
@@ -507,12 +551,13 @@ void main() {
       await pumpEventQueue();
 
       expect(runtime.state.visibleLocation.chapterIndex, 3);
+      expect(suggestions, isEmpty);
     });
   });
 
   group('catching up with a newer progress while reading', () {
     var commits = 0;
-    final jumped = <ReaderLocation>[];
+    final suggestions = <Future<void> Function()>[];
 
     /// 另一台讀到第 [chapter] 章第 [offset] 個字。
     PulledProgress cloudAt(int chapter, int offset) => PulledProgress(
@@ -541,45 +586,75 @@ void main() {
 
     Future<void> openReader() async {
       commits = 0;
-      jumped.clear();
-      start(onJumped: jumped.add).bookOpened();
+      suggestions.clear();
+      start(suggestions: suggestions).bookOpened();
       await runtime.openBook();
     }
 
-    test('a jump that lands shows the notice and records the sync', () async {
+    test('a newer progress asks before jumping', () async {
       await openReader();
       sync.pulled = cloudAt(1, 400);
 
       await backToForeground();
 
-      expect(runtime.state.visibleLocation.charOffset, 400);
-      expect(jumped.map((it) => it.charOffset), [10]);
-      expect(commits, 1);
+      expect(runtime.state.visibleLocation.charOffset, 10);
+      expect(suggestions, hasLength(1));
+      expect(commits, 0);
     });
 
-    test('a position only a few characters away still jumps there', () async {
+    test('pressing the question jumps there and records the sync', () async {
       await openReader();
-      sync.pulled = cloudAt(1, 50);
+      sync.pulled = cloudAt(1, 400);
 
       await backToForeground();
+      await suggestions.single();
 
-      expect(runtime.state.visibleLocation.charOffset, 50);
-      expect(jumped.map((it) => it.charOffset), [10]);
+      expect(runtime.state.visibleLocation.charOffset, 400);
       expect(commits, 1);
+      expect(bookDao.synced, [1]);
     });
 
-    test('the very same position does not jump but is recorded', () async {
+    test(
+      'a position only a few characters away still asks and jumps there',
+      () async {
+        await openReader();
+        sync.pulled = cloudAt(1, 50);
+
+        await backToForeground();
+        expect(suggestions, hasLength(1));
+        await suggestions.single();
+
+        expect(runtime.state.visibleLocation.charOffset, 50);
+        expect(commits, 1);
+      },
+    );
+
+    test('the very same position does not ask but is recorded', () async {
       await openReader();
       sync.pulled = cloudAt(1, 10);
 
       await backToForeground();
 
-      expect(jumped, isEmpty);
+      expect(suggestions, isEmpty);
       expect(commits, 1);
     });
 
+    test('moving after the question: pressing it does nothing', () async {
+      await openReader();
+      sync.pulled = cloudAt(1, 400);
+
+      await backToForeground();
+      runtime.updateVisibleLocation(
+        const ReaderLocation(chapterIndex: 1, charOffset: 200),
+      );
+      await suggestions.single();
+
+      expect(runtime.state.visibleLocation.charOffset, 200);
+      expect(commits, 0);
+    });
+
     test('scrolling in the same chapter while the jump is loading cancels '
-        'it: no notice, not recorded as synced', () async {
+        'it: not recorded as synced', () async {
       await openReader();
       sync.pulled = cloudAt(1, 400);
       final entered = Completer<void>();
@@ -591,15 +666,16 @@ void main() {
       };
 
       await backToForeground();
+      final jumping = suggestions.single();
       await entered.future;
       runtime.cancelJumpForUserScroll();
       runtime.updateVisibleLocation(
         const ReaderLocation(chapterIndex: 1, charOffset: 200),
       );
       gate.complete();
+      await jumping;
       await pumpEventQueue();
 
-      expect(jumped, isEmpty);
       expect(commits, 0, reason: '沒記成同步過，下次回到前景還會再抓到雲端的位置');
       expect(runtime.state.visibleLocation.charOffset, 200);
     });
@@ -610,8 +686,8 @@ void main() {
       bookDao.failWrites = true;
 
       await backToForeground();
+      await suggestions.single();
 
-      expect(jumped, isEmpty);
       expect(commits, 0);
       expect(bookDao.synced, isEmpty);
     });
@@ -622,14 +698,13 @@ void main() {
       sync.pulled = cloudAt(3, 5);
 
       await backToForeground();
+      await suggestions.single();
 
-      expect(jumped, isEmpty);
       expect(commits, 0);
       expect(runtime.state.visibleLocation.chapterIndex, 1);
     });
 
-    test('a jump replaced by a newer one does not show the notice or '
-        'record', () async {
+    test('a jump replaced by a newer one does not record', () async {
       await openReader();
       sync.pulled = cloudAt(1, 400);
       final entered = Completer<void>();
@@ -643,15 +718,16 @@ void main() {
       };
 
       await backToForeground();
+      final jumping = suggestions.single();
       await entered.future;
       final newer = runtime.jumpToLocation(
         const ReaderLocation(chapterIndex: 2, charOffset: 0),
       );
       await newer;
       gate.complete();
+      await jumping;
       await pumpEventQueue();
 
-      expect(jumped, isEmpty);
       expect(commits, 0);
       expect(runtime.state.visibleLocation.chapterIndex, 2);
     });

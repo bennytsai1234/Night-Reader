@@ -376,16 +376,39 @@ class SyncService {
     );
   }
 
+  /// 同一個同步空間沿用同一個 store：Google 雲端硬碟的 store 每次新建立都
+  /// 會另開一條連線，開書抓進度時重新連線要一秒多。身分（空間、網址、帳號、
+  /// 帳密）變了或停用時換掉。
+  SyncStore? _cachedStore;
+  String? _cachedStoreIdentity;
+
   /// 目前設定的同步空間。要寫入的只在 [_lock] 裡呼叫：讀設定到用完同步空間
   /// 之間，不會被停用或換帳號插進來，寫到已經不用的空間。
   Future<SyncStore?> _store() async {
     final space = await _settings.space();
-    return _storeFactory(
-      space,
-      await _settings.webDavAccount(),
-      await _settings.googleAccount(),
-    );
+    final webDav = await _settings.webDavAccount();
+    final googleAccount = await _settings.googleAccount();
+    final identity = _identityOf(space, webDav, googleAccount);
+    if (_cachedStoreIdentity == identity) return _cachedStore;
+    final store = _storeFactory(space, webDav, googleAccount);
+    _cachedStore = store;
+    _cachedStoreIdentity = identity;
+    return store;
   }
+
+  /// 同步空間的身分。WebDAV 帶帳密：只改了密碼也要用新的連線。沒同步空間
+  /// 也是身分之一，換過去之後不再重試。
+  static String _identityOf(
+    SyncSpace space,
+    WebDavAccount? webDav,
+    String? googleAccount,
+  ) => switch (space) {
+    SyncSpace.none => 'none',
+    SyncSpace.webdav =>
+      'webdav\t${webDav?.url.trim() ?? ''}\t${webDav?.user ?? ''}'
+          '\t${webDav?.password ?? ''}',
+    SyncSpace.googleDrive => 'google_drive\t${googleAccount ?? ''}',
+  };
 
   /// 上次同步的紀錄屬於哪個同步空間的檔名。
   static const String _ownerFile = 'owner';
@@ -458,6 +481,8 @@ class SyncService {
       _settled.clear();
       await _settings.disable();
       await _bases.clear();
+      _cachedStore = null;
+      _cachedStoreIdentity = null;
     });
     status.value = const SyncStatus();
     if (wasGoogle) {
@@ -908,6 +933,18 @@ class SyncService {
       if (decision != SyncDecision.apply ||
           theirs == null ||
           generation != _generation) {
+        return null;
+      }
+      // 雲端比較新還不夠：讀到的位置也要在這台後面才接。兩台螢幕大小不同，
+      // 開書對齊行首存下的位置常差幾行；只看誰新會往回跳（使用者
+      // 2026-11-26）。
+      final chapterDao = _chapterDao ?? getIt<ChapterDao>();
+      if (!ProgressSync.isAhead(
+        book: book,
+        remote: theirs,
+        titles: await chapterDao.titlesByBook(book.bookUrl),
+        ids: await ProgressSync.chapterIdsOf(book, chapterDao),
+      )) {
         return null;
       }
       return PulledProgress(

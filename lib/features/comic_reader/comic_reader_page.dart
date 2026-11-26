@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
+import 'package:night_reader/core/chinese/ui_language.dart';
 import 'package:night_reader/core/comic/comic_chapter_download.dart';
 import 'package:night_reader/core/comic/comic_chapter_numbers.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -125,6 +126,15 @@ class _ComicReaderPageState extends State<ComicReaderPage>
   );
   ComicLocation? _location;
 
+  /// 問要不要跳到另一台進度時畫面停在的位置；一捲動、打開選單就收起提示。
+  ComicLocation? _syncHintAt;
+
+  static const String _syncHintMessage = '另一台讀到較新的地方';
+
+  /// 畫面上那則提示；收起時只清自己的（被下一則換掉的不清）。
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _visibleNotice;
+  String? _visibleNoticeMessage;
+
   ComicLocation get _readingLocation {
     final model = _model;
     return _location ??
@@ -143,6 +153,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     titles: () => [for (final chapter in _chapters) chapter.title],
     ids: () => [for (final chapter in _chapters) chapter.url],
     jumpTo: _jumpToSynced,
+    onProgressSuggestion: _showSyncHint,
     resumes: widget.startChapter == null,
     busy: () => _autoScrolling.value,
   );
@@ -158,12 +169,15 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     _inUse = BooksInUse.hold(widget.book.bookUrl);
     _strip.onAutoScrollStopped = () => _autoScrolling.value = false;
     _menuVisible.addListener(() {
+      if (_menuVisible.value) _dismissSyncHint();
       final behind = _menuBehind;
       if (_menuVisible.value && behind != null) {
         _refreshProgress(behind.chapterIndex, behind.pageIndex);
       }
     });
     unawaited(_settings.loadSettings());
+    // 點書當下就開始抓雲端進度，換頁動畫播完時不用再等一次。
+    _sync.prefetch();
     unawaited(_open());
   }
 
@@ -321,6 +335,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     _refreshProgress(location.chapterIndex, location.pageIndex);
     _progressWrites.schedule(location);
     _sync.located();
+    _dismissSyncHintIfMoved();
   }
 
   Future<void> _save(ComicLocation location) async {
@@ -439,11 +454,67 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     }
   }
 
-  void _showNotice(String message) {
+  /// 正文已經在畫面上之後才抓到另一台較新的進度：先問要不要跳過去。
+  void _showSyncHint(Future<void> Function() jump) {
+    final at = _sync.current();
+    if (!mounted || at == null) return;
+    _syncHintAt = at;
+    _showNotice(
+      _syncHintMessage,
+      action: (label: '跳過去', onPressed: () => unawaited(jump())),
+      duration: const Duration(seconds: 6),
+    );
+  }
+
+  void _dismissSyncHint() {
+    final hintAt = _syncHintAt;
+    _syncHintAt = null;
+    if (hintAt == null || _visibleNoticeMessage != _syncHintMessage) return;
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+  }
+
+  void _dismissSyncHintIfMoved() {
+    final hintAt = _syncHintAt;
+    final now = _sync.current();
+    if (hintAt != null &&
+        now != null &&
+        !ComicProgressSync.sameSpot(now, hintAt)) {
+      _dismissSyncHint();
+    }
+  }
+
+  void _showNotice(
+    String message, {
+    ({String label, VoidCallback onPressed})? action,
+    Duration duration = const Duration(milliseconds: 4000),
+  }) {
     if (!mounted) return;
-    ScaffoldMessenger.maybeOf(context)
-      ?..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: UiText(message)));
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    _visibleNoticeMessage = message;
+    messenger.hideCurrentSnackBar();
+    final notice = messenger.showSnackBar(
+      SnackBar(
+        content: UiText(message),
+        action: action == null
+            ? null
+            : SnackBarAction(
+                label: context.ui(action.label),
+                onPressed: action.onPressed,
+              ),
+        // 帶按鈕的提示預設不會自己收起，會一直蓋在正文上。
+        persist: false,
+        duration: duration,
+      ),
+    );
+    _visibleNotice = notice;
+    unawaited(
+      notice.closed.then<void>((_) {
+        if (!identical(_visibleNotice, notice)) return;
+        _visibleNotice = null;
+        _visibleNoticeMessage = null;
+      }),
+    );
   }
 
   void _toggleAutoScroll() {

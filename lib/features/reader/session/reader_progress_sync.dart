@@ -13,19 +13,22 @@ import 'reader_open_target.dart';
 import 'reader_runtime.dart';
 import 'reader_state.dart';
 
-/// 閱讀器這一頭的進度同步（ADR 0039），規則只有一條：誰新用誰。
-/// - 接著上次讀的地方開書時抓這本書的雲端進度，最多等 [openGrace]：等到了
-///   而且比這台新，就照它開；等不及先照這台的位置開，晚到時讀者還沒動就
-///   跳過去。從目錄或詳情點了某一章開書不抓。
-/// - 讀到一半回到前景時再抓一次，比這台新、而且抓的途中沒翻頁就跳過去。
-///   跳到雲端那一筆的準確位置（章＋字），位置完全一樣才不動。
+/// 閱讀器這一頭的進度同步（ADR 0039）：雲端那筆比較新、而且讀到的地方在
+/// 這台後面，才接。
+/// - 接著上次讀的地方開書時，點書當下就先抓這本書的雲端進度；換頁動畫播完
+///   最多等 [openGrace]：等到了而且比這台新，就照它開。等不及先照這台的位置
+///   開，正文已經在畫面上之後才到的話先問要不要跳過去，不自己跳。從目錄或
+///   詳情點了某一章開書不抓。
+/// - 讀到一半回到前景時再抓一次，比這台新、而且抓的途中沒翻頁就問要不要跳
+///   過去；沒按就不跳、不記成同步過。跳到雲端那一筆的準確位置（章＋字），
+///   位置完全一樣才不動。
 /// - 讀書途中畫面停住時上傳（[ReadingUploadPacer]）；退到背景、離開閱讀器
 ///   時把進度存好再上傳。
 class ReaderProgressSync {
   ReaderProgressSync({
     required this.book,
     required this._runtime,
-    required this._onJumped,
+    required this._onProgressSuggestion,
     required this._bookDao,
     ReaderOpenTarget? openTarget,
     SyncService? sync,
@@ -40,8 +43,9 @@ class ReaderProgressSync {
   final Book book;
   final ReaderRuntime? Function() _runtime;
 
-  /// 跳到另一台的位置之後呼叫，[previous] 是跳之前的位置，給「回到原處」用。
-  final void Function(ReaderLocation previous) _onJumped;
+  /// 正文已經在畫面上之後才抓到比這台新的進度：交給頁面問要不要跳過去，
+  /// 按了才執行傳進去的動作（會再確認讀者沒動過、還是同一筆）。
+  final void Function(Future<void> Function() jump) _onProgressSuggestion;
   final BookDao _bookDao;
   final SyncService _sync;
 
@@ -53,8 +57,14 @@ class ReaderProgressSync {
   Timer? _graceTimer;
   Completer<bool>? _grace;
 
+  /// 點書當下就開始抓的那一次；換頁動畫播完的 [openLocation] 改用它。
+  Future<PulledProgress?>? _openingPull;
+
   /// 開書時等不及的那次抓取：進度晚到時，書已經開在這台的位置了。
   Future<PulledProgress?>? _lateProgress;
+
+  /// 問過幾次要不要跳：換下一則之後，前一個按鈕按了也不動。
+  int _suggestions = 0;
   bool _marked = false;
   bool _opened = false;
   bool _disposed = false;
@@ -93,7 +103,12 @@ class ReaderProgressSync {
 
   void start() {
     // 照點的章節開書不抓，馬上記成開著，背景同步就不改這本。
-    if (!_resumes) _markOpen();
+    if (!_resumes) {
+      _markOpen();
+    } else {
+      // 點書當下就開始抓，換頁動畫播完時直接用這一次，多賺動畫的時間。
+      _openingPull ??= _sync.pullProgress(book.bookUrl);
+    }
     _lifecycle = AppLifecycleListener(onShow: _onShow, onHide: _onHide);
     _sync.uploadsOnHide(this, true);
   }
@@ -113,7 +128,8 @@ class ReaderProgressSync {
   Future<ReaderLocation?> openLocation(ReaderRuntime runtime) async {
     if (!_resumes) return null;
     _markOpen();
-    final pulling = _sync.pullProgress(book.bookUrl);
+    final pulling = _openingPull ?? _sync.pullProgress(book.bookUrl);
+    _openingPull = null;
     if (await _within(pulling, openGrace)) {
       if (_disposed || runtime.disposed) return null;
       try {
@@ -163,12 +179,12 @@ class ReaderProgressSync {
     if (late != null) unawaited(_catchUp(late));
   }
 
-  /// 開書時雲端進度還沒抓到、先照這台的位置開了：抓到時讀者還沒動就跳過去。
-  /// 讀者已經翻頁或捲動的話，這台的位置比較新，不蓋掉。
+  /// 開書時雲端進度還沒抓到、先照這台的位置開了：抓到時讀者還沒動就問
+  /// 要不要跳過去。
   Future<void> _catchUp(Future<PulledProgress?> pulling) async {
     final since = _runtime()?.state.visibleLocation;
     if (since == null) return;
-    await _jumpIfStill(await pulling, since);
+    await _offerCatchUp(await pulling, since);
   }
 
   void _onShow() {
@@ -186,7 +202,7 @@ class ReaderProgressSync {
       AppLog.e('存進度失敗', error: error, stackTrace: stackTrace);
     }
     final since = runtime.state.visibleLocation;
-    await _jumpIfStill(await _sync.pullProgress(book.bookUrl), since);
+    await _offerCatchUp(await _sync.pullProgress(book.bookUrl), since);
   }
 
   void _onHide() {
@@ -213,8 +229,37 @@ class ReaderProgressSync {
     );
   }
 
-  /// 抓到比這台新的進度、而且從 [since] 之後沒翻過頁，就跳到它的準確位置。
-  /// 翻過頁的話這台的位置比較新，之後照常上傳。
+  /// 正文已經在畫面上才抓到比這台新的進度：位置一樣就照舊記成同步過；
+  /// 不一樣就先問要不要跳過去，不自己跳。
+  Future<void> _offerCatchUp(
+    PulledProgress? pulled,
+    ReaderLocation since,
+  ) async {
+    final runtime = _runtime();
+    if (pulled == null || !pulled.isCurrent || !_isReady(runtime)) return;
+    final current = runtime!.state.visibleLocation;
+    if (!_samePlace(current, since)) return;
+    final index = pulled.progress.chapterIndexIn([
+      for (var i = 0; i < runtime.chapterCount; i++) runtime.titleFor(i),
+    ], reversed: book.getReverseToc());
+    final target = ReaderLocation(
+      chapterIndex: index,
+      charOffset: pulled.progress.charOffset,
+    );
+    if (_samePlace(target, current)) {
+      await _jumpIfStill(pulled, since);
+      return;
+    }
+    final suggestion = ++_suggestions;
+    _onProgressSuggestion(() async {
+      // 換過一則提示（讀者又動了、回到前景又抓到）：前一個按鈕不再有用。
+      if (suggestion != _suggestions) return;
+      await _jumpIfStill(pulled, since);
+    });
+  }
+
+  /// 按了「跳過去」：讀者從 [since] 之後沒翻過頁、還是同一筆、同一個同步
+  /// 空間，就跳到它的準確位置，存好、記成同步過。
   Future<void> _jumpIfStill(
     PulledProgress? pulled,
     ReaderLocation since,
@@ -235,8 +280,8 @@ class ReaderProgressSync {
       if (jumps) {
         final reached = await runtime.jumpToLocation(target);
         // 沒定位到目標（那一章取不到、使用者自己捲動而作廢、被別的操作取代）
-        // 時，跳轉照樣正常結束、畫面留在原處：不提示、不記成已同步，下次
-        // 回到前景再試。同一章內的跳轉也一樣，不能只看章節序號。
+        // 時，跳轉照樣正常結束、畫面留在原處：不記成已同步，下次回到前景
+        // 再試。同一章內的跳轉也一樣，不能只看章節序號。
         if (!reached || !_isReady(runtime)) return;
       }
       await runtime.flushProgress();
@@ -254,7 +299,6 @@ class ReaderProgressSync {
       AppLog.e('存進度失敗', error: error, stackTrace: stackTrace);
       return;
     }
-    if (jumps) _onJumped(current);
     // 進度控制器存好後，記憶體裡的書就是存下的那一筆。
     await pulled.commit(ProgressSync.recordOf(book));
   }

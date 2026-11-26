@@ -96,18 +96,55 @@ class _AudiobookPageState extends State<AudiobookPage> {
   /// 播放器不影響階段的提示（例如通話中按播放沒出聲）。
   late final StreamSubscription<String> _notices;
 
+  /// 抓到另一台較新的進度：問要不要跳過去。
+  late final StreamSubscription<AudiobookProgressSuggestion> _suggestions;
+
+  /// 畫面上那則問要不要跳的提示，與彈出時按過的次數；按了播放、暫停、
+  /// 拖動或換集就收起。
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _suggestionNotice;
+  int? _suggestionInteractions;
+
   @override
   void initState() {
     super.initState();
     // 進來之前就留著的失敗不再跳一次；按播放重試又失敗才跳。
     _noticedError = _playbackError;
     _notices = _player.notices.listen(_showNotice);
+    _suggestions = _player.progressSuggestions.listen(_showProgressSuggestion);
+    // 點書當下就開始抓雲端進度，換頁動畫播完才開書，多賺動畫的時間。
+    if (widget.chapterIndex == null) _player.prefetchProgress(widget.book);
     _player.addListener(_onPlayerChanged);
     unawaited(_start());
   }
 
+  /// 另一台較新的進度：先問要不要跳過去，不自動跳。
+  void _showProgressSuggestion(AudiobookProgressSuggestion suggestion) {
+    if (!mounted) return;
+    _hideProgressSuggestion();
+    _suggestionInteractions = _player.interactions;
+    _showNotice(
+      suggestion.message,
+      action: SnackBarAction(
+        label: context.ui('跳過去'),
+        onPressed: () => unawaited(suggestion.jump()),
+      ),
+      duration: const Duration(seconds: 6),
+    );
+    _suggestionNotice = _notice;
+  }
+
+  void _hideProgressSuggestion() {
+    _suggestionNotice?.close();
+    _suggestionNotice = null;
+    _suggestionInteractions = null;
+  }
+
   /// 播放失敗：跳一則提示寫原因；能解決時（登入、前往驗證）旁邊給那一顆。
   void _onPlayerChanged() {
+    if (_suggestionInteractions case final interactions?
+        when _player.interactions != interactions) {
+      _hideProgressSuggestion();
+    }
     final error = _playbackError;
     if (error == _noticedError) return;
     _noticedError = error;
@@ -127,14 +164,18 @@ class _AudiobookPageState extends State<AudiobookPage> {
   }
 
   /// 跳一則提示；新的蓋掉還在畫面上的那一則。
-  void _showNotice(String message, {SnackBarAction? action}) {
+  void _showNotice(
+    String message, {
+    SnackBarAction? action,
+    Duration duration = const Duration(seconds: 4),
+  }) {
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
     final notice = messenger.showSnackBar(
       SnackBar(
         content: UiText(message),
         persist: false,
-        duration: const Duration(seconds: 4),
+        duration: duration,
         action: action,
       ),
     );
@@ -142,6 +183,10 @@ class _AudiobookPageState extends State<AudiobookPage> {
     unawaited(
       notice.closed.then<void>((_) {
         if (identical(_notice, notice)) _notice = null;
+        if (identical(_suggestionNotice, notice)) {
+          _suggestionNotice = null;
+          _suggestionInteractions = null;
+        }
       }),
     );
   }
@@ -199,6 +244,8 @@ class _AudiobookPageState extends State<AudiobookPage> {
   void dispose() {
     _player.removeListener(_onPlayerChanged);
     unawaited(_notices.cancel());
+    unawaited(_suggestions.cancel());
+    _suggestionNotice?.close();
     _notice?.close();
     unawaited(_downloads?.cancel());
     _listScroll?.dispose();
