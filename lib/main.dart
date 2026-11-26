@@ -23,6 +23,7 @@ import 'core/database/dao/book_dao.dart';
 import 'core/local_book/local_book_service.dart';
 import 'core/storage/app_storage_paths.dart';
 import 'core/storage/reader_layout_cache.dart';
+import 'core/storage/temp_files.dart';
 import 'app_providers.dart';
 import 'shared/layout/tablet_text_scale.dart';
 import 'shared/theme/app_chrome.dart';
@@ -299,6 +300,12 @@ void _runPostLaunchTasks() {
   unawaited(
     AppStoragePaths.removeLegacyRuleData().catchError(
       (Object e) => AppLog.w('Cleanup legacy rule data failed: $e'),
+    ),
+  );
+  // 選檔、分享、匯出與備份留下的一次性暫存檔，放超過一天的刪掉。
+  unawaited(
+    TempFiles.sweep().catchError(
+      (Object e) => AppLog.w('Cleanup stale temp files failed: $e'),
     ),
   );
   unawaited(_pruneStoredBooks());
