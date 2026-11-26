@@ -17,7 +17,7 @@ import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'ai_repair_page.dart';
@@ -598,7 +598,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
         _batch,
         title: _run.title,
         into: Directory(
-          '${(await getTemporaryDirectory()).path}/repair-export',
+          '${(await AppStoragePaths.temporaryDir()).path}/repair-export',
         ),
       );
       await SharePlus.instance.share(

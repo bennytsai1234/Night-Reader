@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:intl/intl.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/ai_find_dao.dart';
@@ -25,10 +27,12 @@ import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/backup/backup_service.dart';
 import 'package:night_reader/core/backup/restore_service.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/core/models/reading/bookmark.dart';
 import 'package:night_reader/core/models/reading/read_record.dart';
 import 'package:night_reader/core/network/network_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -322,5 +326,46 @@ void main() {
     );
     expect(restored.id, 1700000000123456);
     expect(restored.charOffset, 40);
+  });
+
+  test('打包完刪掉攤開的資料，成功時清掉同資料夾的舊備份、留下新的', () async {
+    final dir = await AppStoragePaths.backupTempDir(ensureExists: true);
+    final stale = File(p.join(dir.path, 'backup-2020-01-01.zip'))
+      ..writeAsStringSync('old');
+
+    final zip = await BackupService().createBackupZip();
+
+    expect(zip, isNotNull);
+    expect(await zip!.exists(), isTrue);
+    expect(
+      await Directory(p.join(dir.path, 'legado_backup')).exists(),
+      isFalse,
+    );
+    expect(await stale.exists(), isFalse);
+    expect(await dir.list().map((e) => p.basename(e.path)).toList(), [
+      p.basename(zip.path),
+    ]);
+  });
+
+  test('打包失敗也刪掉攤開的資料與沒改名成功的暫存檔', () async {
+    final dir = await AppStoragePaths.backupTempDir(ensureExists: true);
+    final zipPath = p.join(
+      dir.path,
+      'backup-${DateFormat('yyyy-MM-dd').format(DateTime.now())}.zip',
+    );
+    // 目標位置放著資料夾，重新命名一定失敗。
+    final existing = File(zipPath);
+    if (await existing.exists()) await existing.delete();
+    final blocker = await Directory(zipPath).create();
+    addTearDown(() => blocker.delete(recursive: true));
+
+    final zip = await BackupService().createBackupZip();
+
+    expect(zip, isNull);
+    expect(
+      await Directory(p.join(dir.path, 'legado_backup')).exists(),
+      isFalse,
+    );
+    expect(await File('$zipPath.tmp').exists(), isFalse);
   });
 }
