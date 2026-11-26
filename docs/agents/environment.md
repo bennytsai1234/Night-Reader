@@ -26,8 +26,8 @@
 
 ## 書源
 
-- **Legado 原始碼**：對照 Legado 的做法時讀使用者的 fork：家裡在 `C:\Users\benny\Desktop\Folder\projects\legado`，公司在 `C:\Users\045650\Project\legado`，家裡的 Linux 筆電在 `/home/benny/projects/legado`（`git clone --depth 1 https://github.com/bennytsai1234/legado.git`）。`gedoor/legado` 已經清空。
-- **Mihon 原始碼**：對照漫畫閱讀器（條漫捲動、縮放、換章分隔）時讀，家裡在 `C:\Users\benny\Desktop\Folder\projects\mihon`，公司在 `C:\Users\045650\Project\mihon`，家裡的 Linux 筆電還沒有，要用時照下面的指令放在 `/home/benny/projects/mihon`（`git clone --depth 1 https://github.com/mihonapp/mihon.git`，Apache 2.0）；條漫閱讀器在 `app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/webtoon/`，預設值在 `ui/reader/setting/ReaderPreferences.kt`。
+- **Legado 原始碼**：對照 Legado 的做法時讀使用者的 fork：家裡在 `C:\Users\benny\Desktop\Folder\projects\legado`，公司在主資料夾的 `.local\legado`，家裡的 Linux 筆電在 `/home/benny/projects/legado`（`git clone --depth 1 https://github.com/bennytsai1234/legado.git`）。`gedoor/legado` 已經清空。
+- **Mihon 原始碼**：對照漫畫閱讀器（條漫捲動、縮放、換章分隔）時讀，家裡在 `C:\Users\benny\Desktop\Folder\projects\mihon`，公司在主資料夾的 `.local\mihon`，家裡的 Linux 筆電還沒有，要用時照下面的指令放在 `/home/benny/projects/mihon`（`git clone --depth 1 https://github.com/mihonapp/mihon.git`，Apache 2.0）；條漫閱讀器在 `app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/webtoon/`，預設值在 `ui/reader/setting/ReaderPreferences.kt`。
 - **改正文的段落處理（段落修復、排版整理）時比對真網站的正文**：`test/live/chapter_text_live_test.dart` 抓幾章存成檔，`test/live/paragraph_repair_corpus_live_test.dart` 列出每一處合併，用法寫在檔頭。書源用主資料夾 `.local/ai-repair/export_589_sources.json`（使用者手機上的書源）；抓回的章在主資料夾 `.local/paragraph-repair/`，改規則時先拿它重跑比對、再視需要抓新的。
 - **用真的網站校驗書源**：`test/live/source_check_live_test.dart`，用法寫在檔頭。調 AI 修書源（提示詞、流程）時的整批實跑、評估表與逐輪頁面照 `docs/agents/ai-repair-runs.md`。源倉庫（yckceo.com）的書源可以照清單頁收集 id，再從 `https://www.yckceo.com/yuedu/shuyuan/json/id/<id>.json` 下載。清單頁 `https://www.yckceo.com/yuedu/shuyuan/index.html` 接 `?tu=1`（圖源）、`?shengyin=1`（有聲）、`?keys=<關鍵字>`、`&page=<n>` 篩選，一頁 100 個；「圖源」裡混著小說與聚合源，類型以下載的 JSON 為準。
 - **整批校驗的逾時與 `DioException [unknown]` 不代表書源壞了**：家裡這台連部分網站時 TLS 憑證不受信任（curl 也一樣）、DNS 時好時壞，每次跑的結果都不同（同一批會有一部分逾時）。要判斷書源本身時，挑出來重跑，並用 curl 打同一個網址對照；書源匯入時的分類（`prepareIncoming`）`test/live/` 不會跑，要看匯入後的類型另外呼叫。
