@@ -145,4 +145,18 @@ void main() {
       reason: '兩台同一個方向，序號 1 在序號 0 後面',
     );
   });
+
+  test('a mirrored index outside this table of contents, with a title not '
+      'found here, is not taken as ahead', () {
+    // 另一台目錄方向相反、序號超出這台的目錄、章名這台也沒有：換算不出。
+    final book = _book(chapterIndex: 1, charOffset: 0);
+    expect(
+      ProgressSync.isAhead(
+        book: book,
+        remote: _remote(9, 0, title: '改過名的一章', tocReversed: true),
+        titles: titles,
+      ),
+      isFalse,
+    );
+  });
 }

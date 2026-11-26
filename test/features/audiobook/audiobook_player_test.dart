@@ -1437,6 +1437,29 @@ void main() {
     expect(sync.commits, 1);
   });
 
+  test('提示出現之後按過暫停，再按「跳過去」不換集、不記成同步過', () async {
+    final gate = Completer<void>();
+    sync
+      ..pullGate = gate
+      ..pulled = cloudAt(3, 1000);
+    final suggestions = <AudiobookProgressSuggestion>[];
+    final subscription = player.progressSuggestions.listen(suggestions.add);
+    addTearDown(subscription.cancel);
+    await player.open(book);
+    gate.complete();
+    await pumpEventQueue();
+    expect(suggestions, hasLength(1));
+
+    await player.pause();
+    final opened = engine.opened.length;
+    await suggestions.single.jump();
+    await pumpEventQueue();
+
+    expect(engine.opened, hasLength(opened), reason: '讀者按過別的，照讀者的');
+    expect(player.chapterIndex, isNot(3));
+    expect(sync.commits, 0);
+  });
+
   test('開書時雲端進度晚到、這台播著已經過了那裡：不出提示、不倒回去', () async {
     final gate = Completer<void>();
     sync

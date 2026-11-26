@@ -89,11 +89,13 @@ class ComicProgressSync {
 
   /// 開書失敗後重試會再呼叫一次，只註冊一次。
   void start() {
+    // 開書失敗後重試：上一次留下的抓取可能已經過時（或是當時沒抓到），重抓。
+    final retry = _lifecycle != null;
     if (!resumes) {
       _markOpen();
-    } else {
+    } else if (retry || _openingPull == null) {
       // 點書當下就開始抓，換頁動畫播完時直接用這一次，多賺動畫的時間。
-      _openingPull ??= _sync.pullProgress(book.bookUrl);
+      _openingPull = _sync.pullProgress(book.bookUrl);
     }
     _lifecycle ??= AppLifecycleListener(onShow: _onShow, onHide: _onHide);
     _sync.uploadsOnHide(this, true);

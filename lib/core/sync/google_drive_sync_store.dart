@@ -32,10 +32,6 @@ class GoogleDriveSyncStore implements SyncStore {
   final String _account;
   final Dio _dio;
 
-  /// 檔名 → 檔案編號：同一個 store 連續讀同一份檔時直接下載，不再照檔名
-  /// 查一次（每次查都要重新連線，開書抓進度要一秒多）。404 時清掉重查。
-  final Map<String, String> _fileIds = {};
-
   static const String _api = 'https://www.googleapis.com/drive/v3/files';
   static const String _upload =
       'https://www.googleapis.com/upload/drive/v3/files';
@@ -78,9 +74,7 @@ class GoogleDriveSyncStore implements SyncStore {
       if (files is List && files.isNotEmpty) {
         final first = files.first;
         if (first is! Map || first['id'] is! String) return null;
-        final id = first['id'] as String;
-        _fileIds[name] = id;
-        return (id: id, version: '${first['version']}');
+        return (id: first['id'] as String, version: '${first['version']}');
       }
       final next = json['nextPageToken'];
       pageToken = next is String && next.isNotEmpty ? next : null;
@@ -90,26 +84,6 @@ class GoogleDriveSyncStore implements SyncStore {
 
   @override
   Future<SyncFile?> read(String name) async {
-    if (_fileIds[name] case final id?) {
-      // 先問版本再下載，順序同照檔名查：中間有別台寫入時拿到的內容只會比
-      // 版本新，寫回時版本對不上、重讀再合併；反過來會拿舊內容蓋掉新的。
-      final (:version, :missing) = await _versionOf(id);
-      if (!missing) {
-        final response = await _send(
-          '$_api/$id',
-          'GET',
-          query: {'alt': 'media'},
-        );
-        if (response.statusCode != 404) {
-          _ensureOk(response);
-          return SyncFile(
-            utf8.decode(response.data ?? Uint8List(0), allowMalformed: true),
-            version: version,
-          );
-        }
-      }
-      _fileIds.remove(name);
-    }
     final file = await _find(name);
     if (file == null) return null;
     final response = await _send(
@@ -117,10 +91,7 @@ class GoogleDriveSyncStore implements SyncStore {
       'GET',
       query: {'alt': 'media'},
     );
-    if (response.statusCode == 404) {
-      _fileIds.remove(name);
-      return null;
-    }
+    if (response.statusCode == 404) return null;
     _ensureOk(response);
     return SyncFile(
       utf8.decode(response.data ?? Uint8List(0), allowMalformed: true),
@@ -128,30 +99,8 @@ class GoogleDriveSyncStore implements SyncStore {
     );
   }
 
-  /// 只問版本（`files/<id>?fields=version`）。回 404 就是這個編號不在了。
-  Future<({String? version, bool missing})> _versionOf(String id) async {
-    final response = await _send(
-      '$_api/$id',
-      'GET',
-      query: {'fields': 'version'},
-    );
-    if (response.statusCode == 404) return (version: null, missing: true);
-    _ensureOk(response);
-    final json = jsonDecode(utf8.decode(response.data ?? Uint8List(0)));
-    final version = json is Map ? json['version'] : null;
-    return (version: version == null ? null : '$version', missing: false);
-  }
-
   @override
-  Future<String?> version(String name) async {
-    if (_fileIds[name] case final id?) {
-      final (:version, :missing) = await _versionOf(id);
-      if (!missing) return version;
-      _fileIds.remove(name);
-    }
-    final file = await _find(name);
-    return file?.version;
-  }
+  Future<String?> version(String name) async => (await _find(name))?.version;
 
   @override
   Future<void> write(
@@ -175,7 +124,6 @@ class GoogleDriveSyncStore implements SyncStore {
         data: bytes,
       );
       _ensureOk(response);
-      _fileIds[name] = current.id;
       return;
     }
     const boundary = 'night_reader_sync_boundary';
@@ -208,19 +156,6 @@ class GoogleDriveSyncStore implements SyncStore {
 
   @override
   Future<Uint8List?> readBytes(String name) async {
-    if (_fileIds[name] case final id?) {
-      final response = await _send(
-        '$_api/$id',
-        'GET',
-        query: {'alt': 'media'},
-        transfer: true,
-      );
-      if (response.statusCode != 404) {
-        _ensureOk(response);
-        return response.data ?? Uint8List(0);
-      }
-      _fileIds.remove(name);
-    }
     final file = await _find(name);
     if (file == null) return null;
     final response = await _send(
@@ -229,10 +164,7 @@ class GoogleDriveSyncStore implements SyncStore {
       query: {'alt': 'media'},
       transfer: true,
     );
-    if (response.statusCode == 404) {
-      _fileIds.remove(name);
-      return null;
-    }
+    if (response.statusCode == 404) return null;
     _ensureOk(response);
     return response.data ?? Uint8List(0);
   }
@@ -274,7 +206,6 @@ class GoogleDriveSyncStore implements SyncStore {
       transfer: true,
     );
     _ensureOk(response);
-    if (current != null) _fileIds[name] = current.id;
   }
 
   /// 同名的檔都刪掉（兩台第一次同時寫入會各建一個，[_find]），刪到查不到
@@ -283,12 +214,8 @@ class GoogleDriveSyncStore implements SyncStore {
   Future<void> delete(String name) async {
     for (var i = 0; i < 20; i++) {
       final file = await _find(name);
-      if (file == null) {
-        _fileIds.remove(name);
-        return;
-      }
+      if (file == null) return;
       final response = await _send('$_api/${file.id}', 'DELETE');
-      if (_fileIds[name] == file.id) _fileIds.remove(name);
       // 404：剛被別台刪掉，再查一次還有沒有別的同名檔。
       if (response.statusCode != 404) _ensureOk(response);
     }

@@ -648,6 +648,29 @@ void main() {
     expect(await b.sync.pullProgress('b-src'), isNull);
   });
 
+  test('progress pulled when the book was tapped is not written if this '
+      'phone moved past it before the book opened', () async {
+    await a.addBook(
+      'a-src',
+      toc: toc,
+      chapterIndex: 2,
+      charOffset: 9,
+      time: 200,
+    );
+    await b.addBook('b-src', toc: toc, time: 100);
+    await a.sync.syncAll();
+
+    final pulled = await b.sync.pullProgress('b-src');
+    expect(pulled, isNotNull);
+    // 換頁動畫期間這台被推到更後面（例如背景那輪接上了更新的一筆）。
+    await b.books.updateProgress('b-src', 3, '第三章', 1);
+
+    expect(await pulled!.applyBeforeOpen(), isFalse);
+    final book = await b.book('b-src');
+    expect(book.chapterIndex, 3, reason: '不拿點書時抓到的舊位置蓋掉');
+    expect(book.charOffset, 1);
+  });
+
   test(
     'a phone whose clock runs behind takes the other phone\'s progress, '
     'reads on, and the other phone follows instead of pulling it back',

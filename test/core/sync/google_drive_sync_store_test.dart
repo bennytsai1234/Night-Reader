@@ -51,14 +51,6 @@ class _FakeDrive implements HttpClientAdapter {
   /// 二進位檔的內容（檔案編號 → 位元組），可續傳上傳寫進來的。
   final Map<String, Uint8List> blobs = {};
 
-  /// 照檔名列檔幾次、下載內容幾次、只取版本幾次。
-  int findQueries = 0;
-  int mediaGets = 0;
-  int versionGets = 0;
-
-  /// 問這些檔案編號的版本時回 404（內容照常下載得到）。
-  final Set<String> versionGone = {};
-
   /// 開好、還沒送檔的上傳工作：更新的是哪個檔（新建時是 null）、檔名。
   final Map<String, ({String? id, String name})> sessions = {};
   var _nextId = 0;
@@ -87,7 +79,6 @@ class _FakeDrive implements HttpClientAdapter {
       final name = q == null
           ? null
           : RegExp(r"name = '([^']+)'").firstMatch(q)![1];
-      if (name != null) findQueries++;
       return _json(200, {
         'files': [
           for (final entry in files.entries)
@@ -97,17 +88,8 @@ class _FakeDrive implements HttpClientAdapter {
       });
     }
     if (uri.path.startsWith('/drive/v3/files/') && options.method == 'GET') {
-      if (uri.queryParameters['fields'] == 'version') versionGets++;
-      if (uri.queryParameters['alt'] == 'media') mediaGets++;
-      if (uri.queryParameters['fields'] == 'version' &&
-          versionGone.contains(uri.pathSegments.last)) {
-        return _json(404, {});
-      }
       final file = files[uri.pathSegments.last];
       if (file == null) return _json(404, {});
-      if (uri.queryParameters['fields'] == 'version') {
-        return _json(200, {'version': '${file.version}'});
-      }
       if (forbidden.contains(file.name)) return _json(403, {});
       if (failure case (final status, final body)) return _json(status, body);
       final raw = blobs[uri.pathSegments.last];
@@ -228,71 +210,6 @@ void main() {
       expect(auth.accounts, {'me@example.com'});
     },
   );
-
-  test('the file id is remembered: later reads and version checks do not '
-      'look up the name again', () async {
-    final driveStore = store();
-    await driveStore.write('progress.json', '{"v":1}');
-    final first = (await driveStore.read('progress.json'))!;
-    expect(first.content, '{"v":1}');
-    final finds = drive.findQueries;
-
-    expect((await driveStore.read('progress.json'))!.content, '{"v":1}');
-    expect(await driveStore.version('progress.json'), first.version);
-    expect(drive.findQueries, finds, reason: '記住編號後直接用編號，不再照檔名查');
-    expect(drive.mediaGets, 2);
-    expect(drive.versionGets, 2);
-  });
-
-  test('a remembered id that is gone is forgotten and looked up by name '
-      'once', () async {
-    final driveStore = store();
-    await driveStore.write('progress.json', '{"v":1}');
-    expect((await driveStore.read('progress.json'))!.content, '{"v":1}');
-    final old = drive.files.keys.single;
-    drive.files.remove(old);
-    drive.blobs.remove(old);
-    // 同名的檔案被另一台重新建立成另一個編號。
-    drive.files['rebuilt'] = (
-      name: 'progress.json',
-      content: '{"v":2}',
-      version: 5,
-    );
-
-    final finds = drive.findQueries;
-    final gets = drive.mediaGets;
-    final file = (await driveStore.read('progress.json'))!;
-
-    expect(file.content, '{"v":2}');
-    expect(file.version, '5');
-    expect(drive.mediaGets - gets, 1, reason: '記住的編號問版本就 404，不下載，照檔名重查後下載一次');
-    expect(drive.findQueries - finds, 1, reason: '404 後只重查一次');
-  });
-
-  test('a newly created file is looked up by name the next time, so two '
-      'phones that created it at once settle on the earliest one', () async {
-    final driveStore = store();
-    await driveStore.write('progress.json', 'mine');
-    final finds = drive.findQueries;
-
-    expect((await driveStore.read('progress.json'))!.content, 'mine');
-    expect(drive.findQueries, finds + 1, reason: '新建時不記自己的編號');
-  });
-
-  test('a missing version falls back to the name instead of returning no '
-      'version', () async {
-    final driveStore = store();
-    await driveStore.write('progress.json', '{"v":1}');
-    expect((await driveStore.read('progress.json'))!.content, '{"v":1}');
-    drive.versionGone.add(drive.files.keys.single);
-    final finds = drive.findQueries;
-
-    final file = (await driveStore.read('progress.json'))!;
-
-    expect(file.content, '{"v":1}');
-    expect(file.version, '1', reason: '沒有版本就不回這份，寫回才不會不比版本');
-    expect(drive.findQueries - finds, 1, reason: '清掉編號、照檔名重查一次');
-  });
 
   test('a book file larger than one plain upload goes up resumably, comes '
       'back byte for byte, is replaced in place and deleted', () async {

@@ -185,6 +185,16 @@ class ProgressSync extends SyncKind {
   }) {
     if (remote.deleted) return false;
     final position = SyncedProgress.fromRecord(remote);
+    // 兩台目錄方向相反、雲端的序號超出這台的目錄、章名也對不到：換算不出
+    // 是哪一章，不算在後面（寧可不接，也不把前面的章當成後面）。
+    final reversedThere = position.tocReversed;
+    if (reversedThere != null &&
+        reversedThere != book.getReverseToc() &&
+        position.chapterId.isEmpty &&
+        position.chapterIndex >= titles.length &&
+        !titles.any((title) => title.trim() == position.chapterTitle.trim())) {
+      return false;
+    }
     final index = position.chapterIndexIn(
       titles,
       ids: ids,

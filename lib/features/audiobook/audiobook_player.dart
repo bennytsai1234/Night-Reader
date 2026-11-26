@@ -252,8 +252,15 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 預先解析好的下一集音訊請求。
   ({int index, AudioRequest request})? _prefetched;
 
-  /// 播放器頁一打開就先抓的這本書雲端進度；開書時直接等這一個。
-  ({String bookUrl, Future<PulledProgress?> pulling})? _prefetchedProgress;
+  /// 播放器頁一打開就先抓的這本書雲端進度；開書時直接等這一個。播放器
+  /// 整個 App 共用：沒被這次開書用掉（換頁動畫中就返回、開書失敗）的，
+  /// 過了 [_prefetchFresh] 就不再用。
+  ({String bookUrl, Future<PulledProgress?> pulling, DateTime at})?
+  _prefetchedProgress;
+  static const Duration _prefetchFresh = Duration(seconds: 5);
+
+  /// 問過幾次要不要跳：換下一則之後，前一個按鈕按了也不動。
+  int _suggestionSerial = 0;
 
   /// 使用者要不要出聲：載入中按了暫停（或定時到了、別的播放接手），載入完
   /// 就不自己開始播；暫停時在接手系統播放的那一下按了暫停也不出聲。開書中、
@@ -368,10 +375,16 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 已經開著時不用抓（開書也不會再抓）。
   void prefetchProgress(Book book) {
     if (isCurrent(book) && _phase != AudiobookPhase.openFailed) return;
-    if (_prefetchedProgress?.bookUrl == book.bookUrl) return;
+    final earlier = _prefetchedProgress;
+    if (earlier != null &&
+        earlier.bookUrl == book.bookUrl &&
+        DateTime.now().difference(earlier.at) < _prefetchFresh) {
+      return;
+    }
     _prefetchedProgress = (
       bookUrl: book.bookUrl,
       pulling: _sync.pullProgress(book.bookUrl),
+      at: DateTime.now(),
     );
   }
 
@@ -492,7 +505,10 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   Future<(Book, Future<PulledProgress?>?)> _resumePosition(Book book) async {
     final prefetched = _prefetchedProgress;
     _prefetchedProgress = null;
-    final pulling = prefetched != null && prefetched.bookUrl == book.bookUrl
+    final pulling =
+        prefetched != null &&
+            prefetched.bookUrl == book.bookUrl &&
+            DateTime.now().difference(prefetched.at) < _prefetchFresh
         ? prefetched.pulling
         : _sync.pullProgress(book.bookUrl);
     Future<PulledProgress?>? late;
@@ -1069,10 +1085,23 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       unawaited(_jumpToPulled(book, pulled, since, play: play));
       return;
     }
+    final serial = ++_suggestionSerial;
     _progressSuggestions.add(
       AudiobookProgressSuggestion(
         message: audiobookNewerProgressNotice,
-        jump: () => _jumpToPulled(book, pulled, since, play: play),
+        jump: () async {
+          // 按下時再確認：沒被下一則取代、提示出現後沒按過什麼、還是這本與
+          // 同一個同步空間，播著的話還沒聽過另一台停的地方（不倒回去）。
+          if (serial != _suggestionSerial ||
+              _commands != since ||
+              !isCurrent(book) ||
+              !pulled.isCurrent ||
+              (_phase == AudiobookPhase.playing &&
+                  !_aheadOfHere(book, pulled))) {
+            return;
+          }
+          await _jumpToPulled(book, pulled, since, play: play);
+        },
       ),
     );
   }

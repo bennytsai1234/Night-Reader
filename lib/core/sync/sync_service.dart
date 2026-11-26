@@ -954,6 +954,9 @@ class SyncService {
         applyStored: () async {
           final current = await bookDao.getByUrl(bookUrl);
           if (current == null) return null;
+          // 點書當下就抓的，到開書時這台可能已經被背景那輪推到更後面：
+          // 寫入前照這台現在的位置再比一次，不在後面就不蓋。
+          if (!await _progress.isAheadOn(current, theirs)) return null;
           return _progress.applyTo(current, theirs);
         },
       );
