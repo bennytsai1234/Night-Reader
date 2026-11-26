@@ -20,6 +20,30 @@ class EncodingDetect {
     return decodeWithCharset(bytes, getEncode(bytes));
   }
 
+  /// 網路回應的文字（同 Legado `ResponseBody.text`）：去掉 UTF-8 BOM，回應
+  /// 標頭 [contentType] 寫了字元集就照它，沒寫照 HTML 的 meta 與內容偵測。
+  static String decodeResponse(Uint8List bytes, String? contentType) {
+    if (bytes.isEmpty) return '';
+    final clean =
+        bytes.length >= 3 &&
+            bytes[0] == 0xEF &&
+            bytes[1] == 0xBB &&
+            bytes[2] == 0xBF
+        ? Uint8List.sublistView(bytes, 3)
+        : bytes;
+    final charset = charsetOfContentType(contentType);
+    return decodeWithCharset(clean, charset ?? getHtmlEncode(clean));
+  }
+
+  /// `Content-Type` 標頭裡的字元集，沒寫是 null。
+  static String? charsetOfContentType(String? contentType) {
+    if (contentType == null) return null;
+    return RegExp(
+      r'''charset\s*=\s*["']?([^;\s"']+)''',
+      caseSensitive: false,
+    ).firstMatch(contentType)?.group(1);
+  }
+
   /// 使用已知編碼解碼完整檔案或不含 BOM 的章節切片。
   static String decodeWithCharset(List<int> bytes, String charset) {
     if (bytes.isEmpty) return '';

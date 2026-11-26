@@ -173,12 +173,7 @@ BlockingTask rawResponse({
 
 /// Jsoup `Response.body()`：照回應標頭的字元集解，沒寫是 UTF-8。
 String _decodeBody(Uint8List bytes, String? contentType) {
-  final charset = contentType == null
-      ? null
-      : RegExp(
-          r'''charset\s*=\s*["']?([^;\s"']+)''',
-          caseSensitive: false,
-        ).firstMatch(contentType)?.group(1);
+  final charset = EncodingDetect.charsetOfContentType(contentType);
   if (charset == null) return utf8.decode(bytes, allowMalformed: true);
   return EncodingDetect.decodeWithCharset(bytes, charset);
 }
@@ -227,25 +222,27 @@ BlockingTask responseBytes(AnalyzeUrl url) =>
     () => url.getByteArray();
 
 /// `java.cacheFile`：快取裡有就用，沒有就照書源的請求（標頭、登入、網址
-/// 選項，同 Legado `downloadFile` 經書源的 AnalyzeUrl）抓回來存進快取。存的
-/// 時候不等它寫完：停住的書源 isolate 手上若有交易，寫入要等它，它又在等
-/// 這裡。[url] 是快取的鍵（規則給的網址原文）。
+/// 選項，同 Legado `downloadFile` 經書源的 AnalyzeUrl）抓回來存進快取。照
+/// 內容偵測的編碼讀成文字（同 Legado `readTxtFile`）。存的時候不等它寫完：
+/// 停住的書源 isolate 手上若有交易，寫入要等它，它又在等這裡。[url] 是快取
+/// 的鍵（規則給的網址原文）。抓不到時是空字串；這項工作被取消時照丟，規則
+/// 不拿空字串接著跑（同 `java.ajax`）。
 BlockingTask cachedText(String url, AnalyzeUrl request, int saveTimeSeconds) =>
     () async {
       final key = JsEncodeUtils.md5Encode16(url);
       final cached = await CacheManager().get(key);
       if (cached != null) return cached;
       try {
-        final content = utf8.decode(
-          await request.getByteArray(),
-          allowMalformed: true,
-        );
+        final content = EncodingDetect.decode(await request.getByteArray());
         if (content.isNotEmpty) {
           unawaited(
             CacheManager().put(key, content, saveTimeSeconds: saveTimeSeconds),
           );
         }
         return content;
+      } on DioException catch (e) {
+        if (e.type == DioExceptionType.cancel) rethrow;
+        return '';
       } catch (_) {
         return '';
       }
@@ -267,9 +264,9 @@ BlockingTask jsLibText(String url) => () async {
     ),
     cancelToken: currentSourceCancelToken,
   );
-  final content = utf8.decode(
-    response.data ?? const <int>[],
-    allowMalformed: true,
+  final content = EncodingDetect.decodeResponse(
+    Uint8List.fromList(response.data ?? const <int>[]),
+    response.headers.value(Headers.contentTypeHeader),
   );
   unawaited(CacheManager().put(key, content));
   return content;

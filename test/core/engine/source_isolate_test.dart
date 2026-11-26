@@ -6,6 +6,7 @@ import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/isolate.dart';
 import 'package:drift/native.dart';
+import 'package:fast_gbk/fast_gbk.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
@@ -181,6 +182,27 @@ Future<void> _putMemoryInSourceIsolate(String key, String value) =>
 
 Future<String> _cookieStoreInSourceIsolate(String url) =>
     SourceIsolate.run((_) => CookieStore().getCookie(url));
+
+/// 存成 GBK 的腳本：定義 `gbkGreet()`，回傳一句中文。
+const _gbkScript = 'function gbkGreet() { return "夜裡讀書，窗外下著小雨，一盞燈陪我讀完這一章。"; }';
+const _gbkGreeting = '夜裡讀書，窗外下著小雨，一盞燈陪我讀完這一章。';
+
+/// 在書源 isolate 用規則 JS 的 `java.cacheFile` 抓 [url]，自己接住丟出的錯誤：
+/// 回 `returned`（拿到內容或空字串）或 `threw`。
+Future<String> _cacheFileCaught(String url, {CancelToken? cancelToken}) =>
+    SourceIsolate.run((_) async {
+      final engine = JsEngine();
+      try {
+        return '${engine.evaluate('''
+          var got;
+          try { java.cacheFile("$url"); got = "returned"; }
+          catch (e) { got = "threw"; }
+          got
+        ''')}';
+      } finally {
+        engine.dispose();
+      }
+    }, cancelToken: cancelToken);
 
 /// 在書源 isolate 用規則 JS 的 `java.ajax` 抓 [url]，自己接住丟出的錯誤：
 /// 回 `returned`（拿到結果或錯誤文字）或 `threw`。
@@ -499,6 +521,13 @@ void main() {
           request.response.write('數到了');
         case '/lib.js':
           request.response.write('function libGreet() { return "夜讀"; }');
+        case '/gbk.js':
+          // 存成 GBK、標頭沒寫字元集的腳本（Legado 照內容偵測編碼）。
+          request.response.headers.contentType = ContentType(
+            'application',
+            'javascript',
+          );
+          request.response.add(gbk.encode(_gbkScript));
         case '/missing.js':
           request.response.statusCode = HttpStatus.notFound;
         case '/flaky':
@@ -1247,6 +1276,40 @@ void main() {
       );
     });
 
+    // 同 Legado：cacheFile 抓回的檔照內容偵測編碼讀（`readTxtFile`），存成
+    // GBK 的腳本也讀得出中文。
+    test('java.cacheFile and importScript read a GBK script', () async {
+      final source = {'bookSourceUrl': baseUrl, 'bookSourceName': 'GBK'};
+      expect(
+        await _sourceJs(
+          source,
+          'eval(String(java.cacheFile("$baseUrl/gbk.js?c=1"))); gbkGreet()',
+        ),
+        _gbkGreeting,
+      );
+      expect(
+        await _sourceJs(
+          source,
+          'eval(String(java.importScript("$baseUrl/gbk.js?i=1"))); gbkGreet()',
+        ),
+        _gbkGreeting,
+      );
+    });
+
+    // 取消不是抓不到：規則不拿空字串接著跑（同 java.ajax）。
+    test('java.cacheFile rethrows when its work is cancelled', () async {
+      final cancelToken = CancelToken();
+      final work = _cacheFileCaught(
+        '$baseUrl/held/cache-file-cancel',
+        cancelToken: cancelToken,
+      );
+      await gate(arrived, 'cache-file-cancel').future;
+      cancelToken.cancel();
+      final outcome = await work.then<Object?>((v) => v, onError: (e) => e);
+      gate(released, 'cache-file-cancel').complete();
+      expect(outcome, isNot('returned'));
+    });
+
     test('cookie.getCookie and removeCookie see the cookies the site set, '
         'like Legado', () async {
       // 2026-11-13 手机小说：網站搜尋後寫入 ss_search_delay，書源每次搜尋前
@@ -1777,6 +1840,17 @@ void main() {
         }
       }
       expect(kept, contains('libGreet'));
+    });
+
+    // 同 Legado `ResponseBody.text`：標頭沒寫字元集時照內容偵測。
+    test('a jsLib saved as GBK reads as Chinese', () async {
+      expect(
+        await _evaluateSourceJs(
+          'gbkGreet()',
+          jsLib: '{"lib": "$baseUrl/gbk.js?lib=1"}',
+        ),
+        _gbkGreeting,
+      );
     });
 
     test('a jsLib that cannot be fetched fails the rule and says so', () async {

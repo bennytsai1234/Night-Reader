@@ -225,10 +225,11 @@ void main() {
       final again = provider.search('甲書', '乙作者');
       await untilCalls(2);
 
-      // 上一輪的請求先回來（空的）。
-      site.calls[0].complete(const []);
+      // 上一輪的請求先回來，帶著一張封面：不混進這一輪，也不算這一輪的進度。
+      site.calls[0].complete([_found('甲書', '乙作者', 'a.jpg')]);
       await first;
       expect(provider.isSearching, isTrue, reason: '這一輪還在等網站');
+      expect(provider.progress, 0);
 
       site.calls[1].complete([_found('甲書', '乙作者', 'b.jpg')]);
       await again;

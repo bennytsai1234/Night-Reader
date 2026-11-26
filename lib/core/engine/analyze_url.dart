@@ -931,40 +931,11 @@ class AnalyzeUrl {
     return out.toString();
   }
 
-  /// 依優先順序解碼回應位元組 (對標 Android OkHttpUtils.ResponseBody.text())
-  String _decodeResponseBody(Uint8List bytes, Response response) {
-    if (bytes.isEmpty) return '';
-
-    // 移除 UTF-8 BOM
-    Uint8List cleanBytes = bytes;
-    if (bytes.length >= 3 &&
-        bytes[0] == 0xEF &&
-        bytes[1] == 0xBB &&
-        bytes[2] == 0xBF) {
-      cleanBytes = bytes.sublist(3);
-    }
-
-    // 1. HTTP Content-Type 標頭中的 charset。網址選項的 charset 只管送出的
-    //    參數，同 Legado（newCallStrResponse 解碼時不帶它）。
-    final contentType = response.headers.value('content-type');
-    if (contentType != null) {
-      final ctCharset = _extractCharsetFromContentType(contentType);
-      if (ctCharset != null) {
-        return EncodingDetect.decodeWithCharset(cleanBytes, ctCharset);
-      }
-    }
-
-    // 2. HTML meta 標籤 + 自動偵測 (EncodingDetect.getHtmlEncode)
-    final detected = EncodingDetect.getHtmlEncode(cleanBytes);
-    return EncodingDetect.decodeWithCharset(cleanBytes, detected);
-  }
-
-  /// 從 Content-Type 標頭提取 charset
-  String? _extractCharsetFromContentType(String contentType) {
-    final match = RegExp(
-      r'''charset\s*=\s*["']?([^;\s"']+)''',
-      caseSensitive: false,
-    ).firstMatch(contentType);
-    return match?.group(1);
-  }
+  /// 解碼回應位元組（[EncodingDetect.decodeResponse]）。網址選項的 charset
+  /// 只管送出的參數，同 Legado（newCallStrResponse 解碼時不帶它）。
+  String _decodeResponseBody(Uint8List bytes, Response response) =>
+      EncodingDetect.decodeResponse(
+        bytes,
+        response.headers.value('content-type'),
+      );
 }

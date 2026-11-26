@@ -490,6 +490,11 @@ void main() {
     );
     expect(inMemory.status, DownloadTask.statusPaused);
     expect(inMemory.totalCount, 2);
+    expect(
+      service.isTaskRetiring(book.bookUrl),
+      isFalse,
+      reason: '還原完要放行，不然按繼續也排不進下一輪',
+    );
   });
 
   test('a chapter waiting to retry stops when cancelled', () async {
