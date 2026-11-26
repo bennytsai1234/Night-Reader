@@ -59,6 +59,10 @@ class BackupService {
     if (await backupFolder.exists()) await backupFolder.delete(recursive: true);
     await backupFolder.create();
 
+    final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final zipPath = p.join(backupTempDir.path, 'backup-$dateStr.zip');
+    final tmpZipPath = '$zipPath.tmp';
+
     try {
       // 0. 寫入備份 manifest（版本資訊，供還原時驗證）
       final version = await AppVersion.current();
@@ -165,9 +169,6 @@ class BackupService {
 
       // 3. 打包為 ZIP（先寫暫存檔，再原子重新命名）
       final encoder = ZipFileEncoder();
-      final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      final zipPath = p.join(backupTempDir.path, 'backup-$dateStr.zip');
-      final tmpZipPath = '$zipPath.tmp';
 
       encoder.create(tmpZipPath);
       await for (var entity in backupFolder.list(recursive: true)) {
@@ -181,10 +182,49 @@ class BackupService {
       final tmpFile = File(tmpZipPath);
       await tmpFile.rename(zipPath);
 
+      // 新的寫好、改名成功後才刪其他備份：這次失敗時至少留著前一次的。
+      await _deleteEarlierBackups(backupTempDir, keep: zipPath);
+
       return File(zipPath);
     } catch (e, stack) {
       AppLog.e('建立備份 ZIP 失敗: $e', error: e, stackTrace: stack);
       return null;
+    } finally {
+      // 攤開的資料與沒改名成功的暫存檔都不必留；打包失敗時也一樣。
+      await _deleteQuietly(backupFolder);
+      await _deleteQuietly(File(tmpZipPath));
+    }
+  }
+
+  /// 刪掉用不到的暫存檔；刪不掉就留給系統或下次開 App 的清理，不讓備份
+  /// 因此失敗。
+  static Future<void> _deleteQuietly(FileSystemEntity entity) async {
+    try {
+      if (!await entity.exists()) return;
+      if (entity is Directory) {
+        await entity.delete(recursive: true);
+      } else {
+        await entity.delete();
+      }
+    } on FileSystemException catch (e) {
+      AppLog.w('備份暫存刪不掉：${entity.path}（$e）');
+    }
+  }
+
+  /// 留下這次寫好的 [keep]，同資料夾裡其他 `backup-*.zip` 都是舊的備份。
+  static Future<void> _deleteEarlierBackups(
+    Directory dir, {
+    required String keep,
+  }) async {
+    try {
+      await for (final entity in dir.list(followLinks: false)) {
+        if (entity is! File || entity.path == keep) continue;
+        final name = p.basename(entity.path);
+        if (!name.startsWith('backup-') || !name.endsWith('.zip')) continue;
+        await _deleteQuietly(entity);
+      }
+    } on FileSystemException catch (e) {
+      AppLog.w('刪除舊的備份檔失敗：$e');
     }
   }
 
