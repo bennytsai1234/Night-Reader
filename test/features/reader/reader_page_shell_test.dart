@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/features/reader/features/tts/reader_tts_phase.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/features/reader/features/menu/reader_bottom_menu.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_controller.dart';
@@ -28,6 +29,7 @@ void main() {
   late int systemBacks;
   late int exitIntents;
   late int timedTtsTaps;
+  late int stopTtsCalls;
   late ReaderSidePanelController panel;
 
   const contentKey = Key('reader-content');
@@ -50,9 +52,11 @@ void main() {
     VoidCallback? onMenuHidden,
     ReaderInfoTarget? loadingTarget,
     String? fontFamily,
+    ReaderTtsPhase ttsPhase = ReaderTtsPhase.idle,
   }) async {
     showControls = 0;
     timedTtsTaps = 0;
+    stopTtsCalls = 0;
     dismissControls = 0;
     systemBacks = 0;
     exitIntents = 0;
@@ -137,6 +141,8 @@ void main() {
             onOpenDrawer: noop,
             onTts: noop,
             onTimedTts: () => timedTtsTaps += 1,
+            onStopTts: () => stopTtsCalls += 1,
+            ttsPhase: ttsPhase,
             onInterface: noop,
             onSettings: noop,
             onAutoPage: noop,
@@ -615,6 +621,28 @@ void main() {
       timer.sync(active: false, running: false);
       await tester.pump();
       expect(find.text('14分'), findsNothing);
+    });
+
+    testWidgets('a long press ends the reading aloud, only while it reads or '
+        'is paused', (tester) async {
+      await pumpShell(tester, controlsVisible: true, sleepTimer: timer);
+      await tester.longPress(find.byTooltip('定時朗讀'));
+      expect(stopTtsCalls, 0, reason: '沒在朗讀時長按不做事');
+
+      for (final (phase, tooltip) in const [
+        (ReaderTtsPhase.reading, '暫停朗讀'),
+        (ReaderTtsPhase.paused, '繼續朗讀'),
+      ]) {
+        await pumpShell(
+          tester,
+          controlsVisible: true,
+          sleepTimer: timer,
+          ttsPhase: phase,
+        );
+        await tester.longPress(find.byTooltip(tooltip));
+        expect(stopTtsCalls, 1, reason: '$phase 長按結束朗讀');
+        expect(timedTtsTaps, 0, reason: '長按不算一次點按');
+      }
     });
   });
 

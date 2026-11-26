@@ -165,7 +165,7 @@ class ReaderPageShell extends StatelessWidget {
     required this.onReplaceRule,
     this.onAutoPageSettings,
     this.onReplaceRuleSettings,
-    this.onTimedTtsSettings,
+    this.onStopTts,
     this.onDayNightSettings,
     required this.onShowControls,
     required this.onDismissControls,
@@ -265,10 +265,10 @@ class ReaderPageShell extends StatelessWidget {
   final VoidCallback onToggleDayNight;
   final VoidCallback onReplaceRule;
 
-  /// 圓鈕長按開完整設定頁（見 [ReaderBottomMenu.onAutoPageSettings]）。
+  /// 圓鈕長按（見 [ReaderBottomMenu.onAutoPageSettings]）。
   final VoidCallback? onAutoPageSettings;
   final VoidCallback? onReplaceRuleSettings;
-  final VoidCallback? onTimedTtsSettings;
+  final VoidCallback? onStopTts;
   final VoidCallback? onDayNightSettings;
   final VoidCallback onShowControls;
   final VoidCallback onDismissControls;
@@ -470,7 +470,7 @@ class ReaderPageShell extends StatelessWidget {
                           onReplaceRule: onReplaceRule,
                           onAutoPageSettings: onAutoPageSettings,
                           onReplaceRuleSettings: onReplaceRuleSettings,
-                          onTimedTtsSettings: onTimedTtsSettings,
+                          onStopTts: onStopTts,
                           onDayNightSettings: onDayNightSettings,
                           onPrevChapter: onPrevChapter,
                           onNextChapter: onNextChapter,

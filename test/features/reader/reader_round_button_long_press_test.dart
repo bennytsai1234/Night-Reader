@@ -1,4 +1,5 @@
-// 閱讀選單上方四顆圓鈕長按開各自的完整設定頁，返回後選單回到打開的樣子。
+// 閱讀選單上方的圓鈕長按開各自的完整設定頁（定時朗讀鈕除外，長按是結束
+// 朗讀），返回後選單回到打開的樣子。
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,7 +12,6 @@ import 'package:night_reader/features/reader/features/replace_rule/reader_replac
 import 'package:night_reader/features/reader/screen/reader_page.dart';
 import 'package:night_reader/features/settings/appearance_settings_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
-import 'package:night_reader/features/settings/tts_settings_page.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/navigation_budget.dart';
@@ -44,7 +44,6 @@ void main() {
     for (final (button, page) in <(Finder, Type)>[
       (roundButton('開始自動翻頁'), ReadingSettingsPage),
       (roundButton('替換規則'), ReaderReplaceRulePage),
-      (roundButton('定時朗讀'), TtsSettingsPage),
       (dayNight, AppearanceSettingsPage),
     ]) {
       expect(button, findsOneWidget, reason: '$page 的圓鈕');
