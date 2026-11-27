@@ -3,11 +3,16 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:file/file.dart' as pkgfile;
 import 'package:file/local.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/storage/source_cover_loader.dart';
 import 'package:night_reader/shared/widgets/book/book_cover_widget.dart';
 import 'package:night_reader/shared/widgets/skeleton/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
@@ -32,6 +37,9 @@ void main() {
 
   setUp(() async {
     BookCoverWidget.forgetFailedCovers();
+    // 網路封面讀的是磁碟快取；測試不讀真的網路，換成兩個測試各自決定的假
+    // 快取（「等一頁封面」那組在群組的 setUp 再換成自己的）。
+    CachedNetworkImageProvider.defaultCacheManager = _UnavailableCache();
     imageCache
       ..clear()
       ..clearLiveImages();
@@ -44,9 +52,9 @@ void main() {
 
   tearDown(() => dir.deleteSync(recursive: true));
 
-  Widget cover(String? url) => MaterialApp(
+  Widget cover(String? url, {String? origin}) => MaterialApp(
     home: Center(
-      child: BookCoverWidget(bookName: '書', coverUrl: url),
+      child: BookCoverWidget(bookName: '書', coverUrl: url, origin: origin),
     ),
   );
 
@@ -116,6 +124,27 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(opacityAbove(tester, find.byType(DefaultBookCover)), 1);
+  });
+
+  testWidgets('the same cover url from another source is tried again', (
+    tester,
+  ) async {
+    const url = 'https://covers.example/a.jpg';
+    await tester.pumpWidget(cover(url, origin: 'https://a.example'));
+    await settleIo(tester);
+    await tester.pumpAndSettle();
+    expect(find.byType(DefaultBookCover), findsOneWidget);
+
+    // 換一個書源、同一個封面網址：A 的失敗不能讓 B 直接畫預設封面，要重新試
+    // （兩個書源都不在測試的資料庫裡，都會失敗）。
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(cover(url, origin: 'https://b.example'));
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.byType(DefaultBookCover), findsNothing);
+
+    await settleIo(tester);
+    await tester.pumpAndSettle();
+    expect(find.byType(DefaultBookCover), findsOneWidget);
   });
 
   testWidgets('switching to the default cover crossfades', (tester) async {
@@ -282,6 +311,7 @@ void main() {
       required bool loading,
       CoverWait wait = CoverWait.onDevice,
       List<String>? urls,
+      String? origin,
     }) => MaterialApp(
       home: Scaffold(
         body: SkeletonSwitcher(
@@ -291,7 +321,7 @@ void main() {
           builder: (_) => Row(
             children: [
               for (final url in urls ?? [coverUrl, otherUrl])
-                BookCoverWidget(bookName: '書', coverUrl: url),
+                BookCoverWidget(bookName: '書', coverUrl: url, origin: origin),
             ],
           ),
         ),
@@ -372,6 +402,46 @@ void main() {
       expect(allDrawn(), isTrue, reason: '換場開始時封面已經到位');
     });
 
+    testWidgets('a source cover already in the disk cache for its source '
+        'holds the reveal until it is drawn', (tester) async {
+      const origin = 'https://source.example';
+      GetIt.instance.registerSingleton<BookSourceDao>(
+        _FakeSourceDao(
+          BookSource(
+            bookSourceUrl: origin,
+            bookSourceName: '書源',
+            header: '{"Referer":"$origin/"}',
+          ),
+        ),
+      );
+      addTearDown(() => GetIt.instance.unregister<BookSourceDao>());
+      cache.onDevice[SourceCoverLoader.sourceKey(origin, network)] = Uri.parse(
+        coverUrl,
+      ).toFilePath();
+
+      await tester.pumpWidget(
+        page(loading: true, urls: [network], origin: origin),
+      );
+      await tester.pumpWidget(
+        page(loading: false, urls: [network], origin: origin),
+      );
+      for (var i = 0; i < 60; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(revealed(tester), 0, reason: '照書源抓的封面在快取裡也等');
+
+      var started = false;
+      for (var i = 0; i < 200 && !started; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)),
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+        started = revealed(tester) > 0;
+      }
+      expect(started, isTrue);
+      expect(allDrawn(), isTrue, reason: '換場開始時封面已經到位');
+    });
+
     testWidgets('a network cover that is not on the phone does not hold the '
         'shelf', (tester) async {
       // 要上網抓：一直抓不到也不等。
@@ -401,6 +471,31 @@ void main() {
       expect(revealed(tester), greaterThan(0), reason: '0.3 秒到了就換場');
     });
   });
+}
+
+/// 什麼都沒有的磁碟快取：一般圖片一律當成不在手機裡、也抓不到（測試不連
+/// 網路）。
+class _UnavailableCache implements BaseCacheManager {
+  @override
+  Future<pkgfile.File> getSingleFile(
+    String url, {
+    String? key,
+    Map<String, String>? headers,
+  }) async => throw const SocketException('沒有快取');
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// 資料庫裡的書源：只認 [source] 的網址。
+class _FakeSourceDao extends Fake implements BookSourceDao {
+  _FakeSourceDao(this.source);
+
+  final BookSource source;
+
+  @override
+  Future<BookSource?> getByUrl(String url) async =>
+      url == source.bookSourceUrl ? source : null;
 }
 
 /// 網路封面的磁碟快取：[onDevice] 裡的網址算已經存在手機裡；讀取（不論
