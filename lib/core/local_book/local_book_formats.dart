@@ -57,23 +57,35 @@ List<LocalChapterRange>? readChapterRanges(String path, int version) {
 }
 
 /// 把 [ranges] 照 [version] 寫進 [path]（格式見 [readChapterRanges]）：先寫
-/// 旁邊的 `.tmp` 再換上，寫到一半被關掉也不留半份。同步寫檔。
+/// 旁邊的暫存檔再換上，寫到一半被關掉也不留半份。同步寫檔。
 void writeChapterRanges(
   String path,
   int version,
   List<LocalChapterRange> ranges,
 ) {
-  final temp = File('$path.tmp');
-  temp.parent.createSync(recursive: true);
-  temp.writeAsStringSync(
-    jsonEncode({
-      'version': version,
-      'chapters': [
-        for (final range in ranges)
-          [range.title, range.start, range.end, range.isVolume],
-      ],
-    }),
-    flush: true,
+  final temp = File(
+    '$path.${DateTime.now().microsecondsSinceEpoch}.'
+    '${identityHashCode(ranges)}.tmp',
   );
-  temp.renameSync(path);
+  temp.parent.createSync(recursive: true);
+  try {
+    temp.writeAsStringSync(
+      jsonEncode({
+        'version': version,
+        'chapters': [
+          for (final range in ranges)
+            [range.title, range.start, range.end, range.isVolume],
+        ],
+      }),
+      flush: true,
+    );
+    temp.renameSync(path);
+  } catch (_) {
+    try {
+      if (temp.existsSync()) temp.deleteSync();
+    } on FileSystemException {
+      // 清除失敗不蓋掉原本的寫入錯誤。
+    }
+    rethrow;
+  }
 }
