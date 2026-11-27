@@ -232,6 +232,14 @@ class ReaderControllerHost {
       initialLayoutSpec: spec,
       initialLocation: initialLocation,
     )..addListener(_onControllerChanged);
+    // 書源搬家時，開著「顯示插圖」的正文裡插圖是照舊網址的書本資料夾排的：
+    // 照新網址重排畫面上的這一章。
+    repository.onOriginMoved = () {
+      if (identical(runtime, nextRuntime) &&
+          repository.currentShowIllustrations()) {
+        unawaited(nextRuntime.reloadContentPreservingLocation());
+      }
+    };
     final nextTts = ReaderTtsController(runtime: nextRuntime)
       ..addListener(_onTtsChanged);
     final nextAutoPage = ReaderAutoPageController(

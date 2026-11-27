@@ -8,11 +8,14 @@ import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/storage/moved_chapters.dart';
 import 'package:night_reader/features/comic_reader/comic_reader_page.dart';
 import 'package:night_reader/features/comic_reader/comic_reader_menu.dart';
@@ -558,5 +561,62 @@ void main() {
           .first,
       '${ReaderTapAction.nextPage.code}',
     );
+  });
+
+  testWidgets('讀著網路漫畫時別處換了書源網址：選單上的書源換成新的', (tester) async {
+    const oldUrl = 'https://comic-old.test';
+    const newUrl = 'https://comic-new.test';
+    final network = Book(
+      bookUrl: '$oldUrl/book/1',
+      origin: oldUrl,
+      originName: '舊書源',
+      name: '夜行漫畫',
+      type: 2,
+      isInBookshelf: true,
+    );
+    await tester.runAsync(() async {
+      await getIt<BookSourceDao>().upsert(
+        BookSource(bookSourceUrl: oldUrl, bookSourceName: '舊書源'),
+      );
+      await getIt<BookDao>().upsert(network);
+    });
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicReaderPage(
+          book: network.copyWith(),
+          initialChapters: [
+            for (var i = 0; i < 4; i++)
+              BookChapter(
+                url: '$oldUrl/c/$i',
+                title: '第${i + 1}話',
+                bookUrl: network.bookUrl,
+                index: i,
+              ),
+          ],
+          pageSource: FakeComicSource(),
+        ),
+      ),
+    );
+    await settle(tester);
+    await tester.tapAt(const Offset(200, 400));
+    await settle(tester);
+    expect(find.text('舊書源').hitTestable(), findsOneWidget);
+
+    await tester.runAsync(() async {
+      await getIt<BookSourceDao>().upsert(
+        BookSource(bookSourceUrl: newUrl, bookSourceName: '新書源'),
+      );
+      await getIt<BookDao>().moveOrigin(oldUrl, newUrl, toName: '新書源');
+      AppEventBus().fire(
+        AppEventBus.sourceMoved,
+        data: const SourceMovedEvent(fromUrl: oldUrl, toUrl: newUrl),
+      );
+    });
+    await settle(tester);
+
+    expect(find.text('新書源').hitTestable(), findsOneWidget);
   });
 }

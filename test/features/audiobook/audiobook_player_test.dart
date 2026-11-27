@@ -14,6 +14,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
@@ -62,6 +63,7 @@ void main() {
 
   late AppDatabase db;
   late BookDao bookDao;
+  late BookSourceDao sourceDao;
   late FakeAudioEngine engine;
   late FakeAudioSourceService source;
   late FakeSync sync;
@@ -75,7 +77,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     db = AppDatabase.forTesting(NativeDatabase.memory());
     bookDao = BookDao(db);
-    final sourceDao = BookSourceDao(db);
+    sourceDao = BookSourceDao(db);
     final chapterDao = ChapterDao(db);
     await sourceDao.upsert(
       BookSource(
@@ -180,18 +182,91 @@ void main() {
     await subscription.cancel();
   });
 
-  test('編輯書源改了網址回來，播放器手上的書換成新網址，已下載的集數照新的書本資料夾找', () async {
-    await player.open(book);
-    await bookDao.moveOrigin(
-      book.origin,
-      'https://audio-new.test',
-      toName: '新書源',
+  /// 書源從 `https://audio.test` 搬到 [to]：資料庫裡的書源與書都已經換好
+  /// （同 `BookSourceService.saveEditedSource`）。
+  Future<void> moveSource(String to) async {
+    await sourceDao.upsert(
+      BookSource(
+        bookSourceUrl: to,
+        bookSourceName: '新書源',
+        bookSourceType: SourceType.audio,
+      ),
     );
+    await bookDao.moveOrigin('https://audio.test', to, toName: '新書源');
+  }
+
+  test('編輯書源改了網址回來，播放器換上新書源，已下載的集數照新的書本資料夾找', () async {
+    await player.open(book);
+    await moveSource('https://audio-new.test');
 
     await player.reloadBookOrigin();
 
     expect(player.book!.origin, 'https://audio-new.test');
     expect(player.book!.originName, '新書源');
+    expect(player.source!.bookSourceUrl, 'https://audio-new.test');
+  });
+
+  test('編輯書源網址沒變、規則改了回來，播放器換上新規則', () async {
+    await player.open(book);
+    await sourceDao.upsert(
+      BookSource(
+        bookSourceUrl: 'https://audio.test',
+        bookSourceName: '改過的聽書',
+        bookSourceType: SourceType.audio,
+      ),
+    );
+
+    await player.reloadBookOrigin();
+
+    expect(player.source!.bookSourceName, '改過的聽書');
+  });
+
+  test('別處換了這本書的書源網址：播放器換上新書源，下一集照新書源抓，系統播放資訊'
+      '跟著換', () async {
+    await player.open(book);
+    await pumpEventQueue();
+    // 開好這一集就先抓了下一集（照舊書源）。
+    expect(source.resolved, [
+      'https://audio.test/ep2',
+      'https://audio.test/ep3',
+    ]);
+    await moveSource('https://audio-new.test');
+    // 另一個開著這本書的頁面先收到、已經改了同一本書的網址。
+    book.origin = 'https://audio-new.test';
+
+    AppEventBus().fire(
+      AppEventBus.sourceMoved,
+      data: const SourceMovedEvent(
+        fromUrl: 'https://audio.test',
+        toUrl: 'https://audio-new.test',
+      ),
+    );
+    await pumpEventQueue();
+
+    expect(player.source!.bookSourceUrl, 'https://audio-new.test');
+    expect(player.book!.originName, '新書源');
+    expect(playback.item!.coverOrigin, 'https://audio-new.test');
+    source.resolved.clear();
+    source.resolvedWith.clear();
+    await player.next();
+    expect(source.resolved.first, 'https://audio.test/ep3', reason: '預抓的作廢');
+    expect(source.resolvedWith.first, 'https://audio-new.test');
+  });
+
+  test('別的書源換了網址，播放器不動', () async {
+    await player.open(book);
+    final before = player.source;
+
+    AppEventBus().fire(
+      AppEventBus.sourceMoved,
+      data: const SourceMovedEvent(
+        fromUrl: 'https://other.test',
+        toUrl: 'https://other-new.test',
+      ),
+    );
+    await pumpEventQueue();
+
+    expect(player.source, same(before));
   });
 
   test('開書還沒讀到目錄時，畫面問有沒有上一集、下一集不會出錯', () async {

@@ -20,7 +20,6 @@ class AppEventBus {
   static const String upDownload = 'upDownload';
   static const String upDownloadState = 'upDownloadState';
   static const String saveContent = 'saveContent';
-  static const String sourceChanged = 'sourceChanged';
   static const String searchResult = 'searchResult';
   static const String updateReadActionBar = 'updateReadActionBar';
 
@@ -30,6 +29,11 @@ class AppEventBus {
   /// 一本書換了書源（網址可能也換了，舊的那筆已刪掉）；data 是
   /// [BookSwitchedEvent]。
   static const String bookSwitched = 'bookSwitched';
+
+  /// 書源換了網址（編輯、AI 修復與還原、修復異常書源、同步搬書源、合併
+  /// 重複書源）；data 是 [SourceMovedEvent]。發的時候資料庫裡的書、正文與
+  /// 書本資料夾都已經搬到新網址，開著這些書的頁面與播放器照它換上新書源。
+  static const String sourceMoved = 'sourceMoved';
 
   /// 使用者或同步刪掉了書源（[BookSourceDao.deleteByUrls]；併掉重複的、
   /// 改網址不算，書跟著搬走了）；data 是刪掉的網址 `List<String>`。用它的
@@ -71,4 +75,12 @@ class BookSwitchedEvent {
   final String toBookUrl;
 
   const BookSwitchedEvent({required this.fromBookUrl, required this.toBookUrl});
+}
+
+/// 書源從 [fromUrl] 搬到 [toUrl]（[AppEventBus.sourceMoved]）。
+class SourceMovedEvent {
+  final String fromUrl;
+  final String toUrl;
+
+  const SourceMovedEvent({required this.fromUrl, required this.toUrl});
 }

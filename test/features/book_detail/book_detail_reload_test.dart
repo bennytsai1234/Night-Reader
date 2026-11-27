@@ -281,6 +281,94 @@ void main() {
     expect(provider.currentSource?.bookSourceName, '新名字');
   });
 
+  /// 別處（書源編輯、AI 修復、同步、合併重複書源）把 `https://old.example`
+  /// 換成 `https://moved.example`：資料庫裡的書源、書與正文都搬好了才發。
+  Future<void> moveSourceElsewhere() async {
+    await db.bookSourceDao.upsert(
+      BookSource(bookSourceUrl: 'https://moved.example', bookSourceName: '搬家後'),
+    );
+    await db.bookDao.moveOrigin(
+      'https://old.example',
+      'https://moved.example',
+      toName: '搬家後',
+    );
+    await db.readerChapterContentDao.saveContent(
+      contentKey: 'moved-c0',
+      origin: 'https://moved.example',
+      bookUrl: oldUrl,
+      chapterUrl: '$oldUrl/c0',
+      chapterIndex: 0,
+      content: '已下載的第一章',
+      updatedAt: 1,
+    );
+    AppEventBus().fire(
+      AppEventBus.sourceMoved,
+      data: const SourceMovedEvent(
+        fromUrl: 'https://old.example',
+        toUrl: 'https://moved.example',
+      ),
+    );
+  }
+
+  Future<void> settle() async {
+    for (var i = 0; i < 20; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+  }
+
+  test('a source moved elsewhere while the detail is open: the detail reads '
+      'the new source and the downloads under it', () async {
+    await db.bookSourceDao.upsert(
+      BookSource(bookSourceUrl: 'https://old.example', bookSourceName: '舊名字'),
+    );
+    final provider = await openDetail();
+    expect(provider.cacheStatus.storedChapterCount, 0);
+
+    await moveSourceElsewhere();
+    await settle();
+
+    expect(provider.book.origin, 'https://moved.example');
+    expect(provider.book.originName, '搬家後');
+    expect(provider.currentSource?.bookSourceUrl, 'https://moved.example');
+    expect(provider.cacheStatus.storedChapterCount, 1);
+  });
+
+  test('a source moved before the detail finished loading: the detail '
+      'still ends on the new source', () async {
+    await db.bookSourceDao.upsert(
+      BookSource(bookSourceUrl: 'https://old.example', bookSourceName: '舊名字'),
+    );
+    final entrance = Completer<void>();
+    final book = bookAt(oldUrl, 'https://old.example', inShelf: false);
+    await db.chapterDao.insertChapters(chaptersOf(oldUrl, 3));
+    final provider = BookDetailProvider(
+      AggregatedSearchBook(book: book, sources: []),
+      entrance: entrance.future,
+      bookDao: db.bookDao,
+      chapterDao: db.chapterDao,
+      sourceDao: db.bookSourceDao,
+      chapterContentDao: db.readerChapterContentDao,
+      downloadService: _Downloads(),
+    );
+    addTearDown(provider.dispose);
+
+    // 還沒進資料庫的搜尋結果：資料庫搬不到它，只有手上這本知道。
+    await moveSourceElsewhere();
+    await settle();
+    entrance.complete();
+    while (!provider.hasReadyWorld) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    await settle();
+
+    expect(provider.book.origin, 'https://moved.example');
+    expect(provider.currentSource?.bookSourceUrl, 'https://moved.example');
+    expect(
+      (await db.bookDao.getByUrl(oldUrl))?.origin,
+      'https://moved.example',
+    );
+  });
+
   test('書源改了類型，回來後這本書跟著換類別（ADR 0053）', () async {
     await db.bookSourceDao.upsert(
       BookSource(bookSourceUrl: 'https://old.example', bookSourceName: '書源'),

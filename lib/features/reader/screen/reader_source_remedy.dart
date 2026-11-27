@@ -275,14 +275,21 @@ final class ReaderSourceRemedy {
   }
 
   /// 這本書的書源，有登入（ADR 0038）時才有；換源會換掉整個閱讀頁，所以
-  /// 一頁查一次。
-  Future<BookSource?> loginSource() => _loginSourceLookup ??= () async {
-    if (_book.isLocal) return null;
-    final source = await _host.dependencies.sourceDao.getByUrl(_book.origin);
-    return source != null && source.hasLogin ? source : null;
-  }();
+  /// 一個書源網址查一次（書源搬家時網址換了才再查）。
+  Future<BookSource?> loginSource() {
+    final origin = _book.origin;
+    final lookup = _loginSourceLookup;
+    if (lookup != null && lookup.origin == origin) return lookup.source;
+    final source = () async {
+      if (_book.isLocal) return null;
+      final source = await _host.dependencies.sourceDao.getByUrl(origin);
+      return source != null && source.hasLogin ? source : null;
+    }();
+    _loginSourceLookup = (origin: origin, source: source);
+    return source;
+  }
 
-  Future<BookSource?>? _loginSourceLookup;
+  ({String origin, Future<BookSource?> source})? _loginSourceLookup;
 
   /// 開書源的登入；登入資料變了就重抓（[_refetchFailed]）。[ticket] 是從
   /// 選單開的那一次：等選單滑出才推頁，回來後選單滑回來。

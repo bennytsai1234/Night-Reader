@@ -133,6 +133,9 @@ class FakeAudioEngine implements AudioEngine {
 class FakeAudioSourceService extends BookSourceService {
   final List<String> resolved = [];
 
+  /// 每次解析音訊網址用的書源網址。
+  final List<String> resolvedWith = [];
+
   /// 解析音訊網址前要等外面放行（測試載入中）。
   Completer<void>? gate;
 
@@ -165,6 +168,7 @@ class FakeAudioSourceService extends BookSourceService {
     CancelToken? cancelToken,
   }) async {
     resolved.add(chapter.url);
+    resolvedWith.add(source.bookSourceUrl);
     await gate?.future;
     if (failing.contains(chapter.url)) throw StateError('抓不到這一集');
     return AudioRequest(
