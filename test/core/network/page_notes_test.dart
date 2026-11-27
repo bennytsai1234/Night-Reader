@@ -142,6 +142,13 @@ void main() {
     expect(scriptRedirectOf(afterComment), '/new/');
   });
 
+  test('a page full of unclosed <script is scanned once', () {
+    final body = '<html>${'<script' * 40000}';
+    final watch = Stopwatch()..start();
+    expect(scriptRedirectOf(body), isNull);
+    expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+  });
+
   test('a page with content keeps its script redirects to itself', () {
     final page =
         '<html><body><script>if (x) location.href="/m/"</script>'

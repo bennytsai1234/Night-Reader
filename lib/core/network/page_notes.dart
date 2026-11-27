@@ -64,6 +64,12 @@ String? scriptRedirectOf(String body) {
       continue;
     }
     final open = _scriptTagEnd(body, i);
+    if (open == _noTagEnd) {
+      // `<script` 後面整頁都沒有 `>`：後面的 `<script` 也都沒有，剩下的
+      // 照一般文字，不再一個個往後找。
+      visible.write(body.substring(i));
+      break;
+    }
     if (open >= 0) {
       final close = _indexOfIgnoreCase(body, '</script', open + 1);
       final codeEnd = close < 0 ? body.length : close;
@@ -82,14 +88,19 @@ String? scriptRedirectOf(String body) {
   return (visible: visible.toString(), redirect: redirect);
 }
 
-/// [i] 是 `<script` 開頭時，傳回這個標籤的 `>` 在哪；不是時是 -1。
+/// [_scriptTagEnd] 找到 `<script` 但後面整頁都沒有 `>`。
+const int _noTagEnd = -2;
+
+/// [i] 是 `<script` 開頭時，傳回這個標籤的 `>` 在哪；不是時是 -1，後面
+/// 沒有 `>` 時是 [_noTagEnd]。
 int _scriptTagEnd(String body, int i) {
   const name = '<script';
   if (i + name.length > body.length) return -1;
   if (body.substring(i, i + name.length).toLowerCase() != name) return -1;
   final after = i + name.length;
   if (after < body.length && _isWordChar(body[after])) return -1;
-  return body.indexOf('>', after);
+  final end = body.indexOf('>', after);
+  return end < 0 ? _noTagEnd : end;
 }
 
 /// [text] 從 [from] 開始第一次出現 [pattern] 的位置，不分大小寫。

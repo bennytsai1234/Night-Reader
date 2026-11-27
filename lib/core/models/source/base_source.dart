@@ -105,9 +105,28 @@ abstract class BaseSource {
     required Map<String, String> started,
   }) async {
     final cache = CacheManager();
-    for (final (from, to) in await _draftPairs(_draftIdentity(draft), key)) {
+    final identity = _draftIdentity(draft);
+    final pairs = await _draftPairs(identity, key);
+    // 開始時抄進來、草稿裡刪掉的規則變數不在 [_draftPairs] 裡，補上。
+    final listed = {for (final (from, _) in pairs) from};
+    final draftPrefix = _ruleVariablePrefix(identity);
+    for (final from in started.keys) {
+      if (listed.contains(from) || !from.startsWith(draftPrefix)) continue;
+      pairs.add((
+        from,
+        '${_ruleVariablePrefix(key)}${from.substring(draftPrefix.length)}',
+      ));
+    }
+    for (final (from, to) in pairs) {
       final value = await cache.get(from);
-      if (value == null || started[from] == value) continue;
+      if (started[from] == value) continue;
+      if (value == null) {
+        // 草稿裡刪掉了（書源程式登出、清掉變數）：書源的一起刪；刪登入標頭
+        // 同 [removeLoginHeader] 連網站的 Cookie 一起清。
+        await cache.delete(to);
+        if (to == _loginHeaderKey(key)) await _removeLoginCookiesOf(key);
+        continue;
+      }
       await cache.copy(from, to);
       if (to == _loginHeaderKey(key)) {
         await _applyLoginHeaderCookie(key, value);
@@ -295,14 +314,19 @@ abstract class BaseSource {
   /// 採用時不能清掉讀者的登入狀態。
   Future<void> removeLoginCookies() {
     if (draftVariables != null) return Future<void>.value();
-    final stored = CookieStore().removeCookie(getKey());
-    final jar = _removeCookieJarCookies(getKey());
+    return _removeLoginCookiesOf(getKey());
+  }
+
+  /// 網站 [key] 夜讀存的 Cookie 與 Cookie 罐裡這個網域的 Cookie。
+  static Future<void> _removeLoginCookiesOf(String key) {
+    final stored = CookieStore().removeCookie(key);
+    final jar = _removeCookieJarCookies(key);
     return Future.wait([stored, jar]);
   }
 
   /// Cookie 罐裡這個網域的 Cookie。沒初始化網路層的地方（有些測試、只讀
   /// 資料的呼叫）清不到就記一筆，CookieStore 照清。
-  Future<void> _removeCookieJarCookies(String key) async {
+  static Future<void> _removeCookieJarCookies(String key) async {
     final uri = NetworkUtils.cookieJarUri(key);
     if (uri == null) return;
     try {

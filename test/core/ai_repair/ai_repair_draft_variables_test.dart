@@ -222,6 +222,34 @@ void main() {
     },
   );
 
+  // 書源程式在草稿裡登出（刪掉登入資訊與登入標頭）、修復採用了：書源的也
+  // 刪掉，網站 Cookie 同登出一起清。
+  test('a repair that is applied takes the logout the draft did', () async {
+    addTearDown(() async {
+      await CacheManager().delete(source.loginInfoCacheKey);
+      await CacheManager().delete(source.loginHeaderCacheKey);
+      await CookieStore().removeCookie(url);
+    });
+    await CacheManager().put(source.loginInfoCacheKey, '{"user":"real"}');
+    await CacheManager().put(source.loginHeaderCacheKey, '{"X-Token":"real"}');
+    await CookieStore().setCookie(url, 'sid=real');
+
+    final s = session(
+      [test_, submit],
+      draft: (candidate) async {
+        await candidate.removeLoginInfo();
+        await candidate.removeLoginHeader();
+        return '';
+      },
+    );
+    await s.start();
+
+    expect(s.job.outcome, AiRepairOutcome.repaired);
+    expect(await source.getLoginInfo(), isNull);
+    expect(await source.getLoginHeader(), isNull);
+    expect(await CookieStore().getCookie(url), isEmpty);
+  });
+
   test('a secret the draft stored is hidden from the AI', () async {
     const secret = 'draft-only-token-123456';
     final s = session(
