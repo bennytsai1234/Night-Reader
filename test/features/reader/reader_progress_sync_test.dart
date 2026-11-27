@@ -13,9 +13,11 @@ import 'package:night_reader/features/reader/chapter/reader_chapter_repository.d
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/session/reader_open_target.dart';
+import 'package:night_reader/features/reader/session/reader_operation_token.dart';
 import 'package:night_reader/features/reader/session/reader_progress_controller.dart';
 import 'package:night_reader/features/reader/session/reader_progress_sync.dart';
 import 'package:night_reader/features/reader/session/reader_runtime.dart';
+import 'package:night_reader/features/reader/session/reader_state.dart';
 
 class _BookDao extends Fake implements BookDao {
   Book? stored;
@@ -475,8 +477,8 @@ void main() {
       expect(bookDao.synced, [1], reason: '時間記成不比雲端那一筆早');
     });
 
-    test('the pull finished before the book was positioned: still asks '
-        'after the book shows', () async {
+    test('the pull finished before the book was positioned: opens there '
+        'without asking', () async {
       sync.pullGate = Completer();
       commits = 0;
       suggestions.clear();
@@ -484,15 +486,127 @@ void main() {
       await progressSync.openLocation(runtime);
       sync.pulled = cloudAt(3, 40);
       sync.pullGate!.complete();
+      await pumpEventQueue();
+      expect(
+        runtime.stateMachine.currentOperation?.kind,
+        ReaderOperationKind.jump,
+        reason: '開書還沒開始：記成開書要開的地方',
+      );
       await runtime.openBook();
       progressSync.bookOpened();
       await pumpEventQueue();
 
-      expect(runtime.state.visibleLocation.chapterIndex, 1);
-      expect(suggestions, hasLength(1));
-      await suggestions.single();
       expect(runtime.state.visibleLocation.chapterIndex, 3);
+      expect(runtime.state.visibleLocation.charOffset, 40);
+      expect(suggestions, isEmpty);
       expect(commits, 1);
+      expect(bookDao.synced, [1]);
+    });
+
+    /// 開書等不及、正在排第一頁（紙還蓋著）時，[restore] 擋在這裡。
+    Future<(ReaderProgressSync, Future<void>, Completer<void>)>
+    openUntilPositioning() async {
+      sync.pullGate = Completer();
+      commits = 0;
+      suggestions.clear();
+      final progressSync = start(suggestions: suggestions);
+      final at = await progressSync.openLocation(runtime);
+      final positioning = Completer<void>();
+      restore = (_) async {
+        await positioning.future;
+        return true;
+      };
+      final opening = runtime.openBook(at: at);
+      await pumpEventQueue();
+      expect(runtime.state.lifecycle, ReaderLifecycle.cold);
+      return (progressSync, opening, positioning);
+    }
+
+    test('the pull finished while the text was still loading: opens there '
+        'without asking', () async {
+      final (progressSync, opening, positioning) = await openUntilPositioning();
+
+      sync.pulled = cloudAt(3, 40);
+      sync.pullGate!.complete();
+      await pumpEventQueue();
+      positioning.complete();
+      await opening;
+      progressSync.bookOpened();
+      await pumpEventQueue();
+
+      expect(runtime.state.visibleLocation.chapterIndex, 3);
+      expect(runtime.state.visibleLocation.charOffset, 40);
+      expect(suggestions, isEmpty, reason: '正文還沒出現，直接開在那裡');
+      expect(commits, 1);
+      expect(bookDao.synced, [1], reason: '時間記成不比雲端那一筆早');
+    });
+
+    test('a chapter picked while the text was loading stays where the '
+        'reader went', () async {
+      final (progressSync, opening, positioning) = await openUntilPositioning();
+      // 讀者在紙還蓋著時從目錄跳到第 2 章：開書那次被取代、先結束，頁面
+      // 這時就呼叫 bookOpened，跳章還在排。
+      final picked = Completer<void>();
+      restore = (location) async {
+        if (location.chapterIndex == 2) await picked.future;
+        return true;
+      };
+      final jumping = runtime.jumpToChapter(2);
+      positioning.complete();
+      await opening;
+      progressSync.bookOpened();
+
+      sync.pulled = cloudAt(3, 40);
+      sync.pullGate!.complete();
+      await pumpEventQueue();
+      picked.complete();
+      await jumping;
+      await pumpEventQueue();
+
+      expect(runtime.state.visibleLocation.chapterIndex, 2);
+      expect(suggestions, isEmpty, reason: '讀者自己動過，不跳也不問');
+      expect(commits, 0);
+    });
+
+    test('the background sync already moved this phone further: the late '
+        'pull does not take it back', () async {
+      // 換頁動畫期間背景那輪同步把這台推到第 4 章，點書當下抓的還是第 3 章。
+      bookDao.stored = book.copyWith(chapterIndex: 4, charOffset: 0);
+      final (progressSync, opening, positioning) = await openUntilPositioning();
+
+      sync.pulled = cloudAt(3, 40);
+      sync.pullGate!.complete();
+      await pumpEventQueue();
+      positioning.complete();
+      await opening;
+      progressSync.bookOpened();
+      await pumpEventQueue();
+
+      expect(runtime.state.visibleLocation.chapterIndex, 4);
+      expect(suggestions, isEmpty);
+      expect(commits, 0);
+      expect(bookDao.synced, isEmpty);
+    });
+
+    test('the late chapter cannot be loaded: stays at this phone\'s position '
+        'and records nothing', () async {
+      unavailable = {3};
+      final (progressSync, opening, positioning) = await openUntilPositioning();
+
+      sync.pulled = cloudAt(3, 40);
+      sync.pullGate!.complete();
+      await pumpEventQueue();
+      positioning.complete();
+      await opening;
+      await pumpEventQueue();
+      progressSync.bookOpened();
+      await pumpEventQueue();
+
+      expect(runtime.state.lifecycle, ReaderLifecycle.ready);
+      expect(runtime.state.visibleLocation.chapterIndex, 1);
+      expect(runtime.state.visibleLocation.charOffset, 10);
+      expect(commits, 0);
+      expect(bookDao.synced, isEmpty);
     });
 
     test('the reader already moved: this phone\'s position is newer, nothing '
