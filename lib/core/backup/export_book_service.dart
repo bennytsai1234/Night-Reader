@@ -1,6 +1,8 @@
 import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book/book.dart';
@@ -14,8 +16,17 @@ import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:share_plus/share_plus.dart';
 
 class ExportBookService {
-  ExportBookService({BookSourceService? sourceService})
-    : _sourceService = sourceService ?? BookSourceService();
+  ExportBookService({
+    BookSourceService? sourceService,
+    BookmarkDao? bookmarkDao,
+    HighlightDao? highlightDao,
+  }) : _sourceService = sourceService ?? BookSourceService(),
+       _bookmarkDao =
+           bookmarkDao ??
+           (getIt.isRegistered<BookmarkDao>() ? getIt<BookmarkDao>() : null),
+       _highlightDao =
+           highlightDao ??
+           (getIt.isRegistered<HighlightDao>() ? getIt<HighlightDao>() : null);
 
   final ChapterDao _chapterDao = getIt<ChapterDao>();
   final ReaderChapterContentDao _chapterContentDao =
@@ -23,6 +34,10 @@ class ExportBookService {
   BookSourceDao get _sourceDao => getIt<BookSourceDao>();
   BookDao get _bookDao => getIt<BookDao>();
   final BookSourceService _sourceService;
+
+  /// 本地 TXT 匯出前重新分章時，書籤與標註跟著換到新目錄。
+  final BookmarkDao? _bookmarkDao;
+  final HighlightDao? _highlightDao;
 
   /// 匯出全書為 TXT 檔案。漫畫是圖、沒有文字，丟出 [StateError]（書籍詳情
   /// 不給漫畫這個選項，ADR 0052）。
@@ -43,9 +58,23 @@ class ExportBookService {
       throw StateError('漫畫沒有文字可以匯出');
     }
     var stored = await _chapterDao.getByBook(book.bookUrl);
-    if (book.isLocal &&
-        localBookExtensionFromPath(LocalBookService.filePathOf(book)) ==
-            'epub') {
+    final localExtension = book.isLocal
+        ? localBookExtensionFromPath(LocalBookService.filePathOf(book))
+        : null;
+    if (localExtension == 'txt') {
+      // 本地 TXT 是舊版分章規則切的：先照現在的規則重新分章，和閱讀器開書
+      // 一樣。
+      final synced = await LocalBookService().ensureTxtChapters(
+        book,
+        bookDao: _bookDao,
+        chapterDao: _chapterDao,
+        bookmarkDao: _bookmarkDao,
+        highlightDao: _highlightDao,
+        contentDao: _chapterContentDao,
+      );
+      if (synced.chapters.isNotEmpty) stored = synced.chapters;
+    }
+    if (localExtension == 'epub') {
       // 本地 EPUB 轉好的文字不見或轉法改過：先重轉、對好目錄再讀，不拿舊
       // 範圍讀新檔。
       stored = (await LocalBookService().syncEpubChapters(

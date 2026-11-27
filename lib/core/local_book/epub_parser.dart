@@ -56,34 +56,8 @@ class EpubParser {
       p.join(p.dirname(textPath), 'epub-chapters.json');
 
   /// [textPath] 這次轉檔記下的章節範圍；沒有、版本不對或壞了時回傳 null。
-  static List<LocalChapterRange>? readChapters(String textPath) {
-    try {
-      final json = jsonDecode(
-        File(chaptersPathFor(textPath)).readAsStringSync(),
-      );
-      if (json is! Map<String, Object?> || json['version'] != textVersion) {
-        return null;
-      }
-      return [
-        for (final value in json['chapters'] as List<Object?>)
-          if (value case [
-            final String title,
-            final int start,
-            final int end,
-            final bool isVolume,
-          ])
-            (title: title, start: start, end: end, isVolume: isVolume)
-          else
-            throw const FormatException('Malformed EPUB chapter range.'),
-      ];
-    } on FileSystemException {
-      return null;
-    } on FormatException {
-      return null;
-    } on TypeError {
-      return null;
-    }
-  }
+  static List<LocalChapterRange>? readChapters(String textPath) =>
+      readChapterRanges(chaptersPathFor(textPath), textVersion);
 
   /// [epubPath] 書裡寫的書名；沒寫或讀不出來時是 null。
   static Future<String?> readTitle(String epubPath) => Isolate.run(() {
@@ -195,15 +169,10 @@ EpubBookInfo _convert(_Archive archive, String textPath) {
     output.closeSync();
   }
   temp.renameSync(textPath);
-  File(EpubParser.chaptersPathFor(textPath)).writeAsStringSync(
-    jsonEncode({
-      'version': EpubParser.textVersion,
-      'chapters': [
-        for (final chapter in chapters)
-          [chapter.title, chapter.start, chapter.end, chapter.isVolume],
-      ],
-    }),
-    flush: true,
+  writeChapterRanges(
+    EpubParser.chaptersPathFor(textPath),
+    EpubParser.textVersion,
+    chapters,
   );
 
   final coverPath = package.coverPath;

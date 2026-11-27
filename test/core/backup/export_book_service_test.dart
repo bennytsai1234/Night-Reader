@@ -8,11 +8,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/backup/export_book_service.dart';
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
+import 'package:night_reader/core/local_book/txt_parser.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
@@ -57,6 +60,7 @@ void main() {
     await GetIt.instance.reset();
     db = AppDatabase.forTesting(NativeDatabase.memory());
     GetIt.instance
+      ..registerSingleton<BookDao>(BookDao(db))
       ..registerSingleton<ChapterDao>(ChapterDao(db))
       ..registerSingleton<BookSourceDao>(BookSourceDao(db))
       ..registerSingleton<ReaderChapterContentDao>(ReaderChapterContentDao(db));
@@ -125,7 +129,7 @@ void main() {
       charset: 'utf-8',
     );
     final volumeBytes = utf8.encode(volume).length;
-    await ChapterDao(db).insertChapters([
+    final chapters = [
       BookChapter(
         url: '${book.bookUrl}#0',
         title: '第一卷',
@@ -143,7 +147,17 @@ void main() {
         start: volumeBytes,
         end: await file.length(),
       ),
-    ]);
+    ];
+    await ChapterDao(db).insertChapters(chapters);
+    // 這份目錄記成照現在的分章規則切的，匯出前不重新分章。
+    writeChapterRanges(
+      await LocalBookService.txtChaptersPath(book),
+      TxtParser.tocVersion,
+      [
+        for (final c in chapters)
+          (title: c.title, start: c.start!, end: c.end!, isVolume: c.isVolume),
+      ],
+    );
 
     await ExportBookService().exportToTxt(book, present: present);
     // Windows 上開著的原檔刪不掉。

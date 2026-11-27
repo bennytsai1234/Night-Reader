@@ -3,6 +3,8 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/local_book/local_book_fingerprint.dart';
+import 'package:night_reader/core/local_book/local_book_formats.dart';
+import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/models/book/book.dart';
 
 import 'sync_kind.dart';
@@ -18,6 +20,7 @@ class ProgressSync extends SyncKind {
     required this.chapterDao,
     bool Function(String key)? isOpen,
     this._run = runLocalBookWorkInBackground,
+    this._chaptersCurrent,
   }) : _isOpen = isOpen ?? _never;
 
   static const String kind = 'progress';
@@ -28,6 +31,26 @@ class ProgressSync extends SyncKind {
 
   /// 補算本地書指紋交給誰跑（[fillLocalBookFingerprints]）。
   final LocalBookWorkRunner _run;
+
+  /// 這本書的目錄是不是照現在的規則切的；沒給時照
+  /// [LocalBookService.txtChaptersCurrent]。
+  final Future<bool> Function(Book book)? _chaptersCurrent;
+
+  /// 本地 TXT 的目錄還是舊版分章規則切的，要等開書重新分章
+  /// （[LocalBookService.ensureTxtChapters]）：這時套用雲端的進度會照舊目錄
+  /// 找章，落到別章。其他書都算是。
+  Future<bool> _currentChapters(Book book) async {
+    if (!book.isLocal ||
+        localBookExtensionFromPath(LocalBookService.filePathOf(book)) !=
+            'txt') {
+      return true;
+    }
+    if (_chaptersCurrent case final check?) return check(book);
+    return LocalBookService().txtChaptersCurrent(
+      book,
+      await chapterDao.getByBook(book.bookUrl),
+    );
+  }
 
   static bool _never(String key) => false;
 
@@ -115,6 +138,8 @@ class ProgressSync extends SyncKind {
         // 雲端比較新，但讀到的位置在這台前面或一樣：另一台可能刻意往回
         // 讀，不把這台拉回去（使用者 2026-11-26）。雲端那筆留著，下次再比。
         if (!await isAheadOn(book, record)) continue;
+        // 還沒重新分章的 TXT 這次不套、不記成同步過，留給開書時那一次。
+        if (!await _currentChapters(book)) continue;
         applied[key] = await applyTo(book, record);
       }
     }

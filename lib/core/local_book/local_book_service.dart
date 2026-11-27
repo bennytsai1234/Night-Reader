@@ -198,6 +198,11 @@ class LocalBookService {
   @visibleForTesting
   static Future<void> Function(String step)? debugUpdateStep;
 
+  /// 測試用：開書時 TXT 在背景重新分章算好、還沒寫回之前呼叫，模擬這段
+  /// 時間裡使用者把書移出書架或換了原檔（[ensureTxtChapters]）。
+  @visibleForTesting
+  static Future<void> Function()? debugTxtResplitDone;
+
   /// 換原檔時跟著換的、EPUB 轉好的資料（在這本書的資料夾裡）。
   static const _epubAssets = [
     'epub-text.txt',
@@ -228,6 +233,8 @@ class LocalBookService {
     final assets = isEpub ? p.dirname(await epubTextPath(existing)) : null;
     final journal = File(_journalPathOf(target));
     var committed = false;
+    // 換好的 TXT 目錄：資料庫寫好、舊檔收掉之後才記下分章版本。
+    List<BookChapter>? txtChapters;
     final ({List<BookChapter> chapters, String charset}) parsed;
     ({Uint8List bytes, String extension})? cover;
     try {
@@ -311,6 +318,7 @@ class LocalBookService {
         await contentDao?.deleteByBook(existing.origin, existing.bookUrl);
       });
       committed = true;
+      if (!isEpub) txtChapters = chapters;
       await debugUpdateStep?.call('committed');
     } on LocalBookUpdateInterrupted {
       rethrow;
@@ -324,6 +332,7 @@ class LocalBookService {
     }
     await _finish(target, assets);
     await _removeQuietly(journal.path);
+    if (txtChapters != null) await _recordTxtChapters(existing, txtChapters);
     if (cover != null) {
       await BookCoverStorageService().storeEmbeddedCover(
         existing,
@@ -914,10 +923,9 @@ class LocalBookService {
       ..charset = result.charset
       ..intro = result.intro
       ..totalChapterNum = result.chapters.length;
-    return LocalBookImportResult(
-      book: book,
-      chapters: _chapters(book, _txtRanges(result.chapters)),
-    );
+    final chapters = _chapters(book, _txtRanges(result.chapters));
+    await _recordTxtChapters(book, chapters);
+    return LocalBookImportResult(book: book, chapters: chapters);
   }
 
   static List<LocalChapterRange> _txtRanges(
@@ -949,9 +957,9 @@ class LocalBookService {
   }
 
   /// 讀者在「更多」手動把這本 TXT 的編碼換成 [charset]：照新編碼重新解碼、
-  /// 重新分章，目錄整份換掉。閱讀進度、書籤與標註照原本在檔案裡的位元組位置
-  /// 對到新的目錄與章內位置，留在同一章；正文換了，錨點（閱讀位置綁定的
-  /// 舊原文）不再適用，一起清掉。
+  /// 重新分章，目錄整份換掉（[_replaceTxtChapters]）。閱讀進度、書籤與標註
+  /// 照原本在檔案裡的位元組位置對到新的目錄與章內位置，留在同一章；正文
+  /// 換了，錨點（閱讀位置綁定的舊原文）不再適用，一起清掉。
   ///
   /// 原檔不存在、不是 TXT、書不在資料庫裡或分不出章時回傳 null，資料庫與
   /// 原檔都不動。解不開時往外丟錯，呼叫端提示。
@@ -981,28 +989,73 @@ class LocalBookService {
     final oldChapters = await chapterDao.getByBook(current.bookUrl);
     final oldCharset = current.charset ?? EncodingDetect.getEncode(bytes);
     final oldLengths = <int, int>{};
+
+    ({int index, int charOffset}) mapPosition(int oldIndex, int oldOffset) {
+      if (oldChapters.isEmpty) {
+        return (index: oldIndex.clamp(0, chapters.length - 1), charOffset: 0);
+      }
+      return _positionByBytes(
+        oldSpans: _spansOf(oldChapters),
+        newSpans: _spansOf(chapters),
+        oldIndex: oldIndex,
+        oldOffset: oldOffset,
+        oldLength: (i) => oldLengths.putIfAbsent(
+          i,
+          () => _chapterCharLength(bytes, oldChapters[i], oldCharset),
+        ),
+        newLength: (i) => _chapterCharLength(bytes, chapters[i], charsetName),
+      );
+    }
+
+    await _replaceTxtChapters(
+      current,
+      oldChapters: oldChapters,
+      chapters: chapters,
+      charset: charsetName,
+      intro: parsed.intro,
+      mapPosition: mapPosition,
+      readNow: true,
+      bookDao: bookDao,
+      chapterDao: chapterDao,
+      bookmarkDao: bookmarkDao,
+      highlightDao: highlightDao,
+      contentDao: contentDao,
+    );
+    await _recordTxtChapters(current, chapters);
+    return bookDao.getByUrl(current.bookUrl);
+  }
+
+  /// 這本 TXT 的目錄換成 [chapters]（同一個原檔重新分章：改編碼、分章規則
+  /// 改了）。閱讀進度、書籤與標註照 [mapPosition] 從舊目錄 [oldChapters] 對到
+  /// 新目錄，錨點清掉，編碼與「前言」當成的簡介跟著換，存著的正文清掉，都在
+  /// 同一個交易裡。[readNow] 是讀者自己要換的（改編碼），位置移動的時間記成
+  /// 現在、書排到書架前面；不是的（分章規則改了）不動時間，不當成讀者讀了、
+  /// 也不當成比另一台新的進度。
+  ///
+  /// 給了 [unchanged] 時在交易裡先問它：這本書在算新目錄的這段時間被移出
+  /// 書架、換了原檔或編碼、目錄被別處換過，就什麼都不寫，回傳 false。
+  Future<bool> _replaceTxtChapters(
+    Book current, {
+    required List<BookChapter> oldChapters,
+    required List<BookChapter> chapters,
+    required String charset,
+    required String? intro,
+    required ({int index, int charOffset}) Function(int index, int charOffset)
+    mapPosition,
+    required bool readNow,
+    required BookDao bookDao,
+    required ChapterDao chapterDao,
+    BookmarkDao? bookmarkDao,
+    HighlightDao? highlightDao,
+    ReaderChapterContentDao? contentDao,
+    Future<bool> Function()? unchanged,
+  }) async {
     final oldBookmarks =
         await bookmarkDao?.watchByBook(current.name, current.author).first ??
         const <Bookmark>[];
     final oldHighlights =
         await highlightDao?.watchByBook(current.name, current.author).first ??
         const <Highlight>[];
-
-    ({int index, int charOffset}) mapPosition(int oldIndex, int oldOffset) {
-      if (oldChapters.isEmpty) {
-        return (index: oldIndex.clamp(0, chapters.length - 1), charOffset: 0);
-      }
-      return _positionAfterDecode(
-        bytes: bytes,
-        oldCharset: oldCharset,
-        newCharset: charsetName,
-        oldChapters: oldChapters,
-        newChapters: chapters,
-        oldIndex: oldIndex,
-        oldOffset: oldOffset,
-        oldLengths: oldLengths,
-      );
-    }
 
     final progress = mapPosition(current.chapterIndex, current.charOffset);
     // 書籤與標註記的是顯示的章名（可能套過繁簡轉換與標題規則），用照章名
@@ -1055,25 +1108,28 @@ class LocalBookService {
       );
     }
 
-    await bookDao.transaction(() async {
+    return bookDao.transaction(() async {
+      if (unchanged != null && !await unchanged()) return false;
       await bookDao.writeFields(
         current,
         BooksCompanion(
-          charset: Value(charsetName),
-          // 「前言」當成的簡介是照舊編碼解的，跟著換。
-          intro: Value(parsed.intro),
+          charset: Value(charset),
+          // 「前言」當成的簡介是照舊目錄（舊編碼）解的，跟著換。
+          intro: Value(intro),
           chapterIndex: Value(progress.index),
           durChapterTitle: Value(chapters[progress.index].title),
           charOffset: Value(progress.charOffset),
           visualOffsetPx: const Value(0.0),
           readerAnchorJson: const Value(null),
-          durChapterTime: Value(DateTime.now().millisecondsSinceEpoch),
+          durChapterTime: readNow
+              ? Value(DateTime.now().millisecondsSinceEpoch)
+              : const Value.absent(),
           totalChapterNum: Value(chapters.length),
         ),
       );
       await chapterDao.replaceByBook(current.bookUrl, chapters);
-      // 章節網址是「書網址#序號」，換目錄後還是同一組鍵：舊編碼讀過的正文
-      // 要一起清掉，不然閱讀器、匯出與備份都會拿到舊的亂碼。
+      // 章節網址是「書網址#序號」，換目錄後還是同一組鍵：照舊目錄（舊編碼）
+      // 讀過的正文要一起清掉，不然閱讀器、匯出與備份都會拿到舊的那份。
       await contentDao?.deleteByBook(current.origin, current.bookUrl);
       if (movedBookmarks.isNotEmpty) {
         await bookmarkDao!.upsertAll(movedBookmarks);
@@ -1081,61 +1137,339 @@ class LocalBookService {
       if (movedHighlights.isNotEmpty) {
         await highlightDao!.upsertAll(movedHighlights);
       }
+      return true;
     });
-    return bookDao.getByUrl(current.bookUrl);
   }
 
-  /// 舊目錄第 [oldIndex] 章第 [oldOffset] 個字，換了編碼之後在新目錄的哪一章、
-  /// 第幾個字。
+  /// 這次 App 執行期間對過分章版本的 TXT（[ensureTxtChapters]）：還在對的
+  /// 與對好的都在這裡，同一本書同時只對一次。
+  final Map<String, Future<_TxtCheck>> _txtChecks = {};
+
+  /// [_txtChecks] 裡已經對好的書。
+  final Set<String> _txtChecked = {};
+
+  /// 測試用：忘掉這次對過的分章版本。每項測試的書與資料庫都是新的，前一項
+  /// 留下的結果不能沿用；元件測試裡等前一項做好的 Future 也等不到。
+  @visibleForTesting
+  void forgetTxtChapterChecks() {
+    for (final pending in _txtChecks.values) {
+      pending.ignore();
+    }
+    _txtChecks.clear();
+    _txtChecked.clear();
+  }
+
+  /// 這次 App 執行期間 [book]（TXT）的目錄已經照現在的分章規則對過了
+  /// （[ensureTxtChapters] 做完）。之後拿到的位置都是現在目錄的座標。
+  bool txtChaptersChecked(Book book) => _txtChecked.contains(book.bookUrl);
+
+  /// TXT 記分章版本（[TxtParser.tocVersion]）與章節範圍的檔，在這本書的
+  /// 資料夾裡，移出書架時跟著封面一起刪掉。
+  static Future<String> txtChaptersPath(Book book) async {
+    final dir = await AppStoragePaths.bookAssetDir(
+      BookCoverStorageService.bookStorageKey(book),
+    );
+    return p.join(dir.path, 'txt-chapters.json');
+  }
+
+  /// [book]（TXT）的目錄寫進資料庫時呼叫：記下這份目錄是照現在的分章規則
+  /// 切的，這次對過的結果作廢。分不出章（[chapters] 是空的）時不記。
+  Future<void> _recordTxtChapters(Book book, List<BookChapter> chapters) async {
+    _txtChecks.remove(book.bookUrl)?.ignore();
+    _txtChecked.remove(book.bookUrl);
+    await _writeTxtChapterRanges(book, chapters);
+  }
+
+  /// 把 [chapters] 的範圍記進 [txtChaptersPath]；寫不成只記日誌，下次開書再
+  /// 對一次。
+  static Future<void> _writeTxtChapterRanges(
+    Book book,
+    List<BookChapter> chapters,
+  ) async {
+    if (chapters.isEmpty) return;
+    try {
+      final path = await txtChaptersPath(book);
+      final ranges = _rangesOf(chapters);
+      await Isolate.run(
+        () => writeChapterRanges(path, TxtParser.tocVersion, ranges),
+      );
+    } catch (error) {
+      AppLog.w('記下 TXT 分章版本失敗：$error');
+    }
+  }
+
+  static List<LocalChapterRange> _rangesOf(List<BookChapter> chapters) => [
+    for (final chapter in chapters)
+      (
+        title: chapter.title,
+        start: chapter.start ?? 0,
+        end: chapter.end ?? 0,
+        isVolume: chapter.isVolume,
+      ),
+  ];
+
+  /// 資料庫裡 [book]（TXT）的目錄 [chapters] 是不是照現在的分章規則切的：
+  /// 只讀記下的檔比對，不重新分章（那留給開書時的 [ensureTxtChapters]）。
+  /// 不是 TXT、原檔不在或沒有目錄時沒有東西可以重新分章，當成是。
+  Future<bool> txtChaptersCurrent(Book book, List<BookChapter> chapters) async {
+    final path = filePathOf(book);
+    if (localBookExtensionFromPath(path) != 'txt') return true;
+    if (chapters.isEmpty || txtChaptersChecked(book)) return true;
+    if (!await File(path).exists()) return true;
+    final ranges = await _readTxtChapterRanges(await txtChaptersPath(book));
+    return ranges != null && chaptersMatch(chapters, ranges);
+  }
+
+  static Future<List<LocalChapterRange>?> _readTxtChapterRanges(String path) =>
+      Isolate.run(() => readChapterRanges(path, TxtParser.tocVersion));
+
+  /// 開書與匯出全書前呼叫：[book]（本地 TXT）是舊版分章規則切的（記下的
+  /// 版本不對、沒記，或記下的範圍和資料庫的目錄不一樣），就照現在的規則
+  /// 與同一個編碼重新分章；切出來和資料庫一樣只記下版本，不一樣就換掉目錄
+  /// （[_replaceTxtChapters]）：閱讀進度、書籤與標註照原本在檔案裡的位元組
+  /// 位置對到新目錄的同一個地方，存著的正文清掉。不是讀者讀了，位置移動的
+  /// 時間不動。換了目錄時記憶體裡的 [book] 跟著換成新的進度、編碼與章數。
   ///
-  /// 兩個目錄的章節範圍都是同一個原檔的位元組位移，不隨編碼改變：先照舊章
-  /// 的長度算出這個字在章內的比例，換成檔案裡的位元組位置，找新目錄裡蓋住
-  /// 這個位置的那一章；再照這個位元組位置在**新章**裡的比例換成新章的章內
-  /// 字數（新舊章的起訖不一樣，舊章的比例不能直接套）。編碼錯了時新舊章名
-  /// 不一定一樣，所以不照章名對。
-  static ({int index, int charOffset}) _positionAfterDecode({
-    required Uint8List bytes,
-    required String oldCharset,
-    required String newCharset,
-    required List<BookChapter> oldChapters,
-    required List<BookChapter> newChapters,
+  /// 同一本書同時只對一次，對好的結果這次 App 執行期間留著，再呼叫直接拿
+  /// 結果；對好之後才來的不再改 [book]（拿到的已經是新的）。回傳現在的
+  /// 目錄；換過時 `remap` 把舊目錄的位置換成新目錄的（閱讀器拿它換算開書前
+  /// 拿到的位置）。不是 TXT、原檔不在或資料庫沒有這本書的目錄時照原樣回傳，
+  /// 不丟錯。沒給的書籤、標註與正文的資料表照已註冊的用。
+  Future<({List<BookChapter> chapters, TxtChapterRemap? remap})>
+  ensureTxtChapters(
+    Book book, {
+    required BookDao bookDao,
+    required ChapterDao chapterDao,
+    BookmarkDao? bookmarkDao,
+    HighlightDao? highlightDao,
+    ReaderChapterContentDao? contentDao,
+  }) async {
+    final key = book.bookUrl;
+    final late = _txtChecked.contains(key);
+    final check = _txtChecks[key] ??= _startTxtCheck(
+      book,
+      bookDao: bookDao,
+      chapterDao: chapterDao,
+      bookmarkDao:
+          bookmarkDao ??
+          (getIt.isRegistered<BookmarkDao>() ? getIt<BookmarkDao>() : null),
+      highlightDao:
+          highlightDao ??
+          (getIt.isRegistered<HighlightDao>() ? getIt<HighlightDao>() : null),
+      contentDao:
+          contentDao ??
+          (getIt.isRegistered<ReaderChapterContentDao>()
+              ? getIt<ReaderChapterContentDao>()
+              : null),
+    );
+    final result = await check;
+    if (!late) result.updateBook(book);
+    return (chapters: result.chapters, remap: result.remap);
+  }
+
+  Future<_TxtCheck> _startTxtCheck(
+    Book book, {
+    required BookDao bookDao,
+    required ChapterDao chapterDao,
+    BookmarkDao? bookmarkDao,
+    HighlightDao? highlightDao,
+    ReaderChapterContentDao? contentDao,
+  }) {
+    final key = book.bookUrl;
+    late final Future<_TxtCheck> check;
+    check =
+        _checkTxtChapters(
+          book,
+          bookDao: bookDao,
+          chapterDao: chapterDao,
+          bookmarkDao: bookmarkDao,
+          highlightDao: highlightDao,
+          contentDao: contentDao,
+        ).then(
+          (result) {
+            if (!identical(_txtChecks[key], check)) return result;
+            // 沒對成（原檔不在、還沒有目錄）的下次再對。
+            if (result.checked) {
+              _txtChecked.add(key);
+            } else {
+              _txtChecks.remove(key)?.ignore();
+            }
+            return result;
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            if (identical(_txtChecks[key], check)) {
+              _txtChecks.remove(key)?.ignore();
+            }
+            Error.throwWithStackTrace(error, stackTrace);
+          },
+        );
+    return check;
+  }
+
+  Future<_TxtCheck> _checkTxtChapters(
+    Book book, {
+    required BookDao bookDao,
+    required ChapterDao chapterDao,
+    BookmarkDao? bookmarkDao,
+    HighlightDao? highlightDao,
+    ReaderChapterContentDao? contentDao,
+  }) async {
+    await _recoverBeforeReading();
+    final path = filePathOf(book);
+    final oldChapters = await chapterDao.getByBook(book.bookUrl);
+    if (localBookExtensionFromPath(path) != 'txt' ||
+        oldChapters.isEmpty ||
+        !await File(path).exists()) {
+      return _TxtCheck(oldChapters, checked: false);
+    }
+    final recorded = await _readTxtChapterRanges(await txtChaptersPath(book));
+    if (recorded != null && chaptersMatch(oldChapters, recorded)) {
+      return _TxtCheck(oldChapters);
+    }
+    final current = await bookDao.getByUrl(book.bookUrl);
+    if (current == null) return _TxtCheck(oldChapters, checked: false);
+
+    final split = await _resplitTxt(
+      path,
+      charset: current.charset,
+      old: _rangesOf(oldChapters),
+    );
+    await debugTxtResplitDone?.call();
+    final chapters = _chapters(current, split.ranges);
+    // 照現在的規則分不出章：留著舊目錄，不記版本，下次開書再對。
+    if (chapters.isEmpty) return _TxtCheck(oldChapters, checked: false);
+    // 分章在背景跑的這段時間，這本書可能被移出書架、更新了原檔或改了編碼：
+    // 那時這次算的目錄已經不是這本書的，不寫，下次開書再對。
+    Future<bool> unchanged() async {
+      final row = await bookDao.getByUrl(book.bookUrl);
+      if (row == null ||
+          row.charset != current.charset ||
+          row.fileFingerprint != current.fileFingerprint) {
+        return false;
+      }
+      return chaptersMatch(
+        await chapterDao.getByBook(book.bookUrl),
+        _rangesOf(oldChapters),
+      );
+    }
+
+    if (chaptersMatch(oldChapters, split.ranges)) {
+      if (!await unchanged()) return _TxtCheck(oldChapters, checked: false);
+      await _writeTxtChapterRanges(current, chapters);
+      return _TxtCheck(oldChapters);
+    }
+    final remap = TxtChapterRemap(
+      oldRanges: _rangesOf(oldChapters),
+      oldLengths: split.oldLengths,
+      newRanges: split.ranges,
+      newLengths: split.newLengths,
+    );
+    final replaced = await _replaceTxtChapters(
+      current,
+      oldChapters: oldChapters,
+      chapters: chapters,
+      charset: current.charset ?? split.charset,
+      intro: split.intro,
+      mapPosition: remap.map,
+      readNow: false,
+      unchanged: unchanged,
+      bookDao: bookDao,
+      chapterDao: chapterDao,
+      bookmarkDao: bookmarkDao,
+      highlightDao: highlightDao,
+      contentDao: contentDao,
+    );
+    if (!replaced) return _TxtCheck(oldChapters, checked: false);
+    await _writeTxtChapterRanges(current, chapters);
+    return _TxtCheck(
+      chapters,
+      remap: remap,
+      stored: await bookDao.getByUrl(book.bookUrl),
+    );
+  }
+
+  /// 在背景 isolate 讀一次原檔，照 [charset]（null 時偵測，同 [_splitTxt]）
+  /// 重新分章。切出來和 [old] 不一樣時，一起算好新舊每一章解出來的字數，
+  /// 換算位置用（主 isolate 不拿整本檔）。
+  static Future<_TxtResplit> _resplitTxt(
+    String path, {
+    required String? charset,
+    required List<LocalChapterRange> old,
+  }) => Isolate.run(() {
+    final bytes = File(path).readAsBytesSync();
+    final split = TxtParser.splitBytes(
+      bytes,
+      charset: charset == null
+          ? null
+          : EncodingDetect.resolveCharset(bytes, charset),
+    );
+    final ranges = _txtRanges(split.chapters);
+    var same = ranges.length == old.length;
+    for (var i = 0; same && i < ranges.length; i += 1) {
+      same = ranges[i] == old[i];
+    }
+    int length(LocalChapterRange range) =>
+        range.start < 0 || range.end > bytes.length || range.end <= range.start
+        ? 0
+        : EncodingDetect.decodeWithCharset(
+            bytes.sublist(range.start, range.end),
+            split.charset,
+          ).length;
+    return (
+      ranges: ranges,
+      charset: split.charset,
+      intro: split.intro,
+      oldLengths: same ? const <int>[] : [for (final r in old) length(r)],
+      newLengths: same ? const <int>[] : [for (final r in ranges) length(r)],
+    );
+  });
+
+  static List<({int? start, int? end})> _spansOf(List<BookChapter> chapters) =>
+      [for (final c in chapters) (start: c.start, end: c.end)];
+
+  /// 舊目錄第 [oldIndex] 章第 [oldOffset] 個字，在新目錄的哪一章、第幾個字。
+  /// [oldLength]、[newLength] 是舊、新目錄第幾章解出來有幾個字。
+  ///
+  /// 兩個目錄的章節範圍都是同一個原檔的位元組位移，不隨編碼與分章規則改變：
+  /// 先照舊章的長度算出這個字在章內的比例，換成檔案裡的位元組位置，找新
+  /// 目錄裡蓋住這個位置的那一章；再照這個位元組位置在**新章**裡的比例換成
+  /// 新章的章內字數（新舊章的起訖不一樣，舊章的比例不能直接套）。編碼錯了
+  /// 時新舊章名不一定一樣，所以不照章名對。
+  static ({int index, int charOffset}) _positionByBytes({
+    required List<({int? start, int? end})> oldSpans,
+    required List<({int? start, int? end})> newSpans,
     required int oldIndex,
     required int oldOffset,
-    required Map<int, int> oldLengths,
+    required int Function(int index) oldLength,
+    required int Function(int index) newLength,
   }) {
-    if (newChapters.isEmpty) return (index: 0, charOffset: 0);
-    final safeOldIndex = oldIndex.clamp(0, oldChapters.length - 1);
-    final oldChapter = oldChapters[safeOldIndex];
-    final oldStart = oldChapter.start;
-    final oldEnd = oldChapter.end;
-    if (oldStart == null || oldEnd == null || oldEnd <= oldStart) {
-      return (index: oldIndex.clamp(0, newChapters.length - 1), charOffset: 0);
+    if (newSpans.isEmpty) return (index: 0, charOffset: 0);
+    if (oldSpans.isEmpty) {
+      return (index: oldIndex.clamp(0, newSpans.length - 1), charOffset: 0);
     }
-    final oldLength = oldLengths.putIfAbsent(
-      safeOldIndex,
-      () => _chapterCharLength(bytes, oldChapter, oldCharset),
-    );
-    final fraction = oldLength <= 0
-        ? 0.0
-        : (oldOffset / oldLength).clamp(0.0, 1.0);
+    final safeOldIndex = oldIndex.clamp(0, oldSpans.length - 1);
+    final (start: oldStart, end: oldEnd) = oldSpans[safeOldIndex];
+    if (oldStart == null || oldEnd == null || oldEnd <= oldStart) {
+      return (index: oldIndex.clamp(0, newSpans.length - 1), charOffset: 0);
+    }
+    final length = oldLength(safeOldIndex);
+    final fraction = length <= 0 ? 0.0 : (oldOffset / length).clamp(0.0, 1.0);
     final byte = oldStart + (fraction * (oldEnd - oldStart)).floor();
 
     var newIndex = 0;
-    for (var i = 0; i < newChapters.length; i += 1) {
-      final start = newChapters[i].start;
+    for (var i = 0; i < newSpans.length; i += 1) {
+      final start = newSpans[i].start;
       if (start == null || start > byte) break;
       newIndex = i;
     }
-    final newChapter = newChapters[newIndex];
-    final newStart = newChapter.start;
-    final newEnd = newChapter.end;
+    final (start: newStart, end: newEnd) = newSpans[newIndex];
     final newFraction = newStart == null || newEnd == null || newEnd <= newStart
         ? 0.0
         : ((byte - newStart) / (newEnd - newStart)).clamp(0.0, 1.0);
-    final newLength = _chapterCharLength(bytes, newChapter, newCharset);
-    final newOffset = newLength <= 0
+    final newChars = newLength(newIndex);
+    final newOffset = newChars <= 0
         ? 0
-        : (newFraction * newLength).round().clamp(0, newLength - 1);
+        : (newFraction * newChars).round().clamp(0, newChars - 1);
     return (index: newIndex, charOffset: newOffset);
   }
 
@@ -1363,4 +1697,87 @@ class _PreparedMove {
   final Book book;
   final List<BookChapter> chapters;
   final Directory? oldAssets;
+}
+
+/// [LocalBookService._resplitTxt] 的結果。
+typedef _TxtResplit = ({
+  List<LocalChapterRange> ranges,
+  String charset,
+  String? intro,
+  List<int> oldLengths,
+  List<int> newLengths,
+});
+
+/// 一次分章版本的核對（[LocalBookService.ensureTxtChapters]）。
+class _TxtCheck {
+  _TxtCheck(this.chapters, {this.remap, this.stored, this.checked = true});
+
+  /// 核對完的目錄。
+  final List<BookChapter> chapters;
+
+  /// 換了目錄時，舊目錄的位置換到新目錄的對照。
+  final TxtChapterRemap? remap;
+
+  /// 換了目錄時，資料庫裡換好的這本書。
+  final Book? stored;
+
+  /// 對成了：之後這次 App 執行期間不用再對。
+  final bool checked;
+
+  /// 換了目錄時，記憶體裡的 [book] 換成資料庫裡新的進度、編碼與章數。
+  void updateBook(Book book) {
+    final row = stored;
+    if (row == null) return;
+    book
+      ..charset = row.charset
+      ..intro = row.intro
+      ..chapterIndex = row.chapterIndex
+      ..durChapterTitle = row.durChapterTitle
+      ..charOffset = row.charOffset
+      ..visualOffsetPx = row.visualOffsetPx
+      ..readerAnchorJson = row.readerAnchorJson
+      ..totalChapterNum = row.totalChapterNum;
+  }
+}
+
+/// TXT 重新分章前後的對照（[LocalBookService.ensureTxtChapters]）：只放
+/// 新舊目錄每一章在原檔裡的位元組範圍與解出來的字數，不拿原檔。
+class TxtChapterRemap {
+  const TxtChapterRemap({
+    required this.oldRanges,
+    required this.oldLengths,
+    required this.newRanges,
+    required this.newLengths,
+  });
+
+  final List<LocalChapterRange> oldRanges;
+  final List<int> oldLengths;
+  final List<LocalChapterRange> newRanges;
+  final List<int> newLengths;
+
+  /// 舊目錄第 [index] 章第 [charOffset] 個字在新目錄的哪一章、第幾個字。
+  /// 新目錄裡有一章的範圍與章名和舊的那章一模一樣時，章內字數照舊、只換
+  /// 序號；其他照位元組位置換算（同改編碼）。
+  ({int index, int charOffset}) map(int index, int charOffset) {
+    if (oldRanges.isNotEmpty && newRanges.isNotEmpty) {
+      final old = oldRanges[index.clamp(0, oldRanges.length - 1)];
+      for (final (i, range) in newRanges.indexed) {
+        if (range.start == old.start &&
+            range.end == old.end &&
+            range.title == old.title) {
+          return (index: i, charOffset: charOffset);
+        }
+      }
+    }
+    int lengthAt(List<int> lengths, int i) =>
+        i < lengths.length ? lengths[i] : 0;
+    return LocalBookService._positionByBytes(
+      oldSpans: [for (final r in oldRanges) (start: r.start, end: r.end)],
+      newSpans: [for (final r in newRanges) (start: r.start, end: r.end)],
+      oldIndex: index,
+      oldOffset: charOffset,
+      oldLength: (i) => lengthAt(oldLengths, i),
+      newLength: (i) => lengthAt(newLengths, i),
+    );
+  }
 }

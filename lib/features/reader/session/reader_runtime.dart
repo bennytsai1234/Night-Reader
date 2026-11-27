@@ -85,6 +85,20 @@ class ReaderRuntime extends ChangeNotifier {
   bool _openStarted = false;
   ReaderLocation? _jumpedBeforeOpen;
 
+  /// 開書前對好目錄（[alignChaptersBeforeOpen]）的那一次。
+  Future<void>? _alignment;
+
+  /// 開書前拿到的位置已經換成現在目錄的座標了沒（[_takeLocationRefresh]）：
+  /// 之後才拿到的位置本來就是現在目錄的，不再換。
+  bool _locationsRefreshed = false;
+
+  /// 開書時目錄換過，開書前拿到的位置照它換成現在目錄的座標；沒換過是 null。
+  ReaderLocation Function(ReaderLocation location)? _refreshLocation;
+
+  /// 開書前拿到的位置照檔案裡的位置換算過（TXT 重新分章）：舊章名對不上
+  /// 新目錄，開書時不再照書籤的章名對。
+  bool _refreshedByPosition = false;
+
   /// 開書做完（含取不到正文）或閱讀器關掉時完成；開書前的跳章等它。
   final Completer<void> _openFinished = Completer<void>();
   final ReaderStateMachine stateMachine;
@@ -258,6 +272,40 @@ class ReaderRuntime extends ChangeNotifier {
     }
   }
 
+  /// 本地書開書前先對好目錄（EPUB 的轉法版本、TXT 的分章版本）：目錄換過
+  /// 時，開書的位置與開書前的跳章（都是舊目錄的座標）換成現在目錄的，畫面
+  /// 記著的位置也一起換。之後才讀資料庫的位置（剛同步來的進度）就是現在
+  /// 目錄的座標。只做一次；對不了的錯誤留給開書處理。
+  Future<void> alignChaptersBeforeOpen() =>
+      _alignment ??= _alignChaptersBeforeOpen();
+
+  Future<void> _alignChaptersBeforeOpen() async {
+    await repository.ensureChapters();
+    if (disposed || _openStarted) return;
+    final refresh = _takeLocationRefresh();
+    if (refresh == null) return;
+    _initialLocation = refresh.map(_initialLocation).normalized();
+    final jumped = _jumpedBeforeOpen;
+    if (jumped != null) _jumpedBeforeOpen = refresh.map(jumped);
+    stateMachine
+      ..updateVisibleLocation(_initialLocation)
+      ..commitLocation(_initialLocation);
+    notifyListeners();
+  }
+
+  /// 拿目錄換過的對照（[ReaderChapterRepository.takeLocationRefresh]），只拿
+  /// 一次；目錄要先讀好。
+  ReaderLocationRefresh? _takeLocationRefresh() {
+    if (_locationsRefreshed) return null;
+    _locationsRefreshed = true;
+    final refresh = repository.takeLocationRefresh();
+    if (refresh != null) {
+      _refreshLocation = refresh.map;
+      _refreshedByPosition = refresh.byPosition;
+    }
+    return refresh;
+  }
+
   /// 開書，停在建立時給的位置；給了 [at]（開書前才從資料庫讀到的較新位置，
   /// 例如剛同步來的）就改停在那裡，之後跳章失敗也回到這裡。開書前使用者
   /// 已經跳章（例如在換頁動畫期間開了目錄），開在跳去的地方。給了
@@ -285,14 +333,21 @@ class ReaderRuntime extends ChangeNotifier {
       await repository.ensureChapters();
       await _loadChapterShares();
       if (!isCurrentOperationToken(token)) return;
-      // 開書時本地 EPUB 重轉、目錄變了：位置是舊目錄的序號，照章名對過去。
-      location = location.copyWith(
-        chapterIndex: repository.takeRefreshedChapterIndex(
-          location.chapterIndex,
-        ),
-      );
+      // 開書前沒先對好目錄（[alignChaptersBeforeOpen]）而目錄換過：建立時給
+      // 的位置與開書前的跳章是舊目錄的座標，在這裡換。[at] 是讀好目錄之後
+      // 才從資料庫讀到的，已經是現在目錄的。
+      final refresh = _takeLocationRefresh();
+      if (refresh != null) {
+        if (at == null) {
+          _initialLocation = refresh.map(_initialLocation).normalized();
+        }
+        location = jumped != null ? refresh.map(jumped) : _initialLocation;
+      }
       if (jumped == null) {
-        if (chapterTitle != null && chapterTitle.isNotEmpty) {
+        // 照檔案裡的位置換算過時，書籤記的舊章名對不上新目錄，不再照它對。
+        if (chapterTitle != null &&
+            chapterTitle.isNotEmpty &&
+            !_refreshedByPosition) {
           location = location.copyWith(
             chapterIndex: alignChapterIndex(
               oldIndex: location.chapterIndex,
@@ -694,9 +749,14 @@ class ReaderRuntime extends ChangeNotifier {
     ReaderLocation location,
     bool immediateSave,
   ) async {
+    // 對好目錄之前的跳章是舊目錄的座標，開書時換過（[_takeLocationRefresh]）。
+    final beforeRefresh = !_locationsRefreshed;
     await _openFinished.future;
     if (disposed || !state.hasStableWorld) return false;
-    final target = location.normalized(chapterCount: repository.chapterCount);
+    final refresh = _refreshLocation;
+    final target =
+        (beforeRefresh && refresh != null ? refresh(location) : location)
+            .normalized(chapterCount: repository.chapterCount);
     if (state.visibleLocation.chapterIndex != target.chapterIndex) return false;
     if (immediateSave) {
       await viewportBridge.saveProgressLocation(state.visibleLocation);
