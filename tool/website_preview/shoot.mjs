@@ -81,7 +81,7 @@ const sizes = { desktop: { width: 1440, height: 900, dpr: 1, mobile: false }, mo
 const stops = `(() => {
   const y = (e, k = 0.18) => e.getBoundingClientRect().top + scrollY - innerHeight * k;
   const out = [['hero', 0]];
-  document.querySelectorAll('.feature, .source-note').forEach((e, i) => out.push([(e.querySelector('h3')?.textContent ?? 'f' + i).slice(0, 8), y(e)]));
+  document.querySelectorAll('.feature, .source-note').forEach((e, i) => out.push([(e.querySelector('h2')?.textContent ?? 'f' + i).slice(0, 8), y(e)]));
   out.push(['download', document.documentElement.scrollHeight - innerHeight]);
   return out;
 })()`;
