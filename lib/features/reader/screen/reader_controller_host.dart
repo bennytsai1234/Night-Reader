@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/storage/book_storage_service.dart';
 import 'package:night_reader/features/reader/screen/dependencies/reader_dependencies.dart';
@@ -466,7 +467,9 @@ class ReaderControllerHost {
           // 比對的雲端進度也照新目錄。對不了的錯誤由開書處理。
           try {
             await runtime.alignChaptersBeforeOpen();
-          } catch (_) {}
+          } catch (error, stackTrace) {
+            AppLog.e('開書前對目錄失敗', error: error, stackTrace: stackTrace);
+          }
           if (!_isMounted() || runtime.disposed) return;
         }
         final at = await _openLocation?.call(runtime);

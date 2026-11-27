@@ -198,6 +198,11 @@ class LocalBookService {
   @visibleForTesting
   static Future<void> Function(String step)? debugUpdateStep;
 
+  /// 測試用：開書時 TXT 在背景重新分章算好、還沒寫回之前呼叫，模擬這段
+  /// 時間裡使用者把書移出書架或換了原檔（[ensureTxtChapters]）。
+  @visibleForTesting
+  static Future<void> Function()? debugTxtResplitDone;
+
   /// 換原檔時跟著換的、EPUB 轉好的資料（在這本書的資料夾裡）。
   static const _epubAssets = [
     'epub-text.txt',
@@ -1026,7 +1031,10 @@ class LocalBookService {
   /// 同一個交易裡。[readNow] 是讀者自己要換的（改編碼），位置移動的時間記成
   /// 現在、書排到書架前面；不是的（分章規則改了）不動時間，不當成讀者讀了、
   /// 也不當成比另一台新的進度。
-  Future<void> _replaceTxtChapters(
+  ///
+  /// 給了 [unchanged] 時在交易裡先問它：這本書在算新目錄的這段時間被移出
+  /// 書架、換了原檔或編碼、目錄被別處換過，就什麼都不寫，回傳 false。
+  Future<bool> _replaceTxtChapters(
     Book current, {
     required List<BookChapter> oldChapters,
     required List<BookChapter> chapters,
@@ -1040,6 +1048,7 @@ class LocalBookService {
     BookmarkDao? bookmarkDao,
     HighlightDao? highlightDao,
     ReaderChapterContentDao? contentDao,
+    Future<bool> Function()? unchanged,
   }) async {
     final oldBookmarks =
         await bookmarkDao?.watchByBook(current.name, current.author).first ??
@@ -1099,7 +1108,8 @@ class LocalBookService {
       );
     }
 
-    await bookDao.transaction(() async {
+    return bookDao.transaction(() async {
+      if (unchanged != null && !await unchanged()) return false;
       await bookDao.writeFields(
         current,
         BooksCompanion(
@@ -1127,6 +1137,7 @@ class LocalBookService {
       if (movedHighlights.isNotEmpty) {
         await highlightDao!.upsertAll(movedHighlights);
       }
+      return true;
     });
   }
 
@@ -1141,6 +1152,9 @@ class LocalBookService {
   /// 留下的結果不能沿用；元件測試裡等前一項做好的 Future 也等不到。
   @visibleForTesting
   void forgetTxtChapterChecks() {
+    for (final pending in _txtChecks.values) {
+      pending.ignore();
+    }
     _txtChecks.clear();
     _txtChecked.clear();
   }
@@ -1320,10 +1334,27 @@ class LocalBookService {
       charset: current.charset,
       old: _rangesOf(oldChapters),
     );
+    await debugTxtResplitDone?.call();
     final chapters = _chapters(current, split.ranges);
     // 照現在的規則分不出章：留著舊目錄，不記版本，下次開書再對。
     if (chapters.isEmpty) return _TxtCheck(oldChapters, checked: false);
+    // 分章在背景跑的這段時間，這本書可能被移出書架、更新了原檔或改了編碼：
+    // 那時這次算的目錄已經不是這本書的，不寫，下次開書再對。
+    Future<bool> unchanged() async {
+      final row = await bookDao.getByUrl(book.bookUrl);
+      if (row == null ||
+          row.charset != current.charset ||
+          row.fileFingerprint != current.fileFingerprint) {
+        return false;
+      }
+      return chaptersMatch(
+        await chapterDao.getByBook(book.bookUrl),
+        _rangesOf(oldChapters),
+      );
+    }
+
     if (chaptersMatch(oldChapters, split.ranges)) {
+      if (!await unchanged()) return _TxtCheck(oldChapters, checked: false);
       await _writeTxtChapterRanges(current, chapters);
       return _TxtCheck(oldChapters);
     }
@@ -1333,7 +1364,7 @@ class LocalBookService {
       newRanges: split.ranges,
       newLengths: split.newLengths,
     );
-    await _replaceTxtChapters(
+    final replaced = await _replaceTxtChapters(
       current,
       oldChapters: oldChapters,
       chapters: chapters,
@@ -1341,12 +1372,14 @@ class LocalBookService {
       intro: split.intro,
       mapPosition: remap.map,
       readNow: false,
+      unchanged: unchanged,
       bookDao: bookDao,
       chapterDao: chapterDao,
       bookmarkDao: bookmarkDao,
       highlightDao: highlightDao,
       contentDao: contentDao,
     );
+    if (!replaced) return _TxtCheck(oldChapters, checked: false);
     await _writeTxtChapterRanges(current, chapters);
     return _TxtCheck(
       chapters,

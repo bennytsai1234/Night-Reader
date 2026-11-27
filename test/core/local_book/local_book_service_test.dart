@@ -890,6 +890,44 @@ void main() {
           TxtParser.tocVersion,
         );
 
+    test('重新分章途中書被移出書架：不把書加回來、不記版本', () async {
+      final book = await seedOld();
+      LocalBookService.debugTxtResplitDone = () async {
+        await bookDao.deleteByUrl(book.bookUrl);
+        await chapterDao.deleteByBook(book.bookUrl);
+      };
+      addTearDown(() => LocalBookService.debugTxtResplitDone = null);
+
+      await ensure(book);
+
+      expect(await bookDao.getByUrl(book.bookUrl), isNull);
+      expect(await chapterDao.getByBook(book.bookUrl), isEmpty);
+      expect(await recorded(book), isNull);
+    });
+
+    test('重新分章途中目錄被別處換過：留著別處換的，不記版本', () async {
+      final book = await seedOld();
+      final other = BookChapter(
+        url: '${book.bookUrl}#0',
+        title: '別處換的',
+        bookUrl: book.bookUrl,
+        index: 0,
+        start: 0,
+        end: 3,
+      );
+      LocalBookService.debugTxtResplitDone = () =>
+          chapterDao.replaceByBook(book.bookUrl, [other]);
+      addTearDown(() => LocalBookService.debugTxtResplitDone = null);
+
+      final result = await ensure(book);
+
+      expect(result.remap, isNull);
+      expect((await chapterDao.getByBook(book.bookUrl)).map((c) => c.title), [
+        '別處換的',
+      ]);
+      expect(await recorded(book), isNull);
+    });
+
     test('目錄換新，進度、書籤與標註對到同一段字，正文清掉，時間不動', () async {
       final book = await seedOld();
       final atBing = text.indexOf('丙');
