@@ -147,7 +147,10 @@ EpubBookInfo _convert(_Archive archive, String textPath) {
   _extractImages(archive, text.images, textPath);
 
   final chapters = <LocalChapterRange>[];
-  final temp = File('$textPath.tmp');
+  final temp = File(
+    '$textPath.${DateTime.now().microsecondsSinceEpoch}.'
+    '${identityHashCode(pieces)}.tmp',
+  );
   temp.parent.createSync(recursive: true);
   final output = temp.openSync(mode: FileMode.write);
   try {
@@ -168,7 +171,16 @@ EpubBookInfo _convert(_Archive archive, String textPath) {
   } finally {
     output.closeSync();
   }
-  temp.renameSync(textPath);
+  try {
+    temp.renameSync(textPath);
+  } catch (_) {
+    try {
+      if (temp.existsSync()) temp.deleteSync();
+    } on FileSystemException {
+      // 清除失敗不蓋掉原本的寫入錯誤。
+    }
+    rethrow;
+  }
   writeChapterRanges(
     EpubParser.chaptersPathFor(textPath),
     EpubParser.textVersion,

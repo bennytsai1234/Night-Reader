@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/diagnostics/crash_handler.dart';
+import 'package:path/path.dart' as p;
 
 /// 一次 AI 修復的紀錄，分兩份（ADR 0054）：
 /// - **摘要**（[summary]）：每一步的結論與花的時間、AI 每一輪下的指令與
@@ -246,7 +247,7 @@ final class AiRepairLog {
     final directory = await _directory();
     await directory.create(recursive: true);
     final file = File('${directory.path}/$_fileName');
-    _writing.add(file.path);
+    _writing.add(p.normalize(file.path));
     await _prune(directory, room: 1);
     return file;
   }
@@ -261,7 +262,7 @@ final class AiRepairLog {
   void finish() {
     _queue = _queue.then((_) async {
       final file = _file;
-      if (file != null) _writing.remove(file.path);
+      if (file != null) _writing.remove(p.normalize(file.path));
       if (_fileFailed || file == null) return;
       try {
         await _prune(file.parent, keep: file.path);
@@ -286,7 +287,11 @@ final class AiRepairLog {
     var bytes = 0;
     for (final (i, file) in files.indexed) {
       bytes += file.lengthSync();
-      if (file.path == keep || _writing.contains(file.path)) continue;
+      final path = p.normalize(file.path);
+      if (path == (keep == null ? null : p.normalize(keep)) ||
+          _writing.contains(path)) {
+        continue;
+      }
       if (i >= _keptFiles - room || bytes > _keptBytes) {
         try {
           file.deleteSync();

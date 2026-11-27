@@ -49,9 +49,21 @@ class SyncBaseStorage {
   Future<void> writeJson(String name, Map<String, Object?> json) async {
     final file = await _file(name);
     await file.parent.create(recursive: true);
-    final temp = File('${file.path}.tmp');
-    await temp.writeAsString(jsonEncode(json), flush: true);
-    await temp.rename(file.path);
+    final temp = File(
+      '${file.path}.${DateTime.now().microsecondsSinceEpoch}.'
+      '${identityHashCode(json)}.tmp',
+    );
+    try {
+      await temp.writeAsString(jsonEncode(json), flush: true);
+      await temp.rename(file.path);
+    } catch (_) {
+      try {
+        if (await temp.exists()) await temp.delete();
+      } on FileSystemException {
+        // 清除失敗不蓋掉原本的寫入錯誤。
+      }
+      rethrow;
+    }
   }
 
   Future<void> clear() async {
