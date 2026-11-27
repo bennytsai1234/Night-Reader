@@ -301,6 +301,7 @@ class _SessionHandler extends BaseAudioHandler {
         item.coverSource,
         item.bookName,
         kind: item.kind,
+        origin: item.coverOrigin,
       );
       mediaItem.add(_mediaItemOf(item, art));
       if (art == null) {

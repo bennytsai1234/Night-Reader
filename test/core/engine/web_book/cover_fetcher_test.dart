@@ -107,6 +107,9 @@ void main() {
       ),
       isTrue,
     );
+    // 網址帶 {{}}、@js:：Legado 每張封面都經過 AnalyzeUrl，先算出來才抓。
+    expect(CoverFetcher.needsSource(source(), '$baseUrl/{{1+1}}.png'), isTrue);
+    expect(CoverFetcher.needsSource(source(), '$baseUrl/c.png@JS:1'), isTrue);
   });
 
   test('只有要跑書源程式時才交給書源 isolate', () {
@@ -132,6 +135,8 @@ void main() {
       isTrue,
     );
     expect(CoverFetcher.needsScript(source(), '$baseUrl/{{1+1}}.png'), isTrue);
+    // AnalyzeUrl 的 _jsPattern 不分大小寫。
+    expect(CoverFetcher.needsScript(source(), '$baseUrl/c.png@JS:1'), isTrue);
   });
 
   test('標頭或網址選項解不成 JSON（會當成 JS 跑）時也交給書源 isolate', () {

@@ -140,6 +140,64 @@ void main() {
     },
   );
 
+  testWidgets('two sources sharing a cover url each keep their own artwork', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      const url = 'https://x.test/shared.jpg';
+      final art = NowPlayingArtwork(
+        directory: () async => dir,
+        download: (url, origin) async {
+          downloads.add('$origin $url');
+          return File('${dir.path}/${origin!.split('//').last}.png')
+            ..writeAsBytesSync(image);
+        },
+        memoryResource: (key) async => null,
+      );
+      final fromA = await fileOf(
+        art.resolve(url, '書', origin: 'https://a.example'),
+      );
+      final fromB = await fileOf(
+        art.resolve(url, '書', origin: 'https://b.example'),
+      );
+
+      expect(fromB.path, isNot(fromA.path));
+      expect(downloads, ['https://a.example $url', 'https://b.example $url']);
+      expect(art.resolved(url, '書', origin: 'https://a.example'), fromA.uri);
+      expect(art.resolved(url, '書', origin: 'https://b.example'), fromB.uri);
+    });
+  });
+
+  testWidgets('a cover that failed in one source is tried again in another', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      const url = 'https://x.test/shared.jpg';
+      final art = NowPlayingArtwork(
+        directory: () async => dir,
+        download: (url, origin) async {
+          downloads.add('$origin $url');
+          if (origin == 'https://a.example') {
+            throw const SocketException('offline');
+          }
+          return File('${dir.path}/b.png')..writeAsBytesSync(image);
+        },
+        memoryResource: (key) async => null,
+      );
+      final fromA = await fileOf(
+        art.resolve(url, '書', origin: 'https://a.example'),
+      );
+      final fromB = await fileOf(
+        art.resolve(url, '書', origin: 'https://b.example'),
+      );
+
+      expect(downloads, ['https://a.example $url', 'https://b.example $url']);
+      expect(fromB.path, isNot(fromA.path));
+      expect(art.resolved(url, '書', origin: 'https://a.example'), fromA.uri);
+      expect(art.resolved(url, '書', origin: 'https://b.example'), fromB.uri);
+    });
+  });
+
   testWidgets('a cover from the web comes from the cover cache', (
     tester,
   ) async {

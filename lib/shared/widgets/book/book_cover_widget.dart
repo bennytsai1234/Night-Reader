@@ -64,6 +64,17 @@ String? _sourceOf(String? coverUrl) {
   return source == null || source.isEmpty ? null : source;
 }
 
+/// 這張封面記在記憶體快取裡的鍵：有書源網址的網路封面帶上書源，兩個書源
+/// 共用同一個封面網址時各記各的（書源要不要標頭、解密，這裡查不到，一律
+/// 分開記）；本機、記憶體與沒有書源網址的封面只用網址。
+String _coverCacheKey(String source, String? origin) {
+  if (origin == null || origin.isEmpty) return source;
+  if (!source.startsWith('http://') && !source.startsWith('https://')) {
+    return source;
+  }
+  return SourceCoverLoader.sourceKey(origin, source);
+}
+
 class _BookCoverWidgetState extends State<BookCoverWidget>
     with SingleTickerProviderStateMixin {
   /// 換封面的交叉淡化；第一次換封面時才建立，書架上大多數封面用不到。
@@ -368,7 +379,9 @@ class _CoverImageState extends State<_CoverImage> {
         await cache.getFileFromCache(source) != null ||
         (origin != null &&
             origin.isNotEmpty &&
-            await cache.getFileFromCache(SourceCoverLoader.sourceKey(source)) !=
+            await cache.getFileFromCache(
+                  SourceCoverLoader.sourceKey(origin, source),
+                ) !=
                 null);
     inCache().then(
       _onDeviceChecked,
@@ -398,7 +411,7 @@ class _CoverImageState extends State<_CoverImage> {
       onReady(null);
       return _buildDefaultCover();
     }
-    if (_failed.contains(source)) {
+    if (_failed.contains(_coverCacheKey(source, widget.origin))) {
       // 失敗過的不再重抓。剛才在這裡失敗、還在淡入的照原本的淡入接著播；
       // 之前就記下失敗的（新建的封面）直接畫。
       _unregister();
@@ -544,7 +557,7 @@ class _CoverImageState extends State<_CoverImage> {
   Widget _buildFailedCover(BuildContext context, String source) {
     final reveal = CoverRevealScope.waitingOf(context);
     _unregister();
-    _failed.add(source);
+    _failed.add(_coverCacheKey(source, widget.origin));
     onReady(source);
     return _FadeInOnce(
       key: _fallbackKey,

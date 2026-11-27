@@ -37,12 +37,14 @@ abstract final class CoverFetcher {
     return decoded;
   }
 
-  /// 這個書源的封面要不要照書源抓：網址帶選項、書源有標頭、要登入（Cookie）
-  /// 或要解密時才要；其他的照一般圖片抓。
+  /// 這個書源的封面要不要照書源抓：要跑書源程式（[needsScript]：封面解密、
+  /// 網址帶 `{{}}`／`@js:`／`<js>`、標頭或網址選項是 JS）、書源有標頭、要
+  /// 登入（Cookie）或網址帶選項時才要；其他的照一般圖片抓。Legado 每張封面
+  /// 都經過 `AnalyzeUrl`。
   static bool needsSource(BookSource source, String url) =>
+      needsScript(source, url) ||
       url.contains(RegExp(r',\s*\{')) ||
       (source.header?.trim().isNotEmpty ?? false) ||
-      (source.coverDecodeJs?.trim().isNotEmpty ?? false) ||
       (source.loginUrl?.trim().isNotEmpty ?? false);
 
   /// 抓這張封面要不要跑書源的程式（封面解密、寫成 JS 的標頭或網址）：要的
@@ -53,7 +55,10 @@ abstract final class CoverFetcher {
   static bool needsScript(BookSource source, String url) {
     if (source.coverDecodeJs?.trim().isNotEmpty ?? false) return true;
     final lower = url.toLowerCase();
-    if (url.contains('@js:') || lower.contains('<js>') || url.contains('{{')) {
+    // AnalyzeUrl 的 _jsPattern 不分大小寫。
+    if (lower.contains('@js:') ||
+        lower.contains('<js>') ||
+        url.contains('{{')) {
       return true;
     }
     if (!_isPlainObject(source.header)) return true;

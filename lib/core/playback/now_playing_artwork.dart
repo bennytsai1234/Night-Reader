@@ -39,14 +39,15 @@ class NowPlayingArtwork {
   static const int defaultCoverHeight = 504;
 
   /// 這次開 App 換過的封面；同一本書換章時直接用，不再找一次檔案。封面的
-  /// 圖檔照網址記，預設封面照類別與書名記；連預設封面都寫不出來時不記，
-  /// 下次再試。
+  /// 圖檔照書源與網址記（有書源網址的網路封面分書源），預設封面照類別與
+  /// 書名記；連預設封面都寫不出來時不記，下次再試。
   final Map<String, Future<Uri?>> _resolving = {};
   final Map<String, Uri> _resolved = {};
 
-  /// 這次開 App 載不到或不是圖的封面，不每次換章都重抓。書源沒封面時常
-  /// 共用同一張預設圖的網址，所以這裡只記網址；預設封面照每本的類別與書名
-  /// 存一張（有聲書的音量條照書名），天空一律是夜空的中間那個顏色。
+  /// 這次開 App 載不到或不是圖的封面，不每次換章都重抓。有書源網址的網路
+  /// 封面分書源記；書源沒封面時常共用同一張預設圖的網址，一般圖片只記網址；
+  /// 預設封面照每本的類別與書名存一張（有聲書的音量條照書名），天空一律是
+  /// 夜空的中間那個顏色。
   final Set<String> _unavailable = {};
 
   /// 網路封面和書架的封面（`CachedNetworkImageProvider`）用同一個磁碟快取：
@@ -65,10 +66,11 @@ class NowPlayingArtwork {
     String? coverSource,
     String bookName, {
     BookSourceKind kind = BookSourceKind.novel,
+    String? origin,
   }) {
-    final source = _usableSource(coverSource);
+    final source = _usableSource(coverSource, origin);
     return source != null
-        ? _resolved[_coverKey(source)]
+        ? _resolved[_coverKey(source, origin)]
         : _resolved[_defaultKey(bookName, kind)];
   }
 
@@ -80,10 +82,10 @@ class NowPlayingArtwork {
     BookSourceKind kind = BookSourceKind.novel,
     String? origin,
   }) async {
-    final source = _usableSource(coverSource);
+    final source = _usableSource(coverSource, origin);
     if (source != null) {
       final cover = await _once(
-        _coverKey(source),
+        _coverKey(source, origin),
         () => _coverUri(source, origin),
       );
       if (cover != null) return cover;
@@ -96,12 +98,25 @@ class NowPlayingArtwork {
   }
 
   /// 有內容、這次開 App 還沒判定載不到的封面來源；其他是 null。
-  String? _usableSource(String? coverSource) {
+  String? _usableSource(String? coverSource, String? origin) {
     final source = coverSource?.trim() ?? '';
-    return source.isEmpty || _unavailable.contains(source) ? null : source;
+    return source.isEmpty || _unavailable.contains(_sourceKey(source, origin))
+        ? null
+        : source;
   }
 
-  static String _coverKey(String source) => 'cover\u0000$source';
+  static String _coverKey(String source, String? origin) =>
+      'cover\u0000${_sourceKey(source, origin)}';
+
+  /// 有書源網址的網路封面以書源與網址記（兩個書源共用同一個封面網址時
+  /// 各記各的）；本機、記憶體與沒有書源網址的封面只記網址。
+  static String _sourceKey(String source, String? origin) {
+    if (origin == null || origin.isEmpty) return source;
+    if (!source.startsWith('http://') && !source.startsWith('https://')) {
+      return source;
+    }
+    return SourceCoverLoader.sourceKey(origin, source);
+  }
 
   static String _defaultKey(String bookName, BookSourceKind kind) =>
       'default\u0000${kind.name}\u0000$bookName';
@@ -129,7 +144,7 @@ class NowPlayingArtwork {
     } catch (error) {
       AppLog.d('NowPlayingArtwork: cover unavailable, use default: $error');
     }
-    _unavailable.add(source);
+    _unavailable.add(_sourceKey(source, origin));
     return null;
   }
 
