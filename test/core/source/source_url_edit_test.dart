@@ -9,6 +9,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/models/book/book.dart';
@@ -108,6 +109,35 @@ void main() {
     expect(SourceMoves(await SharedPreferences.getInstance()).read(), {
       newUrl: [oldUrl],
     });
+  });
+
+  test('editing a source URL tells the open pages, after the files moved; '
+      'keeping the URL says nothing', () async {
+    await getIt<BookSourceDao>().upsert(
+      BookSource(bookSourceUrl: oldUrl, bookSourceName: '舊名'),
+    );
+    final moves = <SourceMovedEvent>[];
+    final subscription = AppEventBus()
+        .onName(AppEventBus.sourceMoved)
+        .listen((event) => moves.add(event.data as SourceMovedEvent));
+    addTearDown(subscription.cancel);
+
+    await BookSourceService().saveEditedSource(
+      BookSource(bookSourceUrl: oldUrl, bookSourceName: '改名'),
+      previousUrl: oldUrl,
+    );
+    await pumpEventQueue();
+    expect(moves, isEmpty);
+
+    await BookSourceService().saveEditedSource(
+      BookSource(bookSourceUrl: newUrl, bookSourceName: '新名'),
+      previousUrl: oldUrl,
+    );
+    await pumpEventQueue();
+    expect(
+      [for (final move in moves) (move.fromUrl, move.toUrl)],
+      [(oldUrl, newUrl)],
+    );
   });
 
   group('the book folder (downloaded comic chapters, audio, illustrations, '

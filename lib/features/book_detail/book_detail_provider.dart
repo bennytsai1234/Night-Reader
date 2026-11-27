@@ -330,12 +330,38 @@ class BookDetailProvider extends ChangeNotifier {
     _switchSub = AppEventBus()
         .onName(AppEventBus.bookSwitched)
         .listen((event) => _followSwitch(event.data as BookSwitchedEvent));
+    _moveSub = AppEventBus()
+        .onName(AppEventBus.sourceMoved)
+        .listen((event) => _followMove(event.data as SourceMovedEvent));
     // 進場動畫播完才讀資料庫、向書源抓資料（ADR 0018）；這之前照傳進來
     // 的書畫。
     unawaited(entrance.then((_) => _init()));
   }
 
   StreamSubscription<AppEvent>? _switchSub;
+  StreamSubscription<AppEvent>? _moveSub;
+
+  /// 載入中書源換了網址：載入可能已經照舊網址讀過書源，載完再重讀一次。
+  bool _reloadSourceAfterInit = false;
+
+  /// 別處（書源編輯、AI 修復、同步、合併重複書源）換了這本書的書源網址：
+  /// 資料庫裡的書已經改記新網址，照它重讀書源（[reloadSource]）。這頁正在
+  /// 換源時不管，換完就是換過去的書源。書可能和其他頁面共用、那邊先改了
+  /// 網址，手上的書源還是舊的也算。
+  void _followMove(SourceMovedEvent event) {
+    if (_disposed || isRunning(BookDetailAction.changeSource)) return;
+    if (_book.origin != event.fromUrl &&
+        _currentSource?.bookSourceUrl != event.fromUrl) {
+      return;
+    }
+    // 還沒寫進資料庫的書（搜尋結果）資料庫搬不到，手上的先改。
+    _book.origin = event.toUrl;
+    if (_worldState == BookDetailWorldState.initializing) {
+      _reloadSourceAfterInit = true;
+      return;
+    }
+    unawaited(reloadSource());
+  }
 
   /// 這頁開著時，開 App 或還原備份的清理不動這本書（[BooksInUse]）。
   late final BookInUse _inUse;
@@ -423,11 +449,15 @@ class BookDetailProvider extends ChangeNotifier {
     } finally {
       notifyListeners();
     }
+    if (_reloadSourceAfterInit) {
+      _reloadSourceAfterInit = false;
+      await reloadSource();
+    }
   }
 
-  /// 從書源編輯或除錯頁回來時重讀這本書的書源：那邊存的規則、啟用與健康
-  /// 狀態只寫進資料庫，詳情手上的還是舊的；不重讀的話，再進一次編輯頁會
-  /// 帶入舊規則，存檔就蓋掉上一次的修改。
+  /// 從書源編輯或除錯頁回來、或別處換了書源網址（[_followMove]）時重讀這本書
+  /// 的書源：那邊存的規則、啟用與健康狀態只寫進資料庫，詳情手上的還是舊的；
+  /// 不重讀的話，再進一次編輯頁會帶入舊規則，存檔就蓋掉上一次的修改。
   Future<void> reloadSource() async {
     if (_disposed) return;
     // 編輯頁可能改了書源網址：資料庫裡的書已經改記新網址，照它找書源。
@@ -441,17 +471,22 @@ class BookDetailProvider extends ChangeNotifier {
         ..coverLocalPath = stored.coverLocalPath
         ..customCoverLocalPath = stored.customCoverLocalPath;
     }
+    final previousSource = _currentSource?.bookSourceUrl;
     // 只重讀書源，書籍資訊與目錄沒有重抓：抓書源的結果照舊。
     await _loadSource();
     if (_disposed) return;
+    final source = _currentSource;
+    // 換了網址：顯示新書源的名字，已下載的正文與檔案照新網址算。
+    final moved = source != null && source.bookSourceUrl != previousSource;
+    if (moved) _book.originName = source.bookSourceName;
     // 書源改了類型，書跟著換類別（ADR 0053）：書架上的書資料庫已經換了，
     // 還沒加入書架的照同一條規則換；開書、閱讀還是收聽都照新的類別。
-    final source = _currentSource;
     final kind = source == null
         ? null
         : BookSourceDao.kindsToFollow([source])[source.bookSourceUrl];
-    if (kind != null && kind != _book.bookKind) {
-      _book.type = kind.bookType;
+    final kindChanged = kind != null && kind != _book.bookKind;
+    if (kindChanged) _book.type = kind.bookType;
+    if (moved || kindChanged) {
       await _refreshCacheStatus(notify: false);
       if (_disposed) return;
     }
@@ -1211,6 +1246,7 @@ class BookDetailProvider extends ChangeNotifier {
     _disposed = true;
     _debounce?.cancel();
     _switchSub?.cancel();
+    _moveSub?.cancel();
     _inUse.release();
     super.dispose();
   }

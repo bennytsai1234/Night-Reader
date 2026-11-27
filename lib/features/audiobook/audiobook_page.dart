@@ -141,6 +141,14 @@ class _AudiobookPageState extends State<AudiobookPage> {
 
   /// 播放失敗：跳一則提示寫原因；能解決時（登入、前往驗證）旁邊給那一顆。
   void _onPlayerChanged() {
+    // 書源換了網址（[AudiobookPlayer.reloadBookOrigin]）：書本資料夾跟著搬了，
+    // 照新網址重讀已下載的集數。
+    final origin = _downloadedOrigin;
+    if (origin != null &&
+        _player.isCurrent(widget.book) &&
+        _player.book!.origin != origin) {
+      unawaited(_loadDownloaded());
+    }
     if (_suggestionInteractions case final interactions?
         when _player.interactions != interactions) {
       _hideProgressSuggestion();
@@ -230,9 +238,13 @@ class _AudiobookPageState extends State<AudiobookPage> {
     });
   }
 
+  /// [_downloaded] 照哪個書源網址的書本資料夾讀的。
+  String? _downloadedOrigin;
+
   Future<void> _loadDownloaded() async {
+    final book = _player.isCurrent(widget.book) ? _player.book! : widget.book;
+    _downloadedOrigin = book.origin;
     try {
-      final book = _player.isCurrent(widget.book) ? _player.book! : widget.book;
       final files = await BookChapterFiles.downloaded(book);
       if (mounted) setState(() => _downloaded = files.keys.toSet());
     } catch (_) {
@@ -366,9 +378,9 @@ class _AudiobookPageState extends State<AudiobookPage> {
         await Navigator.of(context).push<bool>(
           MaterialPageRoute(builder: (_) => SourceEditorPage(source: source)),
         );
-        // 改了書源網址的話，書本資料夾跟著搬了：照新網址重讀已下載的集數。
+        // 規則或網址可能改了：播放器換上存好的書源（網址換了的話，已下載的
+        // 集數由 [_onPlayerChanged] 照新網址重讀）。
         await _player.reloadBookOrigin();
-        if (mounted) unawaited(_loadDownloaded());
       case _MoreAction.log:
         await Navigator.of(context)
             .push<void>(MaterialPageRoute(builder: (_) => const AppLogPage()));

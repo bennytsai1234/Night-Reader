@@ -188,10 +188,22 @@ class _ComicReaderPageState extends State<ComicReaderPage>
   /// 閱讀器開著時，開 App 或還原備份的清理不動這本書（[BooksInUse]）。
   late final BookInUse _inUse;
 
+  StreamSubscription<AppEvent>? _moves;
+
+  /// 這頁讀圖用的書源網址。書可能和其他頁面共用、那邊先改了 [_book] 的
+  /// 網址，照這個比對是不是這本書的書源搬家。
+  late String _origin;
+
   @override
   void initState() {
     super.initState();
     _inUse = BooksInUse.hold(widget.book.bookUrl);
+    _origin = widget.book.origin;
+    if (!widget.book.isLocal) {
+      _moves = AppEventBus()
+          .onName(AppEventBus.sourceMoved)
+          .listen((event) => _followMove(event.data as SourceMovedEvent));
+    }
     _strip.onAutoScrollStopped = () => _autoScrolling.value = false;
     _menuVisible.addListener(() {
       if (_menuVisible.value) _dismissSyncHint();
@@ -213,6 +225,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     // 存好最後的位置再上傳（[ComicProgressSync.dispose] 會先 flush）。
     _sync.dispose();
     _inUse.release();
+    unawaited(_moves?.cancel());
     _model?.dispose();
     _settings
       ..removeListener(_onSettings)
@@ -271,7 +284,8 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       } else {
         pageSource = NetworkComicPageSource(
           book: _book,
-          source: source!,
+          // 開書途中書源搬家（[_followMove]）時已經換成新的。
+          source: _source!,
           chapters: chapters,
         );
       }
@@ -284,7 +298,6 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       )..addListener(_onModel);
       setState(() {
         _chapters = chapters;
-        _source = source;
         _model = model;
         _initialFraction = start == null && !model.anchorMoved
             ? (resume?.fraction ?? _book.visualOffsetPx)
@@ -723,6 +736,37 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     await service.commitSwitch(_book, prepared);
     AppEventBus().fire(AppEventBus.upBookshelf);
     return prepared;
+  }
+
+  /// 書源從舊網址搬家（[AppEventBus.sourceMoved]）：資料庫裡這本書與書本
+  /// 資料夾都已經改記新網址。照資料庫換上書與書源；下載好的話是照舊資料夾
+  /// 打開的，照新網址重建條漫，停在原本那一張。
+  Future<void> _followMove(SourceMovedEvent event) async {
+    if (event.fromUrl != _origin) return;
+    _origin = event.toUrl;
+    final stored = await getIt<BookDao>().getByUrl(_book.bookUrl);
+    final source = await getIt<BookSourceDao>().getByUrl(
+      stored?.origin ?? event.toUrl,
+    );
+    if (!mounted) return;
+    if (stored != null) {
+      _book
+        ..origin = stored.origin
+        ..originName = stored.originName
+        ..coverLocalPath = stored.coverLocalPath
+        ..customCoverLocalPath = stored.customCoverLocalPath;
+    } else {
+      _book.origin = event.toUrl;
+    }
+    _origin = _book.origin;
+    if (source != null) _source = source;
+    if (_model == null) {
+      setState(() {});
+      return;
+    }
+    await _flush();
+    if (!mounted) return;
+    _reloadChapters(_chapters);
   }
 
   /// 刪掉這一話下載好的與抓到一半的圖，照書源重抓。

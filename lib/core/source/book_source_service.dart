@@ -264,7 +264,8 @@ class BookSourceService {
   /// 儲存編輯後的書源。網址改過時，以原網址記的一切跟著搬到新網址（書架上
   /// 的書、搜尋結果、已下載的正文見 [BookSourceDao.saveEdited]，登入資訊與
   /// 變數見 [BaseSource.moveCachedIdentity]）；搬的時候這些書的下載先停住，
-  /// 搬完照原本的狀態接著下載，不會有一輪用舊網址寫正文。
+  /// 搬完照原本的狀態接著下載，不會有一輪用舊網址寫正文；都搬好了才發
+  /// [AppEventBus.sourceMoved]，開著這些書的頁面與播放器換上新書源。
   ///
   /// [editedFrom] 是編輯頁打開的那一筆：它這時已經不在了（編輯時被刪掉或
   /// 併掉）就不存（[BookSourceDao.saveEdited]）。同步搬書源不給：舊網址的
@@ -302,6 +303,10 @@ class BookSourceService {
     } finally {
       release?.call();
     }
+    AppEventBus().fire(
+      AppEventBus.sourceMoved,
+      data: SourceMovedEvent(fromUrl: previousUrl, toUrl: source.bookSourceUrl),
+    );
     // 同步時別台照這份紀錄把舊網址的書搬過去（ADR 0039）。
     await SourceMoves(await SharedPreferences.getInstance())
         .record(from: previousUrl, to: source.bookSourceUrl);
@@ -309,7 +314,8 @@ class BookSourceService {
 
   /// 重複書源 [from] 併進 [into]（ADR 0062；做法見
   /// [BookSourceDao.mergeInto]）。合併時暫停這些
-  /// 書的下載，記一筆書源搬家給同步。傳回真的併掉的網址。
+  /// 書的下載，記一筆書源搬家給同步；每個併掉的網址都發
+  /// [AppEventBus.sourceMoved]。傳回真的併掉的網址。
   Future<List<String>> mergeSources(List<String> from, String into) async {
     final books = [
       for (final url in from)
@@ -328,6 +334,12 @@ class BookSourceService {
       ], into);
     } finally {
       release?.call();
+    }
+    for (final url in merged) {
+      AppEventBus().fire(
+        AppEventBus.sourceMoved,
+        data: SourceMovedEvent(fromUrl: url, toUrl: into),
+      );
     }
     // 同步時別台照這份紀錄把併掉的書源的書搬過去（ADR 0039）。
     final moves = SourceMoves(await SharedPreferences.getInstance());

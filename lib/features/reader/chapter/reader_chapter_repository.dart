@@ -10,6 +10,7 @@ import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/models/book/chapter_alignment.dart';
@@ -92,7 +93,14 @@ class ReaderChapterRepository {
        currentChineseConvert = currentChineseConvert ?? (() => 0),
        currentShowIllustrations = currentShowIllustrations ?? (() => false),
        _chapters = List<BookChapter>.from(initialChapters),
-       _txtCheckedBefore = LocalBookService().txtChaptersChecked(book);
+       _origin = book.origin,
+       _txtCheckedBefore = LocalBookService().txtChaptersChecked(book) {
+    if (!book.isLocal) {
+      _moves = AppEventBus()
+          .onName(AppEventBus.sourceMoved)
+          .listen((event) => _followMove(event.data as SourceMovedEvent));
+    }
+  }
 
   final Book book;
   final BookDao bookDao;
@@ -123,6 +131,15 @@ class ReaderChapterRepository {
 
   List<BookChapter> _chapters;
   BookSource? _source;
+
+  /// 別處換了這本書的書源網址、這裡也換上之後呼叫（[_followMove]）：正文裡
+  /// 的插圖照書本資料夾的路徑排好，閱讀器照新網址重排畫面上的章。
+  void Function()? onOriginMoved;
+
+  /// 這裡抓章、讀正文用的書源網址。書可能和其他頁面共用、那邊先改了
+  /// [book] 的網址，照這個比對是不是這本書的書源搬家。
+  String _origin;
+  StreamSubscription<AppEvent>? _moves;
   static const int _maxContentCacheSize = 20;
   final Map<int, ReaderContent> _contentCache = <int, ReaderContent>{};
   final Map<int, Future<ReaderContent>> _contentInFlight =
@@ -718,6 +735,29 @@ class ReaderChapterRepository {
     }
   }
 
+  /// 書源從舊網址搬家（[AppEventBus.sourceMoved]）：資料庫裡這本書、已下載
+  /// 的正文與書本資料夾都已經改記新網址。照資料庫換上，之後的章照新書源抓、
+  /// 照新網址讀已下載的正文；照舊網址讀的書源與替換規則作廢。
+  Future<void> _followMove(SourceMovedEvent event) async {
+    if (_disposed || event.fromUrl != _origin) return;
+    _origin = event.toUrl;
+    final stored = await bookDao.getByUrl(book.bookUrl);
+    if (_disposed) return;
+    if (stored != null) {
+      book
+        ..origin = stored.origin
+        ..originName = stored.originName
+        ..coverLocalPath = stored.coverLocalPath
+        ..customCoverLocalPath = stored.customCoverLocalPath;
+    } else {
+      book.origin = event.toUrl;
+    }
+    _origin = book.origin;
+    _source = null;
+    _forgetEnabledRules();
+    onOriginMoved?.call();
+  }
+
   /// 規則表改過了：快取的規則清單作廢，下一章重新讀。
   void _forgetEnabledRules() {
     _rulesRevision += 1;
@@ -725,12 +765,14 @@ class ReaderChapterRepository {
     _enabledRulesInFlight = null;
   }
 
-  /// 不再用了（閱讀器關掉）：停止跟著規則表的變動。
+  /// 不再用了（閱讀器關掉）：停止跟著規則表的變動與書源搬家。
   void dispose() {
     _disposed = true;
     _retired = true;
     unawaited(_ruleChanges?.cancel());
     _ruleChanges = null;
+    unawaited(_moves?.cancel());
+    _moves = null;
   }
 
   bool _disposed = false;

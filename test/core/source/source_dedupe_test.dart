@@ -6,6 +6,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
@@ -138,8 +139,20 @@ void main() {
         ),
       );
 
+      final moves = <SourceMovedEvent>[];
+      final subscription = AppEventBus()
+          .onName(AppEventBus.sourceMoved)
+          .listen((event) => moves.add(event.data as SourceMovedEvent));
+      addTearDown(subscription.cancel);
+
       expect(await mergeDuplicateSources(), 1);
 
+      // 開著這本書的頁面照這則換成留下的書源。
+      await pumpEventQueue();
+      expect(
+        [for (final move in moves) (move.fromUrl, move.toUrl)],
+        [('https://site.example#b', 'https://site.example#a')],
+      );
       final left = await getIt<BookSourceDao>().getAllPart();
       expect(
         [for (final s in left) s.bookSourceUrl],

@@ -11,11 +11,14 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/playback/audio_focus.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/storage/book_chapter_files.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/features/audiobook/audiobook_page.dart';
@@ -142,6 +145,65 @@ void main() {
 
     await settle(tester);
     expect(find.text('第 1 集'), findsWidgets);
+    await close(tester);
+  });
+
+  testWidgets('a source moved elsewhere while playing: the episodes '
+      'downloaded under the new URL show as downloaded', (tester) async {
+    final book = _book();
+    world = _World(AppDatabase.forTesting(NativeDatabase.memory()));
+    final root = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('audiobook_moved'),
+    ))!;
+    addTearDown(() => root.deleteSync(recursive: true));
+    AppStoragePaths.useRoots((
+      documents: root.path,
+      support: root.path,
+      temporary: root.path,
+    ));
+    await tester.runAsync(() async {
+      await world.addSource();
+      await world.addBook(book);
+    });
+    await open(tester, book);
+    await settle(tester);
+    expect(find.byIcon(Icons.download_done_rounded), findsNothing);
+
+    const newUrl = 'https://audio-new.test';
+    await tester.runAsync(() async {
+      await world.sources.upsert(
+        BookSource(
+          bookSourceUrl: newUrl,
+          bookSourceName: '新書源',
+          bookSourceType: SourceType.audio,
+        ),
+      );
+      await world.books.moveOrigin(_sourceUrl, newUrl, toName: '新書源');
+      // 書本資料夾已經搬到新網址底下。
+      final moved = book.copyWith(origin: newUrl);
+      final dir = Directory(await BookChapterFiles.dirFor(moved));
+      await dir.create(recursive: true);
+      final first = BookChapter(
+        url: '$_sourceUrl/ep0',
+        title: '第 1 集',
+        bookUrl: book.bookUrl,
+      );
+      await File(BookChapterFiles.pathFor(dir.path, first, '.mp3'))
+          .writeAsString('x');
+      AppEventBus().fire(
+        AppEventBus.sourceMoved,
+        data: const SourceMovedEvent(fromUrl: _sourceUrl, toUrl: newUrl),
+      );
+    });
+    // 播放器換好書源後，播放頁照新網址讀書本資料夾。
+    for (var i = 0; i < 10; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+    }
+
+    expect(find.byIcon(Icons.download_done_rounded), findsOneWidget);
     await close(tester);
   });
 

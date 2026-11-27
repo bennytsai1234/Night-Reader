@@ -9,6 +9,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/book/book.dart';
@@ -125,7 +126,12 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
        _random = random ?? Random(),
        _now = now ?? DateTime.now {
     sleepTimer = SleepTimer(onExpired: () => unawaited(pause()), now: now);
+    _moves = AppEventBus()
+        .onName(AppEventBus.sourceMoved)
+        .listen((event) => _followMove(event.data as SourceMovedEvent));
   }
+
+  late final StreamSubscription<AppEvent> _moves;
 
   static AudiobookPlayer? _instance;
 
@@ -353,20 +359,43 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 這本書在播或暫停中。
   bool isCurrent(Book other) => _book?.bookUrl == other.bookUrl;
 
-  /// 播放頁進去編輯書源回來：書源可能改了網址，資料庫裡這本書已經改記新
-  /// 網址、書本資料夾也搬了。照資料庫換上，換集時才找得到已下載的集數。
+  /// 這本書的書源換了：播放頁進去編輯書源回來（網址或規則可能改了），或別處
+  /// 換了書源網址（[_followMove]）。資料庫裡這本書已經改記新網址、書本資料夾
+  /// 也搬了：照資料庫換上書與書源，換集時才找得到已下載的集數、照新書源抓；
+  /// 照舊書源預抓的下一集作廢，系統播放資訊照新的封面路徑重交。
   Future<void> reloadBookOrigin() async {
     final book = _book;
     if (book == null) return;
     final stored = await _books.getByUrl(book.bookUrl);
-    if (stored == null || !identical(book, _book)) return;
-    if (stored.origin == book.origin) return;
-    book
-      ..origin = stored.origin
-      ..originName = stored.originName
-      ..coverLocalPath = stored.coverLocalPath
-      ..customCoverLocalPath = stored.customCoverLocalPath;
+    if (!identical(book, _book)) return;
+    final source = await _sources.getByUrl(stored?.origin ?? book.origin);
+    if (!identical(book, _book)) return;
+    if (stored != null) {
+      book
+        ..origin = stored.origin
+        ..originName = stored.originName
+        ..coverLocalPath = stored.coverLocalPath
+        ..customCoverLocalPath = stored.customCoverLocalPath;
+    }
+    if (source != null) _source = source;
+    _prefetched = null;
     notifyListeners();
+    // 開書、載入這一集時不交：載好時才交（[_load]）。
+    if (_phase != AudiobookPhase.opening && _phase != AudiobookPhase.loading) {
+      _publish();
+    }
+  }
+
+  /// 別處換了書源網址：是這本書的書源就換上新的。書可能和其他頁面共用、那邊
+  /// 先改了網址，手上的書源還是舊的也算。
+  void _followMove(SourceMovedEvent event) {
+    final book = _book;
+    if (book == null) return;
+    if (book.origin != event.fromUrl &&
+        _source?.bookSourceUrl != event.fromUrl) {
+      return;
+    }
+    unawaited(reloadBookOrigin());
   }
 
   // --- 開書與選集 ---
@@ -655,7 +684,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       final request = await ReadingFetches.instance.track(
         () => _sourceService.getAudioRequest(source, book, _chapters[next]),
       );
-      if (generation == _generation) {
+      // 抓的期間換了書源（[reloadBookOrigin]）就不算。
+      if (generation == _generation && identical(source, _source)) {
         _prefetched = (index: next, request: request);
       }
     } catch (error) {
@@ -1254,6 +1284,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   @override
   void dispose() {
     _generation++;
+    unawaited(_moves.cancel());
     _lifecycle?.dispose();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
