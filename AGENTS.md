@@ -15,7 +15,6 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 工作重心是打磨現有功能（改進、UI 精修、互動、精簡、效能、相容性、重構）；全新的功能線要使用者明確提出，談定案時照 `docs/agents/new-feature.md` 走一遍觸點。取捨照 `DESIGN.md`，要違反先改對應的 ADR。評估需求時考量所有讀者，不以使用者本人需不需要為依據。
 書源、校驗、規則引擎該怎麼表現拿不準時，照 Legado 原始碼做（位置在 `docs/agents/environment.md`），不自己定標準；夜讀刻意不同的寫在 ADR。
-**到下一個正式版只收穩**：使用者提的新功能與新設定只在 `PLAN.md`「正式版之後」記一行、不開工，回覆裡說這是新功能；修錯、流暢、外觀的小修照做，使用者在對照 Legado 的清單上勾的選項也照做。階段在 `PLAN.md`，每一項定了什麼在 `docs/proposals/roadmap.md`。
 
 ## 開發設定
 
