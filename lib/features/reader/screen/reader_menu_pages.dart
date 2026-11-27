@@ -12,6 +12,7 @@ import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/storage/book_toc_reverser.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_departure.dart';
+import 'package:night_reader/features/reader/features/menu/reader_menu_panel.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_sheet.dart';
 import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_page.dart';
 import 'package:night_reader/features/reader/features/tts/reader_tts_sheet.dart';
@@ -543,28 +544,13 @@ final class ReaderMenuPages {
     );
   }
 
-  /// 從選單開面板：開著時上下選單與亮度條收起，正文整頁露出來（排版面板
-  /// 沒有暗色遮罩，邊調邊看）；面板關掉後回到選單打開的樣子。
-  ///
-  /// 選單從面板滑上來的下一格才開始滑出：面板的第一格要建整個面板的骨架，
-  /// 選單開始滑出那一格要重算整組選單的讀屏資訊，兩件事錯開一格（ADR 0029
-  /// 做法 4；擠在同一格時那一格多 1–2ms）。
-  void openPanel(Future<void> Function() open) {
-    var closed = false;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_mounted() && !closed) _host.menu.dismissControls();
-    });
-    WidgetsBinding.instance.ensureVisualUpdate();
-    unawaited(
-      open().whenComplete(() {
-        closed = true;
-        if (!_mounted() || !(pageRouteOf(_context())?.isCurrent ?? false)) {
-          return;
-        }
-        _host.menu.showControls();
-      }),
-    );
-  }
+  /// 從選單開面板，見 [openReaderMenuPanel]。
+  void openPanel(Future<void> Function() open) => openReaderMenuPanel(
+    _context(),
+    open: open,
+    hideMenu: _host.menu.dismissControls,
+    showMenu: _host.menu.showControls,
+  );
 
   Future<void> showTts() async {
     final tts = _host.tts;

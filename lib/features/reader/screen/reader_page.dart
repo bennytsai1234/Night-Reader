@@ -31,6 +31,7 @@ import 'package:night_reader/features/reader/use_cases/coordinators/reader_page_
 import 'package:night_reader/features/reader/session/reader_session_facade.dart';
 import 'package:night_reader/features/reader/features/brightness/reader_brightness.dart';
 import 'package:night_reader/features/reader/features/brightness/reader_brightness_bar.dart';
+import 'package:night_reader/features/reader/features/brightness/reader_dim_overlay.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_sheet.dart';
 import 'package:night_reader/features/reader/features/menu/reader_bottom_menu.dart';
 import 'package:night_reader/features/reader/screen/reader_chapters_drawer.dart';
@@ -380,7 +381,7 @@ class _ReaderPageState extends State<ReaderPage>
                 forward: volumeDown != settings.volumeKeyReversed,
               ),
             ),
-            child: _DimOverlay(
+            child: ReaderDimOverlay(
               dim: customBrightness
                   ? ReaderBrightness.dimFor(
                       settings.brightness,
@@ -854,26 +855,4 @@ class _NoChapterYet implements ValueListenable<int> {
 
   @override
   void removeListener(VoidCallback listener) {}
-}
-
-/// 亮度拉進加暗段時疊在整個閱讀畫面（含選單）上的黑色；不攔點擊。
-class _DimOverlay extends StatelessWidget {
-  const _DimOverlay({required this.dim, required this.child});
-
-  final double dim;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    if (dim <= 0) return child;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        child,
-        IgnorePointer(
-          child: ColoredBox(color: Colors.black.withValues(alpha: dim)),
-        ),
-      ],
-    );
-  }
 }

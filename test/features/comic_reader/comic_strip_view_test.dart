@@ -27,7 +27,7 @@ class _Harness {
   final ComicStripModel model;
   final ComicStripController controller = ComicStripController();
   final List<ComicLocation> locations = [];
-  final List<ComicTapRegion> taps = [];
+  final List<int> taps = [];
 
   ComicLocation get last => locations.last;
 
@@ -91,21 +91,6 @@ class _LockedSource extends FakeComicSource {
 }
 
 void main() {
-  test('點擊區域照 Mihon 的 L 形', () {
-    const size = Size(300, 900);
-    expect(
-      comicTapRegionOf(const Offset(250, 100), size),
-      ComicTapRegion.previous,
-    );
-    expect(
-      comicTapRegionOf(const Offset(50, 450), size),
-      ComicTapRegion.previous,
-    );
-    expect(comicTapRegionOf(const Offset(150, 450), size), ComicTapRegion.menu);
-    expect(comicTapRegionOf(const Offset(250, 450), size), ComicTapRegion.next);
-    expect(comicTapRegionOf(const Offset(50, 800), size), ComicTapRegion.next);
-  });
-
   // 文字閱讀器同樣的兩道（ReaderAutoPageController）：一幀最多推進 0.08 秒
   // 的量，退到背景就停。
   testWidgets('replacing the comic model preserves the image fraction', (
@@ -235,14 +220,19 @@ void main() {
     expect(harness.last, const ComicLocation(0, 0));
   });
 
-  testWidgets('點一下回報點擊區域；慣性滑動中按下去只停下來', (tester) async {
+  testWidgets('點一下回報點在九格的哪一格；慣性滑動中按下去只停下來', (tester) async {
     final harness = _Harness(FakeComicSource());
     await harness.pump(tester);
-    await tester.tapAt(const Offset(200, 400));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.tapAt(const Offset(200, 750));
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(harness.taps, [ComicTapRegion.menu, ComicTapRegion.next]);
+    for (final at in const [
+      Offset(200, 400),
+      Offset(200, 750),
+      Offset(10, 10),
+      Offset(390, 790),
+    ]) {
+      await tester.tapAt(at);
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+    expect(harness.taps, [4, 7, 0, 8]);
 
     await tester.fling(
       find.byType(ComicStripView),
@@ -252,7 +242,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 16));
     await tester.tapAt(const Offset(200, 400));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(harness.taps, hasLength(2));
+    expect(harness.taps, hasLength(4));
   });
 
   testWidgets('上面那張圖晚到、高度變了，畫面頂端看到的內容不動', (tester) async {

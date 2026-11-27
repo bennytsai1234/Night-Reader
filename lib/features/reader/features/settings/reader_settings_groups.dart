@@ -637,37 +637,41 @@ class ReaderSettingsGroups {
     ],
   );
 
-  bool get _clickActionsAreDefault {
-    final defaults = ReaderTapAction.defaultGrid();
-    for (var i = 0; i < defaults.length; i++) {
-      if (settings.clickActions[i] != defaults[i]) return false;
-    }
-    return true;
-  }
+  /// 九宮格點擊區域，見 [clickActionsOf]。
+  GroupedSection clickActions() => clickActionsOf(settings, margin: margin);
 
-  /// 九宮格點擊區域。
-  GroupedSection clickActions() => GroupedSection(
-    margin: margin,
-    children: [
-      GroupedContent(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: _Watch<List<int>>(
-          listenable: settings,
-          select: () => settings.clickActions,
-          builder: (context, actions) => _ClickActionGrid(
-            actions: actions,
-            onChanged: settings.setClickAction,
+  /// 九宮格點擊區域與最後一列「恢復預設」。閱讀偏好與漫畫閱讀器的「漫畫
+  /// 偏好」共用，改的是同一個值。
+  static GroupedSection clickActionsOf(
+    ReaderSettingsController settings, {
+    EdgeInsetsGeometry? margin,
+  }) {
+    bool isDefault() =>
+        listEquals(settings.clickActions, ReaderTapAction.defaultGrid());
+    return GroupedSection(
+      margin: margin,
+      children: [
+        GroupedContent(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: _Watch<List<int>>(
+            listenable: settings,
+            select: () => settings.clickActions,
+            builder: (context, actions) => _ClickActionGrid(
+              actions: actions,
+              onChanged: settings.setClickAction,
+            ),
           ),
         ),
-      ),
-      _Watch<bool>(
-        listenable: settings,
-        select: () => _clickActionsAreDefault,
-        builder: (context, isDefault) =>
-            _ResetRow(onPressed: isDefault ? null : settings.resetClickActions),
-      ),
-    ],
-  );
+        _Watch<bool>(
+          listenable: settings,
+          select: isDefault,
+          builder: (context, isDefault) => _ResetRow(
+            onPressed: isDefault ? null : settings.resetClickActions,
+          ),
+        ),
+      ],
+    );
+  }
 
   /// 音量鍵翻頁：音量下是下一頁、音量上是上一頁；打開「反向」時對調。
   GroupedSection volumeKey() => GroupedSection(

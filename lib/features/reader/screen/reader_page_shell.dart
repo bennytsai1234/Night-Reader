@@ -6,16 +6,13 @@ import 'package:flutter/foundation.dart'
     show ValueListenable, visibleForTesting;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/popups/popup_routes.dart';
 import 'package:intl/intl.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/features/reader/features/settings/reader_info_item.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_constants.dart';
-import 'package:night_reader/features/reader/features/brightness/reader_brightness_bar.dart';
 import 'package:night_reader/features/reader/features/menu/reader_bottom_menu.dart';
-import 'package:night_reader/features/reader/features/menu/reader_menu_entrance.dart';
-import 'package:night_reader/features/reader/features/menu/reader_menu_style.dart';
+import 'package:night_reader/features/reader/features/menu/reader_menu_layout.dart';
 import 'package:night_reader/features/reader/features/menu/reader_top_menu.dart';
 import 'package:night_reader/core/playback/sleep_timer.dart';
 import 'package:night_reader/features/reader/text_view/core/progress_snapshot.dart';
@@ -432,74 +429,50 @@ class ReaderPageShell extends StatelessWidget {
                   ),
                 ),
                 Positioned.fill(
-                  child: CustomMultiChildLayout(
-                    delegate: _MenuLayoutDelegate(
-                      brightnessSide: brightnessSide,
+                  child: ReaderMenuLayout(
+                    controlsVisible: controlsVisible,
+                    brightnessSide: brightnessSide,
+                    top: ReaderTopMenu(
+                      horizontalInset: menuInset,
+                      controlsVisible: controlsVisible,
+                      bookName: context.zh(book.name),
+                      navigation: navigation,
+                      originName: originName,
+                      onOpenOrigin: onOpenOrigin,
+                      showReadTitleAddition: showReadTitleAddition,
+                      onBack: onExitIntent,
+                      onMore: onMore,
                     ),
-                    children: [
-                      LayoutId(
-                        id: _MenuSlot.top,
-                        child: ReaderTopMenu(
-                          horizontalInset: menuInset,
-                          controlsVisible: controlsVisible,
-                          bookName: context.zh(book.name),
-                          navigation: navigation,
-                          originName: originName,
-                          onOpenOrigin: onOpenOrigin,
-                          showReadTitleAddition: showReadTitleAddition,
-                          onBack: onExitIntent,
-                          onMore: onMore,
-                        ),
-                      ),
-                      LayoutId(
-                        id: _MenuSlot.bottom,
-                        child: ReaderBottomMenu(
-                          horizontalInset: menuInset,
-                          controlsVisible: controlsVisible,
-                          navigation: navigation,
-                          isAutoPaging: isAutoPaging,
-                          dayNightIcon: dayNightIcon,
-                          dayNightTooltip: dayNightTooltip,
-                          onOpenDrawer: onOpenDrawer,
-                          onTts: onTts,
-                          onTimedTts: onTimedTts,
-                          onInterface: onInterface,
-                          onSettings: onSettings,
-                          onAutoPage: onAutoPage,
-                          onToggleDayNight: onToggleDayNight,
-                          onReplaceRule: onReplaceRule,
-                          onAutoPageSettings: onAutoPageSettings,
-                          onReplaceRuleSettings: onReplaceRuleSettings,
-                          onStopTts: onStopTts,
-                          onDayNightSettings: onDayNightSettings,
-                          onPrevChapter: onPrevChapter,
-                          onNextChapter: onNextChapter,
-                          onScrubStart: onScrubStart,
-                          onScrubbing: onScrubbing,
-                          onScrubEnd: onScrubEnd,
-                          progressListenable: progressListenable,
-                          sleepTimer: sleepTimer,
-                          ttsPhase: ttsPhase,
-                          onHidden: onMenuHidden,
-                        ),
-                      ),
-                      if (brightnessControl case final control?)
-                        LayoutId(
-                          id: _MenuSlot.brightness,
-                          child: ReaderMenuEntrance(
-                            visible: controlsVisible,
-                            edge: AxisDirection.left,
-                            // 滑出畫面的距離照它離左邊多遠。
-                            gap: brightnessSide,
-                            // 比上下選單晚一點出發，三塊錯開。
-                            delay: AppMotion.readerMenuStagger,
-                            child: DerivedTheme(
-                              derive: ReaderMenuStyle.menuThemeOf,
-                              child: control,
-                            ),
-                          ),
-                        ),
-                    ],
+                    bottom: ReaderBottomMenu(
+                      horizontalInset: menuInset,
+                      controlsVisible: controlsVisible,
+                      navigation: navigation,
+                      isAutoPaging: isAutoPaging,
+                      dayNightIcon: dayNightIcon,
+                      dayNightTooltip: dayNightTooltip,
+                      onOpenDrawer: onOpenDrawer,
+                      onTts: onTts,
+                      onTimedTts: onTimedTts,
+                      onInterface: onInterface,
+                      onSettings: onSettings,
+                      onAutoPage: onAutoPage,
+                      onToggleDayNight: onToggleDayNight,
+                      onReplaceRule: onReplaceRule,
+                      onAutoPageSettings: onAutoPageSettings,
+                      onReplaceRuleSettings: onReplaceRuleSettings,
+                      onStopTts: onStopTts,
+                      onDayNightSettings: onDayNightSettings,
+                      onPrevChapter: onPrevChapter,
+                      onNextChapter: onNextChapter,
+                      onScrubStart: onScrubStart,
+                      onScrubbing: onScrubbing,
+                      onScrubEnd: onScrubEnd,
+                      progressListenable: progressListenable,
+                      sleepTimer: sleepTimer,
+                      ttsPhase: ttsPhase,
+                      onHidden: onMenuHidden,
+                    ),
+                    brightness: brightnessControl,
                   ),
                 ),
               ],
@@ -509,44 +482,6 @@ class ReaderPageShell extends StatelessWidget {
       ),
     );
   }
-}
-
-enum _MenuSlot { top, bottom, brightness }
-
-/// 上下選單貼齊畫面上下緣；亮度條離左邊 [brightnessSide]，撐滿兩者之間的
-/// 空間、上下各留 [AppSpacing.xl]，在上下選單之間置中。空間不夠時亮度條
-/// 自己不畫（[ReaderBrightnessBar.minHeight]）。
-class _MenuLayoutDelegate extends MultiChildLayoutDelegate {
-  _MenuLayoutDelegate({required this.brightnessSide});
-
-  final double brightnessSide;
-
-  @override
-  void performLayout(Size size) {
-    final loose = BoxConstraints.loose(size).copyWith(minWidth: size.width);
-    final top = layoutChild(_MenuSlot.top, loose);
-    positionChild(_MenuSlot.top, Offset.zero);
-    final bottom = layoutChild(_MenuSlot.bottom, loose);
-    positionChild(_MenuSlot.bottom, Offset(0, size.height - bottom.height));
-    if (!hasChild(_MenuSlot.brightness)) return;
-    final available =
-        size.height - top.height - bottom.height - AppSpacing.xl * 2;
-    layoutChild(
-      _MenuSlot.brightness,
-      BoxConstraints.tightFor(
-        width: AppGlass.buttonSize,
-        height: available < 0 ? 0 : available,
-      ),
-    );
-    positionChild(
-      _MenuSlot.brightness,
-      Offset(brightnessSide, top.height + AppSpacing.xl),
-    );
-  }
-
-  @override
-  bool shouldRelayout(_MenuLayoutDelegate oldDelegate) =>
-      oldDelegate.brightnessSide != brightnessSide;
 }
 
 /// 頁首頁尾資訊列目前要畫什麼。

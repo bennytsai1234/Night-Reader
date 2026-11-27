@@ -161,4 +161,46 @@ void main() {
     expectNoGlassUnderFade(tester);
     await tearDownApp(tester);
   });
+
+  testWidgets('亮度條拖進加暗段時疊上黑層，正文不重掛', (tester) async {
+    setUpPhone(tester);
+    await tester.runAsync(() async {
+      await setUpApp();
+      await seedLibrary();
+    });
+    await pumpApp(tester);
+    await openReader(tester);
+    await rest(tester);
+    await tester.tapAt(const Offset(196, 420));
+    await rest(tester);
+
+    final rect = tester.getRect(find.byType(ReaderBrightnessBar));
+    final text = tester.state(find.byType(ReaderTextView));
+    final gesture = await tester.startGesture(
+      Offset(rect.center.dx, rect.top + rect.height * 0.6),
+    );
+    for (var i = 1; i <= 8; i++) {
+      await gesture.moveTo(
+        Offset(rect.center.dx, rect.top + rect.height * (0.6 + 0.05 * i)),
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await gesture.up();
+    await tester.pump();
+    expect(
+      tester
+          .widgetList<ColoredBox>(find.byType(ColoredBox))
+          .where(
+            (box) => box.color.a > 0 && box.color.toARGB32() & 0xFFFFFF == 0,
+          ),
+      isNotEmpty,
+      reason: '拉到加暗段疊上一層黑',
+    );
+    expect(
+      identical(tester.state(find.byType(ReaderTextView)), text),
+      isTrue,
+      reason: '跨過加暗段那條線時正文不重掛',
+    );
+    await tearDownApp(tester);
+  });
 }

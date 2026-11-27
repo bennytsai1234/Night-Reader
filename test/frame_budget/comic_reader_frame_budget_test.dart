@@ -1,5 +1,5 @@
 // 漫畫閱讀器（ADR 0052）：開閱讀器、手指拖著捲過換章分隔再放手慣性滑、
-// 叫出選單按「下一話」跳章（骨架換成圖淡入），每一幀的成本。用法見
+// 叫出與收起選單（上下選單與亮度條）、叫出選單按「下一話」跳章（骨架換成圖淡入），每一幀的成本。用法見
 // `test/support/frame_budget.dart`；帶 `frame_budget` 標籤，平常的全套測試
 // 跳過。圖從記憶體來（每種顏色只產生一次），解碼在引擎的執行緒；App 裡的
 // 讀檔、抓圖在背景 isolate，這裡不算。
@@ -16,6 +16,7 @@ import 'package:night_reader/features/comic_reader/comic_reader_page.dart';
 import 'package:night_reader/features/comic_reader/comic_strip_view.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 
 import '../features/comic_reader/comic_test_pages.dart';
 import '../support/app_harness.dart';
@@ -77,6 +78,13 @@ bool _scrolling() => find
     .evaluate()
     .map((e) => (e as StatefulElement).state as ScrollableState)
     .any((s) => s.position.isScrollingNotifier.value);
+
+/// 畫面上每一塊滑進滑出的玻璃（上下選單、亮度條）都停在 [shown]。
+bool _glassAt(double shown) {
+  final slides = find.byType(GlassSlide).evaluate();
+  return slides.isNotEmpty &&
+      slides.every((e) => (e.widget as GlassSlide).shown == shown);
+}
 
 void main() {
   setUpAll(loadScreenshotFonts);
@@ -142,6 +150,24 @@ void main() {
         settled: () => fling.released && !_scrolling(),
         note: () => fling.released ? '慣性' : '拖動',
         onFrame: fling.onFrame,
+      );
+      await rest(tester);
+
+      // 選單與亮度條滑入、滑出。
+      await measureNavigation(
+        tester,
+        '$round 叫出漫畫選單',
+        action: () => tester.tapAt(centre),
+        settled: () => _glassAt(1),
+        note: () => '選單滑入',
+      );
+      await rest(tester);
+      await measureNavigation(
+        tester,
+        '$round 收起漫畫選單',
+        action: () => tester.tapAt(centre),
+        settled: () => _glassAt(0),
+        note: () => '選單滑出',
       );
       await rest(tester);
 
