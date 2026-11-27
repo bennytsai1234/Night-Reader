@@ -2,18 +2,13 @@
 
 一條一行：做什麼、為什麼。開工時在那條後面加「（分支 xxx）」，直接在 `beta` 上做的寫「（主線）」；做完刪掉那一行。分支上這次的步驟寫在分支的 `TODO.md`。
 
-照下面三段的順序做，一段做完才接下一段。
+照下面兩段的順序做，一段做完才接下一段。
 
-## 一、收尾小修
-
-- **同步的暫存檔同時寫兩次會失敗，與只在 Windows 失敗的測試**：存「上次同步的樣子」的檔每次都用同一個暫存檔名（`lib/core/sync/sync_base_storage.dart` 的 `writeJson`），同一種資料同時寫兩次時第二次一定失敗（Linux 上 200 輪 200 輪都失敗，2026-11-28），Windows 上 `local_book_sync_test` 的「改名被拒」可能就是它；先查 App 會不會同時寫，會就改成每次各用一個暫存檔名（同 `paused_work_file.dart`）。其餘只在 Windows 失敗的（Big5／GB18030 的 TXT 在 `txt_parser_test`、`epub_parser_test` 清理時檔案還開著刪不掉，`ai_repair_log_test` 原因沒查，整批跑偶爾失敗的 `background_search_test`、`reading_stats_view_test`）不刪，改成只在 Windows 跳過、CI 照跑。（分支 fix/sync-temp-write-windows-tests，Windows 那台在做）
-- **補審 11-24 那批 PR 時留下的罕見情境**（DeepSeek 2026-11-26，都要好幾個條件同時成立）：封面只照網址認，兩個書源共用同一個封面網址、解密不同時可能用錯；封面規則用 `@js:` 回帶 `{{…}}` 的網址又沒有標頭時照字面抓；網站檢查在很短的首頁上會跟到包在註解、點擊或沒大括號 if 裡的轉址；同網站套用修好的規則或 AI 修復放棄時，校驗途中寫的登入標頭留在沒採用的書源；換書源網址或合併重複書源後，開著的詳情、文字書與漫畫閱讀器、背景播放器手上的書仍是舊網址。（分支 fix/cover-source-key-and-template、fix/site-check-redirect-and-login-header、fix/source-move-open-pages）
-
-## 二、重新打造巡檢
+## 一、重新打造巡檢
 
 - **重新打造巡檢**：每日的自動巡檢關著；重新設計它怎麼跑，定案前排程維持關著。
 
-## 三、新功能
+## 二、新功能
 
 - **和 Legado 對照，盤點夜讀還缺哪些功能**：使用者 2026-11-23 發現「重新分段」沒有開關才提的；列出 Legado 有、夜讀完全沒有的，給使用者挑。
 - **App 內清除快取**：使用者 2026-11-26 同意做，入口上寫明會刪掉什麼、不會動什麼（書架上的書、閱讀進度、已下載的章節）。
