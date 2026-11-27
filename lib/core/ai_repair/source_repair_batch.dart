@@ -633,8 +633,9 @@ class SourceRepairBatch extends ChangeNotifier {
   /// 校驗 [candidate]，通過（或只剩原本就壞的發現頁）就存進去，傳回存了沒。
   ///
   /// 候選書源（換了網址、套用同網站修好的規則）還沒採用：校驗時規則存的
-  /// 變數寫在它自己的一份草稿（[BaseSource.inDraftVariables]，同 AI 修書源），
-  /// 存好了才寫回改過的，沒採用就丟掉。
+  /// 變數、登入資訊與登入標頭寫在它自己的一份草稿
+  /// （[BaseSource.inDraftVariables]，同 AI 修書源），存好了才寫回改過的，
+  /// 沒採用就丟掉。
   Future<bool> _passes(RepairItem item, BookSource candidate) async {
     if (_halting) return false;
     final draft = const Uuid().v4();
