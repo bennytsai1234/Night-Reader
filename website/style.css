@@ -132,7 +132,7 @@ h1, h2, h3, p { text-wrap: balance; }
 .ended .replay { opacity: 1; pointer-events: auto; }
 
 /* 疊在一起的幾張，由 .on 決定顯示哪一張。 */
-.stack > * { opacity: 0; transition: opacity 0.45s linear; }
+.js .stack > * { opacity: 0; transition: opacity 0.45s linear; }
 .stack > .on { opacity: 1; }
 
 /* 小膠囊按鈕：切換前後、白天晚上 */
@@ -160,7 +160,7 @@ h1, h2, h3, p { text-wrap: balance; }
 /* ---------- 功能：一列一個，整頁一左一右（.flip 由 script.js 照整頁的順序加） ---------- */
 .feature { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center; padding: 72px 0; }
 .feature.flip .shots { order: 2; }
-.feature h3 { font-size: 34px; line-height: 1.3; margin: 0 0 14px; font-weight: 700; letter-spacing: 0.06em; }
+.feature h2 { font-size: 34px; line-height: 1.3; margin: 0 0 14px; font-weight: 700; letter-spacing: 0.06em; }
 .feature p { font-size: 18px; color: var(--muted); margin: 0; max-width: 20em; }
 .shots { position: relative; display: flex; justify-content: center; }
 .feature .text { justify-self: start; }
@@ -170,7 +170,7 @@ h1, h2, h3, p { text-wrap: balance; }
 
 /* 最後一段只有字：置中 */
 .source-note { max-width: 30em; margin: 24px auto 0; padding: 48px 0 0; text-align: center; }
-.source-note h3 { font-size: 26px; font-weight: 600; letter-spacing: 0.1em; margin: 0 0 12px; }
+.source-note h2 { font-size: 26px; font-weight: 600; letter-spacing: 0.1em; margin: 0 0 12px; }
 .source-note p { font-size: 17px; color: var(--muted); margin: 0; }
 
 /* ---------- 風格：白天晚上的切換，加兩排風格卡（照 App「外觀與主題」的樣子） ---------- */
@@ -233,7 +233,7 @@ footer a:hover { color: var(--text); }
   .feature { grid-template-columns: 1fr; gap: 30px; padding: 48px 0; text-align: center; }
   .feature.flip .shots { order: 0; }
   .feature .text { order: -1; justify-self: center !important; }
-  .feature h3 { font-size: 26px; }
+  .feature h2 { font-size: 26px; }
   .feature p { font-size: 16px; margin: 0 auto; }
   .swatches { justify-content: center; gap: 8px; }
   .swatches i { width: 40px; height: 52px; }
