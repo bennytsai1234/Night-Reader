@@ -39,25 +39,11 @@ class ComicLocation {
   String toString() => 'ComicLocation($chapterIndex, $pageIndex, $fraction)';
 }
 
-/// 點擊區域（照 Mihon 的 L 形 `LNavigation`）。
-enum ComicTapRegion { previous, menu, next }
-
-/// 條漫上的點擊區域：上排與左中是上一屏，右中與下排是下一屏，正中間是選單。
-ComicTapRegion comicTapRegionOf(Offset position, Size size) {
-  final x = position.dx / size.width;
-  final y = position.dy / size.height;
-  if (y < 0.33) return ComicTapRegion.previous;
-  if (y >= 0.66) return ComicTapRegion.next;
-  if (x < 0.33) return ComicTapRegion.previous;
-  if (x >= 0.66) return ComicTapRegion.next;
-  return ComicTapRegion.menu;
-}
-
-/// 外面對條漫下的指令：往上下捲一屏、自動捲動。
+/// 外面對條漫下的指令：往上下捲四分之三屏、自動捲動。
 class ComicStripController {
   _ComicStripViewState? _state;
 
-  /// 往下（[forward]）或往上捲一屏的四分之三（同 Mihon）。
+  /// 往下（[forward]）或往上捲一屏的四分之三（同 Mihon）；自動捲動中先停下。
   void scrollByScreen({required bool forward}) =>
       _state?._scrollByScreen(forward: forward);
 
@@ -103,8 +89,9 @@ class ComicStripView extends StatefulWidget {
   /// 畫面頂端讀到的地方變了。
   final ValueChanged<ComicLocation> onLocation;
 
-  /// 點了一下（已扣掉點兩下）。點擊區域由呼叫端決定要做什麼。
-  final ValueChanged<ComicTapRegion> onTap;
+  /// 點了一下（已扣掉點兩下），參數是點在三乘三九格的哪一格（左上 0、
+  /// 右下 8，照文字閱讀器的切法）。那一格做什麼由呼叫端照點擊區域決定。
+  final ValueChanged<int> onTap;
 
   /// 第幾話的章名。
   final String Function(int chapterIndex) titleOf;
@@ -602,13 +589,17 @@ class _ComicStripViewState extends State<ComicStripView>
 
   void _onPointerDown(PointerDownEvent event) {
     _restoring = null;
-    // 慣性滑動中按下去只停下來，不算點擊（同 Mihon）。
+    // 慣性滑動或自動捲動中按下去只停下來，不算點擊（同 Mihon）：點擊區域
+    // 是「自動翻頁」時，停了不會放開時又開回來。
     _tapStoppedScroll = false;
     if (_scroll.hasClients && _scroll.position.isScrollingNotifier.value) {
       _tapStoppedScroll = true;
       if (_drag == null) _scroll.comicPosition.goIdle();
     }
-    if (_autoScroll?.isActive ?? false) _stopAutoScroll();
+    if (_autoScroll?.isActive ?? false) {
+      _tapStoppedScroll = true;
+      _stopAutoScroll();
+    }
   }
 
   void _onScaleStart(ScaleStartDetails details) {
@@ -702,7 +693,10 @@ class _ComicStripViewState extends State<ComicStripView>
 
   void _onTapUp(TapUpDetails details) {
     if (_tapStoppedScroll) return;
-    widget.onTap(comicTapRegionOf(details.localPosition, _screen));
+    final at = details.localPosition;
+    final row = (at.dy / (_screen.height / 3)).floor().clamp(0, 2);
+    final column = (at.dx / (_screen.width / 3)).floor().clamp(0, 2);
+    widget.onTap(row * 3 + column);
   }
 
   void _onDoubleTap() {
@@ -763,6 +757,8 @@ class _ComicStripViewState extends State<ComicStripView>
 
   void _scrollByScreen({required bool forward}) {
     if (!_scroll.hasClients) return;
+    // 音量鍵不經過按下，自動捲動要在這裡停，不然它會蓋掉這一捲。
+    _stopAutoScroll();
     final distance = _screen.height * 0.75 / _scale;
     final position = _scroll.position;
     final target = (position.pixels + (forward ? distance : -distance))

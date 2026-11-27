@@ -30,13 +30,23 @@ import 'package:night_reader/core/comic/local_comic_service.dart';
 import 'package:night_reader/core/source_switch/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
+import 'package:night_reader/features/reader/features/brightness/reader_brightness.dart';
+import 'package:night_reader/features/reader/features/brightness/reader_brightness_bar.dart';
+import 'package:night_reader/features/reader/features/brightness/reader_dim_overlay.dart';
 import 'package:night_reader/features/reader/features/menu/reader_bottom_menu.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_controller.dart';
+import 'package:night_reader/features/reader/features/menu/reader_menu_layout.dart';
+import 'package:night_reader/features/reader/features/menu/reader_menu_panel.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_sheet.dart';
+import 'package:night_reader/features/reader/features/menu/reader_tap_action.dart';
 import 'package:night_reader/features/reader/features/menu/reader_top_menu.dart';
+import 'package:night_reader/features/reader/features/settings/comic_paper_tint.dart';
 import 'package:night_reader/features/reader/features/settings/reader_settings_controller.dart';
+import 'package:night_reader/features/reader/features/settings/reader_settings_groups.dart';
 import 'package:night_reader/features/reader/screen/reader_chapters_drawer.dart';
+import 'package:night_reader/features/reader/screen/reader_device_channel.dart';
 import 'package:night_reader/features/reader/screen/reader_side_panel.dart';
+import 'package:night_reader/features/reader/screen/reader_volume_keys.dart';
 import 'package:night_reader/features/reader/screen/reader_window_settings.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
@@ -63,8 +73,9 @@ import 'comic_strip_view.dart';
 import 'network_comic_page_source.dart';
 
 /// 漫畫閱讀器（ADR 0052、`docs/design/comics.md`）：條漫加上閱讀選單。
-/// 平常只有圖，點中間叫出選單；進度記「第幾話第幾張」（`Book.charOffset`
-/// 是第幾張，`visualOffsetPx` 是在那張讀到幾成，只用在這台回到原處）。
+/// 平常只有圖，點一下照閱讀偏好的點擊區域叫出選單或捲動；進度記「第幾話
+/// 第幾張」（`Book.charOffset` 是第幾張，`visualOffsetPx` 是在那張讀到幾成，
+/// 只用在這台回到原處）。
 class ComicReaderPage extends StatefulWidget {
   const ComicReaderPage({
     super.key,
@@ -119,6 +130,20 @@ class _ComicReaderPageState extends State<ComicReaderPage>
   ComicStripModel? _model;
   double _initialFraction = 0;
   Object? _loadError;
+
+  /// 條漫畫出來時用到的設定：紙色與章名的繁簡。只有這兩項變了才重建條漫
+  /// 與選單，拖亮度條這類每幀都通知的設定不重建它們。
+  late ({ComicPaperTint tint, int chineseConvert}) _stripLook;
+
+  ({ComicPaperTint tint, int chineseConvert}) get _stripLookNow => (
+    tint: _settings.comicPaperTint,
+    chineseConvert: _settings.chineseConvert,
+  );
+
+  void _onSettings() {
+    final next = _stripLookNow;
+    if (next != _stripLook) setState(() => _stripLook = next);
+  }
 
   late final _progressWrites = ProgressWriteQueue<ComicLocation>(
     write: _save,
@@ -175,6 +200,8 @@ class _ComicReaderPageState extends State<ComicReaderPage>
         _refreshProgress(behind.chapterIndex, behind.pageIndex);
       }
     });
+    _stripLook = _stripLookNow;
+    _settings.addListener(_onSettings);
     unawaited(_settings.loadSettings());
     // 點書當下就開始抓雲端進度，換頁動畫播完時不用再等一次。
     _sync.prefetch();
@@ -187,7 +214,9 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     _sync.dispose();
     _inUse.release();
     _model?.dispose();
-    _settings.dispose();
+    _settings
+      ..removeListener(_onSettings)
+      ..dispose();
     _menuVisible.dispose();
     _autoScrolling.dispose();
     _currentChapter.dispose();
@@ -401,19 +430,42 @@ class _ComicReaderPageState extends State<ComicReaderPage>
 
   // ─── 操作 ───────────────────────────────────────────────────────────
 
-  void _onTap(ComicTapRegion region) {
+  /// 點了條漫九格的第 [zone] 格：照閱讀偏好的點擊區域（和文字閱讀器同一個
+  /// 值）。上一頁、下一頁是捲四分之三屏，上一章、下一章是上一話、下一話；
+  /// 漫畫沒有字可以朗讀，「朗讀」當成喚起選單。選單開著時點哪裡都是收起。
+  void _onTap(int zone) {
     if (_menuVisible.value) {
       _menuVisible.value = false;
       return;
     }
-    switch (region) {
-      case ComicTapRegion.menu:
+    final actions = _settings.clickActions;
+    final action = zone >= 0 && zone < actions.length
+        ? ReaderTapAction.fromCode(actions[zone])
+        : ReaderTapAction.menu;
+    switch (action) {
+      case ReaderTapAction.menu:
+      case ReaderTapAction.toggleTts:
         _menuVisible.value = true;
-      case ComicTapRegion.previous:
+      case ReaderTapAction.prevPage:
         _strip.scrollByScreen(forward: false);
-      case ComicTapRegion.next:
+      case ReaderTapAction.nextPage:
         _strip.scrollByScreen(forward: true);
+      case ReaderTapAction.prevChapter:
+        _jumpRelative(forward: false);
+      case ReaderTapAction.nextChapter:
+        _jumpRelative(forward: true);
+      case ReaderTapAction.openChapters:
+        _openChapters();
+      case ReaderTapAction.toggleAutoPage:
+        _toggleAutoScroll();
+      case ReaderTapAction.toggleDayNight:
+        _toggleDayNight();
     }
+  }
+
+  void _openChapters() {
+    _menuVisible.value = false;
+    _chapterPanel.open();
   }
 
   void _jumpTo(int chapterIndex, {int pageIndex = 0}) {
@@ -434,7 +486,8 @@ class _ComicReaderPageState extends State<ComicReaderPage>
   }
 
   /// 上一話、下一話：跳過分卷標題與付費章節（[BookChapter.isSkippedWhenReading]）。
-  /// 這一側沒有能讀的話時，還有章節就是都要付費（ADR 0057）。
+  /// 這一側沒有能讀的話時，還有付費章節就是都要付費（ADR 0057），不然就是
+  /// 到頭了。
   void _jumpRelative({required bool forward}) {
     final model = _model;
     if (model == null) return;
@@ -449,9 +502,13 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     final rest = forward
         ? _chapters.skip(current + 1)
         : _chapters.take(current);
-    if (rest.any((chapter) => chapter.isLocked)) {
-      _showNotice(lockedChapterNotice);
-    }
+    _showNotice(
+      rest.any((chapter) => chapter.isLocked)
+          ? lockedChapterNotice
+          : forward
+          ? '已經是最後一話'
+          : '已經是第一話',
+    );
   }
 
   /// 正文已經在畫面上之後才抓到另一台較新的進度：先問要不要跳過去。
@@ -543,34 +600,22 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     );
   }
 
-  Future<void> _openPreferences() => ReaderMenuSheet.show<void>(
+  /// 漫畫偏好：開著時上下選單與亮度條收起，關掉後回到選單打開的樣子
+  /// （同文字閱讀器的面板）。
+  void _openPreferences() => openReaderMenuPanel(
     context,
-    settings: _settings,
-    builder: (context) => ReaderSheetScaffold(
-      title: '漫畫偏好',
-      children: [
-        NumberStepperRow(
-          label: '自動捲動速度',
-          value: _settings.autoPageSpeed,
-          min: ReaderSettingsController.minAutoPageSpeed,
-          max: ReaderSettingsController.maxAutoPageSpeed,
-          step: 0.01,
-          displayScale: 100,
-          unit: '%',
-          onChanged: (speed) {
-            _settings.setAutoPageSpeed(speed);
-            if (_autoScrolling.value) _strip.setAutoScroll(speed);
-          },
-        ),
-        GroupedSection(
-          header: '深色時的紙色',
-          margin: EdgeInsets.zero,
-          children: [
-            GroupedContent(child: ComicPaperTintRow(settings: _settings)),
-          ],
-        ),
-      ],
+    open: () => ReaderMenuSheet.show<void>(
+      context,
+      settings: _settings,
+      builder: (context) => _ComicPreferencesSheet(
+        settings: _settings,
+        onAutoScrollSpeed: (speed) {
+          if (_autoScrolling.value) _strip.setAutoScroll(speed);
+        },
+      ),
     ),
+    hideMenu: () => _menuVisible.value = false,
+    showMenu: () => _menuVisible.value = true,
   );
 
   Future<void> _showMore() async {
@@ -857,45 +902,78 @@ class _ComicReaderPageState extends State<ComicReaderPage>
   Widget build(BuildContext context) {
     final palette = StylePalette.of(context);
     final dark = palette.brightness == Brightness.dark;
+    // 條漫與選單只隨 [_stripLook] 重建；設定的其他變動只重建外面這幾層
+    // （狀態列、背光、音量鍵、加暗），拖亮度條時條漫不重建。
+    final page = PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (_chapterPanel.isOnScreen) {
+          _chapterPanel.close();
+        } else if (_menuVisible.value) {
+          _menuVisible.value = false;
+        } else {
+          unawaited(_exit());
+        }
+      },
+      child: Scaffold(
+        backgroundColor: palette.readerBackground,
+        body: _buildBody(context, palette, dark),
+      ),
+    );
     return ListenableBuilder(
       listenable: _settings,
-      builder: (context, _) => StatusBarHidden(
-        hidden: _settings.hideStatusBar,
-        hideNavigationBar: _settings.hideNavigationBar,
-        child: AnnotatedRegion<SystemUiOverlayStyle>(
-          value: SystemUiOverlayStyle(
-            statusBarColor: Colors.transparent,
-            statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
-            statusBarBrightness: dark ? Brightness.dark : Brightness.light,
-            systemNavigationBarColor: Colors.transparent,
-            systemNavigationBarIconBrightness: dark
-                ? Brightness.light
-                : Brightness.dark,
-          ),
-          child: ReaderWindowSettings(
-            keepScreenOn: _settings.keepScreenOn,
-            backlight: null,
-            orientation: _settings.orientation,
-            child: PopScope(
-              canPop: false,
-              onPopInvokedWithResult: (didPop, _) {
-                if (didPop) return;
-                if (_chapterPanel.isOnScreen) {
-                  _chapterPanel.close();
-                } else if (_menuVisible.value) {
-                  _menuVisible.value = false;
-                } else {
-                  unawaited(_exit());
-                }
-              },
-              child: Scaffold(
-                backgroundColor: palette.readerBackground,
-                body: _buildBody(context, palette, dark),
+      child: page,
+      builder: (context, page) {
+        final customBrightness =
+            !_settings.brightnessAuto &&
+            ReaderDeviceChannel.supportsWindowBrightness;
+        return StatusBarHidden(
+          hidden: _settings.hideStatusBar,
+          hideNavigationBar: _settings.hideNavigationBar,
+          child: AnnotatedRegion<SystemUiOverlayStyle>(
+            value: SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: dark
+                  ? Brightness.light
+                  : Brightness.dark,
+              statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+              systemNavigationBarColor: Colors.transparent,
+              systemNavigationBarIconBrightness: dark
+                  ? Brightness.light
+                  : Brightness.dark,
+            ),
+            child: ReaderWindowSettings(
+              keepScreenOn: _settings.keepScreenOn,
+              backlight: customBrightness
+                  ? ReaderBrightness.backlightFor(_settings.brightness)
+                  : null,
+              orientation: _settings.orientation,
+              // 音量鍵翻頁同文字閱讀器（閱讀偏好的同一個開關）：選單、目錄
+              // 開著，或漫畫還沒開好時照常調音量。
+              child: ReaderVolumeKeys(
+                enabled:
+                    _settings.volumeKeyPage &&
+                    ReaderDeviceChannel.supportsVolumeKeys &&
+                    _model != null,
+                blockers: [_menuVisible, _chapterPanel.shown],
+                onKey: (volumeDown) => _strip.scrollByScreen(
+                  forward: volumeDown != _settings.volumeKeyReversed,
+                ),
+                child: ReaderDimOverlay(
+                  dim: customBrightness
+                      ? ReaderBrightness.dimFor(
+                          _settings.brightness,
+                          maxDim: _settings.maxDim,
+                        )
+                      : 0,
+                  child: page!,
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -981,49 +1059,56 @@ class _ComicReaderPageState extends State<ComicReaderPage>
               webUrlOpener: (url) => unawaited(_openWeb(url)),
               remedyFor: (error) =>
                   SourceFailureRemedy.of(error.toString(), _source),
-              pageTint: dark ? _settings.comicPaperTint.color : null,
+              pageTint: dark ? _stripLook.tint.color : null,
             ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            child: ReaderTopMenu(
+          Positioned.fill(
+            child: ReaderMenuLayout(
               controlsVisible: _menuVisible,
-              bookName: context.zh(_book.name),
-              navigation: navigation,
-              // 本地漫畫同本地書寫「本地」（ADR 0059），不能點。
-              originName: _book.isLocal ? '本地' : _book.originName,
-              onOpenOrigin: _book.isLocal ? null : _openChapterWeb,
-              showReadTitleAddition: true,
-              onBack: () => unawaited(_exit()),
-              onMore: () => unawaited(_showMore()),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: ComicReaderBottomMenu(
-              controlsVisible: _menuVisible,
-              progress: _progress,
-              chapterCount: _chapters.length,
-              autoScrolling: _autoScrolling,
-              dayNightIcon: dark
-                  ? Icons.light_mode_outlined
-                  : Icons.dark_mode_outlined,
-              dayNightTooltip: dark ? '淺色' : '深色',
-              onToggleAutoScroll: _toggleAutoScroll,
-              onToggleDayNight: _toggleDayNight,
-              onPrevChapter: () => _jumpRelative(forward: false),
-              onNextChapter: () => _jumpRelative(forward: true),
-              onSeekPage: (page) =>
-                  _jumpTo(_currentChapter.value, pageIndex: page),
-              onOpenChapters: () {
-                _menuVisible.value = false;
-                _chapterPanel.open();
-              },
-              onPreferences: () => unawaited(_openPreferences()),
+              // 上下選單離邊 [AppGrouped.margin]，亮度條和它們的左緣對齊。
+              brightnessSide: AppGrouped.margin,
+              top: ReaderTopMenu(
+                controlsVisible: _menuVisible,
+                bookName: context.zh(_book.name),
+                navigation: navigation,
+                // 本地漫畫同本地書寫「本地」（ADR 0059），不能點。
+                originName: _book.isLocal ? '本地' : _book.originName,
+                onOpenOrigin: _book.isLocal ? null : _openChapterWeb,
+                showReadTitleAddition: true,
+                onBack: () => unawaited(_exit()),
+                onMore: () => unawaited(_showMore()),
+              ),
+              bottom: ComicReaderBottomMenu(
+                controlsVisible: _menuVisible,
+                progress: _progress,
+                chapterCount: _chapters.length,
+                autoScrolling: _autoScrolling,
+                dayNightIcon: dark
+                    ? Icons.light_mode_outlined
+                    : Icons.dark_mode_outlined,
+                dayNightTooltip: dark ? '淺色' : '深色',
+                onToggleAutoScroll: _toggleAutoScroll,
+                onToggleDayNight: _toggleDayNight,
+                onPrevChapter: () => _jumpRelative(forward: false),
+                onNextChapter: () => _jumpRelative(forward: true),
+                onSeekPage: (page) =>
+                    _jumpTo(_currentChapter.value, pageIndex: page),
+                onOpenChapters: _openChapters,
+                onPreferences: _openPreferences,
+              ),
+              brightness: ReaderDeviceChannel.supportsWindowBrightness
+                  ? ListenableBuilder(
+                      listenable: _settings,
+                      builder: (context, _) => ReaderBrightnessBar(
+                        auto: _settings.brightnessAuto,
+                        level: _settings.brightness,
+                        onAutoChanged: _settings.setBrightnessAuto,
+                        onChanged: (level) =>
+                            _settings.setBrightness(level, persist: false),
+                        onChangeEnd: _settings.setBrightness,
+                      ),
+                    )
+                  : null,
             ),
           ),
         ],
@@ -1062,5 +1147,48 @@ class _OpeningSkeleton extends StatelessWidget {
         ),
       );
     },
+  );
+}
+
+/// 漫畫偏好面板：自動捲動速度、深色時的紙色，和閱讀偏好同一張點擊區域
+/// 九格卡片（同一個值）。
+class _ComicPreferencesSheet extends StatelessWidget {
+  const _ComicPreferencesSheet({
+    required this.settings,
+    required this.onAutoScrollSpeed,
+  });
+
+  final ReaderSettingsController settings;
+
+  /// 自動捲動中改了速度，條漫照新的速度接著捲。
+  final ValueChanged<double> onAutoScrollSpeed;
+
+  @override
+  Widget build(BuildContext context) => ReaderSheetScaffold(
+    title: '漫畫偏好',
+    children: [
+      NumberStepperRow(
+        label: '自動捲動速度',
+        value: settings.autoPageSpeed,
+        min: ReaderSettingsController.minAutoPageSpeed,
+        max: ReaderSettingsController.maxAutoPageSpeed,
+        step: 0.01,
+        displayScale: 100,
+        unit: '%',
+        onChanged: (speed) {
+          settings.setAutoPageSpeed(speed);
+          onAutoScrollSpeed(speed);
+        },
+      ),
+      GroupedSection(
+        header: '深色時的紙色',
+        margin: EdgeInsets.zero,
+        children: [
+          GroupedContent(child: ComicPaperTintRow(settings: settings)),
+        ],
+      ),
+      // 面板自己有左右內距，卡片不再加外距。
+      ReaderSettingsGroups.clickActionsOf(settings, margin: EdgeInsets.zero),
+    ],
   );
 }
