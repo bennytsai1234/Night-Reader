@@ -10,6 +10,7 @@ import 'package:night_reader/core/sync/sync_service.dart';
 
 import 'reader_location.dart';
 import 'reader_open_target.dart';
+import 'reader_operation_token.dart';
 import 'reader_runtime.dart';
 import 'reader_state.dart';
 
@@ -17,8 +18,8 @@ import 'reader_state.dart';
 /// 這台後面，才接。
 /// - 接著上次讀的地方開書時，點書當下就先抓這本書的雲端進度；換頁動畫播完
 ///   最多等 [openGrace]：等到了而且比這台新，就照它開。等不及先照這台的位置
-///   開，正文已經在畫面上之後才到的話先問要不要跳過去，不自己跳。從目錄或
-///   詳情點了某一章開書不抓。
+///   開；正文出現前（紙還蓋著）才到的直接改開在那裡，正文已經在畫面上之後
+///   才到的先問要不要跳過去，不自己跳。從目錄或詳情點了某一章開書不抓。
 /// - 讀到一半回到前景時再抓一次，比這台新、而且抓的途中沒翻頁就問要不要跳
 ///   過去；沒按就不跳、不記成同步過。跳到雲端那一筆的準確位置（章＋字），
 ///   位置完全一樣才不動。
@@ -126,6 +127,19 @@ class ReaderProgressSync {
   /// 比這台新，先寫進這台的資料庫。之後讀這台資料庫裡的位置：書架或詳情頁
   /// 拿著的書可能是同步套用之前的舊位置。
   Future<ReaderLocation?> openLocation(ReaderRuntime runtime) async {
+    final at = await _openAt(runtime);
+    final late = _lateProgress;
+    // 比 [bookOpened] 的 [_catchUp] 先登記：抓到時正文還沒出現，就由這裡
+    // 直接開過去。
+    if (late != null) {
+      unawaited(
+        _openAtLate(late, runtime, at ?? runtime.state.visibleLocation),
+      );
+    }
+    return at;
+  }
+
+  Future<ReaderLocation?> _openAt(ReaderRuntime runtime) async {
     if (!_resumes) return null;
     _markOpen();
     final pulling = _openingPull ?? _sync.pullProgress(book.bookUrl);
@@ -177,6 +191,49 @@ class ReaderProgressSync {
     final late = _lateProgress;
     _lateProgress = null;
     if (late != null) unawaited(_catchUp(late));
+  }
+
+  /// 開書等不及的那次抓取在正文出現前到了（紙還蓋著）：讀者沒跳章、沒改
+  /// 排版，雲端那一筆又在要開的位置 [opening] 後面，就直接改開在那裡，不問。
+  /// 通常是開書正在排，由這次跳轉接手；開書還沒開始時開書直接開在那裡。
+  /// 正文已經出現、讀者動過、還沒有目錄可以換算，或那一章是付費章節時不動，
+  /// 交給 [_catchUp]。
+  Future<void> _openAtLate(
+    Future<PulledProgress?> pulling,
+    ReaderRuntime runtime,
+    ReaderLocation opening,
+  ) async {
+    final PulledProgress? pulled;
+    try {
+      pulled = await pulling;
+    } catch (_) {
+      return;
+    }
+    if (pulled == null ||
+        !pulled.isCurrent ||
+        _disposed ||
+        _retired ||
+        runtime.disposed ||
+        runtime.state.lifecycle != ReaderLifecycle.cold ||
+        runtime.chapterCount <= 0) {
+      return;
+    }
+    final operation = runtime.stateMachine.currentOperation;
+    if (operation != null && operation.kind != ReaderOperationKind.open) {
+      return;
+    }
+    if (!identical(_lateProgress, pulling)) return;
+    final target = _targetOf(pulled, runtime);
+    // 點書當下抓的，背景那輪同步可能在換頁動畫期間已經把這台推到更後面；
+    // 付費章節照開書的規則改開最近的免費章，不自己跳過去。
+    if (!_isAhead(target, opening) ||
+        (runtime.chapterAt(target.chapterIndex)?.isLocked ?? false)) {
+      return;
+    }
+    _lateProgress = null;
+    // 那一章取不到時開書回到這台的位置：不記成同步過，下次回到前景再抓。
+    if (!await _jumpTo(runtime, target)) return;
+    await _recordSynced(pulled);
   }
 
   /// 開書時雲端進度還沒抓到、先照這台的位置開了：抓到時讀者還沒動就問
@@ -239,17 +296,13 @@ class ReaderProgressSync {
     if (pulled == null || !pulled.isCurrent || !_isReady(runtime)) return;
     final current = runtime!.state.visibleLocation;
     if (!_samePlace(current, since)) return;
-    final index = pulled.progress.chapterIndexIn([
-      for (var i = 0; i < runtime.chapterCount; i++) runtime.titleFor(i),
-    ], reversed: book.getReverseToc());
-    final target = ReaderLocation(
-      chapterIndex: index,
-      charOffset: pulled.progress.charOffset,
-    );
+    final target = _targetOf(pulled, runtime);
     if (_samePlace(target, current)) {
       await _jumpIfStill(pulled, since);
       return;
     }
+    // 抓的時候比的是當時存著的位置；在這台前面的不問，免得把人往回帶。
+    if (!_isAhead(target, current)) return;
     final suggestion = ++_suggestions;
     _onProgressSuggestion(() async {
       // 換過一則提示（讀者又動了、回到前景又抓到）：前一個按鈕不再有用。
@@ -268,24 +321,44 @@ class ReaderProgressSync {
     if (pulled == null || !pulled.isCurrent || !_isReady(runtime)) return;
     final current = runtime!.state.visibleLocation;
     if (!_samePlace(current, since)) return;
-    final index = pulled.progress.chapterIndexIn([
-      for (var i = 0; i < runtime.chapterCount; i++) runtime.titleFor(i),
-    ], reversed: book.getReverseToc());
-    final target = ReaderLocation(
-      chapterIndex: index,
-      charOffset: pulled.progress.charOffset,
-    );
-    final jumps = !_samePlace(target, current);
+    final target = _targetOf(pulled, runtime);
+    if (!_samePlace(target, current) && !await _jumpTo(runtime, target)) {
+      return;
+    }
+    await _recordSynced(pulled);
+  }
+
+  /// 跳到 [target]，傳回有沒有落在那裡、閱讀器也排好了。沒定位到目標（那
+  /// 一章取不到、使用者自己捲動而作廢、被別的操作取代）時，跳轉照樣正常
+  /// 結束、畫面留在原處：不記成已同步，下次回到前景再試。同一章內的跳轉也
+  /// 一樣，不能只看章節序號。
+  Future<bool> _jumpTo(ReaderRuntime runtime, ReaderLocation target) async {
     try {
-      if (jumps) {
-        final reached = await runtime.jumpToLocation(target);
-        // 沒定位到目標（那一章取不到、使用者自己捲動而作廢、被別的操作取代）
-        // 時，跳轉照樣正常結束、畫面留在原處：不記成已同步，下次回到前景
-        // 再試。同一章內的跳轉也一樣，不能只看章節序號。
-        if (!reached || !_isReady(runtime)) return;
-      }
-      await runtime.flushProgress();
-      if (_disposed) return;
+      return await runtime.jumpToLocation(target) && _isReady(runtime);
+    } catch (error, stackTrace) {
+      // 跳過去存不成就不記成同步過，下次回到前景還會再抓到。
+      AppLog.e('存進度失敗', error: error, stackTrace: stackTrace);
+      return false;
+    }
+  }
+
+  /// 雲端那一筆在這台目錄的位置（章＋字）。
+  ReaderLocation _targetOf(PulledProgress pulled, ReaderRuntime runtime) =>
+      ReaderLocation(
+        chapterIndex: pulled.progress.chapterIndexIn([
+          for (var i = 0; i < runtime.chapterCount; i++) runtime.titleFor(i),
+        ], reversed: book.getReverseToc()),
+        charOffset: pulled.progress.charOffset,
+      );
+
+  /// 已經落在雲端那一筆的位置：存好、記成同步過。
+  Future<void> _recordSynced(PulledProgress pulled) async {
+    final runtime = _runtime();
+    if (!_isReady(runtime) || _retired) return;
+    try {
+      await runtime!.flushProgress();
+      // 換目錄（改編碼）時存不進去，不能記成同步過。
+      if (_disposed || _retired) return;
       // 跳轉存檔記的是這台的時間；記成不比雲端那一筆早，之後往前讀的才比
       // 另一台記的新（`BookDao.markProgressSynced`）。
       final time = await _bookDao.markProgressSynced(
@@ -311,6 +384,12 @@ class ReaderProgressSync {
 
   static bool _samePlace(ReaderLocation a, ReaderLocation b) =>
       a.chapterIndex == b.chapterIndex && a.charOffset == b.charOffset;
+
+  /// [a] 在 [b] 後面（閱讀順序）：章在後面，或同一章的字數更多；同
+  /// `ProgressSync.isAhead`。
+  static bool _isAhead(ReaderLocation a, ReaderLocation b) =>
+      a.chapterIndex > b.chapterIndex ||
+      (a.chapterIndex == b.chapterIndex && a.charOffset > b.charOffset);
 
   /// 等 [future]，最多 [limit]；傳回它有沒有在時限內完成。閱讀器關掉時馬上
   /// 結束（傳回 false）。
