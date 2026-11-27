@@ -19,6 +19,7 @@ import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
+import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
@@ -508,9 +509,16 @@ void main() {
     final chapters = await repository.ensureChapters();
 
     expect(chapters.map((c) => c.title), ['第一卷', '第一章', '第二章']);
-    expect(repository.takeRefreshedChapterIndex(1), 2);
+    final refresh = repository.takeLocationRefresh()!;
+    expect(refresh.byPosition, isFalse);
+    expect(
+      refresh
+          .map(const ReaderLocation(chapterIndex: 1, charOffset: 0))
+          .chapterIndex,
+      2,
+    );
     // 只對一次：之後拿到的已經是新目錄的位置。
-    expect(repository.takeRefreshedChapterIndex(2), 2);
+    expect(repository.takeLocationRefresh(), isNull);
     final stored = (await db.bookDao.getByUrl(book.bookUrl))!;
     expect(stored.chapterIndex, 2);
     expect(stored.durChapterTitle, '第二章');

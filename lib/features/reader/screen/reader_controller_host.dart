@@ -461,6 +461,14 @@ class ReaderControllerHost {
     unawaited(
       _entrance.then((_) async {
         if (!_isMounted() || runtime.disposed) return;
+        if (book.isLocal) {
+          // 本地書先對好目錄：TXT 重新分章時開書的位置換成新目錄的，之後
+          // 比對的雲端進度也照新目錄。對不了的錯誤由開書處理。
+          try {
+            await runtime.alignChaptersBeforeOpen();
+          } catch (_) {}
+          if (!_isMounted() || runtime.disposed) return;
+        }
         final at = await _openLocation?.call(runtime);
         if (!_isMounted() || runtime.disposed) return;
         unawaited(

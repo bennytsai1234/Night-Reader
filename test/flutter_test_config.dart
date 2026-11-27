@@ -21,6 +21,8 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   // 讀本地書之前會先收上次沒做完的原檔更新，只收一次、要讀真的檔案系統：
   // 每項測試當成已經收過，要測收尾的直接呼叫它。
   setUp(LocalBookService.markRecoveredForTesting);
+  // 開書時對過的 TXT 分章版本留在這次執行期間；每項測試的書都是新的。
+  setUp(() => LocalBookService().forgetTxtChapterChecks());
   tearDownAll(() async {
     try {
       await root.delete(recursive: true);
