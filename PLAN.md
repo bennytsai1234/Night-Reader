@@ -6,7 +6,6 @@
 
 ## 一、收尾小修
 
-- **開書等滿 0.5 秒後、正文出現前才到的雲端進度直接開在那裡**：現在這段時間到的會走「跳過去」提示；要把開書切成先準備、正文出現前再換位置（#673 Codex 審查第 4 條）（分支 fix/late-cloud-progress-open）。
 - **本地 TXT 的分章規則換版時，已在書架上的書跟著重新分章**：分章規則改過（例如 2026-11 認得繁體章名），舊版匯入的書目錄不變，另一台用新版下載卻切成新目錄，兩台交替讀時進度跳到別章；照 EPUB 的轉法版本記在書上，版本不同時開書重新分章，用改編碼時寫好的位元組換算帶過閱讀位置（#613 審查第 5 條）。
 - **本機 Windows 上幾個測試固定或偶爾失敗**：同步本地書（`local_book_sync_test`，暫存資料夾改名 `base_*.json.tmp` 被拒）、Big5／GB18030 的 TXT（`txt_parser_test`、`epub_parser_test`，檔案還開著刪不掉）、AI 修復紀錄（`ai_repair_log_test`）在純 `beta` 也失敗；`background_search_test`、`reading_stats_view_test` 整批跑時偶爾失敗、單獨跑會過。CI（Linux）都過，但每個對話在本機都要逐一判斷是不是自己改壞的；要在 Windows 上查，不影響 App。
 - **大的規則包打開匯入預覽那一下很重**：底部面板一打開就把每一列建好，300 條在電腦除錯模式要 710ms（30 條 186ms，面板本身就重），情境在 `test/frame_budget/replace_rule_import_frame_budget_test.dart`；改成捲到才建要動共用的底部面板，先用手機正式版量過再決定（#633）。
