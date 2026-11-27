@@ -130,10 +130,13 @@ void main() {
     );
     expect(chapters!.map((chapter) => chapter.title), ['第一章 開始', '第二章 結束']);
 
-    // 重開後讀到的正文要用新編碼解，不是資料庫裡存著的舊亂碼。
-    final runtime = tester
-        .widget<ReaderTextView>(find.byType(ReaderTextView))
-        .runtime;
+    // 重開後讀到的正文要用新編碼解，不是資料庫裡存著的舊亂碼。機器慢時舊
+    // 閱讀器還在換頁中，等畫面上只剩重開的那一個。
+    final textView = find.byType(ReaderTextView);
+    for (var i = 0; i < 200 && textView.evaluate().length != 1; i++) {
+      await settle(tester, const Duration(milliseconds: 100));
+    }
+    final runtime = tester.widget<ReaderTextView>(textView).runtime;
     final content = await tester.runAsync(() => runtime.loadContentAt(0));
     expect(content!.displayText, contains('甲正文內容'));
 
