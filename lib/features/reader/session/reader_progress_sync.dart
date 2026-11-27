@@ -2,6 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/local_book/local_book_formats.dart';
+import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
@@ -108,10 +112,30 @@ class ReaderProgressSync {
       _markOpen();
     } else {
       // 點書當下就開始抓，換頁動畫播完時直接用這一次，多賺動畫的時間。
-      _openingPull ??= _sync.pullProgress(book.bookUrl);
+      _openingPull ??= _pullOpening();
     }
     _lifecycle = AppLifecycleListener(onShow: _onShow, onHide: _onHide);
     _sync.uploadsOnHide(this, true);
+  }
+
+  /// 開書時抓雲端進度。本地 TXT 先對好分章版本
+  /// （[LocalBookService.ensureTxtChapters]，和閱讀器開書那次是同一次）再抓：
+  /// 舊版規則切的目錄重新分章之後，比的與寫進資料庫的位置才是新目錄的。
+  Future<PulledProgress?> _pullOpening() async {
+    if (book.isLocal &&
+        localBookExtensionFromPath(LocalBookService.filePathOf(book)) ==
+            'txt') {
+      try {
+        await LocalBookService().ensureTxtChapters(
+          book,
+          bookDao: _bookDao,
+          chapterDao: getIt<ChapterDao>(),
+        );
+      } catch (error, stackTrace) {
+        AppLog.e('TXT 重新分章失敗', error: error, stackTrace: stackTrace);
+      }
+    }
+    return _sync.pullProgress(book.bookUrl);
   }
 
   /// 記成開著：之後的同步不在背景改這本書，由閱讀器自己跳。
@@ -142,7 +166,7 @@ class ReaderProgressSync {
   Future<ReaderLocation?> _openAt(ReaderRuntime runtime) async {
     if (!_resumes) return null;
     _markOpen();
-    final pulling = _openingPull ?? _sync.pullProgress(book.bookUrl);
+    final pulling = _openingPull ?? _pullOpening();
     _openingPull = null;
     if (await _within(pulling, openGrace)) {
       if (_disposed || runtime.disposed) return null;

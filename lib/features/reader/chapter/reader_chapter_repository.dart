@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -22,6 +24,7 @@ import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/storage/reader_chapter_content_storage.dart';
 import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
 
+import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/text_view/progress/reader_chapter_shares.dart';
 
 import 'reader_content.dart';
@@ -31,6 +34,15 @@ typedef ReaderTestContentLoader = Future<String?> Function(
   int chapterIndex,
   BookChapter chapter,
 );
+
+/// 開書時目錄換過（本地 EPUB 重轉、TXT 重新分章），開書前拿到的位置（舊
+/// 目錄的座標）換成現在目錄的（[ReaderChapterRepository.takeLocationRefresh]）。
+/// [byPosition] 是照檔案裡的位置換算的（TXT），章名也跟著換了，不能再照舊
+/// 章名對。
+typedef ReaderLocationRefresh = ({
+  ReaderLocation Function(ReaderLocation location) map,
+  bool byPosition,
+});
 
 final class ReaderContentUnavailableException implements Exception {
   const ReaderContentUnavailableException(this.message);
@@ -50,6 +62,8 @@ class ReaderChapterRepository {
     ReplaceRuleDao? replaceDao,
     BookSourceDao? sourceDao,
     ReaderChapterContentDao? contentDao,
+    BookmarkDao? bookmarkDao,
+    HighlightDao? highlightDao,
     BookSourceService? service,
     int Function()? currentChineseConvert,
     bool Function()? currentShowIllustrations,
@@ -68,10 +82,17 @@ class ReaderChapterRepository {
            (getIt.isRegistered<ReaderChapterContentDao>()
                ? getIt<ReaderChapterContentDao>()
                : null),
+       bookmarkDao =
+           bookmarkDao ??
+           (getIt.isRegistered<BookmarkDao>() ? getIt<BookmarkDao>() : null),
+       highlightDao =
+           highlightDao ??
+           (getIt.isRegistered<HighlightDao>() ? getIt<HighlightDao>() : null),
        service = service ?? BookSourceService(),
        currentChineseConvert = currentChineseConvert ?? (() => 0),
        currentShowIllustrations = currentShowIllustrations ?? (() => false),
-       _chapters = List<BookChapter>.from(initialChapters);
+       _chapters = List<BookChapter>.from(initialChapters),
+       _txtCheckedBefore = LocalBookService().txtChaptersChecked(book);
 
   final Book book;
   final BookDao bookDao;
@@ -79,6 +100,10 @@ class ReaderChapterRepository {
   final ReplaceRuleDao? replaceDao;
   final BookSourceDao sourceDao;
   final ReaderChapterContentDao? contentDao;
+
+  /// 本地 TXT 重新分章時書籤與標註跟著換到新目錄。
+  final BookmarkDao? bookmarkDao;
+  final HighlightDao? highlightDao;
   final BookSourceService service;
   final int Function() currentChineseConvert;
 
@@ -137,15 +162,16 @@ class ReaderChapterRepository {
   /// 同時有好幾處要目錄（開書排版、讀每章長度）時共用同一次載入，不會
   /// 向書源抓兩次。
   ///
-  /// 本地書開書時一定先對一次 EPUB 的轉法版本（[_syncEpubChapters]），帶著
-  /// 目錄開書（書籍詳情傳進來的）也一樣，讀章前章節範圍已經是新的。
+  /// 本地書開書時一定先對一次目錄（[_syncLocalChapters]：EPUB 的轉法版本、
+  /// TXT 的分章版本），帶著目錄開書（書籍詳情傳進來的）也一樣，讀章前章節
+  /// 範圍已經是新的。
   Future<List<BookChapter>> ensureChapters() {
     if (_chapters.isNotEmpty && (!book.isLocal || _localChaptersChecked)) {
       return Future.value(chapters);
     }
     return _chaptersInFlight ??=
         (_chapters.isNotEmpty
-                ? _syncEpubChapters().then((_) => chapters)
+                ? _syncLocalChapters().then((_) => chapters)
                 : _loadChapters())
             .whenComplete(() => _chaptersInFlight = null);
   }
@@ -156,7 +182,7 @@ class ReaderChapterRepository {
   Future<List<BookChapter>> _loadChapters() async {
     _chapters = await chapterDao.getByBook(book.bookUrl);
     if (_chapters.isNotEmpty) {
-      if (book.isLocal) await _syncEpubChapters();
+      if (book.isLocal) await _syncLocalChapters();
       return chapters;
     }
     final source = await _ensureSource();
@@ -180,16 +206,50 @@ class ReaderChapterRepository {
   }
 
   /// 開書時 EPUB 重轉、換掉的舊目錄（[_syncEpubChapters]），開書的位置照它
-  /// 對到新目錄一次（[takeRefreshedChapterIndex]）。
+  /// 對到新目錄一次（[takeLocationRefresh]）。
   List<BookChapter>? _replacedChapters;
 
-  /// 開書前拿到的位置（舊目錄的第 [index] 章）在現在的目錄裡是第幾章：開書
-  /// 時 EPUB 重轉、目錄變了（例如多了分卷）就照章名對過去，只對一次；目錄
-  /// 沒換照舊。
-  int takeRefreshedChapterIndex(int index) {
+  /// 開書時 TXT 重新分章的對照（[_syncTxtChapters]），開書的位置照它換算
+  /// 一次（[takeLocationRefresh]）。
+  TxtChapterRemap? _txtRemap;
+
+  /// 建立時這本 TXT 這次 App 執行期間已經對過分章版本：開書拿到的位置都是
+  /// 現在目錄的座標，之後拿到的對照不再套用。
+  final bool _txtCheckedBefore;
+
+  /// 開書前拿到的位置（開書的位置、開書前的跳章）換成現在目錄的座標：開書
+  /// 時目錄換過才有，只拿一次；沒換過是 null。EPUB 重轉、目錄變了（例如多了
+  /// 分卷）照章名對過去；TXT 重新分章照檔案裡的位置換算章與章內字數，錨點
+  /// 清掉，畫面上的位移歸零（換算前後都在章首時照舊，例如照章節開書）。
+  ReaderLocationRefresh? takeLocationRefresh() {
+    final remap = _txtRemap;
     final old = _replacedChapters;
+    _txtRemap = null;
     _replacedChapters = null;
-    return old == null ? index : _alignToRefreshed(old, index);
+    if (remap != null) {
+      return (
+        map: (location) {
+          final mapped = remap.map(location.chapterIndex, location.charOffset);
+          final atStart = location.charOffset == 0 && mapped.charOffset == 0;
+          return location.copyWith(
+            chapterIndex: mapped.index,
+            charOffset: mapped.charOffset,
+            visualOffsetPx: atStart ? location.visualOffsetPx : 0.0,
+            clearContentIdentity: true,
+          );
+        },
+        byPosition: true,
+      );
+    }
+    if (old != null) {
+      return (
+        map: (location) => location.copyWith(
+          chapterIndex: _alignToRefreshed(old, location.chapterIndex),
+        ),
+        byPosition: false,
+      );
+    }
+    return null;
   }
 
   int _alignToRefreshed(List<BookChapter> old, int index) {
@@ -201,6 +261,42 @@ class ReaderChapterRepository {
       oldTotalCount: old.length,
       newChapters: _chapters,
     );
+  }
+
+  bool get _isLocalTxt =>
+      localBookExtensionFromPath(LocalBookService.filePathOf(book)) == 'txt';
+
+  /// 本地書的目錄對上現在的原檔：TXT 照分章版本
+  /// （[LocalBookService.ensureTxtChapters]），EPUB 照轉好的文字
+  /// （[LocalBookService.syncEpubChapters]）。
+  Future<void> _syncLocalChapters() async {
+    try {
+      if (_isLocalTxt) {
+        await _syncTxtChapters();
+      } else {
+        await _syncEpubChapters();
+      }
+    } finally {
+      _localChaptersChecked = true;
+    }
+  }
+
+  Future<void> _syncTxtChapters() async {
+    try {
+      final synced = await LocalBookService().ensureTxtChapters(
+        book,
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+        bookmarkDao: bookmarkDao,
+        highlightDao: highlightDao,
+        contentDao: contentDao,
+      );
+      if (synced.chapters.isNotEmpty) _chapters = synced.chapters;
+      if (!_txtCheckedBefore) _txtRemap = synced.remap ?? _txtRemap;
+    } catch (error, stackTrace) {
+      // 對不了就照現有的目錄開書，下次開書再對。
+      AppLog.e('TXT 重新分章失敗', error: error, stackTrace: stackTrace);
+    }
   }
 
   /// 本地 EPUB 的目錄對上現在轉好的文字（[LocalBookService.syncEpubChapters]）。
@@ -218,8 +314,6 @@ class ReaderChapterRepository {
     } on FileSystemException catch (error) {
       // 對不了就照現有的目錄開書，下次開書再對。
       AppLog.w('EPUB 章節範圍對不上檔案：$error');
-    } finally {
-      _localChaptersChecked = true;
     }
   }
 

@@ -17,6 +17,10 @@ typedef TxtSplitResult = ({
 class TxtParser {
   final File file;
 
+  /// 分章的版本：分章規則（[tocRules]）或 `_split` 的切法改了就加一，舊書
+  /// 開書時會重新分章（`LocalBookService.ensureTxtChapters`）。
+  static const int tocVersion = 1;
+
   /// 一章最多幾字，超過就再切開；EPUB 目錄太粗時也照這個切。
   static const int maxChapterChars = 50000;
   static const int _fallbackChunkChars = 30000;

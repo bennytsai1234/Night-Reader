@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -9,9 +10,11 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/local_book/txt_parser.dart';
 import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/reading/bookmark.dart';
 import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/core/storage/books_in_use.dart';
@@ -825,5 +828,322 @@ void main() {
     // 兩筆在同一個位置：都照同一個位元組位置換算，落在同一個新位置。
     expect(saved.map((item) => item.charOffset).toSet(), hasLength(1));
     expect(saved.first.charOffset, greaterThan(0));
+  });
+
+  group('舊版分章規則切的 TXT，開書時照現在的規則重新分章', () {
+    String body(String marker) => '　　$marker${'正文內容。' * 300}\n';
+    // 全形數字的章名：舊版規則不認，整本切成一章。
+    final text = '第１章 開始\n${body('甲')}第２章 中間\n${body('乙')}第３章 結尾\n${body('丙')}';
+
+    /// 舊版匯入的書：資料庫裡整本只有一章，沒有記分章版本的檔。
+    Future<Book> seedOld({String content = '', String name = '全形'}) async {
+      final file = File(p.join(picked.path, '$name.txt'));
+      await file.writeAsString(content.isEmpty ? text : content);
+      final book = Book(
+        bookUrl: 'local://${file.path}',
+        origin: 'local',
+        originName: '本地',
+        name: name,
+        author: '本地',
+        isInBookshelf: true,
+        charset: 'UTF-8',
+        durChapterTitle: '正文',
+        durChapterTime: 111,
+        progressTime: 222,
+        totalChapterNum: 1,
+      );
+      await bookDao.upsert(book);
+      await chapterDao.insertChapters([
+        BookChapter(
+          url: '${book.bookUrl}#0',
+          title: '正文',
+          bookUrl: book.bookUrl,
+          index: 0,
+          start: 0,
+          end: await file.length(),
+        ),
+      ]);
+      return book;
+    }
+
+    Future<({List<BookChapter> chapters, TxtChapterRemap? remap})> ensure(
+      Book book,
+    ) => LocalBookService().ensureTxtChapters(
+      book,
+      bookDao: bookDao,
+      chapterDao: chapterDao,
+      bookmarkDao: bookmarkDao,
+      highlightDao: highlightDao,
+      contentDao: contentDao,
+    );
+
+    /// [book] 現在目錄第 [index] 章的正文。
+    Future<String> chapterText(Book book, int index) async {
+      final chapter = (await chapterDao.getByBook(book.bookUrl))[index];
+      final bytes = await File(LocalBookService.filePathOf(book)).readAsBytes();
+      return utf8.decode(bytes.sublist(chapter.start!, chapter.end!));
+    }
+
+    Future<List<LocalChapterRange>?> recorded(Book book) async =>
+        readChapterRanges(
+          await LocalBookService.txtChaptersPath(book),
+          TxtParser.tocVersion,
+        );
+
+    test('重新分章途中書被移出書架：不把書加回來、不記版本', () async {
+      final book = await seedOld();
+      LocalBookService.debugTxtResplitDone = () async {
+        await bookDao.deleteByUrl(book.bookUrl);
+        await chapterDao.deleteByBook(book.bookUrl);
+      };
+      addTearDown(() => LocalBookService.debugTxtResplitDone = null);
+
+      await ensure(book);
+
+      expect(await bookDao.getByUrl(book.bookUrl), isNull);
+      expect(await chapterDao.getByBook(book.bookUrl), isEmpty);
+      expect(await recorded(book), isNull);
+    });
+
+    test('重新分章途中目錄被別處換過：留著別處換的，不記版本', () async {
+      final book = await seedOld();
+      final other = BookChapter(
+        url: '${book.bookUrl}#0',
+        title: '別處換的',
+        bookUrl: book.bookUrl,
+        index: 0,
+        start: 0,
+        end: 3,
+      );
+      LocalBookService.debugTxtResplitDone = () =>
+          chapterDao.replaceByBook(book.bookUrl, [other]);
+      addTearDown(() => LocalBookService.debugTxtResplitDone = null);
+
+      final result = await ensure(book);
+
+      expect(result.remap, isNull);
+      expect((await chapterDao.getByBook(book.bookUrl)).map((c) => c.title), [
+        '別處換的',
+      ]);
+      expect(await recorded(book), isNull);
+    });
+
+    test('目錄換新，進度、書籤與標註對到同一段字，正文清掉，時間不動', () async {
+      final book = await seedOld();
+      final atBing = text.indexOf('丙');
+      final atYi = text.indexOf('乙');
+      await bookDao.updateProgress(
+        book.bookUrl,
+        0,
+        '正文',
+        atBing,
+        readerAnchorJson: '{"chapterIndex":0}',
+      );
+      final stored = (await bookDao.getByUrl(book.bookUrl))!;
+      await bookmarkDao.add(
+        Bookmark(
+          id: 0,
+          bookName: book.name,
+          bookAuthor: book.author,
+          chapterTitle: '正文',
+          charOffset: atYi,
+        ),
+      );
+      await highlightDao.add(
+        Highlight(
+          id: 0,
+          bookName: book.name,
+          bookAuthor: book.author,
+          chapterTitle: '正文',
+          charOffset: atBing,
+          quote: '丙',
+        ),
+      );
+      final contentUrl = '${book.bookUrl}#0';
+      await contentDao.saveContent(
+        contentKey: ReaderChapterContentDao.contentKey(
+          origin: book.origin,
+          bookUrl: book.bookUrl,
+          chapterUrl: contentUrl,
+        ),
+        origin: book.origin,
+        bookUrl: book.bookUrl,
+        chapterUrl: contentUrl,
+        chapterIndex: 0,
+        content: '舊目錄讀過的正文',
+        updatedAt: 1,
+      );
+
+      final result = await ensure(stored);
+
+      expect(result.remap, isNotNull);
+      expect(result.chapters.map((c) => c.title).skip(1), ['第２章 中間', '第３章 結尾']);
+      final saved = (await bookDao.getByUrl(book.bookUrl))!;
+      expect(saved.chapterIndex, 2);
+      expect(saved.durChapterTitle, '第３章 結尾');
+      final third = await chapterText(book, 2);
+      expect(saved.charOffset, closeTo(third.indexOf('丙'), 2));
+      expect(saved.readerAnchorJson, isNull);
+      expect(saved.totalChapterNum, 3);
+      expect(saved.durChapterTime, stored.durChapterTime, reason: '不是讀者讀了');
+      expect(saved.progressTime, stored.progressTime, reason: '不算比另一台新的進度');
+      // 記憶體裡的書跟著換。
+      expect(stored.chapterIndex, 2);
+      expect(stored.charOffset, saved.charOffset);
+      expect(stored.totalChapterNum, 3);
+
+      final mark =
+          (await bookmarkDao.watchByBook(book.name, book.author).first).single;
+      expect(mark.chapterIndex, 1);
+      expect(mark.chapterTitle, '第２章 中間');
+      final second = await chapterText(book, 1);
+      expect(mark.charOffset, closeTo(second.indexOf('乙'), 2));
+      final note =
+          (await highlightDao.watchByBook(book.name, book.author).first).single;
+      expect(note.chapterIndex, 2);
+      expect(note.charOffset, closeTo(third.indexOf('丙'), 2));
+
+      expect(
+        await contentDao.getStoredChapterUrls(
+          origin: book.origin,
+          bookUrl: book.bookUrl,
+        ),
+        isEmpty,
+      );
+      expect(await recorded(book), hasLength(3));
+    });
+
+    test('沒有記版本、但目錄和現在的規則切的一樣：不換，只記下版本', () async {
+      final file = File(p.join(picked.path, '新.txt'));
+      await file.writeAsString(text);
+      final split = await TxtParser(file).splitChapters();
+      final book = Book(
+        bookUrl: 'local://${file.path}',
+        origin: 'local',
+        name: '新',
+        author: '本地',
+        isInBookshelf: true,
+        charset: split.charset,
+        chapterIndex: 1,
+        charOffset: 7,
+      );
+      final chapters = LocalBookService().chaptersOf(book, [
+        for (final chapter in split.chapters)
+          (
+            title: chapter['title'] as String,
+            start: chapter['start'] as int,
+            end: chapter['end'] as int,
+            isVolume: chapter['isVolume'] == true,
+          ),
+      ]);
+      await bookDao.upsert(book);
+      await chapterDao.insertChapters(chapters);
+
+      final result = await ensure(book);
+
+      expect(result.remap, isNull);
+      expect(
+        LocalBookService.chaptersMatch(result.chapters, [
+          for (final c in chapters)
+            (
+              title: c.title,
+              start: c.start!,
+              end: c.end!,
+              isVolume: c.isVolume,
+            ),
+        ]),
+        isTrue,
+      );
+      final saved = (await bookDao.getByUrl(book.bookUrl))!;
+      expect(saved.chapterIndex, 1);
+      expect(saved.charOffset, 7);
+      expect(await recorded(book), hasLength(chapters.length));
+    });
+
+    test('記下的版本與範圍都對上：不再讀原檔分章', () async {
+      final book = await seedOld();
+      await ensure(book);
+      final before = await chapterDao.getByBook(book.bookUrl);
+      // 原檔換成切法完全不同的內容：要是又讀原檔分章，目錄就會變。
+      await File(LocalBookService.filePathOf(book))
+          .writeAsString('第１章 只有一章\n${body('丁')}');
+      LocalBookService().forgetTxtChapterChecks();
+
+      final result = await ensure((await bookDao.getByUrl(book.bookUrl))!);
+
+      expect(result.remap, isNull);
+      expect(
+        (await chapterDao.getByBook(book.bookUrl)).map((c) => c.title),
+        before.map((c) => c.title),
+      );
+    });
+
+    test('同時對兩次只分一次章；對好之後才來的拿結果，不改它手上的書', () async {
+      final book = await seedOld();
+      final again = book.copyWith();
+
+      final results = await Future.wait([ensure(book), ensure(again)]);
+
+      expect(results[0].remap, isNotNull);
+      expect(identical(results[0].remap, results[1].remap), isTrue);
+      expect(again.chapterIndex, book.chapterIndex);
+      expect(LocalBookService().txtChaptersChecked(book), isTrue);
+
+      // 對好之後讀了幾章，再拿一次：同一份結果，不把位置改回對好當時的。
+      final later = (await bookDao.getByUrl(book.bookUrl))!..chapterIndex = 2;
+      final third = await ensure(later);
+      expect(identical(third.remap, results[0].remap), isTrue);
+      expect(later.chapterIndex, 2);
+    });
+
+    test('原檔不在這台：照原樣回傳，不丟錯，也不記成對過', () async {
+      final book = await seedOld();
+      await File(LocalBookService.filePathOf(book)).delete();
+
+      final result = await ensure(book);
+
+      expect(result.remap, isNull);
+      expect(result.chapters.single.title, '正文');
+      expect(LocalBookService().txtChaptersChecked(book), isFalse);
+      expect(
+        await LocalBookService().txtChaptersCurrent(book, result.chapters),
+        isTrue,
+        reason: '沒有原檔可以重新分章，背景同步照舊套進度',
+      );
+    });
+
+    test('匯入與改編碼時記下分章版本，背景同步看得出目錄是現在的', () async {
+      final added = await LocalBookService().addToShelf(
+        await pick('匯入.txt', text),
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+      );
+      final chapters = await chapterDao.getByBook(added!.bookUrl);
+      expect(
+        LocalBookService.chaptersMatch(chapters, (await recorded(added))!),
+        isTrue,
+      );
+      expect(
+        await LocalBookService().txtChaptersCurrent(added, chapters),
+        isTrue,
+      );
+
+      final old = await seedOld(name: '舊');
+      final oldChapters = await chapterDao.getByBook(old.bookUrl);
+      expect(
+        await LocalBookService().txtChaptersCurrent(old, oldChapters),
+        isFalse,
+      );
+
+      await LocalBookService().changeCharset(
+        old,
+        'UTF-8',
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+      );
+      final changed = await chapterDao.getByBook(old.bookUrl);
+      expect(changed, hasLength(3));
+      expect(await LocalBookService().txtChaptersCurrent(old, changed), isTrue);
+    });
   });
 }

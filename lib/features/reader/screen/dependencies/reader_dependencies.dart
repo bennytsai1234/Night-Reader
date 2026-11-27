@@ -84,6 +84,8 @@ class ReaderDependencies {
       chapterDao: chapterDao,
       sourceDao: sourceDao,
       contentDao: readerChapterContentDao,
+      bookmarkDao: bookmarkDao,
+      highlightDao: highlightDao,
       replaceDao: replaceDao,
       service: service,
       currentChineseConvert: currentChineseConvert,
