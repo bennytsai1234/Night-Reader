@@ -39,8 +39,11 @@ abstract class BaseSource {
   static String _loginHeaderKey(String key) => 'loginHeader_$key';
   static String _ruleVariablePrefix(String key) => 'v_${key}_';
 
-  String get loginInfoCacheKey => _loginInfoKey(getKey());
-  String get loginHeaderCacheKey => _loginHeaderKey(getKey());
+  /// 書源登入資訊（表單內容）與登入標頭；在草稿裡（[inDraftVariables]）是
+  /// 草稿那一份。
+  String get loginInfoCacheKey => _loginInfoKey(_variableIdentity(getKey()));
+  String get loginHeaderCacheKey =>
+      _loginHeaderKey(_variableIdentity(getKey()));
 
   /// 書源變數（`source.setVariable`）。在草稿裡（[inDraftVariables]）是草稿
   /// 那一份。
@@ -53,10 +56,10 @@ abstract class BaseSource {
 
   // ── 草稿的變數 ─────────────────────────────────────────────────────
   //
-  // AI 修書源拿還沒套用的草稿試抓、解析、跑程式與校驗時，規則存的書源變數
-  // 與規則變數寫在草稿自己的一份，修好套用時才換掉書源的（[commitDraftVariables]）；
-  // 沒套用就丟掉（[discardDraftVariables]）。登入資訊、登入標頭與 Cookie
-  // 照書源的。
+  // AI 修書源拿還沒套用的草稿試抓、解析、跑程式與校驗時，規則存的書源變數、
+  // 規則變數、登入資訊與登入標頭寫在草稿自己的一份，修好套用時才換掉書源的
+  // （[commitDraftVariables]）；沒套用就丟掉（[discardDraftVariables]）。
+  // 草稿期間寫進登入標頭的 Cookie 也不碰網站真的 Cookie，套用時才併進去。
 
   static const Symbol _draftKey = #sourceDraftVariables;
 
@@ -76,43 +79,50 @@ abstract class BaseSource {
     null => key,
   };
 
-  /// 草稿 [draft] 從書源 [key] 現在的書源變數與規則變數開始；傳回抄進草稿
-  /// 的每個鍵與值，套用時只寫回草稿改過的（[commitDraftVariables]）。
+  /// 草稿 [draft] 從書源 [key] 現在的書源變數、規則變數、登入資訊與登入
+  /// 標頭開始；傳回抄進草稿的每個鍵與值，套用時只寫回草稿改過的
+  /// （[commitDraftVariables]）。
   static Future<Map<String, String>> startDraftVariables(
     String draft,
     String key,
   ) async {
     final started = <String, String>{};
-    for (final (from, to) in await _variablePairs(key, _draftIdentity(draft))) {
+    for (final (from, to) in await _draftPairs(key, _draftIdentity(draft))) {
       final cache = CacheManager();
       if (await cache.copy(from, to)) started[to] = (await cache.get(to))!;
     }
     return started;
   }
 
-  /// 修好套用了：草稿 [draft] 改過的變數（和開始時抄進來的 [started] 不同、
-  /// 或新存的）寫進書源 [key]（網址換了開頭時是新的網址），再丟掉草稿。
-  /// 沒改過的不寫：修復這段時間書源自己存的（開場的校驗與試抓、閱讀）不被
-  /// 開始時的舊值蓋回去。
+  /// 修好套用了：草稿 [draft] 改過的變數、登入資訊與登入標頭（和開始時抄
+  /// 進來的 [started] 不同、或新寫的）寫進書源 [key]（網址換了開頭時是新
+  /// 的網址），再丟掉草稿。沒改過的不寫：修復這段時間書源自己存的（開場的
+  /// 校驗與試抓、閱讀）不被開始時的舊值蓋回去。登入標頭帶的 Cookie 這時才
+  /// 併進網站存的。
   static Future<void> commitDraftVariables(
     String draft,
     String key, {
     required Map<String, String> started,
   }) async {
     final cache = CacheManager();
-    for (final (from, to) in await _variablePairs(_draftIdentity(draft), key)) {
+    for (final (from, to) in await _draftPairs(_draftIdentity(draft), key)) {
       final value = await cache.get(from);
       if (value == null || started[from] == value) continue;
       await cache.copy(from, to);
+      if (to == _loginHeaderKey(key)) {
+        await _applyLoginHeaderCookie(key, value);
+      }
     }
     await discardDraftVariables(draft);
   }
 
-  /// 丟掉草稿 [draft] 的變數。
+  /// 丟掉草稿 [draft] 的變數、登入資訊與登入標頭。
   static Future<void> discardDraftVariables(String draft) async {
     final identity = _draftIdentity(draft);
     final cache = CacheManager();
     await cache.delete(_variableKey(identity));
+    await cache.delete(_loginInfoKey(identity));
+    await cache.delete(_loginHeaderKey(identity));
     for (final key in await cache.keysStartingWith(
       _ruleVariablePrefix(identity),
     )) {
@@ -120,14 +130,16 @@ abstract class BaseSource {
     }
   }
 
-  /// 身分 [from] 的書源變數與每個規則變數，各配上身分 [to] 的同一個鍵。
-  static Future<List<(String, String)>> _variablePairs(
+  /// 身分 [from] 的書源變數、登入資訊、登入標頭與每個規則變數，各配上身分
+  /// [to] 的同一個鍵。
+  static Future<List<(String, String)>> _draftPairs(
     String from,
     String to,
   ) async {
     final fromPrefix = _ruleVariablePrefix(from);
     return [
-      (_variableKey(from), _variableKey(to)),
+      for (final keyOf in [_loginInfoKey, _loginHeaderKey, _variableKey])
+        (keyOf(from), keyOf(to)),
       for (final key in await CacheManager().keysStartingWith(fromPrefix))
         (key, '${_ruleVariablePrefix(to)}${key.substring(fromPrefix.length)}'),
     ];
@@ -240,13 +252,20 @@ abstract class BaseSource {
 
   Future<void> putLoginHeader(String header) async {
     await CacheManager().put(loginHeaderCacheKey, header);
+    // 草稿裡是候選書源的登入標頭：網站的 Cookie 等採用時才併進去。
+    if (draftVariables != null) return;
+    await _applyLoginHeaderCookie(getKey(), header);
+  }
+
+  /// 把 [header] 裡的 Cookie 併進網站 [key] 原本存的，同名的換新（Legado
+  /// `replaceCookie`）。
+  static Future<void> _applyLoginHeaderCookie(String key, String header) async {
     try {
       final decoded = jsonDecode(header);
       if (decoded is Map) {
         final cookie = decoded['cookie'] ?? decoded['Cookie'];
         if (cookie != null && cookie.toString().isNotEmpty) {
-          // 併進這個網站原本存的，同名的換新（Legado `replaceCookie`）。
-          await CookieStore().replaceCookie(getKey(), cookie.toString());
+          await CookieStore().replaceCookie(key, cookie.toString());
         }
       }
     } catch (_) {}
@@ -272,8 +291,10 @@ abstract class BaseSource {
       (await CookieStore().getCookie(getKey())).isNotEmpty;
 
   /// 清掉夜讀自己存的網站 Cookie 與 Cookie 罐裡這個網域的 Cookie（網站寫
-  /// 的）；表單內容與登入標頭不動。
+  /// 的）；表單內容與登入標頭不動。草稿裡不碰網站真的 Cookie：候選書源沒
+  /// 採用時不能清掉讀者的登入狀態。
   Future<void> removeLoginCookies() {
+    if (draftVariables != null) return Future<void>.value();
     final stored = CookieStore().removeCookie(getKey());
     final jar = _removeCookieJarCookies(getKey());
     return Future.wait([stored, jar]);

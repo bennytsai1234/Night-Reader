@@ -235,7 +235,8 @@ class AiRepairSession extends ChangeNotifier {
   final CancelToken _cancelToken = CancelToken();
 
   /// 這次修復的草稿（[BaseSource.inDraftVariables]）：AI 拿改過的書源試抓、
-  /// 解析、跑程式與校驗時，規則存的變數寫在這一份，修好套用時才寫回書源。
+  /// 解析、跑程式與校驗時，規則存的變數、登入資訊與登入標頭寫在這一份，
+  /// 修好套用時才寫回書源。
   final String _draft = const Uuid().v4();
 
   /// 草稿開始時從書源抄進來的變數（[BaseSource.startDraftVariables]）：套用
@@ -967,7 +968,7 @@ class AiRepairSession extends ChangeNotifier {
     }
   }
 
-  /// 丟掉這次修復的草稿變數；丟不掉只記下來，不影響修復的結果。
+  /// 丟掉這次修復的草稿；丟不掉只記下來，不影響修復的結果。
   Future<void> _discardDraft() async {
     try {
       await BaseSource.discardDraftVariables(_draft);

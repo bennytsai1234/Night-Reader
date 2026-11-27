@@ -79,6 +79,69 @@ void main() {
     }
   });
 
+  // 註解裡的程式與轉址都不會執行；網站檢查跟過去會把讀者帶到登出之類的網址。
+  test('a redirect written in an HTML comment is not a redirect', () {
+    for (final body in [
+      '<html><body><!-- <script>location.href="/logout"</script> -->'
+          '</body></html>',
+      '<html><body><!-- <meta http-equiv="refresh" '
+          'content="0; url=/logout"> --></body></html>',
+    ]) {
+      expect(scriptRedirectOf(body), isNull, reason: body);
+    }
+  });
+
+  // 沒有大括號的 if／else／for／while 只跑條件成立的那一句，不是一定會跑的
+  // 最外層轉址。
+  test(
+    'a redirect in a control statement without braces is not a redirect',
+    () {
+      for (final body in [
+        "<script>if (a) location.href='/m/';</script>",
+        "<script>if (a) location.href='/m/'; else location.href='/logout';"
+            '</script>',
+        "<script>for (var i = 0; i < 1; i++) location.href='/m/';</script>",
+        "<script>while (a) location.href='/m/';</script>",
+        "<script>if (a) if (b) location.href='/m/';</script>",
+        "<script>if (a) {} else if (b) location.href='/m/';</script>",
+        // 條件裡的巢狀括號、字串、正則與註解要配對。
+        "<script>if (f(')') && /x/.test(a)) location.href='/m/';</script>",
+        "<script>if (a /* ) */) location.href='/m/';</script>",
+      ]) {
+        expect(scriptRedirectOf(body), isNull, reason: body);
+      }
+    },
+  );
+
+  test('a redirect in an arrow callback without braces is not a redirect', () {
+    for (final body in [
+      "<script>btn.onclick = () => location.href='/logout';</script>",
+      "<script>btn.onclick = () =>\n location.href='/logout';</script>",
+    ]) {
+      expect(scriptRedirectOf(body), isNull, reason: body);
+    }
+  });
+
+  test('a meta refresh written in a script string is not a redirect', () {
+    final body =
+        '<script>var html = \'<meta http-equiv="refresh" '
+        'content="0; url=/logout">\';</script>';
+    expect(scriptRedirectOf(body), isNull);
+  });
+
+  test('a top-level redirect after those is still a redirect', () {
+    const body =
+        "<script>btn.onclick = () => location.href='/logout';\n"
+        "if (a) location.href='/m/';\n"
+        "location.href='/new/';</script>";
+    expect(scriptRedirectOf(body), '/new/');
+    const afterComment =
+        '<html><body><!-- <meta http-equiv="refresh" '
+        'content="0; url=/old"> -->'
+        '<meta http-equiv="refresh" content="0; url=/new/"></body></html>';
+    expect(scriptRedirectOf(afterComment), '/new/');
+  });
+
   test('a page with content keeps its script redirects to itself', () {
     final page =
         '<html><body><script>if (x) location.href="/m/"</script>'
