@@ -7,6 +7,7 @@ import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/network/cookie_store.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/source_check/source_check_isolate.dart';
 import 'package:night_reader/core/utils/cache_manager.dart';
@@ -154,6 +155,99 @@ void main() {
     expect(s.job.outcome, AiRepairOutcome.repaired);
     expect(await CacheManager().get(otherKey), 'draft');
     expect(await CacheManager().get(tokenKey), 'new');
+  });
+
+  // 規則 JS 在校驗草稿時寫的登入資料與登入標頭（含 Cookie）也留在草稿：沒
+  // 採用時原書源的值不動、網站 Cookie 不被清。
+  test('login data a discarded draft wrote stays out of the source', () async {
+    addTearDown(() async {
+      await CacheManager().delete(source.loginInfoCacheKey);
+      await CacheManager().delete(source.loginHeaderCacheKey);
+      await CookieStore().removeCookie(url);
+    });
+    await CacheManager().put(source.loginInfoCacheKey, '{"user":"real"}');
+    await CacheManager().put(source.loginHeaderCacheKey, '{"X-Token":"real"}');
+    await CookieStore().setCookie(url, 'sid=real');
+
+    final s = session(
+      [test_, giveUp],
+      draft: (candidate) async {
+        await candidate.putLoginInfo('{"user":"draft"}');
+        await candidate.putLoginHeader(
+          '{"Cookie":"sid=draft","X-Token":"draft"}',
+        );
+        return '';
+      },
+    );
+    await s.start();
+
+    expect(await source.getLoginInfo(), '{"user":"real"}');
+    expect(await source.getLoginHeader(), '{"X-Token":"real"}');
+    expect(await CookieStore().getCookie(url), 'sid=real');
+  });
+
+  test(
+    'a repair that is applied takes the login data the draft wrote',
+    () async {
+      addTearDown(() async {
+        await CacheManager().delete(source.loginInfoCacheKey);
+        await CacheManager().delete(source.loginHeaderCacheKey);
+        await CookieStore().removeCookie(url);
+      });
+      await CacheManager().put(
+        source.loginHeaderCacheKey,
+        '{"X-Token":"real"}',
+      );
+      await CookieStore().setCookie(url, 'sid=real');
+
+      final s = session(
+        [test_, submit],
+        draft: (candidate) async {
+          await candidate.putLoginInfo('{"user":"draft"}');
+          await candidate.putLoginHeader(
+            '{"Cookie":"sid=draft","X-Token":"draft"}',
+          );
+          return '';
+        },
+      );
+      await s.start();
+
+      expect(s.job.outcome, AiRepairOutcome.repaired);
+      expect(await source.getLoginInfo(), '{"user":"draft"}');
+      expect(
+        await source.getLoginHeader(),
+        '{"Cookie":"sid=draft","X-Token":"draft"}',
+      );
+      expect(await CookieStore().getCookie(url), contains('sid=draft'));
+    },
+  );
+
+  // 書源程式在草稿裡登出（刪掉登入資訊與登入標頭）、修復採用了：書源的也
+  // 刪掉，網站 Cookie 同登出一起清。
+  test('a repair that is applied takes the logout the draft did', () async {
+    addTearDown(() async {
+      await CacheManager().delete(source.loginInfoCacheKey);
+      await CacheManager().delete(source.loginHeaderCacheKey);
+      await CookieStore().removeCookie(url);
+    });
+    await CacheManager().put(source.loginInfoCacheKey, '{"user":"real"}');
+    await CacheManager().put(source.loginHeaderCacheKey, '{"X-Token":"real"}');
+    await CookieStore().setCookie(url, 'sid=real');
+
+    final s = session(
+      [test_, submit],
+      draft: (candidate) async {
+        await candidate.removeLoginInfo();
+        await candidate.removeLoginHeader();
+        return '';
+      },
+    );
+    await s.start();
+
+    expect(s.job.outcome, AiRepairOutcome.repaired);
+    expect(await source.getLoginInfo(), isNull);
+    expect(await source.getLoginHeader(), isNull);
+    expect(await CookieStore().getCookie(url), isEmpty);
   });
 
   test('a secret the draft stored is hidden from the AI', () async {
